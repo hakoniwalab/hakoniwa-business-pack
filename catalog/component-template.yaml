@@ -2,8 +2,14 @@
 id: component-id
 name: Human Readable Component Name
 repository:
+  owner: hakoniwalab
+  name: component-directory
   path: ../component-directory
   url: https://github.com/hakoniwalab/component-directory
+verification:
+  verified_at: 2026-07-19
+  source_revision: commit-sha-or-tag
+  source_ref: main
 summary: One sentence describing the component's role in Hakoniwa.
 category:
   primary: communication
@@ -20,7 +26,9 @@ capabilities:
   - name: Capability name
     description: What user-visible outcome this enables.
     evidence:
-      - ../component-directory/README.md
+      - repository: hakoniwalab/component-directory
+        path: README.md
+        revision: main
 
 limitations:
   - What this component does not provide or should not be used for.
@@ -69,7 +77,9 @@ data_contracts:
   - name: Contract name
     description: Binary layout, message schema, generated asset, or timing contract.
     source:
-      - ../component-directory/docs/spec.md
+      - repository: hakoniwalab/component-directory
+        path: docs/spec.md
+        revision: main
 
 recipe_roles:
   - role: simulation_core | physics_runtime | visualizer | bridge | registry | language_binding | environment_model | control_plane
@@ -110,12 +120,15 @@ known_gaps:
   - Missing information or implementation gap relevant to recipes.
 
 source_refs:
-  - path: ../component-directory/README.md
+  - repository: hakoniwalab/component-directory
+    path: README.md
+    revision: main
     description: Main README.
-  - path: ../component-directory/docs
+  - repository: hakoniwalab/component-directory
+    path: docs
+    revision: main
     description: Design or tutorial docs.
 
 tags:
   - hakoniwa
   - pdu
-

@@ -1,0 +1,237 @@
+id: hakoniwa-conductor-light
+name: Hakoniwa Conductor Light
+repository:
+  owner: hakoniwalab
+  name: hakoniwa-conductor-light
+  path: ../hakoniwa-conductor-light
+  url: https://github.com/hakoniwalab/hakoniwa-conductor-light
+verification:
+  verified_at: 2026-07-19
+  source_revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
+  source_ref: main
+summary: Lightweight conductor for coordinating dynamically joining and leaving assets under a shared virtual time.
+category:
+  primary: simulation-core
+  secondary:
+    - conductor
+    - time-sync
+    - control-plane
+
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - Cataloged from README quick start and server/client config documentation.
+    - Designed as a lighter conductor than the pro/RD stack.
+
+capabilities:
+  - name: Shared virtual-time coordination
+    description: Coordinates assets so they progress under a common virtual time with server-side delay control.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-conductor-light
+        path: README.md
+        revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
+  - name: Dynamic client participation
+    description: Clients generate their own endpoint and RPC configuration and do not need to be pre-registered in server config.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-conductor-light
+        path: README.md
+        revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
+  - name: RPC facade for C++ clients
+    description: ConductorLightRpcClient wraps client config generation, endpoint container initialization, RPC calls, sleep, and notify behavior.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-conductor-light
+        path: README.md
+        revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
+  - name: Manual simulation control
+    description: Supports manual start, stop, reset, state, and time commands through hakoctl when configured for manual start.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-conductor-light
+        path: README.md
+        revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
+  - name: Synchronization observability
+    description: Can record asset synchronization delay to CSV and plot it with the included tool.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-conductor-light
+        path: README.md
+        revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
+
+limitations:
+  - Does not aim to cover the full RD functionality of conductor-pro.
+  - RPC examples require submodules hakoniwa-pdu-rpc and hakoniwa-pdu-endpoint.
+  - Some client/server combinations are explicitly unsupported and rejected by config checks.
+
+interfaces:
+  inputs:
+    - name: Server config
+      kind: config
+      description: JSON defining core tick, max delay, tick rate, RPC limits, TCP listen settings, and generated config paths.
+    - name: Client name and delta asset tick
+      kind: command
+      description: Client example arguments defining asset identity and per-cycle tick progress.
+    - name: Manual control commands
+      kind: command
+      description: hakoctl state, time, start, stop, and reset commands.
+  outputs:
+    - name: Generated endpoint and RPC configs
+      kind: config
+      description: Runtime-generated server and client communication settings.
+    - name: Synchronization CSV
+      kind: file
+      description: Long-form CSV containing world and asset timing offset samples.
+  protocols:
+    - name: TCP RPC
+      role: client | server
+      notes: Example server/client coordination uses PDU-RPC over TCP endpoint.
+  configuration:
+    - path: examples/config/server.json
+      description: Auto-start server config.
+    - path: examples/config/server-manual-start.json
+      description: Manual-start server config.
+    - path: examples/config/pdudef.json
+      description: PDU definition used by generated endpoint configs.
+
+dependencies:
+  required:
+    - name: C++20 compiler
+      type: tool
+      notes: Required for build.
+    - name: CMake
+      type: tool
+      notes: Required build system.
+  optional:
+    - name: hakoniwa-pdu-rpc
+      type: repository
+      notes: Required for RPC examples and transport.
+    - name: hakoniwa-pdu-endpoint
+      type: repository
+      notes: Required for TCP endpoint examples.
+    - name: Python 3
+      type: runtime
+      notes: Required for sync log plotting.
+
+platforms:
+  supported:
+    - macOS
+    - Linux
+  notes:
+    - Platform matrix is not explicitly documented in the README.
+
+connects_to:
+  - component_id: hakoniwa-pdu-rpc
+    direction: uses
+    interface: RPC transport
+    notes: Used for conductor server/client RPC communication.
+  - component_id: hakoniwa-pdu-endpoint
+    direction: uses
+    interface: TCP endpoint / generated configs
+    notes: Provides endpoint transport for RPC examples.
+  - component_id: hakoniwa-core-pro
+    direction: related
+    interface: simulation control concepts
+    notes: Conductor-light provides lightweight virtual-time coordination without requiring the full core-pro conductor stack in the cataloged README path.
+  - component_id: hakoniwa-conductor-pro
+    direction: related
+    interface: conductor role
+    notes: Light is the simpler dynamic-asset conductor; pro covers heavier distributed/RD-oriented flows.
+
+data_contracts:
+  - name: Virtual tick contract
+    description: Server advances world time by delta_core_tick and pauses if assets exceed max_delay_tick.
+    source:
+      - repository: hakoniwalab/hakoniwa-conductor-light
+        path: README.md
+        revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
+  - name: Generated config naming
+    description: Client-generated configs use stable names derived from client_name and reject duplicate same-name concurrent use in the same directory.
+    source:
+      - repository: hakoniwalab/hakoniwa-conductor-light
+        path: README.md
+        revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
+
+recipe_roles:
+  - role: simulation_core
+    description: Coordinates simulation participants through shared virtual time.
+  - role: control_plane
+    description: Provides start, stop, reset, attach, sleep, and state operations.
+  - role: time_sync
+    description: Tracks world and asset tick offsets for synchronized execution.
+
+typical_usecases:
+  - Lightweight multi-asset demos where clients may join dynamically.
+  - Teaching or testing virtual-time synchronization without full RD complexity.
+  - C++ assets that need a simple conductor RPC facade.
+  - Manual simulation start/stop/reset workflows.
+
+anti_usecases:
+  - Full RD handoff scenarios requiring conductor-pro/RD features.
+  - General pub/sub data exchange without simulation time coordination.
+  - Systems needing browser-facing visualization without a separate bridge/viewer.
+
+demo_candidates:
+  - name: Two-client TCP RPC time sync
+    description: Start server-example, then RobotA and RobotB clients with different delta_asset_tick values and inspect CSV lag.
+    required_components:
+      - hakoniwa-conductor-light
+      - hakoniwa-pdu-rpc
+      - hakoniwa-pdu-endpoint
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-conductor-light
+        path: examples/config/server.json
+        revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
+  - name: Manual-start control loop
+    description: Run manual server and manual clients, then control simulation through hakoctl commands.
+    required_components:
+      - hakoniwa-conductor-light
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-conductor-light
+        path: examples/config/server-manual-start.json
+        revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
+
+operations:
+  build:
+    commands:
+      - git submodule update --init --recursive
+      - cmake -S . -B build
+      - cmake --build build
+      - cmake -S . -B build-core -DHAKONIWA_CONDUCTOR_LIGHT_ENABLE_RPC=OFF -DHAKONIWA_CONDUCTOR_LIGHT_BUILD_EXAMPLES=OFF
+    notes:
+      - Default build enables RPC and TCP examples.
+  test:
+    commands: []
+    notes: Add exact test command after reading docs/QuickStart.md or test layout.
+  run:
+    commands:
+      - ./build/server-example examples/config/server.json --csv logs/sync.csv
+      - ./build/client-example RobotA 5000
+      - ./build/client-example RobotB 10000
+      - ./build/hakoctl start
+    notes:
+      - hakoctl commands apply to manual-start workflows.
+
+known_gaps:
+  - Catalog does not yet summarize docs/QuickStart.md or lower-level design docs.
+  - Exact API surface of ConductorLightRpcClient should be cataloged from headers before generating SDK-level recipes.
+  - Platform support should be verified from CI or build docs.
+
+source_refs:
+  - repository: hakoniwalab/hakoniwa-conductor-light
+    path: README.md
+    revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
+    description: Main quick start and server/client behavior.
+  - repository: hakoniwalab/hakoniwa-conductor-light
+    path: docs/QuickStart.md
+    revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
+    description: Command-focused setup and integration-test steps.
+  - repository: hakoniwalab/hakoniwa-conductor-light
+    path: examples/config
+    revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
+    description: Server, client, PDU, and cache configs.
+
+tags:
+  - hakoniwa
+  - conductor
+  - time-sync
+  - rpc
+  - endpoint
+

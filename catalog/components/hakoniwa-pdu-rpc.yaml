@@ -1,0 +1,247 @@
+id: hakoniwa-pdu-rpc
+name: Hakoniwa PDU RPC
+repository:
+  owner: hakoniwalab
+  name: hakoniwa-pdu-rpc
+  path: ../hakoniwa-pdu-rpc
+  url: https://github.com/hakoniwalab/hakoniwa-pdu-rpc
+verification:
+  verified_at: 2026-07-19
+  source_revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+  source_ref: main
+summary: C++ request-response layer for Hakoniwa control-plane RPC built on endpoint topology and PDU definitions.
+category:
+  primary: communication
+  secondary:
+    - rpc
+    - control-plane
+    - integration
+
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - Cataloged from README, examples, tutorial links, and config validation guidance.
+    - Scope is intentionally narrower than a general RPC framework.
+
+capabilities:
+  - name: PDU-native request-response
+    description: Provides RPC semantics aligned with Hakoniwa PDU channels, endpoint configuration, and generated service types.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: README.md
+        revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+  - name: Config-driven service topology
+    description: Defines services, clients, endpoints, request IDs, channels, and timeout behavior in JSON.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: README.md
+        revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+  - name: Multi-client C++ service support
+    description: Allows a service server to handle multiple uniquely named clients.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: README.md
+        revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+  - name: Typed helper API
+    description: Provides template helpers for packing and unpacking ROS service-derived PDU request and response types.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: README.md
+        revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+  - name: Configuration validation
+    description: Includes Python validation for schema and RPC consistency such as duplicate names and channel collisions.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: README.md
+        revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+
+limitations:
+  - Not a general-purpose RPC framework like gRPC.
+  - Not a dynamic service mesh with discovery, auth, tracing, and streaming semantics.
+  - Primarily targeted at C++ Hakoniwa-native control-plane integration.
+  - Requires endpoint and registry alignment; mismatched endpoint IDs, node names, PDU sizes, or channels fail at config/runtime boundaries.
+
+interfaces:
+  inputs:
+    - name: Service configuration
+      kind: config
+      description: JSON service topology including clients, endpoint IDs, request/response channels, and timeouts.
+    - name: Endpoint container configuration
+      kind: config
+      description: Endpoint mappings reused from hakoniwa-pdu-endpoint.
+    - name: Generated service PDU types
+      kind: api
+      description: Request and response packet types generated from service definitions.
+  outputs:
+    - name: RPC response PDUs
+      kind: pdu
+      description: Response payloads sent over endpoint transports.
+    - name: Validation diagnostics
+      kind: command
+      description: Schema and consistency errors reported by the config validator.
+  protocols:
+    - name: Endpoint transports
+      role: client | server
+      notes: RPC layer reuses endpoint transports such as TCP, UDP, and SHM without changing RPC user code.
+  configuration:
+    - path: config/schema/service-schema.json
+      description: Service config schema.
+    - path: config/sample/simple-service.json
+      description: Basic service configuration.
+    - path: config/sample/endpoints.json
+      description: Endpoint mapping for examples.
+    - path: config/sample/minimal
+      description: Compact minimal config set.
+
+dependencies:
+  required:
+    - name: C++20 compiler
+      type: tool
+      notes: Required for native library and examples.
+    - name: CMake 3.16 or later
+      type: tool
+      notes: Required build system.
+    - name: Hakoniwa core library
+      type: repository
+      notes: Typically installed under /usr/local/hakoniwa.
+    - name: hakoniwa-pdu-endpoint
+      type: repository
+      notes: Required for endpoint topology and transport I/O.
+    - name: hakoniwa-pdu-registry
+      type: repository
+      notes: Headers include generated registry types for PDU/service definitions.
+  optional:
+    - name: Python 3
+      type: runtime
+      notes: Required for config validation module.
+    - name: GoogleTest
+      type: library
+      notes: Required for tests.
+
+platforms:
+  supported:
+    - macOS
+    - Linux
+  notes:
+    - README documents Linux/macOS library path handling; Windows support is not called out.
+
+connects_to:
+  - component_id: hakoniwa-pdu-endpoint
+    direction: uses
+    interface: Endpoint API / endpoint config
+    notes: All RPC transport is delegated through endpoints.
+  - component_id: hakoniwa-pdu-registry
+    direction: uses
+    interface: generated request/response PDU types
+    notes: Registry provides service packet types and size definitions.
+  - component_id: hakoniwa-conductor-light
+    direction: used_by
+    interface: RPC client/server transport
+    notes: Conductor-light uses PDU-RPC for server/client coordination examples.
+  - component_id: hakoniwa-conductor-pro
+    direction: related
+    interface: control-plane RPC concept
+    notes: Both address control-plane coordination, with conductor-pro using broader distributed execution control.
+
+data_contracts:
+  - name: RPC service config
+    description: Explicit config contract for service names, clients, endpoints, channels, request IDs, and timeouts.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: config/schema/service-schema.json
+        revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+  - name: Request-response PDU channels
+    description: Request and response traffic uses explicit PDU channels and endpoint mappings.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: README.md
+        revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+
+recipe_roles:
+  - role: control_plane
+    description: Adds deterministic RPC calls for simulation control or service requests.
+  - role: communication_infrastructure
+    description: Reuses endpoint transport while imposing request-response semantics.
+  - role: integration_boundary
+    description: Bridges service-style control code to PDU-native Hakoniwa topology.
+
+typical_usecases:
+  - Hakoniwa-native C++ control-plane services.
+  - Request/response operations that must follow endpoint topology and PDU binary contracts.
+  - Deterministic or tick-driven integration loops where hidden scheduler behavior is undesirable.
+  - Config-reviewed RPC wiring in CI.
+
+anti_usecases:
+  - Public web APIs across many languages.
+  - Streaming RPC workloads.
+  - Dynamic service discovery, auth, tracing, or full service mesh requirements.
+  - Simple browser or JSON-only RPC unrelated to Hakoniwa PDU channels.
+
+demo_candidates:
+  - name: AddTwoInts RPC pair
+    description: Build examples, run server and client, then send two integers and receive their sum.
+    required_components:
+      - hakoniwa-pdu-rpc
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-pdu-registry
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: examples/rpc_server.cpp
+        revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: examples/rpc_client.cpp
+        revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+
+operations:
+  build:
+    commands:
+      - cmake -S . -B build -DHAKO_PDU_ENDPOINT_PREFIX=/usr/local/hakoniwa -DHAKO_PDU_RPC_BUILD_EXAMPLES=ON
+      - cmake --build build
+      - ./build.bash
+    notes:
+      - install.bash installs headers and libraries under /usr/local/hakoniwa by default.
+  test:
+    commands:
+      - ctest --test-dir build
+    notes:
+      - README also documents make test from the build directory.
+  run:
+    commands:
+      - PYTHONPATH=python:$PYTHONPATH python -m hakoniwa_pdu_rpc.validate_configs config/sample/simple-service.json --skip-endpoint-validation
+      - build/examples/hakoniwa_pdu_rpc_server
+      - build/examples/hakoniwa_pdu_rpc_client 1000000
+    notes:
+      - Server should start before client.
+
+known_gaps:
+  - Catalog does not yet list every schema field and validation rule.
+  - Cross-language RPC support beyond C++ should not be assumed.
+  - Runtime behavior should be verified with exact endpoint configs in each recipe.
+
+source_refs:
+  - repository: hakoniwalab/hakoniwa-pdu-rpc
+    path: README.md
+    revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+    description: Main overview, scope, quick start, build, and validation guidance.
+  - repository: hakoniwalab/hakoniwa-pdu-rpc
+    path: examples/README.md
+    revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+    description: Example usage documentation.
+  - repository: hakoniwalab/hakoniwa-pdu-rpc
+    path: docs/tutorials/rpc.md
+    revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+    description: RPC tutorial.
+  - repository: hakoniwalab/hakoniwa-pdu-rpc
+    path: config/schema/service-schema.json
+    revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+    description: Service schema.
+
+tags:
+  - hakoniwa
+  - pdu
+  - rpc
+  - endpoint
+  - cplusplus
+  - control-plane
+

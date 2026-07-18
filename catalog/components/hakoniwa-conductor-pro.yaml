@@ -1,0 +1,281 @@
+id: hakoniwa-conductor-pro
+name: Hakoniwa Conductor Pro
+repository:
+  owner: hakoniwalab
+  name: hakoniwa-conductor-pro
+  path: ../hakoniwa-conductor-pro
+  url: https://github.com/hakoniwalab/hakoniwa-conductor-pro
+verification:
+  verified_at: 2026-07-19
+  source_revision: 8a0463561da34b713f7c2fabced27cc3bca320cf
+  source_ref: main
+summary: Distributed conductor and RD-oriented execution-unit stack for coordinating server/client assets, time synchronization, control flows, and runtime handoff experiments.
+category:
+  primary: simulation-core
+  secondary:
+    - conductor
+    - distributed-execution
+    - rd
+    - control-plane
+
+status:
+  maturity: experimental
+  catalog_confidence: medium
+  notes:
+    - Cataloged from README and docs/design.md.
+    - README states RD feature development is currently frozen while documentation and non-RD development are prioritized.
+    - Treat RD recipes as advanced or experimental until validated with combined-test.md.
+
+capabilities:
+  - name: Server/client conductor processes
+    description: Runs one server conductor process per client and a client asset process for each cli node.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-conductor-pro
+        path: README.md
+        revision: 8a0463561da34b713f7c2fabced27cc3bca320cf
+  - name: Execution-unit config generation
+    description: Generates simple and RD config sets from eu-config inputs.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-conductor-pro
+        path: README.md
+        revision: 8a0463561da34b713f7c2fabced27cc3bca320cf
+  - name: RD runtime monitoring
+    description: ExMonitor observes RuntimeStatus, RuntimeNode, and RuntimeContext paths and records switch timing.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-conductor-pro
+        path: README.md
+        revision: 8a0463561da34b713f7c2fabced27cc3bca320cf
+  - name: Remote API and bridge-based coordination
+    description: Server and client configs include remote API, bridge, endpoint, time source, delta time, and max delay settings.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-conductor-pro
+        path: README.md
+        revision: 8a0463561da34b713f7c2fabced27cc3bca320cf
+  - name: Docker-based multi-node development environment
+    description: Provides Docker image and compose layout for server and multiple client containers on a fixed network.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-conductor-pro
+        path: README.md
+        revision: 8a0463561da34b713f7c2fabced27cc3bca320cf
+
+limitations:
+  - RD functionality is advanced and currently described as frozen for feature development.
+  - README indicates RD changes should be regression-tested with combined-test.md.
+  - Requires many explicit config paths; missing RD-only fields must be supplied as a set when using RD.
+  - Process topology is 1:1 client to server conductor process, which may be more complex than lightweight demos need.
+  - Catalog confidence is medium because design documents are still being reverse-organized from implementation.
+
+interfaces:
+  inputs:
+    - name: Server config
+      kind: config
+      description: JSON containing server_machine_id, remote API, bridge, endpoints, time source, delta time, max delay, and client mappings.
+    - name: Client config
+      kind: config
+      description: JSON containing node_id, server_machine_id, bridge, endpoints, endpoint IDs, and timing fields.
+    - name: Execution-unit input
+      kind: config
+      description: Manual JSON input consumed by eu-config/gen.sh for simple or RD generated configs.
+    - name: Client shell commands
+      kind: command
+      description: join, state, event, conductor start/stop/reset, asset start/stop/reset.
+  outputs:
+    - name: Generated execution-unit configs
+      kind: config
+      description: simple output under eu-config/generated and RD output under eu-config/generated-rd.
+    - name: Conductor binaries
+      kind: command
+      description: main_server, main_client, main_exmonitor, and pdu_communication examples.
+    - name: RD switch timing logs
+      kind: file
+      description: Logs containing real and simulation time handoff duration fields.
+  protocols:
+    - name: TCP
+      role: client | server | mux
+      notes: Used by generated endpoint configs and runtime context mux.
+    - name: SHM poll
+      role: local
+      notes: Used for RuntimeStatus in RD ExMonitor behavior.
+  configuration:
+    - path: config/schema/server-config.schema.json
+      description: Server config schema.
+    - path: config/schema/client-config.schema.json
+      description: Client config schema.
+    - path: eu-config/eu-input.simple.manual.json
+      description: Simple execution-unit input.
+    - path: eu-config/eu-input.rd.manual.json
+      description: RD execution-unit input.
+    - path: config/remote-api.json
+      description: Remote API participant/server mapping.
+
+dependencies:
+  required:
+    - name: C++ compiler
+      type: tool
+      notes: Required for CMake build.
+    - name: CMake
+      type: tool
+      notes: Required build system.
+    - name: hakoniwa-pdu-endpoint
+      type: repository
+      notes: Endpoint configs and transport wiring are central to server/client communication.
+    - name: hakoniwa-pdu-bridge-core
+      type: repository
+      notes: Bridge configs are part of conductor server/client topology.
+    - name: hakoniwa-core-pro
+      type: repository
+      notes: Provides core Hakoniwa runtime concepts and installed libraries.
+  optional:
+    - name: Docker
+      type: runtime
+      notes: Used for documented multi-node development environment.
+    - name: ajv
+      type: tool
+      notes: Used to validate JSON schemas.
+
+platforms:
+  supported:
+    - Linux
+    - macOS
+  notes:
+    - Docker workflow is documented.
+    - Exact platform matrix is not stated.
+
+connects_to:
+  - component_id: hakoniwa-core-pro
+    direction: uses
+    interface: core runtime / install layout
+    notes: Conductor-pro builds and installs into the Hakoniwa runtime ecosystem.
+  - component_id: hakoniwa-pdu-bridge-core
+    direction: uses
+    interface: bridge config / monitor runtime
+    notes: Data/control plane paths are configured through bridge JSON.
+  - component_id: hakoniwa-pdu-endpoint
+    direction: uses
+    interface: endpoint config / TCP and SHM comm
+    notes: Endpoints define server-client communication paths.
+  - component_id: hakoniwa-conductor-light
+    direction: related
+    interface: conductor role
+    notes: Conductor-light is simpler and dynamic; conductor-pro handles RD-oriented distributed execution.
+
+data_contracts:
+  - name: Node ID conventions
+    description: Server machine, server node, and client node IDs follow srv-<machine>, srv-<machine>-<cid>, and cli-<cid> patterns.
+    source:
+      - repository: hakoniwalab/hakoniwa-conductor-pro
+        path: README.md
+        revision: 8a0463561da34b713f7c2fabced27cc3bca320cf
+  - name: SimTime PDU naming
+    description: Server time PDU uses <server_machine_id>.time and client time PDU uses <client_node_id>.time.
+    source:
+      - repository: hakoniwalab/hakoniwa-conductor-pro
+        path: README.md
+        revision: 8a0463561da34b713f7c2fabced27cc3bca320cf
+  - name: RD switch timing log
+    description: ExMonitor logs trace, unit, owner transition, real_dt_usec, sim_dt_usec, and simulation start/end times.
+    source:
+      - repository: hakoniwalab/hakoniwa-conductor-pro
+        path: README.md
+        revision: 8a0463561da34b713f7c2fabced27cc3bca320cf
+
+recipe_roles:
+  - role: simulation_core
+    description: Coordinates distributed server/client execution.
+  - role: control_plane
+    description: Provides conductor and asset control operations through config and shell commands.
+  - role: rd_runtime
+    description: Supports experimental redundancy or runtime handoff scenarios.
+  - role: time_sync
+    description: Manages delta time and max delay behavior across server/client processes.
+
+typical_usecases:
+  - Advanced distributed Hakoniwa execution experiments.
+  - RD handoff or runtime ownership monitoring demos.
+  - Multi-node Docker development and integration tests.
+  - Server/client conductor setups that need explicit remote API, bridge, endpoint, and timing configs.
+
+anti_usecases:
+  - Minimal dynamic-asset demos where conductor-light is sufficient.
+  - Simple PDU data forwarding without conductor control.
+  - Production RD claims without running the documented combined tests.
+
+demo_candidates:
+  - name: Simple two-node pdu_communication
+    description: Generate simple configs and run two pdu_communication execution units with eu.bash.
+    required_components:
+      - hakoniwa-conductor-pro
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-pdu-bridge-core
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-conductor-pro
+        path: eu-config
+        revision: 8a0463561da34b713f7c2fabced27cc3bca320cf
+  - name: RD switch timing observation
+    description: Run RD pdu_communication and ExMonitor, then inspect RdMonitorCore switch timing logs.
+    required_components:
+      - hakoniwa-conductor-pro
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-conductor-pro
+        path: README.md
+        revision: 8a0463561da34b713f7c2fabced27cc3bca320cf
+
+operations:
+  build:
+    commands:
+      - ./build.bash
+      - cmake -S . -B cmake-build
+      - cmake --build cmake-build -j 8
+      - sudo ./install.bash
+    notes:
+      - install is optional and places binaries under /usr/local/hakoniwa.
+  test:
+    commands:
+      - ctest --test-dir build-local -R '(client_config_test|server_config_test|client_args_test|server_args_test)'
+      - ajv validate -s config/schema/server-config.schema.json -d config/srv-01.json
+      - ajv validate -s config/schema/client-config.schema.json -d config/cli-01.json
+    notes:
+      - RD changes should follow combined-test.md.
+  run:
+    commands:
+      - ./eu-config/gen.sh
+      - ./eu-config/gen.sh --rd
+      - ./eu.bash 1 simple
+      - ./eu.bash 2 simple
+      - ./main_exmonitor.bash 1 10
+      - /usr/local/hakoniwa/bin/main_server --config ./config/srv-01.json --server-node-id srv-01-01
+      - /usr/local/hakoniwa/bin/main_client --config ./config/cli-01.json
+    notes:
+      - Use JSON config path rather than positional args where possible.
+
+known_gaps:
+  - Need to read docs/design/* and combined-test.md before producing production-grade RD recipes.
+  - Need to separate non-RD conductor capabilities from RD-specific capabilities more finely.
+  - License/build requirements for RD paths should be cataloged from source docs.
+
+source_refs:
+  - repository: hakoniwalab/hakoniwa-conductor-pro
+    path: README.md
+    revision: 8a0463561da34b713f7c2fabced27cc3bca320cf
+    description: Quick start, RD notes, Docker workflow, config requirements, and process topology.
+  - repository: hakoniwalab/hakoniwa-conductor-pro
+    path: docs/design.md
+    revision: 8a0463561da34b713f7c2fabced27cc3bca320cf
+    description: Design document index and editing rules.
+  - repository: hakoniwalab/hakoniwa-conductor-pro
+    path: hakoniwa-rd-core/docs
+    revision: 8a0463561da34b713f7c2fabced27cc3bca320cf
+    description: RD core concepts, architecture, state machine, config, generators, and operations.
+  - repository: hakoniwalab/hakoniwa-conductor-pro
+    path: eu-config
+    revision: 8a0463561da34b713f7c2fabced27cc3bca320cf
+    description: Execution-unit config generator inputs and outputs.
+
+tags:
+  - hakoniwa
+  - conductor
+  - rd
+  - distributed
+  - endpoint
+  - bridge
+

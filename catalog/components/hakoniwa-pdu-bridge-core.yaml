@@ -1,0 +1,226 @@
+id: hakoniwa-pdu-bridge-core
+name: Hakoniwa PDU Bridge Core
+repository:
+  owner: hakoniwalab
+  name: hakoniwa-pdu-bridge-core
+  path: ../hakoniwa-pdu-bridge-core
+  url: https://github.com/hakoniwalab/hakoniwa-pdu-bridge-core
+verification:
+  verified_at: 2026-07-19
+  source_revision: ee725a01b0f1c66f68a5c7809137d4d308cd5a8a
+  source_ref: main
+summary: Logical PDU transfer layer that controls when data flows between endpoints while delegating transport I/O to hakoniwa-pdu-endpoint.
+category:
+  primary: communication
+  secondary:
+    - integration
+    - bridge
+    - monitoring
+
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - Cataloged from README and tutorial entry points.
+    - The component is a timing and routing layer, not a transport implementation.
+
+capabilities:
+  - name: Logical PDU flow declaration
+    description: Defines which source PDU channels transfer to which destination endpoints.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-bridge-core
+        path: README.md
+        revision: ee725a01b0f1c66f68a5c7809137d4d308cd5a8a
+  - name: Transfer policy control
+    description: Supports immediate, throttle, and ticker policies for deciding when transfers occur.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-bridge-core
+        path: README.md
+        revision: ee725a01b0f1c66f68a5c7809137d4d308cd5a8a
+  - name: Endpoint-backed transport reuse
+    description: Uses EndpointContainer from hakoniwa-pdu-endpoint so bridge logic stays independent from TCP, UDP, SHM, WebSocket, and other transports.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-bridge-core
+        path: README.md
+        revision: ee725a01b0f1c66f68a5c7809137d4d308cd5a8a
+  - name: Runtime introspection
+    description: Provides monitor commands for health, connections, PDU listing, and tailing runtime PDU flow.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-bridge-core
+        path: README.md
+        revision: ee725a01b0f1c66f68a5c7809137d4d308cd5a8a
+
+limitations:
+  - Not a transport implementation.
+  - Does not provide delivery guarantees, retries, or persistent queues.
+  - Does not load endpoint JSON directly; endpoint loading belongs to hakoniwa-pdu-endpoint.
+  - Reference daemon uses a real-time loop, but integrators may need to inject their own time source and execution loop.
+
+interfaces:
+  inputs:
+    - name: Bridge configuration
+      kind: config
+      description: JSON describing nodes, source endpoints, destination endpoints, PDU mappings, and transfer policies.
+    - name: Endpoint container configuration
+      kind: config
+      description: Endpoint loader configuration consumed by hakoniwa-pdu-endpoint.
+    - name: Time source
+      kind: api
+      description: ITimeSource supplied by the caller or reference daemon.
+  outputs:
+    - name: Transferred PDU data
+      kind: pdu
+      description: PDU bytes moved from source endpoint to destination endpoint when policy permits.
+    - name: Monitor responses
+      kind: command
+      description: Health, connection, list_pdus, and tail information from the monitor CLI.
+  protocols:
+    - name: Endpoint API
+      role: local
+      notes: Bridge delegates actual communication to endpoints.
+  configuration:
+    - path: config/tutorials/bridge-immediate.json
+      description: Immediate policy tutorial config.
+    - path: config/web_bridge/bridge/bridge.json
+      description: Managed web bridge config.
+    - path: test/config/tcp/bridge.json
+      description: Two-node TCP integration bridge config.
+
+dependencies:
+  required:
+    - name: C++20 compiler
+      type: tool
+      notes: Required for native build.
+    - name: CMake 3.16 or later
+      type: tool
+      notes: Required build system.
+    - name: Hakoniwa core library
+      type: repository
+      notes: Expected under /usr/local/hakoniwa.
+    - name: hakoniwa-pdu-endpoint
+      type: repository
+      notes: Required for endpoint API, endpoint container, and transport I/O.
+  optional: []
+
+platforms:
+  supported:
+    - macOS
+    - Linux
+  notes:
+    - Windows support is not described in the README for this component.
+
+connects_to:
+  - component_id: hakoniwa-pdu-endpoint
+    direction: uses
+    interface: EndpointContainer / Endpoint API
+    notes: Bridge uses endpoint for all communication I/O.
+  - component_id: hakoniwa-core-pro
+    direction: uses
+    interface: Hakoniwa core libraries / callback asset runtime
+    notes: Web bridge daemon can run as a Hakoniwa callback asset.
+  - component_id: hakoniwa-pdu-javascript
+    direction: used_by
+    interface: WebSocket bridge
+    notes: Browser and Node.js clients can consume PDU data exposed through web bridge configurations.
+  - component_id: hakoniwa-pdu-rpc
+    direction: related
+    interface: Endpoint-style config and deterministic integration patterns
+    notes: Both layers reuse endpoint topology, but bridge is data-flow transfer while rpc is request-response.
+
+data_contracts:
+  - name: Bridge transfer policy
+    description: Explicit policy model deciding when a PDU or atomic PDU group transfers.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-bridge-core
+        path: README.md
+        revision: ee725a01b0f1c66f68a5c7809137d4d308cd5a8a
+  - name: Node-selected endpoint container
+    description: A shared endpoint container config can contain multiple nodes; each daemon selects its node by node_name.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-bridge-core
+        path: README.md
+        revision: ee725a01b0f1c66f68a5c7809137d4d308cd5a8a
+
+recipe_roles:
+  - role: bridge
+    description: Moves PDU data between components according to explicit transfer timing.
+  - role: communication_infrastructure
+    description: Centralizes logical routing without owning low-level transport behavior.
+  - role: monitor
+    description: Provides runtime checks for bridge health and PDU flow.
+
+typical_usecases:
+  - Connect two Hakoniwa nodes or tools while controlling when PDU data is forwarded.
+  - Replace hard-coded transport wiring with bridge JSON and endpoint container JSON.
+  - Expose simulation PDU streams to browser tools through the web bridge daemon.
+  - Add runtime monitoring to PDU transfer paths.
+
+anti_usecases:
+  - Need a raw TCP, UDP, WebSocket, Zenoh, or SHM transport implementation.
+  - Need durable queueing or retry guarantees independent of endpoint comm backends.
+  - Need RPC request-response semantics rather than data-flow transfer.
+
+demo_candidates:
+  - name: Single-node immediate bridge
+    description: Run the reference daemon with bridge-immediate and endpoint_container tutorial configs.
+    required_components:
+      - hakoniwa-pdu-bridge-core
+      - hakoniwa-pdu-endpoint
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-pdu-bridge-core
+        path: config/tutorials/bridge-immediate.json
+        revision: ee725a01b0f1c66f68a5c7809137d4d308cd5a8a
+  - name: Two-node TCP bridge
+    description: Run node1 and node2 daemons using shared TCP test configs and node selection.
+    required_components:
+      - hakoniwa-pdu-bridge-core
+      - hakoniwa-pdu-endpoint
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-pdu-bridge-core
+        path: test/config/tcp
+        revision: ee725a01b0f1c66f68a5c7809137d4d308cd5a8a
+
+operations:
+  build:
+    commands:
+      - cmake -S . -B build -DHAKO_PDU_ENDPOINT_PREFIX=/usr/local/hakoniwa
+      - cmake --build build
+      - ./build.bash
+    notes:
+      - install.bash installs headers, library, and CMake package under /usr/local/hakoniwa.
+  test:
+    commands: []
+    notes: README points to examples and monitor tutorials; add exact test commands when cataloging tests.
+  run:
+    commands:
+      - ./build/hakoniwa-pdu-bridge config/tutorials/bridge-immediate.json 1000 config/tutorials/endpoint_container.json node1
+      - ./build/hakoniwa-pdu-web-bridge --config-root config/web_bridge
+    notes:
+      - delta_time_step_usec controls the reference daemon sleep interval.
+
+known_gaps:
+  - Catalog does not yet enumerate every bridge JSON schema field.
+  - Windows support and exact platform matrix should be verified from build/test data.
+  - Monitor command details should be expanded from docs/tutorials/monitor.md.
+
+source_refs:
+  - repository: hakoniwalab/hakoniwa-pdu-bridge-core
+    path: README.md
+    revision: ee725a01b0f1c66f68a5c7809137d4d308cd5a8a
+    description: Main overview, architecture, build, and run documentation.
+  - repository: hakoniwalab/hakoniwa-pdu-bridge-core
+    path: docs/tutorials/monitor.md
+    revision: ee725a01b0f1c66f68a5c7809137d4d308cd5a8a
+    description: Monitor CLI tutorial.
+  - repository: hakoniwalab/hakoniwa-pdu-bridge-core
+    path: docs/tutorials
+    revision: ee725a01b0f1c66f68a5c7809137d4d308cd5a8a
+    description: Policy tutorials for immediate, throttle, and ticker modes.
+
+tags:
+  - hakoniwa
+  - pdu
+  - bridge
+  - endpoint
+  - monitor
+

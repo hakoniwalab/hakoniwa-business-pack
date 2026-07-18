@@ -1,0 +1,390 @@
+id: hakoniwa-pdu-endpoint
+name: Hakoniwa PDU Endpoint
+repository:
+  owner: hakoniwalab
+  name: hakoniwa-pdu-endpoint
+  path: ../hakoniwa-pdu-endpoint
+  url: https://github.com/hakoniwalab/hakoniwa-pdu-endpoint
+verification:
+  verified_at: 2026-07-19
+  source_revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+  source_ref: main
+summary: Config-driven PDU endpoint layer that makes cache lifetime, communication transport, and PDU meaning explicit for distributed Hakoniwa simulations.
+category:
+  primary: communication
+  secondary:
+    - integration
+    - infrastructure
+    - language-binding
+
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - Cataloged from README, design philosophy, tutorial, config samples, examples, and benchmark docs.
+    - This component is intentionally stricter and heavier than a minimal messaging library.
+
+capabilities:
+  - name: Explicit endpoint composition
+    description: Separates cache, communication, and optional PDU definition so simulation semantics are configured instead of implied.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: README.md
+        revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: docs/design_philosophy.md
+        revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+  - name: Transport-swappable PDU communication
+    description: Allows application code to switch between TCP, UDP, WebSocket, SHM, storage, Zenoh, RMW Zenoh, and MQTT through JSON configuration.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: README.md
+        revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: docs/tutorials/endpoint.md
+        revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+  - name: Cache semantics
+    description: Supports latest-value state cache and queue-style event cache, making overwrite and receive-order behavior explicit.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: README.md
+        revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: docs/receive_semantics.md
+        revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+  - name: Replay and inspection through storage backend
+    description: Writes PDU traffic to latest-slot or append-only queue files and provides a debug tool with human-readable and JSON output.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: README.md
+        revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: docs/storage_comm.md
+        revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+  - name: Native and language binding access
+    description: Provides C++ endpoint APIs, C FFI-oriented implementation, Python bindings, and C# examples/tests for engine or tool integration.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: README.md
+        revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: docs/python_binding.md
+        revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: csharp/README.md
+        revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+
+limitations:
+  - Not a general-purpose messaging library.
+  - Not optimized for the shortest possible Hello World path.
+  - Requires explicit JSON configuration; implicit defaults are intentionally avoided.
+  - SHM communication and Hakoniwa time source features require Hakoniwa core libraries.
+  - Python package depends on the native shared library and CFFI extension; it is not pip-only in the endpoint repository.
+  - Transport-level reliability, persistence, and delivery semantics depend on the selected comm backend.
+
+interfaces:
+  inputs:
+    - name: Endpoint configuration
+      kind: config
+      description: JSON file linking cache, comm, and optional pdu_def settings.
+    - name: Cache configuration
+      kind: config
+      description: JSON file defining latest or queue cache behavior.
+    - name: Communication configuration
+      kind: config
+      description: JSON file defining protocol, role, address, port, storage path, or pub/sub prefix.
+    - name: PDU definition
+      kind: config
+      description: Optional JSON mapping PDU names to channel IDs, sizes, and type names.
+    - name: PDU payload bytes
+      kind: pdu
+      description: Raw bytes sent or received by key.
+  outputs:
+    - name: PDU payload bytes
+      kind: pdu
+      description: Raw bytes delivered to local cache, transport, storage, or receive callbacks.
+    - name: Storage files
+      kind: file
+      description: Latest-slot or append-only queue binary files for persistence, replay, and inspection.
+    - name: Debug metadata
+      kind: command
+      description: Human-readable or JSON summaries from hako_pdu_storage_debug.
+  protocols:
+    - name: TCP
+      role: client | server
+      notes: Reliable stream communication with explicit endpoint roles.
+    - name: UDP
+      role: unicast | broadcast | multicast
+      notes: Connectionless communication for local or network PDU delivery.
+    - name: Shared Memory
+      role: local
+      notes: High-performance local IPC with Hakoniwa core integration.
+    - name: WebSocket
+      role: client | server
+      notes: Stream-based communication suitable for browser-facing or network tool integration.
+    - name: Storage
+      role: file
+      notes: Persistent latest or queue file backend for audit, replay, and offline inspection.
+    - name: Zenoh
+      role: pubsub
+      notes: Dynamic peer-to-peer pub/sub through Zenoh key expressions.
+    - name: RMW Zenoh
+      role: pubsub
+      notes: ROS middleware-oriented Zenoh integration.
+    - name: MQTT
+      role: pubsub
+      notes: Broker-based pub/sub that maps PDU keys to MQTT topics.
+  configuration:
+    - path: config/schema/endpoint_schema.json
+      description: Endpoint schema.
+    - path: config/schema/cache_schema.json
+      description: Cache schema.
+    - path: config/schema/comm_schema.json
+      description: Communication schema.
+    - path: config/schema/pdu_def_schema.json
+      description: PDU definition schema.
+    - path: config/tutorial/endpoint_tcp_server.json
+      description: Tutorial TCP server endpoint.
+    - path: config/tutorial/endpoint_tcp_client.json
+      description: Tutorial TCP client endpoint.
+    - path: config/tutorial/endpoint_udp_server.json
+      description: Tutorial UDP server endpoint.
+    - path: config/tutorial/endpoint_websocket_server.json
+      description: Tutorial WebSocket server endpoint.
+
+dependencies:
+  required:
+    - name: C++20 compiler
+      type: tool
+      notes: Required to build the native library and examples.
+    - name: CMake 3.16 or later
+      type: tool
+      notes: Required build system.
+    - name: Boost headers
+      type: library
+      notes: Required for networking implementation.
+  optional:
+    - name: Hakoniwa Core Library
+      type: repository
+      notes: Required for SHM communication and Hakoniwa time source integration.
+    - name: Python 3 and cffi
+      type: package
+      notes: Required for Python FFI bindings.
+    - name: GoogleTest
+      type: library
+      notes: Required for C++ test suite.
+    - name: zenoh-c
+      type: library
+      notes: Required when Zenoh support is enabled.
+    - name: Eclipse Paho MQTT C++
+      type: library
+      notes: Required when MQTT support is enabled.
+    - name: .NET SDK
+      type: runtime
+      notes: Required for C# smoke tests and examples.
+
+platforms:
+  supported:
+    - macOS
+    - Linux
+    - Windows
+  notes:
+    - README describes macOS, Ubuntu or WSL2, and native Windows benchmark coverage.
+    - On Windows, Boost through vcpkg is recommended.
+    - Hakoniwa core integration defaults differ by platform; core support is on by default for macOS/Linux and off by default for Windows.
+
+connects_to:
+  - component_id: hakoniwa-core-pro
+    direction: uses
+    interface: SHM / time source / core libraries
+    notes: Needed for shared memory communication and Hakoniwa time integration.
+  - component_id: hakoniwa-pdu-registry
+    direction: uses
+    interface: PDU definition / type layout / generated codecs
+    notes: Provides the PDU names, channel IDs, sizes, and type definitions that make bytes meaningful.
+  - component_id: hakoniwa-pdu-bridge-core
+    direction: used_by
+    interface: Endpoint API
+    notes: Bridge delegates actual I/O to endpoint while controlling transfer timing.
+  - component_id: hakoniwa-pdu-rpc
+    direction: used_by
+    interface: Endpoint transport / PDU request-response channels
+    notes: RPC layer reuses endpoint topology and transport configuration.
+  - component_id: hakoniwa-conductor-light
+    direction: used_by
+    interface: TCP endpoint / RPC transport
+    notes: Conductor-light examples use endpoint and PDU-RPC submodules for dynamic asset coordination.
+  - component_id: hakoniwa-godot
+    direction: used_by
+    interface: endpoint config / PDU transport
+    notes: Godot integration consumes endpoint configs for simulation synchronization and PDU exchange.
+  - component_id: hakoniwa-pdu-foxglove
+    direction: used_by
+    interface: PduComm adapter
+    notes: Foxglove adapter derives from endpoint communication abstraction.
+  - component_id: hakoniwa-pdu-python
+    direction: related
+    interface: Python PDU integration
+    notes: Separate Python-oriented PDU library; endpoint repository also provides its own Python FFI bindings.
+
+data_contracts:
+  - name: PduResolvedKey
+    description: Addressing key based on robot name and channel ID, used across endpoint send and receive paths.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: docs/tutorials/endpoint.md
+        revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+  - name: Cache semantics
+    description: latest stores the current state per key; queue stores receive-order events up to configured depth.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: README.md
+        revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+  - name: StorageHeader file format
+    description: Self-describing binary storage files for latest and queue modes, inspectable by debug tooling.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: docs/storage_comm.md
+        revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+  - name: PDU definition mapping
+    description: Optional mapping from semantic PDU names to channel IDs, sizes, and type names.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: config/schema/pdu_def_schema.json
+        revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+
+recipe_roles:
+  - role: bridge
+    description: Provides the transport endpoint used by bridges to move PDU data between assets or tools.
+  - role: communication_infrastructure
+    description: Standardizes how assets send, receive, cache, persist, and inspect PDU bytes.
+  - role: integration_boundary
+    description: Defines the causal boundary between simulation participants with explicit cache and delivery semantics.
+  - role: language_binding
+    description: Exposes endpoint behavior to Python and C# integration contexts through bindings and examples.
+
+typical_usecases:
+  - Multi-asset simulations where communication semantics must be explicit and auditable.
+  - Swapping TCP, UDP, WebSocket, or pub/sub transports without changing application code.
+  - Local high-performance Hakoniwa asset communication through shared memory.
+  - Persisting PDU traffic for replay, audit, debugging, or offline analysis.
+  - Building higher-level bridge, RPC, visualization, or engine-integration components on a common PDU endpoint abstraction.
+
+anti_usecases:
+  - A quick prototype that only needs a few implicit pub/sub messages.
+  - A general web API or service mesh unrelated to Hakoniwa PDU semantics.
+  - Workloads where JSON messages are sufficient and binary layout compatibility does not matter.
+  - Systems where hidden defaults are preferred over explicit configuration.
+
+demo_candidates:
+  - name: Config-only transport swap
+    description: Run endpoint_minimal over TCP, then UDP, then WebSocket using the same binary and different JSON configs.
+    required_components:
+      - hakoniwa-pdu-endpoint
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: examples/endpoint_minimal.cpp
+        revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: config/tutorial
+        revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+  - name: Storage replay and inspection
+    description: Send packets through storage latest and queue endpoints, then inspect binary files with hako_pdu_storage_debug and JSON output.
+    required_components:
+      - hakoniwa-pdu-endpoint
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: examples/endpoint_storage_latest.cpp
+        revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: examples/endpoint_storage_queue.cpp
+        revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+  - name: Hakoniwa bridge transport backend
+    description: Use endpoint as the I/O layer under a PDU bridge recipe where bridge-core controls transfer timing.
+    required_components:
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-pdu-bridge-core
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-pdu-bridge-core
+        path: README.md
+        revision: main
+
+operations:
+  build:
+    commands:
+      - bash build.bash
+      - cmake -S . -B build
+      - cmake --build build
+    notes:
+      - build.bash builds the C++ shared library and Python FFI extension.
+      - Manual CMake build is available for advanced options.
+  test:
+    commands:
+      - ctest --test-dir build --output-on-failure
+      - bash test-python.bash
+      - bash test-csharp.bash
+    notes:
+      - C++ tests use GoogleTest.
+      - Python and C# smoke tests are provided by helper scripts.
+  run:
+    commands:
+      - build/examples/endpoint_minimal config/tutorial/endpoint_tcp_server.json recv 10
+      - build/examples/endpoint_minimal config/tutorial/endpoint_tcp_client.json send 5
+      - build/tools/hako_pdu_storage_debug path/to/storage_queue.bin --json
+    notes:
+      - Tutorial examples require building with HAKO_PDU_ENDPOINT_BUILD_EXAMPLES=ON.
+
+known_gaps:
+  - Catalog does not yet include exact schema field-level details for every comm backend.
+  - Catalog does not yet distinguish stable release tags from main-branch-only features.
+  - Runtime compatibility with each downstream component should be verified recipe by recipe.
+  - Performance characteristics should be selected from benchmark reports when a recipe has latency or throughput requirements.
+
+source_refs:
+  - repository: hakoniwalab/hakoniwa-pdu-endpoint
+    path: README.md
+    revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+    description: Main overview, capabilities, requirements, and quick starts.
+  - repository: hakoniwalab/hakoniwa-pdu-endpoint
+    path: docs/design_philosophy.md
+    revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+    description: Design intent and scope boundary.
+  - repository: hakoniwalab/hakoniwa-pdu-endpoint
+    path: docs/tutorials/endpoint.md
+    revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+    description: TCP, UDP, and WebSocket tutorial.
+  - repository: hakoniwalab/hakoniwa-pdu-endpoint
+    path: docs/storage_comm.md
+    revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+    description: Storage communication behavior.
+  - repository: hakoniwalab/hakoniwa-pdu-endpoint
+    path: docs/receive_semantics.md
+    revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+    description: Receive behavior and cache semantics.
+  - repository: hakoniwalab/hakoniwa-pdu-endpoint
+    path: benchmarks/PERFORMANCE.md
+    revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+    description: TCP and SHM callback performance guidance.
+  - repository: hakoniwalab/hakoniwa-pdu-endpoint
+    path: config/schema
+    revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+    description: JSON schemas for endpoint, cache, comm, and PDU definitions.
+  - repository: hakoniwalab/hakoniwa-pdu-endpoint
+    path: examples
+    revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+    description: C++ examples for transport, storage, and pub/sub variants.
+
+tags:
+  - hakoniwa
+  - pdu
+  - endpoint
+  - tcp
+  - udp
+  - websocket
+  - shm
+  - storage
+  - zenoh
+  - mqtt
+  - cplusplus
+  - python
+  - csharp
