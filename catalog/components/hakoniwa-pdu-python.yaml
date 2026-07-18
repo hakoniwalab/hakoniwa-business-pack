@@ -1,0 +1,238 @@
+id: hakoniwa-pdu-python
+name: Hakoniwa PDU Python
+repository:
+  owner: hakoniwalab
+  name: hakoniwa-pdu-python
+  path: ../hakoniwa-pdu-python
+  url: https://github.com/hakoniwalab/hakoniwa-pdu-python
+  visibility: public
+distribution:
+  channel: oss
+  notes:
+    - Public OSS Hakoniwa component distributed as hakoniwa-pdu on PyPI.
+verification:
+  verified_at: 2026-07-19
+  source_revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+  source_ref: main
+summary: Python PDU communication library for Hakoniwa, integrating WebSocket topics, WebSocket RPC, SHM backend support, and binary/JSON/Python type conversion.
+category:
+  primary: language-binding
+  secondary:
+    - integration
+    - rpc
+    - browser
+
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - Cataloged from README features, install, quick starts, and project structure.
+
+capabilities:
+  - name: Python PDU communication
+    description: Provides Python APIs for Hakoniwa PDU topic and RPC communication.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: README.md
+        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+  - name: WebSocket topic and RPC support
+    description: Runs Pub/Sub topics and RPC over WebSocket with ready-to-run Twist and AddTwoInts examples.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: README.md
+        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+  - name: Binary/JSON/Python conversion
+    description: Converts between binary PDU payloads, JSON, and Python types using offset definitions.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: README.md
+        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+  - name: SHM backend
+    description: Supports high-speed shared-memory communication paths and async shared SHM RPC runtime.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: README.md
+        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+  - name: Event-driven and polling APIs
+    description: Supports registering PDU handlers or polling internal buffers.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: README.md
+        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+
+limitations:
+  - Requires offset files via HAKO_BINARY_PATH or default install path for binary conversion.
+  - WebSocket URI scope must be explicitly configured.
+  - This is a Python-facing library, not the C++ endpoint abstraction.
+
+interfaces:
+  inputs:
+    - name: PDU config
+      kind: config
+      description: Compact or legacy PDU config defining robot, PDU name, channel ID, size, and type mapping.
+    - name: Service config
+      kind: config
+      description: RPC service configuration.
+    - name: Offset files
+      kind: file
+      description: .offset files used for binary conversion.
+    - name: WebSocket URI
+      kind: protocol
+      description: ws:// URI used for remote topic or RPC communication.
+  outputs:
+    - name: Python typed PDU objects
+      kind: api
+      description: Python objects converted from binary or JSON PDU payloads.
+    - name: PDU payloads
+      kind: pdu
+      description: Binary payloads sent over WebSocket or SHM backends.
+  protocols:
+    - name: WebSocket
+      role: client | server
+      notes: Used for remote topics and RPC examples.
+    - name: Shared Memory
+      role: local
+      notes: Used for high-speed local backend and shared RPC runtime.
+  configuration:
+    - path: examples/pdu_config.json
+      description: Example PDU config.
+    - path: examples/service.json
+      description: Example service config.
+    - path: docs/rpc/async_shared_runtime.md
+      description: Shared SHM RPC runtime design notes.
+
+dependencies:
+  required:
+    - name: Python
+      type: runtime
+      notes: Required runtime.
+    - name: hakoniwa-pdu package
+      type: package
+      notes: Install with pip install hakoniwa-pdu.
+    - name: hakoniwa-pdu-registry offsets
+      type: repository
+      notes: Offset definitions are required for binary conversion.
+  optional:
+    - name: WebSocket bridge/server
+      type: runtime
+      notes: Required for WebSocket examples.
+    - name: Hakoniwa SHM runtime
+      type: runtime
+      notes: Required for SHM backend.
+
+platforms:
+  supported:
+    - macOS
+    - Linux
+    - Windows
+  notes:
+    - Python package platform support should be verified from package metadata.
+
+connects_to:
+  - component_id: hakoniwa-pdu-registry
+    direction: uses
+    interface: offset files / generated Python types
+    notes: Registry artifacts enable binary conversion.
+  - component_id: hakoniwa-pdu-bridge-core
+    direction: related
+    interface: WebSocket bridge
+    notes: Python clients can communicate through WebSocket bridge paths.
+  - component_id: hakoniwa-pdu-endpoint
+    direction: related
+    interface: PDU semantics / SHM backend
+    notes: Separate Python-oriented stack that shares PDU concepts with endpoint.
+  - component_id: hakoniwa-mujoco-robots
+    direction: used_by
+    interface: Python controllers and visualizers
+    notes: MuJoCo robot samples use Python controllers and visualizers over Hakoniwa PDU.
+
+data_contracts:
+  - name: Compact PDU config
+    description: paths plus robots[].pdutypes_id format is the recommended PDU config style.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: README.md
+        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+  - name: Offset-based binary conversion
+    description: HAKO_BINARY_PATH points to offset files used to convert binary PDU payloads.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: README.md
+        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+
+recipe_roles:
+  - role: language_binding
+    description: Provides Python access to Hakoniwa PDU topics and RPC.
+  - role: communication_infrastructure
+    description: Supplies WebSocket and SHM communication managers.
+  - role: control_plane
+    description: Supports Python RPC client/server workflows.
+
+typical_usecases:
+  - Build Python controllers, visualizers, or tools for Hakoniwa simulations.
+  - Run WebSocket topic or RPC demos.
+  - Convert PDU binary data into Python types for analysis.
+  - Use shared SHM RPC for high fan-out Python clients.
+
+anti_usecases:
+  - C++ endpoint integration.
+  - Browser or Node.js clients.
+  - PDU type generation.
+
+demo_candidates:
+  - name: WebSocket Twist topic
+    description: Run remote_publisher and remote_subscriber with examples/pdu_config.json and service.json.
+    required_components:
+      - hakoniwa-pdu-python
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: examples/topic/websocket
+        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+  - name: WebSocket AddTwoInts RPC
+    description: Run remote_rpc_server and remote_rpc_client and verify response 3.
+    required_components:
+      - hakoniwa-pdu-python
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: examples/rpc/websocket
+        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+
+operations:
+  build:
+    commands:
+      - pip install hakoniwa-pdu
+    notes:
+      - Set HAKO_BINARY_PATH when using custom offset files.
+  test:
+    commands: []
+    notes: GitHub Actions test badge exists; exact local command should be cataloged.
+  run:
+    commands:
+      - python examples/topic/websocket/remote_publisher.py --uri ws://localhost:8080 --pdu-config examples/pdu_config.json --service-config examples/service.json
+      - python examples/topic/websocket/remote_subscriber.py --uri ws://localhost:8080 --pdu-config examples/pdu_config.json --service-config examples/service.json
+    notes:
+      - Requires a matching WebSocket communication peer.
+
+known_gaps:
+  - Need to catalog package metadata and exact test command.
+  - Need to map app-specific Python modules such as drone and launcher subpackages.
+
+source_refs:
+  - repository: hakoniwalab/hakoniwa-pdu-python
+    path: README.md
+    revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+    description: Main features, installation, quick starts, event handling, project structure, and SHM RPC runtime.
+  - repository: hakoniwalab/hakoniwa-pdu-python
+    path: docs/rpc/async_shared_runtime.md
+    revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+    description: Shared SHM RPC runtime.
+
+tags:
+  - hakoniwa
+  - python
+  - pdu
+  - websocket
+  - shm
+  - rpc
+  - conversion
+

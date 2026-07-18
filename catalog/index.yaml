@@ -11,7 +11,7 @@ components:
   - time-sync
   - control-plane
   maturity: active
-  distribution: unknown
+  distribution: oss
   summary: Lightweight conductor for coordinating dynamically joining and leaving
     assets under a shared virtual time.
   recipe_roles:
@@ -62,6 +62,99 @@ components:
   - endpoint
   - bridge
   catalog_path: components/hakoniwa-conductor-pro.yaml
+- id: hakoniwa-core-pro
+  name: Hakoniwa Core Pro
+  category: simulation-core
+  secondary_categories:
+  - commercial
+  - infrastructure
+  - time-sync
+  - control-plane
+  maturity: active
+  distribution: commercial
+  summary: Hakoniwa core runtime extension layer built on hakoniwa-core-cpp, providing
+    shared-memory simulation hub integration, asset APIs, commands, events, and RPC
+    services.
+  recipe_roles:
+  - simulation_core
+  - communication_infrastructure
+  - control_plane
+  - time_sync
+  connects_to:
+  - hakoniwa-pdu-endpoint
+  - hakoniwa-pdu-bridge-core
+  - hakoniwa-conductor-pro
+  - hakoniwa-mujoco-robots
+  - hakoniwa-godot
+  tags:
+  - hakoniwa
+  - core
+  - commercial
+  - shm
+  - pdu
+  - asset
+  - time-sync
+  - hako-cmd
+  catalog_path: components/hakoniwa-core-pro.yaml
+- id: hakoniwa-envsim
+  name: Hakoniwa Envsim
+  category: physics-environment
+  secondary_categories:
+  - environment-model
+  - visualization
+  - integration
+  maturity: active
+  distribution: oss
+  summary: Environment modeling toolkit for creating, visualizing, refining, and querying
+    environmental factors such as wind, temperature, pressure, GPS strength, and boundaries.
+  recipe_roles:
+  - environment_model
+  - data_model
+  - visualizer
+  connects_to:
+  - hakoniwa-mujoco-robots
+  - hakoniwa-core-pro
+  - hakoniwa-pdu-registry
+  tags:
+  - hakoniwa
+  - environment
+  - wind
+  - gps
+  - temperature
+  - fastsearch
+  - json-schema
+  catalog_path: components/hakoniwa-envsim.yaml
+- id: hakoniwa-godot
+  name: Hakoniwa Godot
+  category: visualization
+  secondary_categories:
+  - integration
+  - time-sync
+  - visualization-assets
+  maturity: active
+  distribution: oss
+  summary: Godot addon and integration package that makes Godot a Hakoniwa simulation
+    participant for visualization, PDU exchange, control, and optional physics time
+    synchronization.
+  recipe_roles:
+  - visualizer
+  - simulation_core
+  - integration_boundary
+  connects_to:
+  - hakoniwa-core-pro
+  - hakoniwa-pdu-endpoint
+  - hakoniwa-pdu-registry
+  - hakoniwa-mbody-registry
+  - hakoniwa-mujoco-robots
+  tags:
+  - hakoniwa
+  - godot
+  - visualization
+  - pdu
+  - endpoint
+  - robot-sync
+  - time-sync
+  catalog_path: components/hakoniwa-godot.yaml
 - id: hakoniwa-mbody-registry
   name: Hakoniwa MBody Registry
   category: data-model
@@ -71,7 +164,7 @@ components:
   - asset-generation
   - visualization-assets
   maturity: active
-  distribution: unknown
+  distribution: oss
   summary: ROS-independent robot body registry that converts upstream robot descriptions
     into committed URDF, MJCF, GLB, PDU, and Godot-ready artifacts.
   recipe_roles:
@@ -95,6 +188,39 @@ components:
   - mujoco
   - registry
   catalog_path: components/hakoniwa-mbody-registry.yaml
+- id: hakoniwa-mujoco-robots
+  name: Hakoniwa MuJoCo Robots
+  category: physics-environment
+  secondary_categories:
+  - simulator
+  - physics-runtime
+  - robot-body
+  - visualization
+  maturity: active
+  distribution: oss
+  summary: MuJoCo-based robot simulation assets for Hakoniwa, including TurtleBot3,
+    sensor and actuator examples, Python controllers, and PDU integration.
+  recipe_roles:
+  - physics_runtime
+  - simulation_core
+  - visualizer
+  connects_to:
+  - hakoniwa-core-pro
+  - hakoniwa-pdu-endpoint
+  - hakoniwa-pdu-registry
+  - hakoniwa-mbody-registry
+  - hakoniwa-godot
+  tags:
+  - hakoniwa
+  - mujoco
+  - robot
+  - turtlebot3
+  - lidar
+  - sensor
+  - actuator
+  - forklift
+  - pdu
+  catalog_path: components/hakoniwa-mujoco-robots.yaml
 - id: hakoniwa-pdu-bridge-core
   name: Hakoniwa PDU Bridge Core
   category: communication
@@ -103,7 +229,7 @@ components:
   - bridge
   - monitoring
   maturity: active
-  distribution: unknown
+  distribution: oss
   summary: Logical PDU transfer layer that controls when data flows between endpoints
     while delegating transport I/O to hakoniwa-pdu-endpoint.
   recipe_roles:
@@ -130,7 +256,7 @@ components:
   - infrastructure
   - language-binding
   maturity: active
-  distribution: unknown
+  distribution: oss
   summary: Config-driven PDU endpoint layer that makes cache lifetime, communication
     transport, and PDU meaning explicit for distributed Hakoniwa simulations.
   recipe_roles:
@@ -162,6 +288,93 @@ components:
   - python
   - csharp
   catalog_path: components/hakoniwa-pdu-endpoint.yaml
+- id: hakoniwa-pdu-foxglove
+  name: Hakoniwa PDU Foxglove
+  category: visualization
+  secondary_categories:
+  - foxglove
+  - integration
+  - bridge
+  maturity: experimental
+  distribution: oss
+  summary: Output-only Foxglove adapter for hakoniwa-pdu-endpoint that publishes caller-provided
+    Foxglove-compatible CDR payloads through the Foxglove SDK WebSocket server.
+  recipe_roles:
+  - visualizer
+  - bridge
+  - integration_boundary
+  connects_to:
+  - hakoniwa-pdu-endpoint
+  - hakoniwa-pdu-registry
+  - hakoniwa-pdu-bridge-core
+  tags:
+  - hakoniwa
+  - foxglove
+  - visualization
+  - endpoint
+  - cdr
+  - websocket
+  - schema
+  catalog_path: components/hakoniwa-pdu-foxglove.yaml
+- id: hakoniwa-pdu-javascript
+  name: Hakoniwa PDU JavaScript
+  category: language-binding
+  secondary_categories:
+  - browser
+  - visualization
+  - integration
+  maturity: active
+  distribution: oss
+  summary: JavaScript library for reading, writing, and converting Hakoniwa PDU data
+    over WebSocket from browser or Node.js applications.
+  recipe_roles:
+  - language_binding
+  - visualizer
+  - integration_boundary
+  connects_to:
+  - hakoniwa-pdu-bridge-core
+  - hakoniwa-pdu-registry
+  - hakoniwa-pdu-endpoint
+  - hakoniwa-godot
+  tags:
+  - hakoniwa
+  - javascript
+  - browser
+  - nodejs
+  - websocket
+  - pdu
+  - cdr
+  - visualization
+  catalog_path: components/hakoniwa-pdu-javascript.yaml
+- id: hakoniwa-pdu-python
+  name: Hakoniwa PDU Python
+  category: language-binding
+  secondary_categories:
+  - integration
+  - rpc
+  - browser
+  maturity: active
+  distribution: oss
+  summary: Python PDU communication library for Hakoniwa, integrating WebSocket topics,
+    WebSocket RPC, SHM backend support, and binary/JSON/Python type conversion.
+  recipe_roles:
+  - language_binding
+  - communication_infrastructure
+  - control_plane
+  connects_to:
+  - hakoniwa-pdu-registry
+  - hakoniwa-pdu-bridge-core
+  - hakoniwa-pdu-endpoint
+  - hakoniwa-mujoco-robots
+  tags:
+  - hakoniwa
+  - python
+  - pdu
+  - websocket
+  - shm
+  - rpc
+  - conversion
+  catalog_path: components/hakoniwa-pdu-python.yaml
 - id: hakoniwa-pdu-registry
   name: Hakoniwa PDU Registry
   category: data-model
@@ -170,7 +383,7 @@ components:
   - code-generation
   - binary-contract
   maturity: active
-  distribution: unknown
+  distribution: oss
   summary: Authoritative registry and reproducible generator for Hakoniwa PDU binary
     layouts derived from ROS 2 message and service definitions.
   recipe_roles:
@@ -201,7 +414,7 @@ components:
   - control-plane
   - integration
   maturity: active
-  distribution: unknown
+  distribution: oss
   summary: C++ request-response layer for Hakoniwa control-plane RPC built on endpoint
     topology and PDU definitions.
   recipe_roles:

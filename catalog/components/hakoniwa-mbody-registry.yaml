@@ -5,6 +5,11 @@ repository:
   name: hakoniwa-mbody-registry
   path: ../hakoniwa-mbody-registry
   url: https://github.com/hakoniwalab/hakoniwa-mbody-registry
+  visibility: public
+distribution:
+  channel: oss
+  notes:
+    - Public OSS Hakoniwa component.
 verification:
   verified_at: 2026-07-19
   source_revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
@@ -262,4 +267,3 @@ tags:
   - godot
   - mujoco
   - registry
-

@@ -1,0 +1,265 @@
+id: hakoniwa-mujoco-robots
+name: Hakoniwa MuJoCo Robots
+repository:
+  owner: hakoniwalab
+  name: hakoniwa-mujoco-robots
+  path: ../hakoniwa-mujoco-robots
+  url: https://github.com/hakoniwalab/hakoniwa-mujoco-robots
+  visibility: public
+distribution:
+  channel: oss
+  notes:
+    - Public OSS Hakoniwa component.
+verification:
+  verified_at: 2026-07-19
+  source_revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+  source_ref: main
+summary: MuJoCo-based robot simulation assets for Hakoniwa, including TurtleBot3, sensor and actuator examples, Python controllers, and PDU integration.
+category:
+  primary: physics-environment
+  secondary:
+    - simulator
+    - physics-runtime
+    - robot-body
+    - visualization
+
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - Cataloged from README start-here and quick-start sections.
+    - Forklift RD-light is explicitly advanced and experimental.
+
+capabilities:
+  - name: MuJoCo robot simulation
+    description: Runs ROS/URDF-derived robot models such as TurtleBot3 Burger in MuJoCo.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: README.md
+        revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+  - name: Hakoniwa PDU integration
+    description: Connects C++ MuJoCo simulators with Python controllers and visualizers through Hakoniwa PDU contracts.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: README.md
+        revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+  - name: Sensor simulation
+    description: Provides LiDAR, ultrasonic, and color-camera examples, including configurable LiDAR noise profiles.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: README.md
+        revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+  - name: Actuator examples
+    description: Provides joint position and velocity actuator examples and reusable actuator components.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: README.md
+        revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+  - name: Forklift context and RD-light demos
+    description: Includes forklift samples with context save/restore and advanced RD-light handoff.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: README.md
+        revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+
+limitations:
+  - Requires installed hakoniwa-core-pro and hakoniwa-pdu-endpoint for core samples.
+  - RD-light forklift handoff is advanced/experimental and not RD-full.
+  - This repository provides robot simulation assets, not the canonical robot body conversion registry.
+
+interfaces:
+  inputs:
+    - name: MuJoCo model XML
+      kind: file
+      description: Robot and environment models under models/.
+    - name: PDU JSON config
+      kind: config
+      description: Channel/type/size contract for C++ simulator and Python tools.
+    - name: Sensor config
+      kind: config
+      description: LiDAR and sensor specifications such as scan frequency, range, resolution, and noise model.
+    - name: Controller commands
+      kind: pdu
+      description: Python controller output consumed by simulator.
+  outputs:
+    - name: Robot state PDU
+      kind: pdu
+      description: Simulation state, sensor, and actuator-related PDU outputs.
+    - name: LaserScan-compatible PDU
+      kind: pdu
+      description: 2D LiDAR output for visualization and controller use.
+    - name: Logs and temporary state
+      kind: file
+      description: Generated logs and context/state files.
+  protocols:
+    - name: Hakoniwa PDU
+      role: local
+      notes: Shared runtime contract between MuJoCo C++ simulator and Python tools.
+  configuration:
+    - path: config
+      description: PDU, sensor, actuator, and sample configs.
+    - path: config/sensors
+      description: LiDAR and sensor spec JSON files.
+    - path: examples
+      description: Standalone sensor and actuator examples.
+
+dependencies:
+  required:
+    - name: hakoniwa-core-pro
+      type: repository
+      notes: Required runtime for synchronization and hako-cmd.
+    - name: hakoniwa-pdu-endpoint
+      type: repository
+      notes: Required installed C++ endpoint package.
+    - name: MuJoCo
+      type: runtime
+      notes: Physics engine for robot simulation.
+    - name: C++ toolchain
+      type: tool
+      notes: Required for simulator build.
+    - name: Python
+      type: runtime
+      notes: Required for controllers and visualizers.
+  optional:
+    - name: Gamepad
+      type: runtime
+      notes: Used by TurtleBot3 gamepad control sample.
+    - name: Docker
+      type: runtime
+      notes: Docker scripts are provided.
+
+platforms:
+  supported:
+    - macOS
+    - Linux
+  notes:
+    - README includes macOS and Linux path setup; exact platform matrix should be verified.
+
+connects_to:
+  - component_id: hakoniwa-core-pro
+    direction: uses
+    interface: runtime sync / hako-cmd / PDU runtime
+    notes: Required for simulator start and synchronization.
+  - component_id: hakoniwa-pdu-endpoint
+    direction: uses
+    interface: installed endpoint package
+    notes: Required for PDU endpoint linkage.
+  - component_id: hakoniwa-pdu-registry
+    direction: uses
+    interface: PDU types and converters
+    notes: PDU JSON contracts and converters must match registry-defined types.
+  - component_id: hakoniwa-mbody-registry
+    direction: related
+    interface: generated MJCF / GLB / PDU configs
+    notes: MBody registry can supply robot body artifacts consumed by MuJoCo recipes.
+  - component_id: hakoniwa-godot
+    direction: related
+    interface: PDU robot visualization path
+    notes: Godot can visualize robot state produced by MuJoCo through endpoint/PDU sync.
+
+data_contracts:
+  - name: PDU JSON contract
+    description: C++ simulator and Python controller/visualizer share channel/type/size contracts through PDU JSON.
+    source:
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: README.md
+        revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+  - name: Sensor config contract
+    description: Sensor behavior such as LiDAR scan frequency, angular range, resolution, and noise model is loaded from JSON.
+    source:
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: docs/spec/sensor-actuator-config-schema.md
+        revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+
+recipe_roles:
+  - role: physics_runtime
+    description: Simulates robot physics and sensors.
+  - role: simulation_core
+    description: Participates as a Hakoniwa asset in synchronized simulation.
+  - role: visualizer
+    description: Provides Python visualizers for LiDAR and other inspection paths.
+
+typical_usecases:
+  - Run TurtleBot3 with gamepad control and 2D LiDAR.
+  - Compare LiDAR noise profiles for Sim2Real validation.
+  - Test standalone MuJoCo sensor or actuator behavior.
+  - Demonstrate forklift context save/restore and RD-light handoff.
+
+anti_usecases:
+  - Pure robot body conversion without running MuJoCo.
+  - Browser-only visualization.
+  - Environment field modeling such as wind or radio strength.
+
+demo_candidates:
+  - name: TurtleBot3 gamepad and LiDAR
+    description: Run tb3_sim, Python gamepad controller, LiDAR visualizer, then start with hako-cmd.
+    required_components:
+      - hakoniwa-mujoco-robots
+      - hakoniwa-core-pro
+      - hakoniwa-pdu-endpoint
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: README.md
+        revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+  - name: Forklift unit sample
+    description: Run forklift_unit_sim with Python forklift_simple_auto controller and hako-cmd start.
+    required_components:
+      - hakoniwa-mujoco-robots
+      - hakoniwa-core-pro
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: README.md
+        revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+
+operations:
+  build:
+    commands:
+      - ./doctor.bash
+      - bash build.bash
+    notes:
+      - README points to prerequisites and setup sections.
+  test:
+    commands: []
+    notes: Sensor tests exist under tests/sensors; exact commands should be cataloged later.
+  run:
+    commands:
+      - ./src/cmake-build/main_for_sample/tb3/tb3_sim
+      - python python/tb3_gamepad.py
+      - python python/lidar_visualizer.py
+      - hako-cmd start
+    notes:
+      - TurtleBot3 quick start uses four terminals.
+
+known_gaps:
+  - Need to catalog exact build commands from setup section and docs/README.md.
+  - Need to map individual examples/sensors and examples/actuators into recipe fragments.
+
+source_refs:
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: README.md
+    revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+    description: Main overview, architecture, quick starts, requirements, and examples.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: docs/README.md
+    revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+    description: Documentation index.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: docs/guide/sensor-actuator-user.md
+    revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+    description: Sensor and actuator workflow.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: docs/guide/forklift-context-rd.md
+    revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+    description: Forklift context and RD-light handoff notes.
+
+tags:
+  - hakoniwa
+  - mujoco
+  - robot
+  - turtlebot3
+  - lidar
+  - sensor
+  - actuator
+  - forklift
+  - pdu
+

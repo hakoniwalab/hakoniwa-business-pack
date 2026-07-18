@@ -5,6 +5,11 @@ repository:
   name: hakoniwa-pdu-bridge-core
   path: ../hakoniwa-pdu-bridge-core
   url: https://github.com/hakoniwalab/hakoniwa-pdu-bridge-core
+  visibility: public
+distribution:
+  channel: oss
+  notes:
+    - Public OSS Hakoniwa component.
 verification:
   verified_at: 2026-07-19
   source_revision: ee725a01b0f1c66f68a5c7809137d4d308cd5a8a
@@ -223,4 +228,3 @@ tags:
   - bridge
   - endpoint
   - monitor
-

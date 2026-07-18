@@ -1,0 +1,231 @@
+id: hakoniwa-pdu-foxglove
+name: Hakoniwa PDU Foxglove
+repository:
+  owner: hakoniwalab
+  name: hakoniwa-pdu-foxglove
+  path: ../hakoniwa-pdu-foxglove
+  url: https://github.com/hakoniwalab/hakoniwa-pdu-foxglove
+  visibility: public
+distribution:
+  channel: oss
+  notes:
+    - Public OSS Hakoniwa component.
+verification:
+  verified_at: 2026-07-19
+  source_revision: 1df9615581704fb3cca7d453611233643d37424a
+  source_ref: main
+summary: Output-only Foxglove adapter for hakoniwa-pdu-endpoint that publishes caller-provided Foxglove-compatible CDR payloads through the Foxglove SDK WebSocket server.
+category:
+  primary: visualization
+  secondary:
+    - foxglove
+    - integration
+    - bridge
+
+status:
+  maturity: experimental
+  catalog_confidence: high
+  notes:
+    - README states version 0.1 initial implementation with deliberately narrow scope.
+
+capabilities:
+  - name: Foxglove live output
+    description: Publishes Hakoniwa-origin CDR payloads to Foxglove through the official C++ SDK WebSocket server.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-foxglove
+        path: README.md
+        revision: 1df9615581704fb3cca7d453611233643d37424a
+  - name: Endpoint PduComm adapter
+    description: Implements FoxgloveComm as a PduComm adapter usable with Endpoint::set_comm().
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-foxglove
+        path: README.md
+        revision: 1df9615581704fb3cca7d453611233643d37424a
+  - name: Raw CDR byte preservation
+    description: Forwards supplied CDR bytes without deserialization, reserialization, or guessing Hakoniwa native binary format.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-foxglove
+        path: README.md
+        revision: 1df9615581704fb3cca7d453611233643d37424a
+  - name: Explicit schema configuration
+    description: Configures topics, schema names, schema encodings, and schema files per Hakoniwa PDU mapping.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-foxglove
+        path: README.md
+        revision: 1df9615581704fb3cca7d453611233643d37424a
+  - name: Testable lifecycle mapping
+    description: Maps PduComm open/start/send/stop/close/is_running lifecycle to explicit Foxglove behavior.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-foxglove
+        path: README.md
+        revision: 1df9615581704fb3cca7d453611233643d37424a
+
+limitations:
+  - Output-only; recv and recv_next are unsupported.
+  - Does not convert Hakoniwa native PDU binary to CDR automatically.
+  - Does not provide Foxglove UI, panels, extensions, MCAP recording, services, parameters, or Foxglove-to-Hakoniwa publishing.
+  - Channels are configured at startup; dynamic channel creation is outside version 0.1 scope.
+
+interfaces:
+  inputs:
+    - name: Complete CDR payload
+      kind: pdu
+      description: Caller-provided Foxglove-compatible CDR bytes passed to FoxgloveComm::send.
+    - name: Foxglove comm config
+      kind: config
+      description: JSON config with server settings, channels, topics, schema names, encodings, and schema file paths.
+    - name: PDU definition
+      kind: config
+      description: Used to resolve robot/PDU names to robot/channel_id keys.
+  outputs:
+    - name: Foxglove WebSocket stream
+      kind: protocol
+      description: RawChannel publications served by the Foxglove SDK WebSocket server.
+  protocols:
+    - name: Foxglove WebSocket
+      role: server
+      notes: Local WebSocket server for Foxglove App live visualization.
+    - name: Endpoint PduComm
+      role: local
+      notes: Adapter boundary used by hakoniwa-pdu-endpoint.
+  configuration:
+    - path: config/sample/endpoint_foxglove.json
+      description: Sample endpoint config.
+    - path: config/sample/comm_foxglove.json
+      description: Sample Foxglove comm config.
+    - path: examples/cdr-publisher
+      description: Manual live-visualization smoke example.
+
+dependencies:
+  required:
+    - name: C++20 compiler
+      type: tool
+      notes: Required build toolchain.
+    - name: CMake 3.20 or later
+      type: tool
+      notes: Required build system.
+    - name: hakoniwa-pdu-endpoint
+      type: repository
+      notes: Provides Endpoint and PduComm abstraction.
+    - name: hakoniwa-pdu-registry
+      type: repository
+      notes: Provides PDU types, CDR codecs, and schema assets.
+    - name: Foxglove C++ SDK
+      type: library
+      notes: Official SDK pinned by CMake integration.
+  optional:
+    - name: GoogleTest
+      type: library
+      notes: Required for tests.
+    - name: nlohmann_json
+      type: library
+      notes: Required directly or through endpoint dependency.
+
+platforms:
+  supported:
+    - macOS
+    - Linux
+  notes:
+    - Exact platform support should be verified from build/test results.
+
+connects_to:
+  - component_id: hakoniwa-pdu-endpoint
+    direction: uses
+    interface: PduComm adapter / Endpoint::set_comm
+    notes: FoxgloveComm adapts endpoint send lifecycle to Foxglove publication.
+  - component_id: hakoniwa-pdu-registry
+    direction: uses
+    interface: CDR converters / schema files
+    notes: Caller should use registry-generated CDR converters and schema assets.
+  - component_id: hakoniwa-pdu-bridge-core
+    direction: related
+    interface: possible bridge/application codec layer
+    notes: Bridge or app layer may convert Hakoniwa PDU to CDR before endpoint send.
+
+data_contracts:
+  - name: FoxgloveComm send input
+    description: send input must be a complete Foxglove-compatible CDR payload.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-foxglove
+        path: README.md
+        revision: 1df9615581704fb3cca7d453611233643d37424a
+  - name: Explicit schema configuration
+    description: Schema encoding and file must be explicit; no fallback between omgidl, ros2msg, and ros2idl is allowed.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-foxglove
+        path: README.md
+        revision: 1df9615581704fb3cca7d453611233643d37424a
+
+recipe_roles:
+  - role: visualizer
+    description: Streams simulation data to Foxglove App for live inspection.
+  - role: bridge
+    description: Adapts endpoint output to a Foxglove WebSocket publication boundary.
+  - role: integration_boundary
+    description: Bridges Hakoniwa PDU/CDR data with Foxglove schema-aware visualization.
+
+typical_usecases:
+  - Publish ROS-compatible CDR payloads from Hakoniwa to Foxglove.
+  - Validate live visualization of specific PDU topics with explicit schemas.
+  - Build an output-only visualization path without modifying endpoint protocol factory.
+
+anti_usecases:
+  - Bidirectional Foxglove control.
+  - Automatic Hakoniwa-native-binary to CDR conversion.
+  - MCAP recording or Foxglove panel development.
+  - General-purpose transport between Hakoniwa assets.
+
+demo_candidates:
+  - name: CDR publisher live smoke
+    description: Run examples/cdr-publisher with sample Foxglove configs and connect Foxglove App to the local WebSocket server.
+    required_components:
+      - hakoniwa-pdu-foxglove
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-pdu-registry
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-pdu-foxglove
+        path: examples/cdr-publisher
+        revision: 1df9615581704fb3cca7d453611233643d37424a
+
+operations:
+  build:
+    commands:
+      - bash build.bash
+      - cmake -S . -B build
+      - cmake --build build
+    notes:
+      - Requires endpoint and registry submodules plus Foxglove SDK.
+  test:
+    commands: []
+    notes: README mentions unit tests that do not require Foxglove App; exact commands should be cataloged.
+  run:
+    commands: []
+    notes: Add exact cdr-publisher command after reading example README or source.
+
+known_gaps:
+  - Need exact build/test/run commands from current CMake files and examples.
+  - Need to map supported schemas and PDU topics into recipe fragments.
+
+source_refs:
+  - repository: hakoniwalab/hakoniwa-pdu-foxglove
+    path: README.md
+    revision: 1df9615581704fb3cca7d453611233643d37424a
+    description: Main goal, scope, data contract, architecture, lifecycle, config, dependencies.
+  - repository: hakoniwalab/hakoniwa-pdu-foxglove
+    path: config/sample
+    revision: 1df9615581704fb3cca7d453611233643d37424a
+    description: Sample endpoint and Foxglove comm configs.
+  - repository: hakoniwalab/hakoniwa-pdu-foxglove
+    path: examples/cdr-publisher
+    revision: 1df9615581704fb3cca7d453611233643d37424a
+    description: Manual live-visualization smoke example.
+
+tags:
+  - hakoniwa
+  - foxglove
+  - visualization
+  - endpoint
+  - cdr
+  - websocket
+  - schema
+

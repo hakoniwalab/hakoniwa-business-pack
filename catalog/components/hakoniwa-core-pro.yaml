@@ -1,0 +1,235 @@
+id: hakoniwa-core-pro
+name: Hakoniwa Core Pro
+repository:
+  owner: hakoniwalab
+  name: hakoniwa-core-pro
+  path: ../hakoniwa-core-pro
+  url: https://github.com/hakoniwalab/hakoniwa-core-pro
+  visibility: private
+distribution:
+  channel: commercial
+  notes:
+    - Private/pro repository; treat as commercial Hakoniwa core component.
+verification:
+  verified_at: 2026-07-19
+  source_revision: 98a057ab91184921e283ab43279b8ed05cf25363
+  source_ref: main
+summary: Hakoniwa core runtime extension layer built on hakoniwa-core-cpp, providing shared-memory simulation hub integration, asset APIs, commands, events, and RPC services.
+category:
+  primary: simulation-core
+  secondary:
+    - commercial
+    - infrastructure
+    - time-sync
+    - control-plane
+
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - Cataloged from README and core-cpp references.
+
+capabilities:
+  - name: Simulation hub integration
+    description: Uses hakoniwa-core-cpp master data and PDU buffers for high-speed asset communication and simulation time synchronization.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-core-pro
+        path: README.md
+        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+  - name: Asset APIs
+    description: Provides C, C++, and Python-facing APIs for asset registration, event handling, PDU read/write, and time access.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-core-pro
+        path: README.md
+        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+  - name: Data receive events
+    description: Lets assets register callbacks or polling flags for specific PDU channel receive events, with pending/resume notification control.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-core-pro
+        path: README.md
+        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+  - name: Core command and conductor tools
+    description: Provides hako-master, hako-conductor, and hako-cmd style control and inspection commands.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-core-pro
+        path: README.md
+        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+  - name: PDU-based RPC services
+    description: Provides request-response service APIs for assets using PDU buffers.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-core-pro
+        path: README.md
+        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+
+limitations:
+  - Commercial/private core component; recipes should consider distribution constraints.
+  - Low-level shared-memory runtime requires correct installation and configuration.
+  - Legacy C API remains for compatibility but README indicates newer polling API should be preferred.
+
+interfaces:
+  inputs:
+    - name: Asset registration and PDU channel definitions
+      kind: api
+      description: Asset code registers with master data and creates logical PDU channels.
+    - name: Asset config
+      kind: config
+      description: Runtime configuration for assets, PDU channels, and service definitions.
+    - name: hako-cmd commands
+      kind: command
+      description: Start, stop, inspect, and control commands for the simulation hub.
+  outputs:
+    - name: Shared-memory master data
+      kind: file
+      description: Shared memory area for simulation state and asset metadata.
+    - name: Shared-memory PDU buffers
+      kind: pdu
+      description: Runtime PDU buffer storage read and written by assets.
+    - name: Simulation time
+      kind: api
+      description: World and asset current time APIs.
+  protocols:
+    - name: Shared Memory
+      role: local
+      notes: Primary high-speed local communication and time-sync boundary.
+  configuration:
+    - path: config
+      description: Core and example runtime configs.
+    - path: examples
+      description: PDU communication and service examples.
+
+dependencies:
+  required:
+    - name: C/C++ toolchain
+      type: tool
+      notes: Required for native core and assets.
+    - name: hakoniwa-core-cpp
+      type: repository
+      notes: Bundled core simulation hub.
+  optional:
+    - name: Python
+      type: runtime
+      notes: Used by Python bindings and asset examples.
+
+platforms:
+  supported:
+    - macOS
+    - Linux
+  notes:
+    - Exact platform matrix should be verified from build docs.
+
+connects_to:
+  - component_id: hakoniwa-pdu-endpoint
+    direction: used_by
+    interface: SHM comm / time source / core libraries
+    notes: Endpoint uses core for shared-memory communication and Hakoniwa time integration.
+  - component_id: hakoniwa-pdu-bridge-core
+    direction: used_by
+    interface: core libraries / callback asset runtime
+    notes: Bridge and web bridge can run inside Hakoniwa runtime contexts.
+  - component_id: hakoniwa-conductor-pro
+    direction: used_by
+    interface: runtime and install layout
+    notes: Conductor-pro builds on commercial core runtime concepts.
+  - component_id: hakoniwa-mujoco-robots
+    direction: used_by
+    interface: hako-cmd / sync / PDU runtime
+    notes: MuJoCo robot samples require installed core-pro.
+  - component_id: hakoniwa-godot
+    direction: used_by
+    interface: time synchronization / addon integration
+    notes: Godot uses core-pro for Hakoniwa time synchronization.
+
+data_contracts:
+  - name: Shared memory layout
+    description: Master data and PDU buffer layout define the low-level runtime contract.
+    source:
+      - repository: hakoniwalab/hakoniwa-core-pro
+        path: hakoniwa-core-cpp/SHARED_MEMORY_SPEC.md
+        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+  - name: Asset event model
+    description: Assets observe simulation events and data receive events through callback or polling APIs.
+    source:
+      - repository: hakoniwalab/hakoniwa-core-pro
+        path: README.md
+        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+
+recipe_roles:
+  - role: simulation_core
+    description: Provides the core simulation hub, time synchronization, and asset coordination base.
+  - role: communication_infrastructure
+    description: Supplies shared-memory PDU buffers and asset-side data access.
+  - role: control_plane
+    description: Provides command and conductor operations for simulation lifecycle.
+  - role: time_sync
+    description: Supplies world and asset time synchronization primitives.
+
+typical_usecases:
+  - Run Hakoniwa assets with shared-memory PDU communication.
+  - Coordinate simulation start, stop, and time progression.
+  - Build C/C++/Python assets that participate in the Hakoniwa runtime.
+  - Provide the runtime base for MuJoCo, endpoint SHM, bridge, and Godot integrations.
+
+anti_usecases:
+  - Browser-only visualization without local Hakoniwa runtime.
+  - Pure data schema generation.
+  - Simple standalone simulations that do not need asset synchronization.
+
+demo_candidates:
+  - name: PDU communication asset sample
+    description: Build and run examples/pdu_communication to verify asset registration, start, and PDU exchange.
+    required_components:
+      - hakoniwa-core-pro
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-core-pro
+        path: examples/pdu_communication
+        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+
+operations:
+  build:
+    commands:
+      - bash build.bash
+      - bash install.bash
+    notes:
+      - Install path is commonly /usr/local/hakoniwa.
+  test:
+    commands: []
+    notes: Add exact test commands after reading test docs.
+  run:
+    commands:
+      - hako-cmd start
+      - hako-cmd stop
+    notes:
+      - Command availability depends on installation.
+
+known_gaps:
+  - Catalog should be refined after reading hakoniwa-core-cpp API and shared memory specs.
+  - Commercial licensing and redistribution constraints should be documented outside this technical catalog.
+
+source_refs:
+  - repository: hakoniwalab/hakoniwa-core-pro
+    path: README.md
+    revision: 98a057ab91184921e283ab43279b8ed05cf25363
+    description: Main overview, architecture, asset APIs, events, time, and RPC services.
+  - repository: hakoniwalab/hakoniwa-core-pro
+    path: hakoniwa-core-cpp/README.md
+    revision: 98a057ab91184921e283ab43279b8ed05cf25363
+    description: Core simulation hub details.
+  - repository: hakoniwalab/hakoniwa-core-pro
+    path: hakoniwa-core-cpp/API_SPEC.md
+    revision: 98a057ab91184921e283ab43279b8ed05cf25363
+    description: Core API specification.
+  - repository: hakoniwalab/hakoniwa-core-pro
+    path: hakoniwa-core-cpp/SHARED_MEMORY_SPEC.md
+    revision: 98a057ab91184921e283ab43279b8ed05cf25363
+    description: Shared memory layout.
+
+tags:
+  - hakoniwa
+  - core
+  - commercial
+  - shm
+  - pdu
+  - asset
+  - time-sync
+  - hako-cmd
+

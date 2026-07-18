@@ -5,6 +5,11 @@ repository:
   name: hakoniwa-pdu-endpoint
   path: ../hakoniwa-pdu-endpoint
   url: https://github.com/hakoniwalab/hakoniwa-pdu-endpoint
+  visibility: public
+distribution:
+  channel: oss
+  notes:
+    - Public OSS Hakoniwa component.
 verification:
   verified_at: 2026-07-19
   source_revision: 5e8d412dca9dcf6c41456d273968714b077e2e99

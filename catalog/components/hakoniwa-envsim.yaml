@@ -1,0 +1,204 @@
+id: hakoniwa-envsim
+name: Hakoniwa Envsim
+repository:
+  owner: hakoniwalab
+  name: hakoniwa-envsim
+  path: ../hakoniwa-envsim
+  url: https://github.com/hakoniwalab/hakoniwa-envsim
+  visibility: public
+distribution:
+  channel: oss
+  notes:
+    - Public OSS Hakoniwa component.
+verification:
+  verified_at: 2026-07-19
+  source_revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
+  source_ref: main
+summary: Environment modeling toolkit for creating, visualizing, refining, and querying environmental factors such as wind, temperature, pressure, GPS strength, and boundaries.
+category:
+  primary: physics-environment
+  secondary:
+    - environment-model
+    - visualization
+    - integration
+
+status:
+  maturity: active
+  catalog_confidence: medium
+  notes:
+    - Cataloged from README schema and use case sections.
+
+capabilities:
+  - name: Creator environment model
+    description: Lets users define intuitive JSON environment models with base conditions and local zones.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: README.md
+        revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
+  - name: Environment visualization
+    description: Supports visualizing environmental data with colors, arrows, and simple Python tooling.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: README.md
+        revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
+  - name: Runtime model refinement
+    description: Converts human-authored creator models into execution-oriented split models for simulation use.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: README.md
+        revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
+  - name: Fast position lookup
+    description: Provides a fast-search approach for mapping positions to environment values in large area models.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: README.md
+        revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
+  - name: Kobe port sample scenario
+    description: Includes an example environment model with base wind, temperature, GPS strength, local zones, turbulence, and priorities.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: README.md
+        revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
+
+limitations:
+  - Not a robot physics simulator.
+  - Integration into runtime simulators is the final target but should be verified per recipe.
+  - Catalog has not yet inspected all src tools and schemas in detail.
+
+interfaces:
+  inputs:
+    - name: Creator environment model
+      kind: config
+      description: JSON model with version, meta, grid, base, and zones.
+    - name: Runtime area/property/link models
+      kind: config
+      description: Split execution model JSON for simulation-efficient lookup.
+  outputs:
+    - name: Visualized environment
+      kind: file
+      description: Human-readable visual representations of environmental fields.
+    - name: Position-to-environment query results
+      kind: api
+      description: Environment values such as wind or GPS strength for a given position.
+  protocols: []
+  configuration:
+    - path: src/hakoniwa_envsim/schemas/environment_model.schema.json
+      description: Creator model schema.
+    - path: src/hakoniwa_envsim/schemas/space_area.schema.json
+      description: Runtime space area schema.
+    - path: src/hakoniwa_envsim/schemas/area_properties.schema.json
+      description: Runtime property schema.
+    - path: src/hakoniwa_envsim/schemas/link.schema.json
+      description: Runtime area/property link schema.
+    - path: examples/datasets/kobe/environment_model.json
+      description: Kobe port sample model.
+
+dependencies:
+  required:
+    - name: Python
+      type: runtime
+      notes: Used by model, fast search, visualization, and pipeline tools.
+  optional: []
+
+platforms:
+  supported:
+    - macOS
+    - Linux
+  notes:
+    - Platform matrix is not explicitly documented.
+
+connects_to:
+  - component_id: hakoniwa-mujoco-robots
+    direction: related
+    interface: environment data for physics/runtime behavior
+    notes: Environment values can influence robot or drone simulation scenarios.
+  - component_id: hakoniwa-core-pro
+    direction: related
+    interface: simulation integration target
+    notes: Runtime integration is a target use case, but exact wiring should be recipe-verified.
+  - component_id: hakoniwa-pdu-registry
+    direction: related
+    interface: potential environment PDU types
+    notes: Environment data may need PDU contracts when integrated into Hakoniwa runtime.
+
+data_contracts:
+  - name: Creator model
+    description: Human-edited JSON model with CRS/units, grid, base environment, and zones.
+    source:
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: src/hakoniwa_envsim/schemas/environment_model.schema.json
+        revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
+  - name: Execution model split
+    description: Runtime model separates space_area, area_properties, link, and optional boundary definitions.
+    source:
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: README.md
+        revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
+
+recipe_roles:
+  - role: environment_model
+    description: Supplies environmental fields such as wind, temperature, pressure, and GPS strength.
+  - role: data_model
+    description: Defines creator and runtime schemas for environment data.
+  - role: visualizer
+    description: Provides pre-simulation environment inspection views.
+
+typical_usecases:
+  - Define wind, GPS, temperature, and turbulence zones for robot/drone scenarios.
+  - Visualize environment conditions before running a simulation.
+  - Query environmental values by position at runtime.
+  - Build realistic Sim2Real validation scenarios.
+
+anti_usecases:
+  - Robot body conversion.
+  - PDU communication transport.
+  - MuJoCo physics stepping by itself.
+
+demo_candidates:
+  - name: Kobe port environment model
+    description: Load and visualize examples/datasets/kobe/environment_model.json.
+    required_components:
+      - hakoniwa-envsim
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: examples/datasets/kobe/environment_model.json
+        revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
+
+operations:
+  build:
+    commands: []
+    notes: Python package/build steps should be cataloged after inspecting project metadata.
+  test:
+    commands: []
+    notes: Add exact test commands after inspecting tests.
+  run:
+    commands: []
+    notes: Add concrete CLI commands after cataloging src tools.
+
+known_gaps:
+  - Need exact CLI/API entrypoints for creator-to-runtime conversion and visualization.
+  - Need to verify current runtime integration points with Hakoniwa simulations.
+
+source_refs:
+  - repository: hakoniwalab/hakoniwa-envsim
+    path: README.md
+    revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
+    description: Main overview, use cases, schemas, and Kobe sample.
+  - repository: hakoniwalab/hakoniwa-envsim
+    path: src/hakoniwa_envsim/schemas
+    revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
+    description: Creator and runtime schemas.
+  - repository: hakoniwalab/hakoniwa-envsim
+    path: src/hakoniwa_envsim/fastsearch
+    revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
+    description: Fast position lookup implementation.
+
+tags:
+  - hakoniwa
+  - environment
+  - wind
+  - gps
+  - temperature
+  - fastsearch
+  - json-schema
+

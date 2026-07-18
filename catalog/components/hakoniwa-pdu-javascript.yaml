@@ -1,0 +1,227 @@
+id: hakoniwa-pdu-javascript
+name: Hakoniwa PDU JavaScript
+repository:
+  owner: hakoniwalab
+  name: hakoniwa-pdu-javascript
+  path: ../hakoniwa-pdu-javascript
+  url: https://github.com/hakoniwalab/hakoniwa-pdu-javascript
+  visibility: public
+distribution:
+  channel: oss
+  notes:
+    - Public OSS Hakoniwa component.
+verification:
+  verified_at: 2026-07-19
+  source_revision: 3da0b5344504da3478733eef314d1ca0dc72a3ef
+  source_ref: main
+summary: JavaScript library for reading, writing, and converting Hakoniwa PDU data over WebSocket from browser or Node.js applications.
+category:
+  primary: language-binding
+  secondary:
+    - browser
+    - visualization
+    - integration
+
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - Cataloged from README usage, architecture, encoding, and test sections.
+
+capabilities:
+  - name: WebSocket PDU access
+    description: Lets browser or Node.js apps read and write Hakoniwa PDU data through a WebSocket bridge.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-javascript
+        path: README.md
+        revision: 3da0b5344504da3478733eef314d1ca0dc72a3ef
+  - name: Browser monitoring and visualization
+    description: Supports readonly monitors, Three.js visualization, and external tool integration.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-javascript
+        path: README.md
+        revision: 3da0b5344504da3478733eef314d1ca0dc72a3ef
+  - name: PDU definition loading
+    description: Resolves robot, PDU name, channel ID, size, and type from legacy or compact PDU definition files.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-javascript
+        path: README.md
+        revision: 3da0b5344504da3478733eef314d1ca0dc72a3ef
+  - name: HAKO and CDR encoding modes
+    description: PduManager can select HAKO or CDR payload conversion through PduEncoding.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-javascript
+        path: README.md
+        revision: 3da0b5344504da3478733eef314d1ca0dc72a3ef
+  - name: RPC helper managers
+    description: Provides RemotePduServiceClientManager and RemotePduServiceServerManager for RPC PDU workflows.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-javascript
+        path: README.md
+        revision: 3da0b5344504da3478733eef314d1ca0dc72a3ef
+
+limitations:
+  - Does not run the simulator by itself.
+  - Usually requires a running Hakoniwa simulator and hakoniwa-pdu-bridge-core WebSocket bridge.
+  - Independent PDU definition design is not covered by the README; existing definitions are recommended for first use.
+
+interfaces:
+  inputs:
+    - name: WebSocket bridge URI
+      kind: protocol
+      description: URI such as ws://127.0.0.1:8080.
+    - name: PDU definition file
+      kind: config
+      description: Legacy or compact PDU definition config.
+    - name: Raw PDU bytes
+      kind: pdu
+      description: ArrayBuffer payloads read or written by PduManager.
+  outputs:
+    - name: JavaScript objects
+      kind: api
+      description: Objects converted from binary or CDR PDU payloads.
+    - name: PDU writes
+      kind: pdu
+      description: Raw PDU bytes flushed to simulator channels.
+  protocols:
+    - name: WebSocket
+      role: client
+      notes: Main runtime connection to hakoniwa-pdu-bridge-core.
+  configuration:
+    - path: package.json
+      description: npm package metadata.
+    - path: examples
+      description: Usage examples.
+    - path: src
+      description: PduManager, communication services, converters, and RPC helpers.
+
+dependencies:
+  required:
+    - name: Node.js 18 or later
+      type: runtime
+      notes: Required for local use and tests.
+    - name: npm 9 or later
+      type: tool
+      notes: Required package manager.
+  optional:
+    - name: hakoniwa-pdu-bridge-core
+      type: repository
+      notes: Required WebSocket bridge for live simulator communication.
+    - name: Three.js
+      type: package
+      notes: Useful for browser visualization recipes.
+
+platforms:
+  supported:
+    - macOS
+    - Linux
+    - Windows
+  notes:
+    - JavaScript runtime support follows Node.js/browser environment.
+
+connects_to:
+  - component_id: hakoniwa-pdu-bridge-core
+    direction: uses
+    interface: WebSocket bridge
+    notes: Typical topology connects JS app to bridge, then to simulator.
+  - component_id: hakoniwa-pdu-registry
+    direction: uses
+    interface: generated JavaScript types and converters
+    notes: Registry artifacts support HAKO/CDR conversion.
+  - component_id: hakoniwa-pdu-endpoint
+    direction: related
+    interface: PDU semantics through bridge
+    notes: Endpoint may sit behind bridge in live data paths.
+  - component_id: hakoniwa-godot
+    direction: related
+    interface: visualization alternative
+    notes: Both can be visualization frontends, with Godot for engine-native scenes and JavaScript for browser/Node.js tools.
+
+data_contracts:
+  - name: PDU definition mapping
+    description: Maps robot and PDU name to channel ID, size, and type.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-javascript
+        path: README.md
+        revision: 3da0b5344504da3478733eef314d1ca0dc72a3ef
+  - name: PDU encoding mode
+    description: PduEncoding.HAKO and PduEncoding.CDR select converter behavior; raw read/write APIs do not interpret payloads.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-javascript
+        path: README.md
+        revision: 3da0b5344504da3478733eef314d1ca0dc72a3ef
+
+recipe_roles:
+  - role: language_binding
+    description: Provides JavaScript access to PDU data.
+  - role: visualizer
+    description: Enables browser and Three.js monitors.
+  - role: integration_boundary
+    description: Connects web tools and Node.js applications to Hakoniwa PDU streams.
+
+typical_usecases:
+  - Build readonly browser monitors for robot or drone state.
+  - Visualize simulation state with Three.js.
+  - Integrate Scratch or other external tools with Hakoniwa PDU/RPC.
+  - Read PDU state through WebSocket bridge from Node.js.
+
+anti_usecases:
+  - Running a simulator without a backend.
+  - Native C++ endpoint integration.
+  - Python controller development.
+
+demo_candidates:
+  - name: Minimal WebSocket PDU read
+    description: Initialize PduManager, connect to ws://127.0.0.1:8080, resolve Drone/pos, and convert binary to JSON.
+    required_components:
+      - hakoniwa-pdu-javascript
+      - hakoniwa-pdu-bridge-core
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-pdu-javascript
+        path: README.md
+        revision: 3da0b5344504da3478733eef314d1ca0dc72a3ef
+
+operations:
+  build:
+    commands:
+      - npm install
+    notes:
+      - Package can also be installed as npm install hakoniwa-pdu-javascript.
+  test:
+    commands:
+      - npm test
+    notes:
+      - Tests cover PDU definition loading, legacy/compact compatibility, PduManager initialization, and WebSocket send/receive.
+  run:
+    commands: []
+    notes:
+      - Live examples require a simulator and WebSocket bridge.
+
+known_gaps:
+  - Need to catalog concrete examples directory entries and browser app templates.
+  - Need to connect with hakoniwa-threejs-drone and hakoniwa-scratch if those are added to business-pack.
+
+source_refs:
+  - repository: hakoniwalab/hakoniwa-pdu-javascript
+    path: README.md
+    revision: 3da0b5344504da3478733eef314d1ca0dc72a3ef
+    description: Main overview, topology, install, minimal usage, encoding, related projects, and tests.
+  - repository: hakoniwalab/hakoniwa-pdu-javascript
+    path: src
+    revision: 3da0b5344504da3478733eef314d1ca0dc72a3ef
+    description: Library source.
+  - repository: hakoniwalab/hakoniwa-pdu-javascript
+    path: examples
+    revision: 3da0b5344504da3478733eef314d1ca0dc72a3ef
+    description: Example apps.
+
+tags:
+  - hakoniwa
+  - javascript
+  - browser
+  - nodejs
+  - websocket
+  - pdu
+  - cdr
+  - visualization
+

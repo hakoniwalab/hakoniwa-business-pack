@@ -17,21 +17,27 @@ controlled_fields:
     values:
       - asset-generation
       - binary-contract
+      - browser
       - bridge
       - code-generation
       - commercial
       - conductor
       - control-plane
       - distributed-execution
+      - environment-model
+      - foxglove
       - infrastructure
       - integration
       - language-binding
       - monitoring
+      - physics-runtime
       - rd
       - registry
       - robot-body
       - rpc
+      - simulator
       - time-sync
+      - visualization
       - visualization-assets
   status.maturity:
     description: Practical maturity for recipe selection.
@@ -126,4 +132,3 @@ authoring_rules:
   - Keep category values broad; use tags for search-specific vocabulary.
   - Keep recipe roles stable because recipe generation uses them as planning primitives.
   - Mark private Hakoniwa business/product repositories as `distribution.channel: commercial`.
-

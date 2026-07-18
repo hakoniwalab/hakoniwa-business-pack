@@ -5,6 +5,11 @@ repository:
   name: hakoniwa-pdu-registry
   path: ../hakoniwa-pdu-registry
   url: https://github.com/hakoniwalab/hakoniwa-pdu-registry
+  visibility: public
+distribution:
+  channel: oss
+  notes:
+    - Public OSS Hakoniwa component.
 verification:
   verified_at: 2026-07-19
   source_revision: 7bc8839ba14b5dcba471257d660ea53beee00ce1
@@ -267,4 +272,3 @@ tags:
   - ros2
   - cdr
   - codegen
-

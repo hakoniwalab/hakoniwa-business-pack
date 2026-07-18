@@ -5,6 +5,11 @@ repository:
   name: hakoniwa-pdu-rpc
   path: ../hakoniwa-pdu-rpc
   url: https://github.com/hakoniwalab/hakoniwa-pdu-rpc
+  visibility: public
+distribution:
+  channel: oss
+  notes:
+    - Public OSS Hakoniwa component.
 verification:
   verified_at: 2026-07-19
   source_revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
@@ -244,4 +249,3 @@ tags:
   - endpoint
   - cplusplus
   - control-plane
-

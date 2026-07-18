@@ -27,6 +27,7 @@ catalog/
 ├── component-template.yaml
 ├── tools/
 │   └── generate_index.rb
+│   └── validate_catalog.rb
 └── components/
     └── <component-id>.yaml
 ```
@@ -41,6 +42,12 @@ Regenerate it from component entries:
 
 ```bash
 ruby catalog/tools/generate_index.rb
+```
+
+Validate catalog entries before regenerating the index:
+
+```bash
+ruby catalog/tools/validate_catalog.rb
 ```
 
 `schema.yaml` defines the controlled vocabulary used by catalog entries. When a
