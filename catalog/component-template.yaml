@@ -1,0 +1,121 @@
+# Copy this file to catalog/components/<component-id>.yaml and replace examples.
+id: component-id
+name: Human Readable Component Name
+repository:
+  path: ../component-directory
+  url: https://github.com/hakoniwalab/component-directory
+summary: One sentence describing the component's role in Hakoniwa.
+category:
+  primary: communication
+  secondary:
+    - integration
+
+status:
+  maturity: draft
+  catalog_confidence: low
+  notes:
+    - Fill from README and docs before using in recipes.
+
+capabilities:
+  - name: Capability name
+    description: What user-visible outcome this enables.
+    evidence:
+      - ../component-directory/README.md
+
+limitations:
+  - What this component does not provide or should not be used for.
+
+interfaces:
+  inputs:
+    - name: Input name
+      kind: config | api | protocol | file | pdu | command
+      description: What the component consumes.
+  outputs:
+    - name: Output name
+      kind: config | api | protocol | file | pdu | command
+      description: What the component produces.
+  protocols:
+    - name: Protocol or transport name
+      role: client | server | pubsub | file | local
+      notes: When this protocol is relevant.
+  configuration:
+    - path: config/example.json
+      description: Example or schema used by this component.
+
+dependencies:
+  required:
+    - name: Dependency name
+      type: library | tool | runtime | repository | package
+      notes: Why it is required.
+  optional:
+    - name: Optional dependency name
+      type: library | tool | runtime | repository | package
+      notes: Feature enabled by this dependency.
+
+platforms:
+  supported:
+    - macOS
+    - Linux
+  notes:
+    - Add Windows or GPU constraints when known.
+
+connects_to:
+  - component_id: other-component-id
+    direction: uses | used_by | bidirectional
+    interface: PDU / RPC / file / generated artifact / API
+    notes: Why these components connect.
+
+data_contracts:
+  - name: Contract name
+    description: Binary layout, message schema, generated asset, or timing contract.
+    source:
+      - ../component-directory/docs/spec.md
+
+recipe_roles:
+  - role: simulation_core | physics_runtime | visualizer | bridge | registry | language_binding | environment_model | control_plane
+    description: How this component appears in recipes.
+
+typical_usecases:
+  - User-facing scenario where this component is a good fit.
+
+anti_usecases:
+  - Scenario where another component or approach is better.
+
+demo_candidates:
+  - name: Minimal demo idea
+    description: Small proof-of-concept this component can support.
+    required_components:
+      - component-id
+      - other-component-id
+    source_examples:
+      - ../component-directory/examples
+
+operations:
+  build:
+    commands:
+      - cmake -S . -B build
+      - cmake --build build
+    notes:
+      - Keep commands copied from the source repository.
+  test:
+    commands:
+      - ctest --test-dir build --output-on-failure
+    notes: ""
+  run:
+    commands:
+      - ./build/example
+    notes: ""
+
+known_gaps:
+  - Missing information or implementation gap relevant to recipes.
+
+source_refs:
+  - path: ../component-directory/README.md
+    description: Main README.
+  - path: ../component-directory/docs
+    description: Design or tutorial docs.
+
+tags:
+  - hakoniwa
+  - pdu
+
