@@ -1,0 +1,129 @@
+schema_version: 0.1
+description: Controlled vocabulary for Hakoniwa component catalog entries.
+
+controlled_fields:
+  category.primary:
+    description: Main catalog grouping used for first-pass component filtering.
+    values:
+      - communication
+      - data-model
+      - physics-environment
+      - simulation-core
+      - visualization
+      - language-binding
+      - tool
+  category.secondary:
+    description: Secondary grouping tags. Extend as needed, but keep values kebab-case.
+    values:
+      - asset-generation
+      - binary-contract
+      - bridge
+      - code-generation
+      - commercial
+      - conductor
+      - control-plane
+      - distributed-execution
+      - infrastructure
+      - integration
+      - language-binding
+      - monitoring
+      - rd
+      - registry
+      - robot-body
+      - rpc
+      - time-sync
+      - visualization-assets
+  status.maturity:
+    description: Practical maturity for recipe selection.
+    values:
+      - draft
+      - experimental
+      - active
+      - stable
+      - deprecated
+  status.catalog_confidence:
+    description: Confidence in the catalog entry based on available source docs.
+    values:
+      - low
+      - medium
+      - high
+  repository.visibility:
+    description: Repository visibility as known to the catalog author.
+    values:
+      - public
+      - private
+      - unknown
+  distribution.channel:
+    description: Product distribution channel for recipe and business-pack planning.
+    values:
+      - oss
+      - commercial
+      - unknown
+  interfaces.kind:
+    description: Interface artifact types consumed or produced by a component.
+    values:
+      - api
+      - command
+      - config
+      - file
+      - protocol
+      - pdu
+  interfaces.protocols.role:
+    description: Role a component takes for a protocol.
+    values:
+      - client
+      - server
+      - pubsub
+      - file
+      - local
+      - unicast
+      - broadcast
+      - multicast
+  dependencies.type:
+    description: Dependency classes.
+    values:
+      - library
+      - tool
+      - runtime
+      - repository
+      - package
+  connects_to.direction:
+    description: Direction of a component graph edge from the current component.
+    values:
+      - uses
+      - used_by
+      - bidirectional
+      - related
+    semantics:
+      uses: Current component directly depends on or consumes the target component.
+      used_by: Target component commonly consumes or builds on the current component.
+      bidirectional: Both components call, consume, or coordinate with each other as peers.
+      related: The relationship is relevant for recipe planning but is not a direct dependency edge.
+  recipe_roles.role:
+    description: Role a component can play inside a product recipe.
+    values:
+      - asset_generator
+      - bridge
+      - code_generator
+      - communication_infrastructure
+      - control_plane
+      - data_model
+      - environment_model
+      - integration_boundary
+      - language_binding
+      - monitor
+      - physics_runtime
+      - rd_runtime
+      - registry
+      - simulation_core
+      - time_sync
+      - visualization_asset_source
+      - visualizer
+
+authoring_rules:
+  - Add new controlled values to this file before using them in component entries.
+  - Prefer `related` only when neither `uses` nor `used_by` is accurate.
+  - Keep category values broad; use tags for search-specific vocabulary.
+  - Keep recipe roles stable because recipe generation uses them as planning primitives.
+  - Mark private Hakoniwa business/product repositories as `distribution.channel: commercial`.
+

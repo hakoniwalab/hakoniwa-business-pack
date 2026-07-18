@@ -22,12 +22,29 @@ grounded in the source repository.
 ```text
 catalog/
 ├── README.md
+├── schema.yaml
+├── index.yaml
 ├── component-template.yaml
+├── tools/
+│   └── generate_index.rb
 └── components/
     └── <component-id>.yaml
 ```
 
 Use one YAML file per component. The file name should match `id`.
+
+`index.yaml` is the lightweight entry point for AI-assisted search. It should
+contain enough information to shortlist candidate components before reading the
+larger component YAML files.
+
+Regenerate it from component entries:
+
+```bash
+ruby catalog/tools/generate_index.rb
+```
+
+`schema.yaml` defines the controlled vocabulary used by catalog entries. When a
+new value is needed, add it there first and then update entries.
 
 ## Authoring Rules
 
@@ -38,6 +55,11 @@ Use one YAML file per component. The file name should match `id`.
 - Keep `interfaces` concrete: files, protocols, commands, APIs, or data types.
 - Use `recipe_roles` to explain how this component participates in a product.
 - Add links to local source docs so later catalog updates can be audited.
+- Use controlled vocabulary from `schema.yaml` for fields such as
+  `connects_to.direction`, `category.primary`, `status.maturity`, and
+  `recipe_roles.role`.
+- Mark commercial/private components explicitly with `distribution.channel` and
+  the `commercial` secondary category.
 
 ## Minimum Viable Entry
 
@@ -58,4 +80,3 @@ A useful first entry should fill these fields:
 - `source_refs`
 
 Other fields can start as empty lists and be filled as the catalog matures.
-

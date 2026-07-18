@@ -5,6 +5,11 @@ repository:
   name: hakoniwa-conductor-pro
   path: ../hakoniwa-conductor-pro
   url: https://github.com/hakoniwalab/hakoniwa-conductor-pro
+  visibility: private
+distribution:
+  channel: commercial
+  notes:
+    - Private/pro repository; treat as commercial Hakoniwa component in recipes.
 verification:
   verified_at: 2026-07-19
   source_revision: 8a0463561da34b713f7c2fabced27cc3bca320cf
@@ -17,6 +22,7 @@ category:
     - distributed-execution
     - rd
     - control-plane
+    - commercial
 
 status:
   maturity: experimental
@@ -278,4 +284,3 @@ tags:
   - distributed
   - endpoint
   - bridge
-

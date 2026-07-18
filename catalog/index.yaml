@@ -1,0 +1,224 @@
+index_version: 0.1
+generated_at: '2026-07-19'
+generated_by: catalog/tools/generate_index.rb
+description: Lightweight search index for Hakoniwa component catalogs.
+components:
+- id: hakoniwa-conductor-light
+  name: Hakoniwa Conductor Light
+  category: simulation-core
+  secondary_categories:
+  - conductor
+  - time-sync
+  - control-plane
+  maturity: active
+  distribution: unknown
+  summary: Lightweight conductor for coordinating dynamically joining and leaving
+    assets under a shared virtual time.
+  recipe_roles:
+  - simulation_core
+  - control_plane
+  - time_sync
+  connects_to:
+  - hakoniwa-pdu-rpc
+  - hakoniwa-pdu-endpoint
+  - hakoniwa-core-pro
+  - hakoniwa-conductor-pro
+  tags:
+  - hakoniwa
+  - conductor
+  - time-sync
+  - rpc
+  - endpoint
+  catalog_path: components/hakoniwa-conductor-light.yaml
+- id: hakoniwa-conductor-pro
+  name: Hakoniwa Conductor Pro
+  category: simulation-core
+  secondary_categories:
+  - conductor
+  - distributed-execution
+  - rd
+  - control-plane
+  - commercial
+  maturity: experimental
+  distribution: commercial
+  summary: Distributed conductor and RD-oriented execution-unit stack for coordinating
+    server/client assets, time synchronization, control flows, and runtime handoff
+    experiments.
+  recipe_roles:
+  - simulation_core
+  - control_plane
+  - rd_runtime
+  - time_sync
+  connects_to:
+  - hakoniwa-core-pro
+  - hakoniwa-pdu-bridge-core
+  - hakoniwa-pdu-endpoint
+  - hakoniwa-conductor-light
+  tags:
+  - hakoniwa
+  - conductor
+  - rd
+  - distributed
+  - endpoint
+  - bridge
+  catalog_path: components/hakoniwa-conductor-pro.yaml
+- id: hakoniwa-mbody-registry
+  name: Hakoniwa MBody Registry
+  category: data-model
+  secondary_categories:
+  - registry
+  - robot-body
+  - asset-generation
+  - visualization-assets
+  maturity: active
+  distribution: unknown
+  summary: ROS-independent robot body registry that converts upstream robot descriptions
+    into committed URDF, MJCF, GLB, PDU, and Godot-ready artifacts.
+  recipe_roles:
+  - registry
+  - data_model
+  - asset_generator
+  - visualization_asset_source
+  connects_to:
+  - hakoniwa-pdu-registry
+  - hakoniwa-godot
+  - hakoniwa-mujoco-robots
+  - hakoniwa-pdu-endpoint
+  tags:
+  - hakoniwa
+  - mbody
+  - robot-body
+  - urdf
+  - mjcf
+  - glb
+  - godot
+  - mujoco
+  - registry
+  catalog_path: components/hakoniwa-mbody-registry.yaml
+- id: hakoniwa-pdu-bridge-core
+  name: Hakoniwa PDU Bridge Core
+  category: communication
+  secondary_categories:
+  - integration
+  - bridge
+  - monitoring
+  maturity: active
+  distribution: unknown
+  summary: Logical PDU transfer layer that controls when data flows between endpoints
+    while delegating transport I/O to hakoniwa-pdu-endpoint.
+  recipe_roles:
+  - bridge
+  - communication_infrastructure
+  - monitor
+  connects_to:
+  - hakoniwa-pdu-endpoint
+  - hakoniwa-core-pro
+  - hakoniwa-pdu-javascript
+  - hakoniwa-pdu-rpc
+  tags:
+  - hakoniwa
+  - pdu
+  - bridge
+  - endpoint
+  - monitor
+  catalog_path: components/hakoniwa-pdu-bridge-core.yaml
+- id: hakoniwa-pdu-endpoint
+  name: Hakoniwa PDU Endpoint
+  category: communication
+  secondary_categories:
+  - integration
+  - infrastructure
+  - language-binding
+  maturity: active
+  distribution: unknown
+  summary: Config-driven PDU endpoint layer that makes cache lifetime, communication
+    transport, and PDU meaning explicit for distributed Hakoniwa simulations.
+  recipe_roles:
+  - bridge
+  - communication_infrastructure
+  - integration_boundary
+  - language_binding
+  connects_to:
+  - hakoniwa-core-pro
+  - hakoniwa-pdu-registry
+  - hakoniwa-pdu-bridge-core
+  - hakoniwa-pdu-rpc
+  - hakoniwa-conductor-light
+  - hakoniwa-godot
+  - hakoniwa-pdu-foxglove
+  - hakoniwa-pdu-python
+  tags:
+  - hakoniwa
+  - pdu
+  - endpoint
+  - tcp
+  - udp
+  - websocket
+  - shm
+  - storage
+  - zenoh
+  - mqtt
+  - cplusplus
+  - python
+  - csharp
+  catalog_path: components/hakoniwa-pdu-endpoint.yaml
+- id: hakoniwa-pdu-registry
+  name: Hakoniwa PDU Registry
+  category: data-model
+  secondary_categories:
+  - registry
+  - code-generation
+  - binary-contract
+  maturity: active
+  distribution: unknown
+  summary: Authoritative registry and reproducible generator for Hakoniwa PDU binary
+    layouts derived from ROS 2 message and service definitions.
+  recipe_roles:
+  - registry
+  - data_model
+  - code_generator
+  connects_to:
+  - hakoniwa-pdu-endpoint
+  - hakoniwa-pdu-rpc
+  - hakoniwa-pdu-python
+  - hakoniwa-pdu-javascript
+  - hakoniwa-godot
+  - hakoniwa-pdu-foxglove
+  tags:
+  - hakoniwa
+  - pdu
+  - registry
+  - binary-contract
+  - ros2
+  - cdr
+  - codegen
+  catalog_path: components/hakoniwa-pdu-registry.yaml
+- id: hakoniwa-pdu-rpc
+  name: Hakoniwa PDU RPC
+  category: communication
+  secondary_categories:
+  - rpc
+  - control-plane
+  - integration
+  maturity: active
+  distribution: unknown
+  summary: C++ request-response layer for Hakoniwa control-plane RPC built on endpoint
+    topology and PDU definitions.
+  recipe_roles:
+  - control_plane
+  - communication_infrastructure
+  - integration_boundary
+  connects_to:
+  - hakoniwa-pdu-endpoint
+  - hakoniwa-pdu-registry
+  - hakoniwa-conductor-light
+  - hakoniwa-conductor-pro
+  tags:
+  - hakoniwa
+  - pdu
+  - rpc
+  - endpoint
+  - cplusplus
+  - control-plane
+  catalog_path: components/hakoniwa-pdu-rpc.yaml
+
