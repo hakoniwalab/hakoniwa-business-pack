@@ -119,6 +119,36 @@ time_model:
   notes:
     - Timing assumption or synchronization strategy.
 
+artifact_sets:
+  physics_artifacts:
+    description: Inputs consumed by the physics/runtime simulator.
+    status: not_tested | partially_verified | verified | blocked
+    artifacts:
+      - artifact-name
+    notes:
+      - Runtime-specific assumptions such as world composition or visual mesh handling.
+  visualization_artifacts:
+    description: Inputs consumed by Godot, Foxglove, or another viewer.
+    status: not_tested | partially_verified | verified | blocked
+    artifacts:
+      - artifact-name
+    notes:
+      - Visualization-specific assumptions such as GLB parts or scene mappings.
+  pdu_artifacts:
+    description: PDU definitions, endpoint configs, and sync profiles.
+    status: not_tested | partially_verified | verified | blocked
+    artifacts:
+      - artifact-name
+    notes:
+      - PDU name/type compatibility assumptions.
+  runtime_artifacts:
+    description: Commands, manifests, generated worlds, or configs required to run the demo.
+    status: not_tested | partially_verified | verified | blocked
+    artifacts:
+      - artifact-name
+    notes:
+      - Environment or component build assumptions.
+
 artifacts:
   - name: artifact-name
     kind: mjcf | urdf | glb | godot-scene | endpoint-config | pdu-definition | profile | command | source

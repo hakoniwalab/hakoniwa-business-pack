@@ -22,6 +22,7 @@ REQUIRED_FIELDS = %w[
   connections
   data_flow
   time_model
+  artifact_sets
   artifacts
   missing_pieces
   demo
@@ -70,6 +71,14 @@ recipe_paths.each do |path|
   Array(validation["steps"]).each do |step|
     unless allowed_step_statuses.include?(step["status"])
       errors << "#{label}: invalid validation step status #{step['status']}"
+    end
+  end
+
+  Array((data["artifact_sets"] || {}).values).each do |artifact_set|
+    next if artifact_set.nil?
+
+    unless allowed_validation_statuses.include?(artifact_set["status"])
+      errors << "#{label}: invalid artifact_set status #{artifact_set['status']}"
     end
   end
 

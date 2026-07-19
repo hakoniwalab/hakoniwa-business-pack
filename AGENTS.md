@@ -161,6 +161,19 @@ A Hakoniwa Recipe is a system composition document that explains:
 - which registry generates or supplies artifacts,
 - what minimal demo can validate the composition.
 
+Separate artifact sets by consumer intent. Do not treat a URDF-derived robot as
+one universal runtime artifact:
+
+- `physics_artifacts` are consumed by MuJoCo or another physics runtime.
+- `visualization_artifacts` are consumed by Godot, Foxglove, or another viewer.
+- `pdu_artifacts` define PDU names, types, endpoint configs, and sync profiles.
+- `runtime_artifacts` include generated worlds, manifests, and commands needed
+  to run the demo.
+
+State validation separately for each set. For example, GLB generation can be
+verified while MuJoCo world composition is only partially verified, or MuJoCo
+runtime motion can be verified while Godot visualization remains untested.
+
 If the user asks for an implementation, create or update a Recipe first unless
 the requested Recipe already exists.
 

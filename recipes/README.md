@@ -15,6 +15,8 @@ A Hakoniwa recipe is a structured system composition document:
 - It describes PDU, endpoint, asset, artifact, and time-model relationships.
 - It states feasibility and missing pieces.
 - It separates design feasibility from runtime validation.
+- It separates runtime physics artifacts from visualization artifacts when they
+  are generated or consumed through different paths.
 - It records component-to-component connection contracts, not only component
   lists.
 - It gives a minimal demo path that can validate the design.
@@ -66,6 +68,28 @@ Each `connections[]` entry should therefore include a `contract`:
   needed for the connection to work.
 - `validation_notes`: evidence or blockers discovered during testing.
 
+## Artifact Sets
+
+Do not assume a robot model has one universal artifact path.
+
+For Hakoniwa robot demos, the artifacts used by the physics runtime and the
+artifacts used by visualization may be different even when they originate from
+the same URDF or registry entry. For example, MuJoCo may need a physics-ready
+MJCF or minimal world with runtime-specific actuator and visual-mesh handling,
+while Godot may need GLB parts, a scene, and a robot sync profile.
+
+Recipes should group artifacts by consumer intent:
+
+- `physics_artifacts`: inputs used by the simulation runtime.
+- `visualization_artifacts`: inputs used by Godot, Foxglove, or another viewer.
+- `pdu_artifacts`: PDU definitions, endpoint configs, and sync profiles.
+- `runtime_artifacts`: commands, manifests, or generated worlds needed to run a
+  demo.
+
+If one source generates multiple artifact sets, state which set has been
+validated. A successful GLB generation does not prove the MJCF is runtime-ready,
+and a successful MuJoCo run does not prove the visualization path is verified.
+
 ## Core Shape
 
 Every recipe should make these sections explicit:
@@ -79,6 +103,7 @@ Every recipe should make these sections explicit:
 - `connections`
 - `data_flow`
 - `time_model`
+- `artifact_sets`
 - `artifacts`
 - `missing_pieces`
 - `demo`
