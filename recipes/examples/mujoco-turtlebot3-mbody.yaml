@@ -505,6 +505,7 @@ demo:
       - tb3-mbody-demo-launch.json starts the simulator before hako-cmd start and starts route/LiDAR assets after simulation start.
   verification_checks:
     lifecycle:
+      - doctor.bash reports 0 failures before the executable demo is launched.
       - hako_launcher reports tb3_sim_mbody, lidar_visualizer, and route_demo assets.
       - hako-cmd start exits with status 0.
       - route_demo exit may intentionally trigger launcher abort-all shutdown after the route completes.

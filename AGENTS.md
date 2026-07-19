@@ -160,6 +160,13 @@ If missing information changes commands or feasibility, ask the user before
 producing the runbook. If it does not change the architecture, state assumptions
 and continue.
 
+If a selected runtime repository provides a diagnostic command such as
+`doctor.bash`, run or instruct the user to run it before attempting an executable
+demo. Treat a passing doctor check as environment evidence, not as proof that
+the demo behavior is verified. If the doctor check fails, report the missing
+requirements and do not continue to destructive setup or install steps without
+explicit user approval.
+
 ## Demo Observability Requirements
 
 A runnable demo must make the intended behavior observable. Do not stop at

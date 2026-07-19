@@ -63,6 +63,12 @@ If these details are missing and they change the commands, dependencies, or
 feasibility, ask the user before writing a runbook. If they do not change the
 architecture, state assumptions explicitly.
 
+When a runtime repository provides a diagnostic command such as `doctor.bash`,
+make it an explicit preflight step in executable recipes. A passing doctor check
+supports the environment claim; it does not by itself verify runtime behavior.
+If the diagnostic fails, record the missing requirement as a blocker or
+environment gap.
+
 ## Feasibility, Validation, And Connection Contracts
 
 `feasibility` describes whether the catalog supports a credible system design.
