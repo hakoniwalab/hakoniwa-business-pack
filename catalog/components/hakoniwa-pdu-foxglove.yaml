@@ -4,11 +4,11 @@ repository:
   owner: hakoniwalab
   name: hakoniwa-pdu-foxglove
   url: https://github.com/hakoniwalab/hakoniwa-pdu-foxglove
-  visibility: public
+  visibility: private
 distribution:
-  channel: oss
+  channel: commercial
   notes:
-    - Public OSS Hakoniwa component.
+    - Private commercial Hakoniwa component.
 verification:
   verified_at: 2026-07-19
   source_revision: 1df9615581704fb3cca7d453611233643d37424a
@@ -20,6 +20,7 @@ category:
     - foxglove
     - integration
     - bridge
+    - commercial
 
 status:
   maturity: experimental
@@ -227,4 +228,3 @@ tags:
   - cdr
   - websocket
   - schema
-

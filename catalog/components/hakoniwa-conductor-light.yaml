@@ -4,11 +4,11 @@ repository:
   owner: hakoniwalab
   name: hakoniwa-conductor-light
   url: https://github.com/hakoniwalab/hakoniwa-conductor-light
-  visibility: public
+  visibility: private
 distribution:
-  channel: oss
+  channel: commercial
   notes:
-    - Public OSS Hakoniwa component.
+    - Private commercial Hakoniwa component.
 verification:
   verified_at: 2026-07-19
   source_revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
@@ -20,6 +20,7 @@ category:
     - conductor
     - time-sync
     - control-plane
+    - commercial
 
 status:
   maturity: active

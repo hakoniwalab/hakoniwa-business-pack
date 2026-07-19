@@ -10,8 +10,9 @@ components:
   - conductor
   - time-sync
   - control-plane
+  - commercial
   maturity: active
-  distribution: oss
+  distribution: commercial
   summary: Lightweight conductor for coordinating dynamically joining and leaving
     assets under a shared virtual time.
   recipe_roles:
@@ -295,8 +296,9 @@ components:
   - foxglove
   - integration
   - bridge
+  - commercial
   maturity: experimental
-  distribution: oss
+  distribution: commercial
   summary: Output-only Foxglove adapter for hakoniwa-pdu-endpoint that publishes caller-provided
     Foxglove-compatible CDR payloads through the Foxglove SDK WebSocket server.
   recipe_roles:
