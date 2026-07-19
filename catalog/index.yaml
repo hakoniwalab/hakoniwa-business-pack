@@ -98,17 +98,19 @@ components:
   - hako-cmd
   catalog_path: components/hakoniwa-core-pro.yaml
 - id: hakoniwa-drone-core
-  name: Hakoniwa Drone Core
+  name: Hakoniwa Drone
   category: physics-environment
   secondary_categories:
   - simulator
   - physics-runtime
   - integration
+  - commercial
   maturity: active
-  distribution: non-commercial
-  summary: Public Hakoniwa drone simulation core with drone dynamics, PX4 and ArduPilot
-    integration, Hakoniwa PDU integration, Python control APIs, multi-drone simulation,
-    and extensible environment and sensor models under non-commercial licensing terms.
+  distribution: dual-license
+  summary: Drone simulation component with dynamics, PX4 and ArduPilot integration,
+    Hakoniwa PDU integration, Python control APIs, multi-drone simulation, and extensible
+    environment and sensor models. The same codebase is offered under non-commercial
+    Hakoniwa Drone Core terms and commercial Hakoniwa Drone PRO licensing.
   recipe_roles:
   - physics_runtime
   - simulation_core
@@ -118,7 +120,6 @@ components:
   - hakoniwa-pdu-endpoint
   - hakoniwa-envsim
   - hakoniwa-pdu-rpc
-  - hakoniwa-drone-pro
   tags:
   - hakoniwa
   - drone
@@ -128,44 +129,12 @@ components:
   - multi-drone
   - simulator
   - pdu
+  - dual-license
   - non-commercial
-  catalog_path: components/hakoniwa-drone-core.yaml
-- id: hakoniwa-drone-pro
-  name: Hakoniwa Drone PRO
-  category: physics-environment
-  secondary_categories:
-  - simulator
-  - physics-runtime
-  - integration
   - commercial
-  maturity: active
-  distribution: commercial
-  summary: Private commercial Hakoniwa drone simulation product for licensed commercial
-    use, source-level extension and customization, and optional Control Link and Scenario
-    Link capabilities for external control and verification-scenario integration.
-  recipe_roles:
-  - physics_runtime
-  - simulation_core
-  - integration_boundary
-  connects_to:
-  - hakoniwa-drone-core
-  - hakoniwa-core-pro
-  - hakoniwa-pdu-endpoint
-  - hakoniwa-envsim
-  - hakoniwa-pdu-rpc
-  tags:
-  - hakoniwa
-  - drone
-  - commercial
-  - private
-  - px4
   - control-link
   - scenario-link
-  - fault-injection
-  - disturbance
-  - simulator
-  - pdu
-  catalog_path: components/hakoniwa-drone-pro.yaml
+  catalog_path: components/hakoniwa-drone-core.yaml
 - id: hakoniwa-envsim
   name: Hakoniwa Envsim
   category: physics-environment
