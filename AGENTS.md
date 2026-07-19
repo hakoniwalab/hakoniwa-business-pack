@@ -50,6 +50,8 @@ For a user asking "Can Hakoniwa do X?" or "How should I build X?":
    goal, selected components, tags, or demo intent.
    - If one exists, read it before opening source repositories or proposing
      commands.
+   - Listing recipe filenames is not enough. Open and use the matching Recipe
+     before executing a demo.
    - Prefer adapting an existing Recipe over rediscovering execution steps from
      component README files.
    - Treat the Recipe as the current system-composition memory, including
@@ -79,9 +81,10 @@ For a user asking "Can Hakoniwa do X?" or "How should I build X?":
 Do not output only a repository list. A useful answer explains how the selected
 components work together as a Hakoniwa system.
 
-Do not jump directly from a catalog hit to a repository README when a relevant
-Recipe exists. Catalogs identify candidate components; Recipes explain proven or
-planned compositions and should guide demo execution.
+Do not execute a demo from a component README until you have checked whether a
+matching Recipe exists and read that Recipe. Catalogs identify candidate
+components; Recipes explain proven or planned compositions and should guide demo
+execution.
 
 ## Ambiguous Requests
 

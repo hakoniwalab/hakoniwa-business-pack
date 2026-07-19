@@ -30,6 +30,9 @@ When an AI or human receives a user request, do not stop at the catalog search.
 After candidate components are found, check `recipes/examples/*.yaml` for an
 existing composition that already covers the goal or a close variant.
 
+Listing recipe filenames is not enough. Open and read the matching recipe before
+executing a demo from a component README.
+
 Use the existing recipe to recover:
 
 - validated and unvalidated paths;
