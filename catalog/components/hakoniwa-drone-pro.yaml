@@ -1,0 +1,238 @@
+id: hakoniwa-drone-pro
+name: Hakoniwa Drone PRO
+repository:
+  owner: hakoniwalab
+  name: hakoniwa-drone-pro
+  url: https://github.com/hakoniwalab/hakoniwa-drone-pro
+  visibility: private
+distribution:
+  channel: commercial
+  notes:
+    - Private commercial repository provided under individual Hakoniwa Drone PRO license agreements.
+    - Do not assume repository access, source availability, redistribution rights, or optional feature access without an applicable contract.
+license:
+  model: commercial-contract
+  public_license_page: https://hakoniwa-lab.net/products/drone-license/
+  notes:
+    - The public license page is the user-facing entry point for PRO licensing information.
+    - Formal rights, restrictions, support conditions, and optional features are governed by the applicable license documents and individual contract.
+verification:
+  verified_at: 2026-07-20
+  source_revision: af20daa6898372b1532812fb2a0f5f9d7df9ce4f
+  source_ref: main
+summary: Private commercial Hakoniwa drone simulation product for licensed commercial use, source-level extension and customization, and optional Control Link and Scenario Link capabilities for external control and verification-scenario integration.
+category:
+  primary: physics-environment
+  secondary:
+    - simulator
+    - physics-runtime
+    - integration
+    - commercial
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - Cataloged from the private repository and public Hakoniwa Drone PRO licensing information.
+    - Private implementation details are not treated as publicly available artifacts.
+capabilities:
+  - name: Commercial drone simulation and customization
+    description: Provides Hakoniwa drone simulation capabilities for commercial use and contract-scoped source-level extension and customization.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-drone-pro
+        path: README.md
+        revision: af20daa6898372b1532812fb2a0f5f9d7df9ce4f
+  - name: Control Link
+    description: Optionally connects PX4 or custom control software through the Adapter Interface for lightweight closed-loop validation before full-stack SITL or real-flight testing.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-drone-pro
+        path: docs/license/pro-control-link.md
+        revision: af20daa6898372b1532812fb2a0f5f9d7df9ce4f
+  - name: Scenario Link
+    description: Optionally connects verification scenarios containing disturbances, environment conditions, sensor noise, and fault injection to the drone simulation through Disturbance PDU and related APIs.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-drone-pro
+        path: docs/license/pro-scenario-link.md
+        revision: af20daa6898372b1532812fb2a0f5f9d7df9ce4f
+  - name: External flight-controller integration
+    description: Supports licensed integration paths for PX4 and other external or custom control implementations depending on the contracted feature set.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-drone-pro
+        path: docs/license/pro-control-link.md
+        revision: af20daa6898372b1532812fb2a0f5f9d7df9ce4f
+  - name: Fault and disturbance verification
+    description: Supports contract-scoped scenario integration for rotor faults, wind, temperature, pressure, obstacle boundaries, sensor noise, and extensible custom disturbance inputs.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-drone-pro
+        path: docs/license/pro-scenario-link.md
+        revision: af20daa6898372b1532812fb2a0f5f9d7df9ce4f
+limitations:
+  - The repository is private and must not be presented as publicly clonable or generally available source code.
+  - Commercial use, modification, redistribution, support, and delivery scope are governed by the applicable license documents and individual contract.
+  - Control Link and Scenario Link are optional licensed capabilities and must not be assumed to be enabled for every PRO user.
+  - Public catalog information should describe capabilities and composition boundaries without exposing contract-specific or confidential implementation details.
+interfaces:
+  inputs:
+    - name: Drone and fleet configuration
+      kind: config
+      description: Contract-supported aircraft, controller, sensor, service, and fleet configuration.
+    - name: External control adapter input
+      kind: api
+      description: Adapter Interface used by licensed Control Link configurations to connect PX4 or custom control implementations.
+    - name: Disturbance PDU
+      kind: pdu
+      description: Scenario Link input for wind, environment conditions, sensor conditions, fault injection, and custom disturbance extensions.
+  outputs:
+    - name: Drone state and sensor data
+      kind: pdu
+      description: Simulated vehicle state and sensor data exposed to connected Hakoniwa components and applications.
+    - name: Closed-loop control response
+      kind: api
+      description: Simulation response observed by connected external control implementations in Control Link configurations.
+  protocols:
+    - name: Hakoniwa PDU
+      role: pubsub
+      notes: Used for simulation state, sensor, environment, and scenario integration.
+    - name: Adapter Interface
+      role: local
+      notes: Licensed Control Link boundary for external control backends.
+  configuration:
+    - path: contract-scoped configuration
+      description: Exact build options, adapters, and scenario capabilities depend on the licensed package and agreement.
+dependencies:
+  required:
+    - name: Hakoniwa Drone PRO license agreement
+      type: package
+      notes: Repository access and permitted use depend on the applicable commercial agreement.
+  optional:
+    - name: hakoniwa-core-pro
+      type: repository
+      notes: Used for Hakoniwa runtime integration and synchronized PDU execution.
+    - name: hakoniwa-pdu-endpoint
+      type: repository
+      notes: Used for distributed and external PDU communication paths.
+    - name: PX4 control adapter
+      type: repository
+      notes: Used by licensed Control Link configurations that connect PX4 through the Adapter Interface.
+    - name: MuJoCo
+      type: runtime
+      notes: Used by supported high-fidelity physics integration configurations.
+platforms:
+  supported:
+    - Windows
+    - macOS
+    - Linux
+    - WSL2
+  notes:
+    - Exact delivered and supported environment is contract- and configuration-dependent.
+connects_to:
+  - component_id: hakoniwa-drone-core
+    direction: related
+    interface: non-commercial public baseline and commercial upgrade path
+    notes: Public/non-commercial and private/commercial distributions must be distinguished in user-facing recipes.
+  - component_id: hakoniwa-core-pro
+    direction: uses
+    interface: Hakoniwa runtime / time synchronization / PDU integration
+    notes: Used by Hakoniwa-integrated PRO configurations.
+  - component_id: hakoniwa-pdu-endpoint
+    direction: related
+    interface: PDU transport
+    notes: Supports distributed and external integration recipes.
+  - component_id: hakoniwa-envsim
+    direction: related
+    interface: environment and disturbance conditions
+    notes: Environment models can participate in Scenario Link recipes when the licensed configuration supports the required inputs.
+  - component_id: hakoniwa-pdu-rpc
+    direction: related
+    interface: service and RPC control
+    notes: Service-oriented control can be composed with supported PRO configurations.
+data_contracts:
+  - name: Control Link Adapter Interface
+    description: Defines the licensed external-control boundary between the Hakoniwa drone control core and PX4 or custom control backends.
+    source:
+      - repository: hakoniwalab/hakoniwa-drone-pro
+        path: docs/license/pro-control-link.md
+        revision: af20daa6898372b1532812fb2a0f5f9d7df9ce4f
+  - name: Scenario Link Disturbance PDU
+    description: Aggregates environment, disturbance, sensor-condition, and fault-injection inputs for licensed verification scenarios.
+    source:
+      - repository: hakoniwalab/hakoniwa-drone-pro
+        path: docs/license/pro-scenario-link.md
+        revision: af20daa6898372b1532812fb2a0f5f9d7df9ce4f
+recipe_roles:
+  - role: physics_runtime
+    description: Provides the licensed drone simulation runtime and physical behavior.
+  - role: simulation_core
+    description: Provides a domain-specific commercial simulation base for drone product recipes.
+  - role: integration_boundary
+    description: Connects licensed external control, scenario, PDU, and simulator integrations.
+typical_usecases:
+  - Commercial drone simulation, PoC, and product-development work under an applicable license agreement.
+  - Lightweight repeated closed-loop validation with PX4 or custom control software using Control Link.
+  - Fault, disturbance, sensor-noise, and environment-condition verification using Scenario Link.
+  - Contract-scoped customization of drone physics, sensors, control, and system integration.
+anti_usecases:
+  - Public or OSS-only recipes that require all implementation repositories to be anonymously clonable.
+  - Assuming every PRO license automatically includes Control Link or Scenario Link.
+  - Redistributing private source or licensed capabilities outside the applicable agreement.
+demo_candidates:
+  - name: Licensed external-control closed loop
+    description: Connect a licensed external controller through Control Link and observe closed-loop drone response under a minimal test condition.
+    required_components:
+      - hakoniwa-drone-pro
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-drone-pro
+        path: docs/license/pro-control-link.md
+        revision: af20daa6898372b1532812fb2a0f5f9d7df9ce4f
+  - name: Licensed fault and disturbance scenario
+    description: Inject a supported disturbance or fault condition through Scenario Link and observe the resulting vehicle and control response.
+    required_components:
+      - hakoniwa-drone-pro
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-drone-pro
+        path: docs/license/pro-scenario-link.md
+        revision: af20daa6898372b1532812fb2a0f5f9d7df9ce4f
+operations:
+  build:
+    commands: []
+    notes: Build and feature-enablement procedures are available only to appropriately licensed users and depend on the delivered package.
+  test:
+    commands: []
+    notes: Validation procedures depend on the licensed feature set and target integration.
+  run:
+    commands: []
+    notes: Use contract-provided setup and run instructions for the licensed configuration.
+known_gaps:
+  - Public catalog entries cannot determine a specific customer's contracted feature set; recipes must treat optional PRO capabilities as conditional.
+  - The public license page is informational; formal contractual terms take precedence for actual usage rights and support scope.
+source_refs:
+  - repository: hakoniwalab/hakoniwa-drone-pro
+    path: README.md
+    revision: af20daa6898372b1532812fb2a0f5f9d7df9ce4f
+    description: Private repository overview used for catalog verification; not a public source artifact.
+  - repository: hakoniwalab/hakoniwa-drone-pro
+    path: docs/license/pro-options.md
+    revision: af20daa6898372b1532812fb2a0f5f9d7df9ce4f
+    description: Private license-option mapping used to distinguish base PRO, Control Link, and Scenario Link.
+  - repository: hakoniwalab/hakoniwa-drone-pro
+    path: docs/license/pro-control-link.md
+    revision: af20daa6898372b1532812fb2a0f5f9d7df9ce4f
+    description: Private Control Link capability boundary used for catalog verification.
+  - repository: hakoniwalab/hakoniwa-drone-pro
+    path: docs/license/pro-scenario-link.md
+    revision: af20daa6898372b1532812fb2a0f5f9d7df9ce4f
+    description: Private Scenario Link capability boundary used for catalog verification.
+public_refs:
+  - url: https://hakoniwa-lab.net/products/drone-license/
+    description: Public user-facing Hakoniwa Drone PRO license overview and commercial-use guidance.
+tags:
+  - hakoniwa
+  - drone
+  - commercial
+  - private
+  - px4
+  - control-link
+  - scenario-link
+  - fault-injection
+  - disturbance
+  - simulator
+  - pdu
