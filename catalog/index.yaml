@@ -474,3 +474,34 @@ components:
   - cplusplus
   - control-plane
   catalog_path: components/hakoniwa-pdu-rpc.yaml
+- id: hakoniwa-threejs-drone
+  name: Hakoniwa Three.js Drone
+  category: visualization
+  secondary_categories:
+  - browser
+  - integration
+  - visualization
+  maturity: active
+  distribution: oss
+  summary: Three.js-based browser viewer for Hakoniwa Drone that receives drone state
+    over WebSocket and visualizes single- or multi-drone fleets with configurable scenes,
+    dynamic spawning, follow cameras, and fleet-oriented display settings.
+  recipe_roles:
+  - visualizer
+  - integration_boundary
+  connects_to:
+  - hakoniwa-pdu-bridge-core
+  - hakoniwa-drone-core
+  tags:
+  - hakoniwa
+  - drone
+  - threejs
+  - browser
+  - visualization
+  - websocket
+  - pdu
+  - fleet
+  - dynamic-spawn
+  - multi-drone
+  - 100-drones
+  catalog_path: components/hakoniwa-threejs-drone.yaml
