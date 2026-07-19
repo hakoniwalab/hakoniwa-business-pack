@@ -13,6 +13,19 @@ feasibility:
   rationale:
     - Why the current catalog supports this judgement.
 
+validation:
+  status: not_tested | partially_verified | verified | blocked
+  summary: What has and has not been executed.
+  steps:
+    - id: normalized_step_id
+      status: not_tested | verified | blocked | skipped
+      evidence:
+        - repository: hakoniwalab/component
+          path: path/to/evidence
+          revision: main
+      notes:
+        - Concrete validation note or blocker.
+
 constraints:
   - no-ros-runtime
   - single-pc
@@ -44,6 +57,32 @@ target_environment:
   notes:
     - Ask the user before producing runbook commands if this section is unspecified.
 
+execution_environment:
+  required_for: executable-demo
+  status: unspecified
+  os: macOS | Linux | Windows | WSL2 | unknown
+  os_version: unknown
+  architecture: arm64 | x86_64 | unknown
+  execution_mode: native | docker | vm | wsl | unknown
+  gui:
+    required: false
+    status: unknown
+  shared_memory:
+    required: false
+    access: unknown
+  devices:
+    - name: joystick
+      required: false
+      available: unknown
+  python:
+    environment: system | venv | conda | unknown
+    hakopy_available: unknown
+  hakoniwa:
+    install_prefix: /usr/local/hakoniwa
+    hako_cmd_access: unknown
+  notes:
+    - Runtime verification must state these assumptions.
+
 components:
   - id: hakoniwa-component-id
     roles:
@@ -56,6 +95,12 @@ connections:
     interface: pdu | endpoint | file | api | command | generated-artifact
     data:
       - data item or artifact name
+    contract:
+      status: not_tested | partially_verified | verified | blocked
+      requires:
+        - condition-or-adapter-needed-for-this-connection
+      validation_notes:
+        - What evidence exists for this specific connection.
     notes: How this connection works.
 
 data_flow:

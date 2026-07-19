@@ -14,8 +14,10 @@ REQUIRED_FIELDS = %w[
   recipe_version
   goal
   feasibility
+  validation
   constraints
   target_environment
+  execution_environment
   components
   connections
   data_flow
@@ -36,6 +38,10 @@ catalog = catalog_paths.to_h do |path|
 end
 catalog_ids = catalog.keys.to_set
 allowed_roles = schema.fetch("recipe_roles.role").fetch("values").to_set
+allowed_feasibility_statuses = %w[feasible partially_feasible not_feasible unknown].to_set
+allowed_confidence = %w[high medium low].to_set
+allowed_validation_statuses = %w[not_tested partially_verified verified blocked].to_set
+allowed_step_statuses = %w[not_tested verified blocked skipped].to_set
 
 recipe_paths = RECIPE_DIRS.flat_map { |dir| Dir[File.join(dir, "*.yaml")] }.sort
 errors = []
@@ -48,6 +54,24 @@ recipe_paths.each do |path|
   errors << "#{label}: missing required fields: #{missing.join(', ')}" unless missing.empty?
 
   errors << "#{label}: file name must match id" unless File.basename(path, ".yaml") == data["id"]
+
+  feasibility = data["feasibility"] || {}
+  unless allowed_feasibility_statuses.include?(feasibility["status"])
+    errors << "#{label}: invalid feasibility.status #{feasibility['status']}"
+  end
+  unless allowed_confidence.include?(feasibility["confidence"])
+    errors << "#{label}: invalid feasibility.confidence #{feasibility['confidence']}"
+  end
+
+  validation = data["validation"] || {}
+  unless allowed_validation_statuses.include?(validation["status"])
+    errors << "#{label}: invalid validation.status #{validation['status']}"
+  end
+  Array(validation["steps"]).each do |step|
+    unless allowed_step_statuses.include?(step["status"])
+      errors << "#{label}: invalid validation step status #{step['status']}"
+    end
+  end
 
   recipe_component_ids = Array(data["components"]).map { |component| component["id"] }
   recipe_component_ids.each do |id|
@@ -64,6 +88,14 @@ recipe_paths.each do |path|
     %w[from to].each do |field|
       id = connection[field]
       errors << "#{label}: connection #{field} references unknown component #{id}" unless catalog_ids.include?(id)
+    end
+    contract = connection["contract"]
+    if contract.nil?
+      errors << "#{label}: connection #{connection['from']} -> #{connection['to']} missing contract"
+      next
+    end
+    unless allowed_validation_statuses.include?(contract["status"])
+      errors << "#{label}: invalid connection contract.status #{contract['status']}"
     end
   end
 

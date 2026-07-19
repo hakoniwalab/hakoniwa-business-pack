@@ -14,6 +14,9 @@ A Hakoniwa recipe is a structured system composition document:
 - It assigns each component a role.
 - It describes PDU, endpoint, asset, artifact, and time-model relationships.
 - It states feasibility and missing pieces.
+- It separates design feasibility from runtime validation.
+- It records component-to-component connection contracts, not only component
+  lists.
 - It gives a minimal demo path that can validate the design.
 
 The first goal is not code generation. The first goal is to convert an ambiguous
@@ -39,13 +42,39 @@ If these details are missing and they change the commands, dependencies, or
 feasibility, ask the user before writing a runbook. If they do not change the
 architecture, state assumptions explicitly.
 
+## Feasibility, Validation, And Connection Contracts
+
+`feasibility` describes whether the catalog supports a credible system design.
+It does not mean the recipe has been executed.
+
+`validation` describes what has actually been run or checked. Use step-level
+statuses so a recipe can be partially verified:
+
+- `not_tested`: no execution evidence yet.
+- `partially_verified`: at least one core step has evidence, but gaps remain.
+- `verified`: the intended demo or runbook has completed successfully.
+- `blocked`: execution is currently stopped by a known blocker.
+
+Component capability and composition confidence are separate. Two components can
+both be capable, while the connection between them still needs an adapter,
+runtime contract, world composition step, or environment assumption.
+
+Each `connections[]` entry should therefore include a `contract`:
+
+- `status`: validation state of that specific connection.
+- `requires`: conditions, adapters, generated artifacts, or runtime assumptions
+  needed for the connection to work.
+- `validation_notes`: evidence or blockers discovered during testing.
+
 ## Core Shape
 
 Every recipe should make these sections explicit:
 
 - `goal`
 - `feasibility`
+- `validation`
 - `constraints`
+- `execution_environment`
 - `components`
 - `connections`
 - `data_flow`

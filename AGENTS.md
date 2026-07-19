@@ -54,10 +54,12 @@ For a user asking "Can Hakoniwa do X?" or "How should I build X?":
 6. Produce a Recipe-shaped answer:
    - Goal
    - Feasibility
-   - Target Environment, if executable steps are requested
+   - Validation
+   - Target Environment and Execution Environment, if executable steps are requested
    - Components
    - Component Roles
    - Connections
+   - Connection Contracts
    - Data Flow
    - Time Model
    - Required Artifacts
@@ -102,6 +104,22 @@ such as a checked demo run, test result, CI result, or recorded execution note.
 If a recipe has only been validated structurally against catalog entries and
 source artifacts, say that clearly.
 
+Component capability and composition validation are separate claims.
+
+- A component can be capable of generating or consuming an artifact.
+- Another component can be capable of running a compatible runtime.
+- The connection between them may still require an adapter, world composition
+  step, runtime-specific configuration, generated manifest, device, or execution
+  permission.
+
+When proposing a Recipe, treat `connections[]` as first-class design objects.
+For each important connection, state:
+
+- what interface or artifact crosses the boundary,
+- what contract must hold for the connection to work,
+- whether that connection is verified, partially verified, blocked, not tested,
+  or only inferred from catalog evidence.
+
 ## Executable Demo And Runbook Requirements
 
 Before writing executable demo steps or a runbook, collect the target
@@ -113,11 +131,16 @@ Required information:
 - OS and version
 - CPU architecture
 - native/container/VM/WSL execution mode
+- GUI or headless execution
+- shared-memory access permissions when Hakoniwa PDU SHM is involved
 - Godot installation and binary path when Godot is involved
 - MuJoCo installation when MuJoCo is involved
 - Python/Node.js/.NET/Docker versions when relevant
+- Python environment policy, such as system Python, venv, conda, and whether
+  `hakopy` is available when SHM/service features are required
 - Hakoniwa install prefix, usually `/usr/local/hakoniwa`
 - whether required components are already built or must be built
+- whether required physical devices such as joysticks are available
 - availability of commercial/private components
 
 If missing information changes commands or feasibility, ask the user before

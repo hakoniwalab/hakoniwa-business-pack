@@ -11,12 +11,69 @@ goal:
 
 feasibility:
   status: feasible
-  confidence: high
+  confidence: medium
   rationale:
     - hakoniwa-mbody-registry already contains generated TurtleBot3 URDF, MJCF, GLB parts, PDU definition, endpoint config, Godot scene, and robot_sync.profile.json artifacts.
     - hakoniwa-mujoco-robots already contains a TurtleBot3 MuJoCo simulator and matching TB3 PDU definitions for base_link_pos and joint_states.
     - hakoniwa-godot already contains examples/mujoco config using robot_sync.profile.json and endpoint_shm_poll_with_pdu.json.
     - The MuJoCo-side and Godot-side TB3 pdutypes define the same robot-state PDU names and types needed for sync.
+    - Composition confidence is medium because the MBody-generated MJCF is not yet verified as a direct input to the MuJoCo Robots TB3 runtime world.
+
+validation:
+  status: partially_verified
+  summary: >
+    The URDF-to-MJCF generation path and the existing MuJoCo TB3 runtime startup
+    were tested on macOS arm64. The full MBody-generated MJCF to MuJoCo runtime
+    to Godot visualization path is not yet verified.
+  steps:
+    - id: urdf_to_mjcf
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mbody-registry
+          path: bodies/turtlebot3/generated/turtlebot3_burger.xml
+          revision: local-validation-2026-07-19
+      notes:
+        - forge.sh generated TurtleBot3 URDF, MJCF, actuated MJCF, GLB, and GLB parts.
+    - id: pdu_artifact_generation
+      status: blocked
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mbody-registry
+          path: tools/mjcf2pdu.py
+          revision: local-validation-2026-07-19
+      notes:
+        - forge.sh failed because mjcf2pdu.py expects config["bodies"] as a non-empty list, while current TurtleBot3 PDU config uses a different schema.
+    - id: mujoco_runtime_start
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: src/cmake-build/main_for_sample/tb3/tb3_sim
+          revision: local-validation-2026-07-19
+      notes:
+        - tb3_sim loaded the standard TurtleBot3 MuJoCo world, created PDU channels, accepted hako-cmd start, and advanced simulation time.
+    - id: mbody_mjcf_to_mujoco_runtime
+      status: blocked
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mbody-registry
+          path: bodies/turtlebot3/generated/turtlebot3_burger.actuated.xml
+          revision: local-validation-2026-07-19
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: models/tb3/turtlebot3_burger_world.xml
+          revision: local-validation-2026-07-19
+      notes:
+        - The generated MJCF is a robot body model, while tb3_sim currently expects a runtime world with ground, freejoint, camera, friction, and velocity actuator details.
+    - id: joystick_free_motion
+      status: blocked
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: python/tb3_gamepad.py
+          revision: local-validation-2026-07-19
+      notes:
+        - The documented controller requires a physical joystick. A direct Python PDU writer failed because hakopy was unavailable in the test venv.
+    - id: godot_visualization
+      status: not_tested
+      evidence: []
+      notes:
+        - Godot was intentionally out of scope for the first validation pass.
 
 constraints:
   - no-ros-runtime
@@ -54,6 +111,34 @@ target_environment:
   notes:
     - This recipe is structurally feasible, but executable runbook commands require target machine details.
     - Ask for OS, architecture, Godot binary path, MuJoCo installation, and build/install state before claiming runtime verification.
+
+execution_environment:
+  required_for: executable-demo
+  status: partially_recorded
+  os: macOS
+  os_version: unknown
+  architecture: arm64
+  execution_mode: native
+  gui:
+    required: true
+    status: available
+  shared_memory:
+    required: true
+    access: requires-unsandboxed-command
+  devices:
+    - name: joystick
+      required: true
+      available: unknown
+  python:
+    environment: venv
+    hakopy_available: false
+  hakoniwa:
+    install_prefix: /usr/local/hakoniwa
+    hako_cmd_access: requires-unsandboxed-command
+  notes:
+    - hako-cmd start failed inside the managed sandbox because the Hakoniwa master shared memory was not visible.
+    - hako-cmd start succeeded outside the sandbox.
+    - A joystick-free TB3 command source is needed for a reproducible minimal demo.
 
 components:
   - id: hakoniwa-mbody-registry
@@ -101,6 +186,16 @@ connections:
       - turtlebot3_burger.actuated.xml
       - pdutypes.json
       - pdu_def.json
+    contract:
+      status: blocked
+      requires:
+        - mujoco-world-composition
+        - runtime-specific-actuator-settings
+        - pdu-manifest-schema-alignment
+      validation_notes:
+        - MBody generated the robot MJCF and actuated MJCF.
+        - forge.sh PDU generation is blocked by a config schema mismatch.
+        - tb3_sim currently loads a MuJoCo Robots world file, not the generated MBody MJCF directly.
     notes: MBody-generated robot body and PDU artifacts define the physical model and communication contract consumed by MuJoCo-side recipes.
 
   - from: hakoniwa-mbody-registry
@@ -111,6 +206,14 @@ connections:
       - robot_sync.profile.json
       - endpoint_shm_with_pdu.json
       - GLB parts
+    contract:
+      status: not_tested
+      requires:
+        - generated-godot-scene
+        - robot-sync-profile
+        - endpoint-config-compatible-with-runtime
+      validation_notes:
+        - Godot was not included in the first validation pass.
     notes: Godot robot sync consumes the generated scene/profile/config artifacts.
 
   - from: hakoniwa-mujoco-robots
@@ -119,6 +222,15 @@ connections:
     data:
       - TB3/base_link_pos
       - TB3/joint_states
+    contract:
+      status: partially_verified
+      requires:
+        - hakoniwa-shared-memory-access
+        - tb3-pdu-definition
+        - hako-cmd-start
+      validation_notes:
+        - tb3_sim created PDU channels and advanced simulation after hako-cmd start.
+        - State publishing was not consumed by Godot in this validation pass.
     notes: tb3_sim publishes robot pose and joint states through the TB3 endpoint.
 
   - from: hakoniwa-pdu-endpoint
@@ -127,6 +239,14 @@ connections:
     data:
       - TB3/base_link_pos
       - TB3/joint_states
+    contract:
+      status: not_tested
+      requires:
+        - godot-runtime
+        - shm-poll-endpoint-config
+        - robot-sync-profile-compatible-with-pdu-names
+      validation_notes:
+        - The PDU-to-Godot connection remains a planned validation step.
     notes: Godot examples/mujoco uses SHM poll endpoint config and robot_sync.profile.json to receive and apply robot state.
 
   - from: hakoniwa-core-pro
@@ -134,6 +254,14 @@ connections:
     interface: command
     data:
       - hako-cmd start
+    contract:
+      status: verified
+      requires:
+        - hakoniwa-runtime-installed
+        - unsandboxed-shared-memory-access
+      validation_notes:
+        - hako-cmd start succeeded outside the managed sandbox and created PDU shared memory.
+        - The same command failed inside the sandbox because the Hakoniwa master was not visible.
     notes: The MuJoCo TurtleBot3 quick start uses hako-cmd to start the simulation.
 
 data_flow:

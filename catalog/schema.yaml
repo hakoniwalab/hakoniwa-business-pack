@@ -94,7 +94,7 @@ controlled_fields:
       - repository
       - package
   connects_to.direction:
-    description: Direction of a component graph edge from the current component.
+    description: Direction of a component graph edge from the current component. This is a planning relationship, not proof that a full recipe connection has been runtime-verified.
     values:
       - uses
       - used_by
@@ -132,3 +132,4 @@ authoring_rules:
   - Keep category values broad; use tags for search-specific vocabulary.
   - Keep recipe roles stable because recipe generation uses them as planning primitives.
   - Mark private Hakoniwa business/product repositories as `distribution.channel: commercial`.
+  - Treat `connects_to` as component-level planning knowledge. Put recipe-specific connection contracts, required adapters, and validation status in recipe `connections[].contract`.

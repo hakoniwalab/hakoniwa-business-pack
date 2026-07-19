@@ -61,6 +61,9 @@ new value is needed, add it there first and then update entries.
 - Keep `capabilities` user-facing: describe outcomes, not only APIs.
 - Keep `interfaces` concrete: files, protocols, commands, APIs, or data types.
 - Use `recipe_roles` to explain how this component participates in a product.
+- Treat `connects_to` as component-level planning knowledge. It means a
+  relationship is relevant for recipes; it does not prove the connection is
+  runtime-verified.
 - Add links to local source docs so later catalog updates can be audited.
 - Use controlled vocabulary from `schema.yaml` for fields such as
   `connects_to.direction`, `category.primary`, `status.maturity`, and
