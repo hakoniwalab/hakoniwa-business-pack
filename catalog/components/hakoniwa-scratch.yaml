@@ -1,0 +1,185 @@
+id: hakoniwa-scratch
+name: Hakoniwa Scratch
+repository:
+  owner: hakoniwalab
+  name: hakoniwa-scratch
+  url: https://github.com/hakoniwalab/hakoniwa-scratch
+  visibility: public
+distribution:
+  channel: oss
+  notes:
+    - Public MIT-licensed Scratch/TurboWarp extension for controlling Hakoniwa systems and drones.
+verification:
+  verified_at: 2026-07-20
+  source_revision: c7e3508a1dc0645e5c975de0446ab4a1044e6e8f
+  source_ref: main
+summary: Scratch and TurboWarp integration for controlling Hakoniwa drone simulations through visual programming blocks, with WebSocket-based bidirectional communication, system lifecycle control, and drone RPC operations.
+category:
+  primary: language-binding
+  secondary:
+    - browser
+    - integration
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - Cataloged from the repository README and MIT license declaration.
+capabilities:
+  - name: Visual drone programming
+    description: Exposes Hakoniwa drone operations as Scratch/TurboWarp visual blocks for programming without writing conventional source code.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-scratch
+        path: README.md
+        revision: c7e3508a1dc0645e5c975de0446ab4a1044e6e8f
+  - name: Hakoniwa lifecycle control
+    description: Provides visual blocks for activating, starting, and terminating a Hakoniwa simulation.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-scratch
+        path: README.md
+        revision: c7e3508a1dc0645e5c975de0446ab4a1044e6e8f
+  - name: Drone RPC control blocks
+    description: Provides blocks for readiness, takeoff, landing, go-to movement, state retrieval, camera tilt, and magnet control.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-scratch
+        path: README.md
+        revision: c7e3508a1dc0645e5c975de0446ab4a1044e6e8f
+  - name: WebSocket bidirectional communication
+    description: Uses a UI-independent Hakoniwa client layer and WebSocket communication to invoke Hakoniwa system and drone RPC operations.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-scratch
+        path: README.md
+        revision: c7e3508a1dc0645e5c975de0446ab4a1044e6e8f
+  - name: Reusable browser client layer
+    description: Separates the Hakoniwa communication client from Scratch-specific UI blocks so the client-side communication logic can be reused by other browser or CLI integrations.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-scratch
+        path: README.md
+        revision: c7e3508a1dc0645e5c975de0446ab4a1044e6e8f
+limitations:
+  - Requires a running Hakoniwa Drone RPC-capable backend for drone control operations.
+  - Requires browser access to the extension assets and WebSocket endpoint, including correct CORS configuration when hosted separately.
+  - The current catalog positioning is focused on Scratch/TurboWarp education and visual programming rather than a general-purpose Hakoniwa UI framework.
+interfaces:
+  inputs:
+    - name: Scratch or TurboWarp block actions
+      kind: api
+      description: User actions from Hakoniwa Control and Hakoniwa Drone visual blocks.
+    - name: Extension and PDU configuration
+      kind: config
+      description: Browser-side module, PDU, service, and base-URL configuration.
+  outputs:
+    - name: Hakoniwa RPC requests
+      kind: protocol
+      description: System lifecycle and drone-control RPC calls sent through the browser client layer.
+    - name: Drone state
+      kind: api
+      description: Drone state returned to Scratch/TurboWarp blocks, including JSON-form state access.
+  protocols:
+    - name: WebSocket
+      role: client
+      notes: Browser-side transport for bidirectional communication with the Hakoniwa system.
+    - name: Hakoniwa PDU/RPC
+      role: client
+      notes: Used by the browser client layer for system control and drone operations.
+  configuration:
+    - path: src/config/drone_service.json
+      description: Drone service configuration.
+    - path: src/config/pdu_config.json
+      description: PDU and communication configuration.
+dependencies:
+  required:
+    - name: TurboWarp or compatible Scratch extension runtime
+      type: runtime
+      notes: Hosts and executes the Hakoniwa visual programming extension.
+    - name: hakoniwa-pdu-javascript
+      type: repository
+      notes: Loaded by the client layer for browser-side Hakoniwa PDU communication.
+  optional:
+    - name: hakoniwa-drone-core
+      type: repository
+      notes: Provides the Hakoniwa Drone backend used by the documented drone-control workflow.
+platforms:
+  supported:
+    - Browser
+  notes:
+    - Development workflow uses a local HTTP server and TurboWarp/Scratch-compatible browser environment.
+connects_to:
+  - component_id: hakoniwa-pdu-javascript
+    direction: uses
+    interface: browser PDU client modules
+    notes: The Hakoniwa client layer dynamically loads the JavaScript PDU modules used for WebSocket communication.
+  - component_id: hakoniwa-drone-core
+    direction: related
+    interface: drone RPC service
+    notes: The documented workflow controls Hakoniwa Drone through its RPC-capable backend.
+  - component_id: hakoniwa-pdu-bridge-core
+    direction: related
+    interface: WebSocket integration path
+    notes: Can participate in browser-facing Hakoniwa compositions where PDU/WebSocket bridging is required.
+data_contracts:
+  - name: Scratch block to Hakoniwa client API mapping
+    description: Scratch-specific block handlers delegate lifecycle and drone operations to the UI-independent Hakoniwa client layer.
+    source:
+      - repository: hakoniwalab/hakoniwa-scratch
+        path: README.md
+        revision: c7e3508a1dc0645e5c975de0446ab4a1044e6e8f
+recipe_roles:
+  - role: language_binding
+    description: Exposes Hakoniwa system and drone operations through Scratch/TurboWarp visual programming blocks.
+  - role: integration_boundary
+    description: Connects a browser-based visual programming environment to Hakoniwa PDU/RPC communication.
+  - role: control_plane
+    description: Provides user-facing lifecycle and drone control operations.
+typical_usecases:
+  - Teach drone programming and simulation concepts with Scratch/TurboWarp visual blocks.
+  - Provide a beginner-friendly or workshop-oriented front end for Hakoniwa Drone.
+  - Build visual programming demos that control takeoff, landing, movement, camera tilt, and payload magnet operations.
+  - Let users start and stop Hakoniwa simulations from a visual programming environment.
+anti_usecases:
+  - High-frequency autonomous control loops better implemented directly in conventional control software.
+  - General-purpose 3D visualization, which should use a dedicated visualization component.
+  - Deployments where a browser/Scratch runtime is not acceptable.
+demo_candidates:
+  - name: Visual block drone flight
+    description: Load the Hakoniwa Scratch extension in TurboWarp, activate and start the simulation, then use blocks to set ready, take off, move, inspect state, and land.
+    required_components:
+      - hakoniwa-scratch
+      - hakoniwa-pdu-javascript
+      - hakoniwa-drone-core
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-scratch
+        path: example/base.sb3
+        revision: c7e3508a1dc0645e5c975de0446ab4a1044e6e8f
+operations:
+  build:
+    commands: []
+    notes: The extension is served as browser assets; local development may use an HTTP server with CORS enabled.
+  test:
+    commands: []
+    notes: Client communication modules can be tested independently from the Scratch-specific UI layer.
+  run:
+    commands:
+      - npx http-server . -p 8090 --cors -c-1
+    notes:
+      - Load the extension from a Scratch/TurboWarp-compatible editor and connect it to a running Hakoniwa backend.
+known_gaps:
+  - End-to-end recipes should explicitly define the selected Hakoniwa Drone RPC backend and WebSocket/PDU topology.
+  - The reusable UI-independent client layer may support broader browser integrations, but this catalog entry intentionally describes the currently documented Scratch/TurboWarp use case.
+source_refs:
+  - repository: hakoniwalab/hakoniwa-scratch
+    path: README.md
+    revision: c7e3508a1dc0645e5c975de0446ab4a1044e6e8f
+    description: Main overview, setup, architecture, communication model, blocks, and demo workflow.
+tags:
+  - hakoniwa
+  - scratch
+  - turbowarp
+  - visual-programming
+  - education
+  - browser
+  - websocket
+  - rpc
+  - drone
+  - pdu
+  - mit
+  - oss
