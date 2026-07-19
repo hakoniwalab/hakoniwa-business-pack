@@ -67,6 +67,40 @@ For a user asking "Can Hakoniwa do X?" or "How should I build X?":
 Do not output only a repository list. A useful answer explains how the selected
 components work together as a Hakoniwa system.
 
+## Ambiguous Requests
+
+When important constraints are missing:
+
+- Ask for clarification only when the missing information changes the
+  architecture.
+- Otherwise, state reasonable assumptions explicitly.
+- Present alternatives when multiple credible compositions exist.
+- Prefer explaining trade-offs over forcing the user to know Hakoniwa component
+  names.
+
+Example:
+
+- If the user says "I want to visualize a robot", do not immediately require
+  them to choose a component.
+- Explain that Godot is a good fit for 3D scene visualization, while Foxglove is
+  a good fit for sensor streams, time series, and schema-aware inspection.
+
+## Feasibility vs Validation
+
+Do not confuse design feasibility with runtime verification.
+
+- `feasible`: the catalog and known artifacts support a credible implementation
+  path.
+- `verified`: the recipe or demo has actually been executed successfully.
+- `partially_feasible`: the main architecture exists, but missing pieces or
+  validation gaps remain.
+- `unknown`: the catalog is insufficient to make a defensible claim.
+
+Never claim a recipe is verified unless explicit validation evidence exists,
+such as a checked demo run, test result, CI result, or recorded execution note.
+If a recipe has only been validated structurally against catalog entries and
+source artifacts, say that clearly.
+
 ## Recipe Principles
 
 A Recipe is not source code and not a generic implementation spec.
@@ -132,4 +166,3 @@ The index is generated from detailed component YAML files. Do not hand-edit
   - `used_by`: target commonly consumes or builds on the current component.
   - `bidirectional`: both sides coordinate as peers.
   - `related`: useful for planning, but not a direct dependency.
-
