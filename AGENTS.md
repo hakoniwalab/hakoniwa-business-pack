@@ -157,7 +157,7 @@ Required information:
 - Hakoniwa install prefix, usually `/usr/local/hakoniwa`
 - whether required components are already built or must be built
 - whether required physical devices such as joysticks are available
-- availability of commercial/private components
+- availability of commercial/private components and required license variants
 
 If missing information changes commands or feasibility, ask the user before
 producing the runbook. If it does not change the architecture, state assumptions
@@ -259,7 +259,7 @@ runtime motion can be verified while Godot visualization remains untested.
 If the user asks for an implementation, create or update a Recipe first unless
 the requested Recipe already exists.
 
-## Commercial, Non-Commercial, And Private Components
+## Licensing, Distribution, And Private Repositories
 
 Catalog entries use:
 
@@ -267,18 +267,33 @@ Catalog entries use:
 repository:
   visibility: public | private | unknown
 distribution:
-  channel: oss | non-commercial | commercial | unknown
+  channel: oss | non-commercial | commercial | dual-license | unknown
 ```
 
-Repository visibility and distribution rights are separate facts. A public
-repository can still carry non-commercial or otherwise restricted licensing.
+Repository visibility, technical component identity, and distribution/license
+rights are separate facts. A public repository can carry non-commercial terms,
+and the same technical component can be offered under a separate commercial
+license.
+
+When `distribution.channel` is `dual-license`:
+
+- Treat the catalog entry as one technical component unless the source evidence
+  shows distinct implementations.
+- Read the component's `license` metadata to determine the applicable license
+  variant for the user's intended use.
+- Do not model a commercial license name as a separate component dependency when
+  it is only another licensing path for the same codebase.
+- Treat optional commercially licensed capabilities as conditional; do not
+  assume they are available to every commercial user.
 
 When proposing a user-facing Recipe:
 
-- Mention when a required component is `commercial` or `non-commercial`.
+- Mention when a required component is `commercial`, `non-commercial`, or
+  `dual-license` when that affects the user's intended use.
 - Prefer OSS components when the user asks for an OSS-only setup.
 - Do not treat a public repository as OSS unless its license supports that claim.
-- Do not claim a private/commercial repository is publicly available.
+- Do not claim a private repository or commercial source distribution is publicly
+  available.
 - Do not expose local filesystem paths. Use `repository`, `path`, and `revision`
   triples from `source_refs` or `source_artifacts`.
 
