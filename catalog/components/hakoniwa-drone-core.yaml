@@ -1,0 +1,278 @@
+id: hakoniwa-drone-core
+name: Hakoniwa Drone
+repository:
+  owner: toppers
+  name: hakoniwa-drone-core
+  url: https://github.com/toppers/hakoniwa-drone-core
+  visibility: public
+distribution:
+  channel: dual-license
+  notes:
+    - Hakoniwa Drone Core and Hakoniwa Drone PRO are licensing forms of the same underlying codebase, not separate technical components.
+    - The public repository is available under custom non-commercial terms.
+    - Commercial use is provided under the Hakoniwa Drone PRO commercial license and applicable individual agreement.
+license:
+  model: dual-license
+  public_license_page: https://hakoniwa-lab.net/products/drone-license/
+  variants:
+    - name: Hakoniwa Drone Core
+      purpose: non-commercial
+      repository_visibility: public
+      terms: Custom non-commercial license. Commercial use is prohibited without a separate commercial license.
+    - name: Hakoniwa Drone PRO
+      purpose: commercial
+      repository_visibility: private
+      terms: Commercial use and contract-scoped source access, modification, delivery, support, and optional capabilities are governed by the applicable license and individual agreement.
+  notes:
+    - Repository visibility and license rights are separate facts.
+    - Hakoniwa Drone PRO is not a separate component dependency; it is the commercial licensing path for this component.
+    - Control Link and Scenario Link are optional licensed capabilities and must not be assumed to be included in every commercial agreement.
+verification:
+  verified_at: 2026-07-20
+  source_revision: afb9d4f468c4d03188c05a949b73c741534bfd10
+  source_ref: main
+summary: Drone simulation component with dynamics, PX4 and ArduPilot integration, Hakoniwa PDU integration, Python control APIs, multi-drone simulation, and extensible environment and sensor models. The same codebase is offered under non-commercial Hakoniwa Drone Core terms and commercial Hakoniwa Drone PRO licensing.
+category:
+  primary: physics-environment
+  secondary:
+    - simulator
+    - physics-runtime
+    - integration
+    - commercial
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - Technical capabilities are cataloged as one component because Core and PRO share the same codebase.
+    - Licensing and optional feature availability must be evaluated separately from technical component selection.
+capabilities:
+  - name: Drone dynamics simulation
+    description: Simulates drone aircraft, rotor, sensor, battery, and related model behavior.
+    evidence:
+      - repository: toppers/hakoniwa-drone-core
+        path: README.md
+        revision: afb9d4f468c4d03188c05a949b73c741534bfd10
+  - name: PX4 and ArduPilot integration
+    description: Supports PX4 and ArduPilot control paths, including MAVLink-oriented configurations.
+    evidence:
+      - repository: toppers/hakoniwa-drone-core
+        path: README.md
+        revision: afb9d4f468c4d03188c05a949b73c741534bfd10
+  - name: Hakoniwa and standalone execution
+    description: Supports Hakoniwa-integrated PDU execution as well as standalone physics and control-model execution.
+    evidence:
+      - repository: toppers/hakoniwa-drone-core
+        path: README.md
+        revision: afb9d4f468c4d03188c05a949b73c741534bfd10
+  - name: Python and RPC drone control
+    description: Provides Python-oriented APIs for drone control and fleet-oriented RPC control in supported configurations.
+    evidence:
+      - repository: toppers/hakoniwa-drone-core
+        path: README.md
+        revision: afb9d4f468c4d03188c05a949b73c741534bfd10
+  - name: Multi-drone simulation
+    description: Supports multiple drone instances controlled through PX4, ArduPilot, or Hakoniwa-oriented control paths.
+    evidence:
+      - repository: toppers/hakoniwa-drone-core
+        path: README.md
+        revision: afb9d4f468c4d03188c05a949b73c741534bfd10
+  - name: Control Link
+    description: Optional Hakoniwa Drone PRO capability for connecting PX4 or custom control software through the Adapter Interface for lightweight closed-loop validation.
+    availability: commercial-option
+    evidence:
+      - repository: hakoniwalab/hakoniwa-drone-pro
+        path: docs/license/pro-control-link.md
+        revision: af20daa6898372b1532812fb2a0f5f9d7df9ce4f
+  - name: Scenario Link
+    description: Optional Hakoniwa Drone PRO capability for connecting verification scenarios including disturbances, environment conditions, sensor noise, and fault injection through Disturbance PDU and related APIs.
+    availability: commercial-option
+    evidence:
+      - repository: hakoniwalab/hakoniwa-drone-pro
+        path: docs/license/pro-scenario-link.md
+        revision: af20daa6898372b1532812fb2a0f5f9d7df9ce4f
+limitations:
+  - Commercial use is prohibited under the public non-commercial terms unless a Hakoniwa Drone PRO commercial license is obtained.
+  - Public repository access must not be interpreted as unrestricted OSS or commercial-use rights.
+  - Control Link and Scenario Link are optional licensed capabilities and must not be assumed to be available in the non-commercial distribution or every PRO agreement.
+  - Multi-drone scale and real-time performance depend on host resources and the selected flight-controller stack.
+interfaces:
+  inputs:
+    - name: Drone and fleet configuration
+      kind: config
+      description: Aircraft, controller, sensor, service, and fleet configuration.
+    - name: Flight control commands
+      kind: protocol
+      description: Commands from PX4, ArduPilot, Python APIs, or Hakoniwa-integrated control paths.
+    - name: Hakoniwa PDU inputs
+      kind: pdu
+      description: PDU-based control and environment data for Hakoniwa-integrated operation.
+    - name: Disturbance PDU
+      kind: pdu
+      description: Optional Scenario Link input for licensed disturbance, environment, sensor-condition, and fault-injection scenarios.
+  outputs:
+    - name: Drone state and sensor data
+      kind: pdu
+      description: Simulated position, attitude, sensor, and related state data.
+    - name: Flight-controller simulation data
+      kind: protocol
+      description: Data exchanged with supported PX4 or ArduPilot configurations.
+  protocols:
+    - name: Hakoniwa PDU
+      role: pubsub
+      notes: Used for control, state, sensor, environment, and integration data.
+    - name: MAVLink
+      role: unicast
+      notes: Used by supported PX4 and ArduPilot integration paths.
+    - name: Adapter Interface
+      role: local
+      notes: Optional licensed Control Link boundary for external control backends.
+  configuration:
+    - path: fleet configuration
+      description: Defines drone types, controllers, services, and per-instance placement.
+    - path: licensed capability configuration
+      description: Exact Control Link, Scenario Link, adapter, build, and delivery settings depend on the applicable commercial agreement.
+dependencies:
+  required:
+    - name: C/C++ toolchain
+      type: tool
+      notes: Required for native development builds.
+  optional:
+    - name: hakoniwa-core-pro
+      type: repository
+      notes: Used for Hakoniwa runtime integration and synchronized PDU execution.
+    - name: hakoniwa-pdu-endpoint
+      type: repository
+      notes: Used by distributed and external PDU communication paths.
+    - name: PX4
+      type: runtime
+      notes: Optional flight-controller stack.
+    - name: ArduPilot
+      type: runtime
+      notes: Optional flight-controller stack.
+platforms:
+  supported:
+    - Windows
+    - macOS
+    - Linux
+    - WSL2
+  notes:
+    - Exact setup and supported delivery environment vary by simulator integration, flight-controller configuration, and commercial agreement.
+connects_to:
+  - component_id: hakoniwa-core-pro
+    direction: uses
+    interface: Hakoniwa runtime / time synchronization / PDU integration
+    notes: Used by Hakoniwa-integrated configurations.
+  - component_id: hakoniwa-pdu-endpoint
+    direction: related
+    interface: PDU transport
+    notes: Supports distributed and external communication recipes.
+  - component_id: hakoniwa-envsim
+    direction: related
+    interface: environmental conditions
+    notes: Environment models can supply wind, temperature, pressure, and related conditions; licensed Scenario Link configurations can consume supported scenario inputs.
+  - component_id: hakoniwa-pdu-rpc
+    direction: related
+    interface: service and RPC control
+    notes: Supports service-oriented drone control recipes.
+data_contracts:
+  - name: Drone and fleet configuration contract
+    description: Configuration defines aircraft models, controllers, services, and multi-drone placement.
+    source:
+      - repository: toppers/hakoniwa-drone-core
+        path: README.md
+        revision: afb9d4f468c4d03188c05a949b73c741534bfd10
+  - name: Hakoniwa PDU contract
+    description: PDU definitions form the integration boundary for drone control, state, sensors, and environment data.
+    source:
+      - repository: toppers/hakoniwa-drone-core
+        path: README.md
+        revision: afb9d4f468c4d03188c05a949b73c741534bfd10
+  - name: Control Link Adapter Interface
+    description: Optional licensed boundary between the Hakoniwa drone control core and PX4 or custom control backends.
+    source:
+      - repository: hakoniwalab/hakoniwa-drone-pro
+        path: docs/license/pro-control-link.md
+        revision: af20daa6898372b1532812fb2a0f5f9d7df9ce4f
+  - name: Scenario Link Disturbance PDU
+    description: Optional licensed contract for environment, disturbance, sensor-condition, and fault-injection inputs.
+    source:
+      - repository: hakoniwalab/hakoniwa-drone-pro
+        path: docs/license/pro-scenario-link.md
+        revision: af20daa6898372b1532812fb2a0f5f9d7df9ce4f
+recipe_roles:
+  - role: physics_runtime
+    description: Simulates drone dynamics and related physical behavior.
+  - role: simulation_core
+    description: Provides the domain-specific simulation runtime for drone recipes.
+  - role: integration_boundary
+    description: Connects drone simulation to flight controllers, Hakoniwa PDU, external applications, and licensed optional integration paths.
+typical_usecases:
+  - Test drone control logic with PX4 or ArduPilot before real-flight testing.
+  - Run single- or multi-drone simulation for research, education, and non-commercial development under the public license.
+  - Use the same technical component commercially under a Hakoniwa Drone PRO license.
+  - Perform lightweight repeated closed-loop validation using licensed Control Link configurations.
+  - Perform fault, disturbance, sensor-noise, and environment-condition verification using licensed Scenario Link configurations.
+anti_usecases:
+  - Commercial product development or operation under the public non-commercial license alone.
+  - Modeling Hakoniwa Drone PRO as a separate technical component or dependency from Hakoniwa Drone Core.
+  - Assuming every Hakoniwa Drone PRO agreement automatically includes Control Link or Scenario Link.
+demo_candidates:
+  - name: Single drone with PX4 or ArduPilot
+    description: Run one simulated drone with a supported flight-controller stack and observe flight state and sensor data.
+    required_components:
+      - hakoniwa-drone-core
+    source_examples:
+      - repository: toppers/hakoniwa-drone-core
+        path: README.md
+        revision: afb9d4f468c4d03188c05a949b73c741534bfd10
+  - name: Licensed external-control closed loop
+    description: Under an applicable PRO and Control Link license, connect an external controller and observe closed-loop drone response under a minimal test condition.
+    required_components:
+      - hakoniwa-drone-core
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-drone-pro
+        path: docs/license/pro-control-link.md
+        revision: af20daa6898372b1532812fb2a0f5f9d7df9ce4f
+operations:
+  build:
+    commands: []
+    notes: Follow the public repository setup for non-commercial use or contract-provided setup for licensed commercial configurations.
+  test:
+    commands: []
+    notes: Validation depends on the selected simulator, controller path, and licensed capability set.
+  run:
+    commands: []
+    notes: Use repository-provided or contract-provided launch instructions for the chosen configuration.
+known_gaps:
+  - Exact usage rights must be checked against the applicable public license or commercial agreement.
+  - A public catalog cannot determine a specific customer's contracted PRO options; recipes must treat Control Link and Scenario Link as conditional capabilities.
+source_refs:
+  - repository: toppers/hakoniwa-drone-core
+    path: README.md
+    revision: afb9d4f468c4d03188c05a949b73c741534bfd10
+    description: Public overview, capabilities, integration paths, and multi-drone behavior.
+  - repository: toppers/hakoniwa-drone-core
+    path: LICENSE-ja.md
+    revision: afb9d4f468c4d03188c05a949b73c741534bfd10
+    description: Public non-commercial license and commercial-use restriction.
+  - repository: hakoniwalab/hakoniwa-drone-pro
+    path: docs/license/pro-options.md
+    revision: af20daa6898372b1532812fb2a0f5f9d7df9ce4f
+    description: Private verification source for PRO licensing variants and optional capabilities; not a public source artifact.
+public_refs:
+  - url: https://hakoniwa-lab.net/products/drone-license/
+    description: Public user-facing overview of Hakoniwa Drone commercial licensing.
+tags:
+  - hakoniwa
+  - drone
+  - px4
+  - ardupilot
+  - mavlink
+  - multi-drone
+  - simulator
+  - pdu
+  - dual-license
+  - non-commercial
+  - commercial
+  - control-link
+  - scenario-link

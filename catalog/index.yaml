@@ -1,5 +1,5 @@
 index_version: 0.1
-generated_at: '2026-07-19'
+generated_at: '2026-07-20'
 generated_by: catalog/tools/generate_index.rb
 description: Lightweight search index for Hakoniwa component catalogs.
 components:
@@ -97,6 +97,44 @@ components:
   - time-sync
   - hako-cmd
   catalog_path: components/hakoniwa-core-pro.yaml
+- id: hakoniwa-drone-core
+  name: Hakoniwa Drone
+  category: physics-environment
+  secondary_categories:
+  - simulator
+  - physics-runtime
+  - integration
+  - commercial
+  maturity: active
+  distribution: dual-license
+  summary: Drone simulation component with dynamics, PX4 and ArduPilot integration,
+    Hakoniwa PDU integration, Python control APIs, multi-drone simulation, and extensible
+    environment and sensor models. The same codebase is offered under non-commercial
+    Hakoniwa Drone Core terms and commercial Hakoniwa Drone PRO licensing.
+  recipe_roles:
+  - physics_runtime
+  - simulation_core
+  - integration_boundary
+  connects_to:
+  - hakoniwa-core-pro
+  - hakoniwa-pdu-endpoint
+  - hakoniwa-envsim
+  - hakoniwa-pdu-rpc
+  tags:
+  - hakoniwa
+  - drone
+  - px4
+  - ardupilot
+  - mavlink
+  - multi-drone
+  - simulator
+  - pdu
+  - dual-license
+  - non-commercial
+  - commercial
+  - control-link
+  - scenario-link
+  catalog_path: components/hakoniwa-drone-core.yaml
 - id: hakoniwa-envsim
   name: Hakoniwa Envsim
   category: physics-environment
@@ -436,4 +474,3 @@ components:
   - cplusplus
   - control-plane
   catalog_path: components/hakoniwa-pdu-rpc.yaml
-
