@@ -60,9 +60,10 @@ controlled_fields:
       - private
       - unknown
   distribution.channel:
-    description: Product distribution channel for recipe and business-pack planning.
+    description: Product distribution channel for recipe and business-pack planning. Repository visibility is tracked separately and does not imply license rights.
     values:
       - oss
+      - non-commercial
       - commercial
       - unknown
   interfaces.kind:
@@ -131,5 +132,7 @@ authoring_rules:
   - Prefer `related` only when neither `uses` nor `used_by` is accurate.
   - Keep category values broad; use tags for search-specific vocabulary.
   - Keep recipe roles stable because recipe generation uses them as planning primitives.
+  - Treat repository visibility and distribution/license rights as separate facts; a public repository is not automatically OSS.
+  - Mark public Hakoniwa components with non-commercial usage restrictions as `distribution.channel: non-commercial`.
   - Mark private Hakoniwa business/product repositories as `distribution.channel: commercial`.
   - Treat `connects_to` as component-level planning knowledge. Put recipe-specific connection contracts, required adapters, and validation status in recipe `connections[].contract`.
