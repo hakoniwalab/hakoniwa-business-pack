@@ -1,0 +1,186 @@
+id: hakoniwa-threejs-drone
+name: Hakoniwa Three.js Drone
+repository:
+  owner: hakoniwalab
+  name: hakoniwa-threejs-drone
+  url: https://github.com/hakoniwalab/hakoniwa-threejs-drone
+  visibility: public
+distribution:
+  channel: oss
+  notes:
+    - Public OSS component distributed under the MIT license.
+verification:
+  verified_at: 2026-07-20
+  source_revision: 9bec1fd968c129970401c0d8748b5fc51427205d
+  source_ref: main
+summary: Three.js-based browser viewer for Hakoniwa Drone that receives drone state over WebSocket and visualizes single- or multi-drone fleets with configurable scenes, dynamic spawning, follow cameras, and fleet-oriented display settings.
+category:
+  primary: visualization
+  secondary:
+    - browser
+    - integration
+    - visualization
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - Cataloged from the public README and MIT license.
+capabilities:
+  - name: Browser-based 3D drone visualization
+    description: Visualizes Hakoniwa Drone state in a web browser using Three.js.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-threejs-drone
+        path: README.md
+        revision: 9bec1fd968c129970401c0d8748b5fc51427205d
+  - name: WebSocket PDU state input
+    description: Connects to a WebSocket endpoint and consumes compact PDU definitions and viewer configuration for drone state visualization.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-threejs-drone
+        path: README.md
+        revision: 9bec1fd968c129970401c0d8748b5fc51427205d
+  - name: Legacy and fleet state modes
+    description: Supports both legacy single-style state input and fleet-oriented input selected through viewer_config.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-threejs-drone
+        path: README.md
+        revision: 9bec1fd968c129970401c0d8748b5fc51427205d
+  - name: Dynamic fleet spawning
+    description: Can dynamically create drone visual instances from fleet state input with configurable template and maximum drone count.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-threejs-drone
+        path: README.md
+        revision: 9bec1fd968c129970401c0d8748b5fc51427205d
+  - name: Large-fleet browser visualization
+    description: Documents fleet-oriented settings for 100-drone visualization, including attached-camera reduction and v2 wire format.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-threejs-drone
+        path: README.md
+        revision: 9bec1fd968c129970401c0d8748b5fc51427205d
+limitations:
+  - This component is a Hakoniwa Drone-oriented visualization client, not a general-purpose Three.js simulation runtime.
+  - It requires a compatible WebSocket bridge and PDU/state publisher path; it does not directly run drone physics.
+  - Large-fleet performance depends on browser, GPU, scene complexity, camera settings, and incoming update rate.
+interfaces:
+  inputs:
+    - name: Viewer configuration
+      kind: config
+      description: Selects scene configuration, PDU definition, WebSocket URI, state input mode, dynamic spawning, and UI behavior.
+    - name: Compact PDU definition
+      kind: config
+      description: Defines the compact PDU layout used by fleet-oriented state input.
+    - name: Drone visual state
+      kind: pdu
+      description: Drone position and attitude state received through the WebSocket bridge.
+  outputs:
+    - name: Browser 3D visualization
+      kind: api
+      description: Interactive Three.js scene rendered in the browser with follow-camera and selection controls.
+  protocols:
+    - name: WebSocket
+      role: client
+      notes: Connects to a compatible Hakoniwa web bridge, typically on ws://127.0.0.1:8765.
+  configuration:
+    - path: config/viewer-config-legacy.json
+      description: Default legacy viewer configuration.
+    - path: config/viewer-config-fleets.json
+      description: Fleet-oriented viewer configuration with compact PDU support.
+dependencies:
+  required:
+    - name: Browser with WebGL support
+      type: runtime
+      notes: Required to render the Three.js scene.
+    - name: hakoniwa-pdu-bridge-core
+      type: repository
+      notes: Provides the WebSocket bridge path used by the documented E2E fleet configuration.
+  optional:
+    - name: Hakoniwa Drone
+      type: repository
+      notes: Provides drone simulation state and visual-state publishing in the documented E2E configuration.
+platforms:
+  supported:
+    - Browser
+  notes:
+    - Static files can be served by any suitable HTTP server; README examples use Python http.server.
+connects_to:
+  - component_id: hakoniwa-pdu-bridge-core
+    direction: uses
+    interface: WebSocket / compact PDU state stream
+    notes: The viewer connects to the bridge WebSocket endpoint to receive drone visual state.
+  - component_id: hakoniwa-drone-core
+    direction: related
+    interface: drone visual state / fleet state
+    notes: Hakoniwa Drone can provide the simulation and visual-state publishing side of the documented E2E composition.
+data_contracts:
+  - name: viewer_config contract
+    description: Controls scene, PDU, WebSocket, state-input mode, dynamic-spawn behavior, and UI options.
+    source:
+      - repository: hakoniwalab/hakoniwa-threejs-drone
+        path: docs/viewer-config-spec.md
+        revision: 9bec1fd968c129970401c0d8748b5fc51427205d
+  - name: Fleet visual-state contract
+    description: Fleet-oriented drone visual state is consumed through compact PDU definitions over the WebSocket bridge.
+    source:
+      - repository: hakoniwalab/hakoniwa-threejs-drone
+        path: README.md
+        revision: 9bec1fd968c129970401c0d8748b5fc51427205d
+recipe_roles:
+  - role: visualizer
+    description: Renders Hakoniwa Drone state as an interactive browser-based Three.js scene.
+  - role: integration_boundary
+    description: Provides the browser-side boundary for WebSocket-delivered Hakoniwa PDU state.
+typical_usecases:
+  - Visualize a Hakoniwa Drone simulation in a web browser.
+  - Display dynamically changing multi-drone fleets without predefining every visual instance.
+  - Build lightweight demos where users only need a browser to observe simulated drone motion.
+  - Visualize large drone fleets with reduced attached-camera rendering and fleet-oriented wire settings.
+anti_usecases:
+  - Running drone dynamics or flight-controller simulation by itself.
+  - General-purpose robot visualization without Hakoniwa Drone-compatible scene and state contracts.
+  - Direct shared-memory PDU access from the browser without a WebSocket bridge.
+demo_candidates:
+  - name: Hakoniwa Drone fleet browser viewer
+    description: Run Hakoniwa Drone visual-state publishing, bridge PDU state through hakoniwa-pdu-bridge-core, and render fleet motion in the Three.js browser viewer.
+    required_components:
+      - hakoniwa-drone-core
+      - hakoniwa-pdu-bridge-core
+      - hakoniwa-threejs-drone
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-threejs-drone
+        path: README.md
+        revision: 9bec1fd968c129970401c0d8748b5fc51427205d
+operations:
+  build:
+    commands: []
+    notes: No native build is required for the basic viewer workflow.
+  test:
+    commands: []
+    notes: Validate by connecting to the WebSocket bridge and observing drone position and attitude updates in the browser.
+  run:
+    commands:
+      - python -m http.server 8000
+    notes:
+      - Open index.html with the appropriate viewerConfigPath and wsUri query parameters.
+known_gaps:
+  - Exact large-fleet performance limits should be measured per browser, machine, scene, and update rate.
+  - The documented E2E path references Hakoniwa Drone visual-state publisher behavior; recipe-level runtime verification should record the exact compatible Drone revision and bridge configuration.
+source_refs:
+  - repository: hakoniwalab/hakoniwa-threejs-drone
+    path: README.md
+    revision: 9bec1fd968c129970401c0d8748b5fc51427205d
+    description: Main overview, quick start, viewer configuration, fleet mode, dynamic spawning, 100-drone settings, and E2E composition.
+  - repository: hakoniwalab/hakoniwa-threejs-drone
+    path: LICENSE
+    revision: 9bec1fd968c129970401c0d8748b5fc51427205d
+    description: MIT license.
+tags:
+  - hakoniwa
+  - drone
+  - threejs
+  - browser
+  - visualization
+  - websocket
+  - pdu
+  - fleet
+  - dynamic-spawn
+  - multi-drone
+  - 100-drones
