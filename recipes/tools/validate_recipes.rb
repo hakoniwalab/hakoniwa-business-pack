@@ -15,6 +15,7 @@ REQUIRED_FIELDS = %w[
   goal
   feasibility
   constraints
+  target_environment
   components
   connections
   data_flow
@@ -86,4 +87,3 @@ unless errors.empty?
 end
 
 puts "recipes valid: recipes=#{recipe_paths.length}, warnings=#{warnings.length}"
-

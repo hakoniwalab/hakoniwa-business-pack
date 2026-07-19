@@ -24,6 +24,37 @@ constraints:
   - shared-memory-pdu
   - visualization-polling
 
+target_environment:
+  required_for: executable-demo
+  status: required
+  os: unknown
+  os_version: unknown
+  architecture: unknown
+  execution_mode: native
+  runtimes:
+    - name: Godot
+      required: true
+      version: unknown
+      path: unknown
+    - name: MuJoCo
+      required: true
+      version: unknown
+      path: unknown
+    - name: Python
+      required: true
+      version: unknown
+      path: unknown
+  hakoniwa:
+    install_prefix: /usr/local/hakoniwa
+    components_built:
+      - hakoniwa-core-pro
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-mujoco-robots
+      - hakoniwa-godot
+  notes:
+    - This recipe is structurally feasible, but executable runbook commands require target machine details.
+    - Ask for OS, architecture, Godot binary path, MuJoCo installation, and build/install state before claiming runtime verification.
+
 components:
   - id: hakoniwa-mbody-registry
     roles:
@@ -314,4 +345,3 @@ tags:
   - pdu
   - robot-sync
   - no-ros-runtime
-

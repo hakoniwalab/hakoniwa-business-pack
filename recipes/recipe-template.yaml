@@ -17,6 +17,33 @@ constraints:
   - no-ros-runtime
   - single-pc
 
+target_environment:
+  required_for: executable-demo
+  status: unspecified
+  os: macOS | Linux | Windows | WSL2 | unknown
+  os_version: unknown
+  architecture: arm64 | x86_64 | unknown
+  execution_mode: native | docker | vm | wsl | unknown
+  runtimes:
+    - name: Godot
+      required: false
+      version: unknown
+      path: unknown
+    - name: MuJoCo
+      required: false
+      version: unknown
+      path: unknown
+    - name: Python
+      required: false
+      version: unknown
+      path: unknown
+  hakoniwa:
+    install_prefix: /usr/local/hakoniwa
+    components_built:
+      - component-id
+  notes:
+    - Ask the user before producing runbook commands if this section is unspecified.
+
 components:
   - id: hakoniwa-component-id
     roles:
@@ -85,4 +112,3 @@ source_artifacts:
 
 tags:
   - hakoniwa
-

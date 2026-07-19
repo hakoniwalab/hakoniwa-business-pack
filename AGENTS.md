@@ -54,6 +54,7 @@ For a user asking "Can Hakoniwa do X?" or "How should I build X?":
 6. Produce a Recipe-shaped answer:
    - Goal
    - Feasibility
+   - Target Environment, if executable steps are requested
    - Components
    - Component Roles
    - Connections
@@ -100,6 +101,28 @@ Never claim a recipe is verified unless explicit validation evidence exists,
 such as a checked demo run, test result, CI result, or recorded execution note.
 If a recipe has only been validated structurally against catalog entries and
 source artifacts, say that clearly.
+
+## Executable Demo And Runbook Requirements
+
+Before writing executable demo steps or a runbook, collect the target
+environment. This is required because Hakoniwa commands, build steps, dynamic
+library paths, and Godot/MuJoCo setup differ by platform.
+
+Required information:
+
+- OS and version
+- CPU architecture
+- native/container/VM/WSL execution mode
+- Godot installation and binary path when Godot is involved
+- MuJoCo installation when MuJoCo is involved
+- Python/Node.js/.NET/Docker versions when relevant
+- Hakoniwa install prefix, usually `/usr/local/hakoniwa`
+- whether required components are already built or must be built
+- availability of commercial/private components
+
+If missing information changes commands or feasibility, ask the user before
+producing the runbook. If it does not change the architecture, state assumptions
+and continue.
 
 ## Recipe Principles
 

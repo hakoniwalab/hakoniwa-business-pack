@@ -19,6 +19,26 @@ A Hakoniwa recipe is a structured system composition document:
 The first goal is not code generation. The first goal is to convert an ambiguous
 user request into a Hakoniwa-valid system composition.
 
+## Target Environment Requirement
+
+A recipe can describe a platform-neutral composition, but an executable demo or
+runbook must define a target environment.
+
+Before producing executable steps, collect or state:
+
+- OS and version
+- CPU architecture
+- whether the target is native, container, VM, or WSL
+- required installed runtimes such as Godot, MuJoCo, Python, Node.js, Docker, or
+  .NET
+- required Hakoniwa install prefixes such as `/usr/local/hakoniwa`
+- whether required components are already built or must be built
+- commercial/private component availability
+
+If these details are missing and they change the commands, dependencies, or
+feasibility, ask the user before writing a runbook. If they do not change the
+architecture, state assumptions explicitly.
+
 ## Core Shape
 
 Every recipe should make these sections explicit:
@@ -36,6 +56,7 @@ Every recipe should make these sections explicit:
 - `expected_result`
 - `source_catalogs`
 - `source_artifacts`
+- `target_environment` when executable demo steps are included
 
 ## Layout
 
@@ -57,4 +78,3 @@ recipes/
 - Keep `demo.steps` concrete enough to validate against existing repositories.
 - Do not assume code has been generated unless `source_artifacts` or a demo step
   points to an existing implementation.
-
