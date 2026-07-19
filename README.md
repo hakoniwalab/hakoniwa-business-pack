@@ -4,7 +4,7 @@
 
 ## 箱庭で、何をしたいですか？
 
-箱庭ラボには、MuJoCo、Godot、PDU、Endpoint、Conductor、Foxglove など、
+箱庭には、MuJoCo、Godot、PDU、Endpoint、Conductor、Foxglove など、
 シミュレーションを構成するためのさまざまな部品があります。
 
 箱庭をよく知っている人であれば、
