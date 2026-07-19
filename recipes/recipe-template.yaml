@@ -171,6 +171,15 @@ demo:
         - repository: hakoniwalab/component
           path: README.md
           revision: main
+  observability:
+    success_signals:
+      - What the user should see, plot, measure, or find in logs.
+    failure_signals:
+      - What indicates the demo started but the composition did not work.
+    fixtures:
+      - World, obstacle, lighting, sensor, or input conditions required to make the behavior observable.
+    automation:
+      - Scripted command source, launcher, or other mechanism that avoids unnecessary manual input.
 
 expected_result: >
   What the user should see when the recipe works.

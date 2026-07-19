@@ -90,6 +90,28 @@ If one source generates multiple artifact sets, state which set has been
 validated. A successful GLB generation does not prove the MJCF is runtime-ready,
 and a successful MuJoCo run does not prove the visualization path is verified.
 
+## Demo Observability
+
+A demo is useful only if the intended behavior is visible or measurable. Recipe
+authors should therefore describe the observation path, not only the launch
+commands.
+
+State:
+
+- observable success signals, such as viewer motion, sensor plots, PDU values,
+  log lines, screenshots, or generated files;
+- failure signals, such as unchanged robot pose, missing PDU channels,
+  all-infinite sensor ranges, or a process that only starts but does not advance;
+- world or fixture requirements that make the behavior observable;
+- automatic controllers or scripted inputs that remove unnecessary manual
+  dependencies such as a joystick;
+- launcher behavior when a demo starts several Hakoniwa assets.
+
+For sensor recipes, the world must exercise the sensor. A LiDAR recipe should
+include obstacles at scan height and within range; a camera recipe should include
+visible geometry and lighting; a contact recipe should include an object along
+the expected path.
+
 ## Core Shape
 
 Every recipe should make these sections explicit:
@@ -107,6 +129,7 @@ Every recipe should make these sections explicit:
 - `artifacts`
 - `missing_pieces`
 - `demo`
+- `demo.observability`
 - `expected_result`
 - `source_catalogs`
 - `source_artifacts`

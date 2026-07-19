@@ -66,6 +66,34 @@ validation:
           revision: local-validation-2026-07-19
       notes:
         - tb3_sim_waffle loaded the MBody Waffle asset manifest and moved through joystick-free route-demo PDU commands.
+    - id: mujoco_launcher_route_lidar_demo
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: tb3-mbody-demo-launch.json
+          revision: local-validation-2026-07-19
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: python/tb3_route_demo.py
+          revision: local-validation-2026-07-19
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: python/tb3_lidar_visualizer.py
+          revision: local-validation-2026-07-19
+      notes:
+        - hakoniwa-pdu launcher started tb3_sim_mbody before hako-cmd start, then started the LiDAR visualizer and figure-eight route demo after simulation start.
+        - Waffle completed the launcher-driven route demo with MuJoCo viewer enabled.
+        - Route completion intentionally stops the launcher-managed assets.
+    - id: lidar_obstacle_fixture
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mbody-registry
+          path: bodies/turtlebot3_burger/config/mujoco_world.yaml
+          revision: local-validation-2026-07-19
+        - repository: hakoniwalab/hakoniwa-mbody-registry
+          path: bodies/turtlebot3_waffle/config/mujoco_world.yaml
+          revision: local-validation-2026-07-19
+      notes:
+        - Demo marker boxes were raised to intersect the TurtleBot3 LiDAR scan plane.
+        - Waffle runtime logs showed nearby LiDAR hits with lidar_min around 0.52 to 0.75 m instead of only far-range returns.
     - id: joystick_free_motion
       status: verified
       evidence:
@@ -143,6 +171,7 @@ execution_environment:
   notes:
     - hako-cmd and Hakoniwa shared memory require an execution environment where the Hakoniwa master is visible.
     - tb3_route_demo.py provides a joystick-free command source for reproducible minimal demos.
+    - The validated MuJoCo-only demo used Python 3.12, hakopy, hakoniwa-pdu, MuJoCo viewer, and unsandboxed shared-memory access.
 
 components:
   - id: hakoniwa-mbody-registry
@@ -355,9 +384,13 @@ artifact_sets:
       - tb3_sim_burger
       - tb3_sim_waffle
       - tb3_route_demo.py
+      - tb3_lidar_visualizer.py
+      - tb3-mbody-demo-launch.json
       - hako-cmd start
     notes:
       - Burger and Waffle route demos are verified without a joystick.
+      - hakoniwa-pdu launcher can start the MuJoCo asset before hako-cmd start and start route/LiDAR assets after simulation start.
+      - The minimal MuJoCo world must contain sensor-visible fixtures; low obstacles below LiDAR scan height are not sufficient validation targets.
       - Godot launch and sync verification remain future validation steps.
 
 artifacts:
@@ -402,6 +435,28 @@ artifacts:
     consumer:
       - hakoniwa-mujoco-robots
     path: config/assets/tb3-mbody-waffle-asset.json
+
+  - name: tb3-mbody-demo-launch.json
+    kind: command
+    producer: hakoniwa-mujoco-robots
+    consumer:
+      - hakoniwa-mujoco-robots
+      - hakoniwa-core-pro
+    path: tb3-mbody-demo-launch.json
+
+  - name: tb3_route_demo.py
+    kind: command
+    producer: hakoniwa-mujoco-robots
+    consumer:
+      - hakoniwa-mujoco-robots
+    path: python/tb3_route_demo.py
+
+  - name: tb3_lidar_visualizer.py
+    kind: command
+    producer: hakoniwa-mujoco-robots
+    consumer:
+      - hakoniwa-mujoco-robots
+    path: python/tb3_lidar_visualizer.py
 
   - name: TurtleBot3.generated.tscn
     kind: godot-scene
@@ -467,6 +522,7 @@ missing_pieces:
   - Confirm exact Godot run command for the MuJoCo TurtleBot3 sync scene.
   - Confirm whether Burger/Waffle-specific robot_sync.profile.json and endpoint config should be generated or adapted from the existing TurtleBot3 reference artifacts.
   - Validate the demo end-to-end on the target machine after builds are available.
+  - Decide whether LiDAR visualization remains a MuJoCo-side validation aid or becomes part of the user-facing Godot recipe.
 
 demo:
   objective: Display a MuJoCo-simulated TurtleBot3 moving synchronously in Godot using existing TB3 PDU state.
@@ -522,13 +578,22 @@ demo:
     - order: 6
       component: hakoniwa-mujoco-robots
       action: Drive the simulator with a joystick-free route demo.
-      command: python3.12 python/tb3_route_demo.py --pattern straight
+      command: python3.12 python/tb3_route_demo.py --pattern figure8
       evidence:
         - repository: hakoniwalab/hakoniwa-mujoco-robots
           path: python/tb3_route_demo.py
           revision: local-validation-2026-07-19
 
     - order: 7
+      component: hakoniwa-mujoco-robots
+      action: For MuJoCo-only validation, run the launcher-driven demo with viewer, LiDAR plot, and scripted route.
+      command: HAKO_TB3_MODEL=waffle HAKO_TB3_ROUTE_PATTERN=figure8 HAKO_TB3_ENABLE_VIEWER=1 ./tb3-mbody-demo.bash
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: tb3-mbody-demo-launch.json
+          revision: local-validation-2026-07-19
+
+    - order: 8
       component: hakoniwa-godot
       action: Verify that Godot receives TB3/base_link_pos and TB3/joint_states and updates the TurtleBot3 scene.
       command: ""
@@ -536,6 +601,22 @@ demo:
         - repository: hakoniwalab/hakoniwa-godot
           path: examples/mujoco/config/robot_sync.profile.json
           revision: 8f5d7d1765b319f107420f8ac4f87b24ab26ae76
+  observability:
+    success_signals:
+      - MuJoCo viewer shows TurtleBot3 Burger or Waffle moving through a scripted figure-eight route.
+      - LiDAR plot shows nearby scan points while the robot passes marker boxes.
+      - MuJoCo runtime logs contain nonzero lidar_hits and nearby lidar_min values around the demo obstacles.
+      - Route demo logs show completed figure-eight phases and a neutral hold before shutdown.
+    failure_signals:
+      - Simulator starts but robot pose does not change after hako-cmd start and route demo launch.
+      - LiDAR ranges remain only at far-range values even when the robot is near demo obstacles.
+      - PDU channels are not created or Python scripts cannot import hakopy/hakoniwa-pdu in the selected Python environment.
+    fixtures:
+      - Demo marker boxes must intersect the TurtleBot3 LiDAR scan height; obstacles below the scan plane do not validate LiDAR.
+      - MuJoCo viewer requires GUI access; Hakoniwa PDU SHM requires unsandboxed shared-memory access.
+    automation:
+      - tb3_route_demo.py provides joystick-free GameControllerOperation commands.
+      - tb3-mbody-demo-launch.json starts the simulator before hako-cmd start and starts route/LiDAR assets after simulation start.
 
 expected_result: >
   TurtleBot3 simulated in MuJoCo is displayed in Godot, with the generated model

@@ -147,6 +147,27 @@ If missing information changes commands or feasibility, ask the user before
 producing the runbook. If it does not change the architecture, state assumptions
 and continue.
 
+## Demo Observability Requirements
+
+A runnable demo must make the intended behavior observable. Do not stop at
+"processes start" unless the recipe goal is only lifecycle validation.
+
+For each executable demo, state:
+
+- what the user should see or measure,
+- which PDU, log line, plot, viewer, or generated artifact proves progress,
+- what fixture or environment condition makes sensors produce meaningful data,
+- which controller or script drives the system without relying on manual input,
+- which failure signal means the composition did not work.
+
+For sensor demos, verify that the simulated world actually intersects the sensor
+model. For example, a LiDAR demo needs obstacles at the scan height and within
+range; a camera demo needs visible geometry and lighting; a contact demo needs a
+collision object along the motion path.
+
+When a demo uses a launcher, include the launcher as a runtime artifact and
+state which assets it starts before simulation start and after simulation start.
+
 ## Recipe Principles
 
 A Recipe is not source code and not a generic implementation spec.

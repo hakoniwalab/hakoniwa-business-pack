@@ -1,0 +1,507 @@
+id: mujoco-turtlebot3-mbody
+title: MuJoCo TurtleBot3 from MBody Registry
+recipe_version: 0.1
+
+goal:
+  user_request: ROSを使わず、MBody Registryから生成したTurtleBot3をMuJoCoで動かしたい
+  description: >
+    Generate or reuse TurtleBot3 Burger and Waffle artifacts from
+    hakoniwa-mbody-registry, run them in hakoniwa-mujoco-robots, and validate
+    motion and LiDAR output with a joystick-free route demo.
+
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - hakoniwa-mbody-registry provides TurtleBot3 Burger and Waffle source definitions and generated MuJoCo artifacts.
+    - hakoniwa-mujoco-robots provides MBody-aware TurtleBot3 simulator targets for Burger and Waffle.
+    - The validated demo uses scripted GameControllerOperation PDU commands, so no joystick is required.
+    - MuJoCo viewer, LiDAR plot, route demo, and runtime logs provide direct validation signals.
+
+validation:
+  status: verified
+  summary: >
+    TurtleBot3 Burger and Waffle MBody artifacts were validated in MuJoCo on
+    macOS arm64. The launcher-driven Waffle demo ran with MuJoCo viewer,
+    joystick-free figure-eight route control, and LiDAR visualization.
+  steps:
+    - id: mbody_burger_forge
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mbody-registry
+          path: bodies/turtlebot3_burger/generated
+          revision: local-validation-2026-07-19
+      notes:
+        - TurtleBot3 Burger URDF, MJCF, actuated MJCF, minimal MuJoCo world, GLB, and PDU artifacts were generated.
+    - id: mbody_waffle_forge
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mbody-registry
+          path: bodies/turtlebot3_waffle/generated
+          revision: local-validation-2026-07-19
+      notes:
+        - TurtleBot3 Waffle URDF, MJCF, actuated MJCF, minimal MuJoCo world, GLB, and PDU artifacts were generated.
+        - Waffle physics MJCF generation uses visual discard for MuJoCo compatibility, while GLB generation remains available for visualization paths.
+    - id: mujoco_burger_runtime_route_demo
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: src/main_for_sample/tb3
+          revision: local-validation-2026-07-19
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: config/assets/tb3-mbody-burger-asset.json
+          revision: local-validation-2026-07-19
+      notes:
+        - tb3_sim_burger loaded the MBody Burger asset manifest and moved with route-demo PDU commands.
+    - id: mujoco_waffle_runtime_route_demo
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: src/main_for_sample/tb3
+          revision: local-validation-2026-07-19
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: config/assets/tb3-mbody-waffle-asset.json
+          revision: local-validation-2026-07-19
+      notes:
+        - tb3_sim_waffle loaded the MBody Waffle asset manifest and moved with route-demo PDU commands.
+    - id: launcher_route_lidar_demo
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: tb3-mbody-demo-launch.json
+          revision: local-validation-2026-07-19
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: python/tb3_route_demo.py
+          revision: local-validation-2026-07-19
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: python/tb3_lidar_visualizer.py
+          revision: local-validation-2026-07-19
+      notes:
+        - hakoniwa-pdu launcher started the MuJoCo asset before hako-cmd start, then started the LiDAR visualizer and figure-eight route demo after simulation start.
+        - Route completion intentionally stops launcher-managed assets.
+    - id: lidar_obstacle_fixture
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mbody-registry
+          path: bodies/turtlebot3_burger/config/mujoco_world.yaml
+          revision: local-validation-2026-07-19
+        - repository: hakoniwalab/hakoniwa-mbody-registry
+          path: bodies/turtlebot3_waffle/config/mujoco_world.yaml
+          revision: local-validation-2026-07-19
+      notes:
+        - Demo marker boxes were raised to intersect the TurtleBot3 LiDAR scan plane.
+        - Waffle runtime logs showed nearby LiDAR hits with lidar_min around 0.52 to 0.75 m.
+
+constraints:
+  - no-ros-runtime
+  - single-pc
+  - shared-memory-pdu
+  - mujoco-only
+  - no-godot
+
+target_environment:
+  required_for: executable-demo
+  status: recorded
+  os: macOS
+  os_version: unknown
+  architecture: arm64
+  execution_mode: native
+  runtimes:
+    - name: MuJoCo
+      required: true
+      version: "3.9.0"
+      path: thirdparty/mujoco
+    - name: Python
+      required: true
+      version: "3.12"
+      path: unknown
+  hakoniwa:
+    install_prefix: /usr/local/hakoniwa
+    components_built:
+      - hakoniwa-core-pro
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-mujoco-robots
+  notes:
+    - The primary composition is MBody Registry to MuJoCo Robots.
+    - hakoniwa-core-pro and hakoniwa-pdu-endpoint are runtime support dependencies for the executable demo.
+
+execution_environment:
+  required_for: executable-demo
+  status: partially_recorded
+  os: macOS
+  os_version: unknown
+  architecture: arm64
+  execution_mode: native
+  gui:
+    required: true
+    status: available
+  shared_memory:
+    required: true
+    access: requires-unsandboxed-command
+  devices:
+    - name: joystick
+      required: false
+      available: unknown
+  python:
+    environment: venv
+    hakopy_available: true
+  hakoniwa:
+    install_prefix: /usr/local/hakoniwa
+    hako_cmd_access: requires-unsandboxed-command
+  notes:
+    - Python 3.12, hakopy, and hakoniwa-pdu must be available in the same Python environment used by route and visualizer scripts.
+    - MuJoCo viewer requires GUI access.
+    - Hakoniwa PDU shared memory requires an execution environment where the Hakoniwa master is visible.
+
+components:
+  - id: hakoniwa-mbody-registry
+    roles:
+      - asset_generator
+      - data_model
+    purpose: Generate and provide TurtleBot3 Burger and Waffle MuJoCo worlds, actuated MJCF, and PDU artifacts.
+
+  - id: hakoniwa-mujoco-robots
+    roles:
+      - physics_runtime
+      - simulation_core
+      - visualizer
+    purpose: Run TurtleBot3 Burger or Waffle in MuJoCo, publish sensor/state PDU data, and provide viewer/LiDAR validation tools.
+
+  - id: hakoniwa-core-pro
+    roles:
+      - simulation_core
+      - time_sync
+    purpose: Provide Hakoniwa runtime lifecycle, hako-cmd, shared memory, and simulation time base.
+
+  - id: hakoniwa-pdu-endpoint
+    roles:
+      - communication_infrastructure
+      - integration_boundary
+    purpose: Provide the installed endpoint package and SHM PDU runtime used by MuJoCo-side assets and Python tools.
+
+  - id: hakoniwa-pdu-registry
+    roles:
+      - data_model
+      - registry
+    purpose: Provide canonical PDU type contracts used by TB3 command, state, and sensor data.
+
+connections:
+  - from: hakoniwa-mbody-registry
+    to: hakoniwa-mujoco-robots
+    interface: generated-artifact
+    data:
+      - turtlebot3_burger.minimal_world.xml
+      - turtlebot3_waffle.minimal_world.xml
+      - turtlebot3_burger.actuated.xml
+      - turtlebot3_waffle.actuated.xml
+      - pdutypes.json
+      - pdu_def.json
+    contract:
+      status: verified
+      requires:
+        - mujoco-world-composition
+        - runtime-specific-actuator-settings
+        - asset-manifest-compatible-with-mujoco-robots
+        - sensor-visible-world-fixtures
+      validation_notes:
+        - MuJoCo Robots loaded Burger and Waffle asset manifests produced from MBody-generated worlds.
+        - Burger and Waffle route demos moved without a joystick.
+        - LiDAR fixtures were adjusted to intersect scan height and produced nearby hits.
+    notes: MBody supplies generated robot/world artifacts; MuJoCo Robots supplies the executable physics runtime.
+
+  - from: hakoniwa-mujoco-robots
+    to: hakoniwa-pdu-endpoint
+    interface: pdu
+    data:
+      - TB3/hako_cmd_game
+      - TB3/laser_scan
+      - TB3/odom
+      - TB3/joint_states
+    contract:
+      status: verified
+      requires:
+        - hakoniwa-shared-memory-access
+        - tb3-pdu-definition
+        - hako-cmd-start
+        - python-environment-with-hakopy-and-hakoniwa-pdu
+      validation_notes:
+        - tb3_sim created PDU channels and advanced simulation after hako-cmd start.
+        - tb3_route_demo.py sent joystick-free command PDUs.
+        - tb3_lidar_visualizer.py consumed LiDAR PDUs for plotting.
+    notes: Runtime command, state, and sensor data move through Hakoniwa PDU SHM.
+
+  - from: hakoniwa-core-pro
+    to: hakoniwa-mujoco-robots
+    interface: command
+    data:
+      - hako-cmd start
+    contract:
+      status: verified
+      requires:
+        - hakoniwa-runtime-installed
+        - unsandboxed-shared-memory-access
+      validation_notes:
+        - hako-cmd start succeeded outside the managed sandbox and started simulation time.
+    notes: Hakoniwa runtime lifecycle gates the MuJoCo simulation.
+
+data_flow:
+  summary: >
+    MBody-generated TurtleBot3 artifacts are loaded by the MuJoCo simulator.
+    A Python route script sends command PDUs, MuJoCo advances the robot and
+    publishes state and LiDAR PDUs, and a Python visualizer plots LiDAR output.
+  steps:
+    - from: hakoniwa-mbody-registry
+      to: hakoniwa-mujoco-robots
+      data:
+        - MuJoCo minimal world
+        - actuated MJCF
+        - PDU definition
+      description: Generated robot/world artifacts establish the MuJoCo runtime input.
+    - from: hakoniwa-mujoco-robots
+      to: hakoniwa-mujoco-robots
+      data:
+        - GameControllerOperation command PDU
+      description: tb3_route_demo.py sends joystick-free motion commands into the simulator.
+    - from: hakoniwa-mujoco-robots
+      to: hakoniwa-mujoco-robots
+      data:
+        - LaserScan PDU
+      description: tb3_lidar_visualizer.py plots sensor output for demo validation.
+
+time_model:
+  mode: shared-simulation-time
+  components:
+    - hakoniwa-core-pro
+    - hakoniwa-mujoco-robots
+  notes:
+    - MuJoCo participates in the Hakoniwa runtime and starts after hako-cmd start.
+    - conductor-light is not required for this single-runtime demo.
+
+artifact_sets:
+  physics_artifacts:
+    description: Inputs consumed by the MuJoCo physics runtime.
+    status: verified
+    artifacts:
+      - turtlebot3_burger.minimal_world.xml
+      - turtlebot3_waffle.minimal_world.xml
+      - turtlebot3_burger.actuated.xml
+      - turtlebot3_waffle.actuated.xml
+      - tb3-mbody-burger-asset.json
+      - tb3-mbody-waffle-asset.json
+    notes:
+      - Burger and Waffle both ran in MuJoCo Robots using MBody-derived asset manifests.
+      - Waffle physics MJCF uses visual discard for MuJoCo compatibility.
+  visualization_artifacts:
+    description: Inputs consumed by MuJoCo viewer and the Python LiDAR plot.
+    status: verified
+    artifacts:
+      - MuJoCo viewer
+      - tb3_lidar_visualizer.py
+    notes:
+      - This recipe intentionally excludes Godot.
+      - MuJoCo viewer confirms robot motion; LiDAR plot confirms sensor output.
+  pdu_artifacts:
+    description: PDU definitions and runtime PDU channels used by command, state, and sensor data.
+    status: verified
+    artifacts:
+      - pdu_def.json
+      - pdutypes.json
+      - tb3-pdutypes.json
+    notes:
+      - Route and LiDAR demos require Python 3.12 with hakopy and hakoniwa-pdu in the same environment.
+  runtime_artifacts:
+    description: Commands, manifests, and launcher config required to run the demo.
+    status: verified
+    artifacts:
+      - tb3_sim_burger
+      - tb3_sim_waffle
+      - tb3_route_demo.py
+      - tb3_lidar_visualizer.py
+      - tb3-mbody-demo-launch.json
+      - tb3-mbody-demo.bash
+      - hako-cmd start
+    notes:
+      - The launcher starts the simulator before hako-cmd start and starts route/LiDAR assets after simulation start.
+      - The route demo removes joystick dependency.
+      - The minimal world must contain LiDAR-visible fixtures.
+
+artifacts:
+  - name: turtlebot3_burger.minimal_world.xml
+    kind: mjcf
+    producer: hakoniwa-mbody-registry
+    consumer:
+      - hakoniwa-mujoco-robots
+    path: bodies/turtlebot3_burger/generated/turtlebot3_burger.minimal_world.xml
+
+  - name: turtlebot3_waffle.minimal_world.xml
+    kind: mjcf
+    producer: hakoniwa-mbody-registry
+    consumer:
+      - hakoniwa-mujoco-robots
+    path: bodies/turtlebot3_waffle/generated/turtlebot3_waffle.minimal_world.xml
+
+  - name: tb3-mbody-burger-asset.json
+    kind: source
+    producer: hakoniwa-mujoco-robots
+    consumer:
+      - hakoniwa-mujoco-robots
+    path: config/assets/tb3-mbody-burger-asset.json
+
+  - name: tb3-mbody-waffle-asset.json
+    kind: source
+    producer: hakoniwa-mujoco-robots
+    consumer:
+      - hakoniwa-mujoco-robots
+    path: config/assets/tb3-mbody-waffle-asset.json
+
+  - name: tb3-mbody-demo-launch.json
+    kind: command
+    producer: hakoniwa-mujoco-robots
+    consumer:
+      - hakoniwa-mujoco-robots
+      - hakoniwa-core-pro
+    path: tb3-mbody-demo-launch.json
+
+  - name: tb3_route_demo.py
+    kind: command
+    producer: hakoniwa-mujoco-robots
+    consumer:
+      - hakoniwa-mujoco-robots
+    path: python/tb3_route_demo.py
+
+  - name: tb3_lidar_visualizer.py
+    kind: command
+    producer: hakoniwa-mujoco-robots
+    consumer:
+      - hakoniwa-mujoco-robots
+    path: python/tb3_lidar_visualizer.py
+
+missing_pieces:
+  - Replace local-validation revisions with concrete commit SHAs after the related repository changes are pushed.
+  - Decide whether this recipe should become the canonical minimal TB3 MuJoCo demo recipe.
+  - Add CI or scripted smoke validation if shared-memory and GUI constraints can be handled.
+
+demo:
+  objective: Run TurtleBot3 Burger or Waffle in MuJoCo from MBody-generated artifacts and validate motion plus LiDAR output.
+  steps:
+    - order: 1
+      component: hakoniwa-mbody-registry
+      action: Verify or regenerate TurtleBot3 Burger artifacts.
+      command: ./tools/forge.sh sources/turtlebot3_burger.yaml turtlebot3_description/urdf/turtlebot3_burger.urdf
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mbody-registry
+          path: bodies/turtlebot3_burger/generated
+          revision: local-validation-2026-07-19
+
+    - order: 2
+      component: hakoniwa-mbody-registry
+      action: Verify or regenerate TurtleBot3 Waffle artifacts.
+      command: ./tools/forge.sh sources/turtlebot3_waffle.yaml turtlebot3_description/urdf/turtlebot3_waffle.urdf
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mbody-registry
+          path: bodies/turtlebot3_waffle/generated
+          revision: local-validation-2026-07-19
+
+    - order: 3
+      component: hakoniwa-mujoco-robots
+      action: Check runtime prerequisites.
+      command: ./doctor.bash
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: doctor.bash
+          revision: local-validation-2026-07-19
+
+    - order: 4
+      component: hakoniwa-mujoco-robots
+      action: Run the launcher-driven Waffle demo with MuJoCo viewer, LiDAR plot, and figure-eight route.
+      command: HAKO_TB3_MODEL=waffle HAKO_TB3_ROUTE_PATTERN=figure8 HAKO_TB3_ENABLE_VIEWER=1 ./tb3-mbody-demo.bash
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: tb3-mbody-demo-launch.json
+          revision: local-validation-2026-07-19
+
+    - order: 5
+      component: hakoniwa-mujoco-robots
+      action: Optionally run the same demo with Burger.
+      command: HAKO_TB3_MODEL=burger HAKO_TB3_ROUTE_PATTERN=figure8 HAKO_TB3_ENABLE_VIEWER=1 ./tb3-mbody-demo.bash
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: config/assets/tb3-mbody-burger-asset.json
+          revision: local-validation-2026-07-19
+  observability:
+    success_signals:
+      - MuJoCo viewer shows TurtleBot3 Burger or Waffle moving through a scripted figure-eight route.
+      - LiDAR plot shows nearby scan points while the robot passes marker boxes.
+      - MuJoCo runtime logs contain nonzero lidar_hits and nearby lidar_min values around the demo obstacles.
+      - Route demo logs show completed figure-eight phases and a neutral hold before launcher shutdown.
+    failure_signals:
+      - Simulator starts but robot pose does not change after hako-cmd start and route demo launch.
+      - LiDAR ranges remain only at far-range values even when the robot is near demo obstacles.
+      - PDU channels are not created or Python scripts cannot import hakopy/hakoniwa-pdu in the selected Python environment.
+    fixtures:
+      - Demo marker boxes must intersect the TurtleBot3 LiDAR scan height; obstacles below the scan plane do not validate LiDAR.
+      - MuJoCo viewer requires GUI access; Hakoniwa PDU SHM requires unsandboxed shared-memory access.
+    automation:
+      - tb3_route_demo.py provides joystick-free GameControllerOperation commands.
+      - tb3-mbody-demo-launch.json starts the simulator before hako-cmd start and starts route/LiDAR assets after simulation start.
+
+expected_result: >
+  TurtleBot3 Burger or Waffle generated from MBody Registry runs in MuJoCo,
+  follows a scripted figure-eight route without a joystick, and produces
+  LiDAR hits from sensor-visible demo obstacles.
+
+source_catalogs:
+  - component_id: hakoniwa-mbody-registry
+    catalog_path: ../catalog/components/hakoniwa-mbody-registry.yaml
+  - component_id: hakoniwa-mujoco-robots
+    catalog_path: ../catalog/components/hakoniwa-mujoco-robots.yaml
+  - component_id: hakoniwa-core-pro
+    catalog_path: ../catalog/components/hakoniwa-core-pro.yaml
+  - component_id: hakoniwa-pdu-endpoint
+    catalog_path: ../catalog/components/hakoniwa-pdu-endpoint.yaml
+  - component_id: hakoniwa-pdu-registry
+    catalog_path: ../catalog/components/hakoniwa-pdu-registry.yaml
+
+source_artifacts:
+  - repository: hakoniwalab/hakoniwa-mbody-registry
+    path: bodies/turtlebot3_burger/generated/turtlebot3_burger.minimal_world.xml
+    revision: local-validation-2026-07-19
+    description: Generated TurtleBot3 Burger MuJoCo minimal world.
+  - repository: hakoniwalab/hakoniwa-mbody-registry
+    path: bodies/turtlebot3_waffle/generated/turtlebot3_waffle.minimal_world.xml
+    revision: local-validation-2026-07-19
+    description: Generated TurtleBot3 Waffle MuJoCo minimal world.
+  - repository: hakoniwalab/hakoniwa-mbody-registry
+    path: bodies/turtlebot3_burger/config/mujoco_world.yaml
+    revision: local-validation-2026-07-19
+    description: Burger minimal world source config with LiDAR-visible demo marker.
+  - repository: hakoniwalab/hakoniwa-mbody-registry
+    path: bodies/turtlebot3_waffle/config/mujoco_world.yaml
+    revision: local-validation-2026-07-19
+    description: Waffle minimal world source config with LiDAR-visible demo markers.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: tb3-mbody-demo-launch.json
+    revision: local-validation-2026-07-19
+    description: Launcher config for MuJoCo simulator, LiDAR visualizer, and route demo.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: tb3-mbody-demo.bash
+    revision: local-validation-2026-07-19
+    description: Demo wrapper that selects Burger or Waffle and runs the launcher.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: python/tb3_route_demo.py
+    revision: local-validation-2026-07-19
+    description: Joystick-free TurtleBot3 command source used for reproducible runtime validation.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: python/tb3_lidar_visualizer.py
+    revision: local-validation-2026-07-19
+    description: LiDAR plot used as sensor observability for the demo.
+
+tags:
+  - hakoniwa
+  - recipe
+  - turtlebot3
+  - mujoco
+  - mbody
+  - lidar
+  - no-ros-runtime
+  - no-godot
