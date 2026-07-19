@@ -180,6 +180,13 @@ demo:
       - World, obstacle, lighting, sensor, or input conditions required to make the behavior observable.
     automation:
       - Scripted command source, launcher, or other mechanism that avoids unnecessary manual input.
+  verification_checks:
+    lifecycle:
+      - Process, launcher, or hako-cmd condition that should occur.
+    behavior:
+      - Model loaded, simulation advanced, pose changed, sensor hit, PDU updated, or controller phase completed.
+    logs:
+      - Log file or message pattern that confirms the behavior evidence.
 
 expected_result: >
   What the user should see when the recipe works.

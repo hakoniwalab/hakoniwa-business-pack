@@ -46,12 +46,21 @@ For a user asking "Can Hakoniwa do X?" or "How should I build X?":
    - `distribution`
 3. Read the detailed YAML for shortlisted components.
 4. Follow `connects_to` edges only when the interface and direction make sense.
-5. Decide feasibility:
+5. Search `recipes/examples/*.yaml` for an existing Recipe that matches the
+   goal, selected components, tags, or demo intent.
+   - If one exists, read it before opening source repositories or proposing
+     commands.
+   - Prefer adapting an existing Recipe over rediscovering execution steps from
+     component README files.
+   - Treat the Recipe as the current system-composition memory, including
+     validation notes, environment assumptions, launcher behavior, and known
+     failure signals.
+6. Decide feasibility:
    - `feasible`: existing components and artifacts are enough for a minimal demo.
    - `partially_feasible`: core path exists, but missing pieces remain.
    - `not_feasible`: current catalog has no credible implementation path.
    - `unknown`: catalog is insufficient; state what must be verified.
-6. Produce a Recipe-shaped answer:
+7. Produce a Recipe-shaped answer:
    - Goal
    - Feasibility
    - Validation
@@ -69,6 +78,10 @@ For a user asking "Can Hakoniwa do X?" or "How should I build X?":
 
 Do not output only a repository list. A useful answer explains how the selected
 components work together as a Hakoniwa system.
+
+Do not jump directly from a catalog hit to a repository README when a relevant
+Recipe exists. Catalogs identify candidate components; Recipes explain proven or
+planned compositions and should guide demo execution.
 
 ## Ambiguous Requests
 
@@ -167,6 +180,22 @@ collision object along the motion path.
 
 When a demo uses a launcher, include the launcher as a runtime artifact and
 state which assets it starts before simulation start and after simulation start.
+
+Launcher termination is not enough to claim success. For example,
+`asset exited: route_demo -> abort all` can be expected launcher behavior after a
+scripted route completes, but it only proves the controller process exited. To
+claim the demo worked, inspect observation evidence such as:
+
+- simulator logs showing the intended model or manifest was loaded,
+- simulation steps advancing after `hako-cmd start`,
+- robot pose, joint, or sensor values changing,
+- route/controller logs showing the intended phases completed,
+- viewer, plot, PDU, or generated-artifact evidence matching
+  `demo.observability.success_signals`.
+
+Report both the lifecycle result and the behavior evidence. If only the
+launcher lifecycle was checked, say the demo launch was checked but runtime
+behavior was not verified.
 
 ## Recipe Principles
 

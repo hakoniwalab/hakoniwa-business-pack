@@ -24,6 +24,25 @@ A Hakoniwa recipe is a structured system composition document:
 The first goal is not code generation. The first goal is to convert an ambiguous
 user request into a Hakoniwa-valid system composition.
 
+## Using Existing Recipes
+
+When an AI or human receives a user request, do not stop at the catalog search.
+After candidate components are found, check `recipes/examples/*.yaml` for an
+existing composition that already covers the goal or a close variant.
+
+Use the existing recipe to recover:
+
+- validated and unvalidated paths;
+- target and execution environment assumptions;
+- required launchers, commands, and runtime artifacts;
+- automation choices such as scripted controllers instead of manual devices;
+- observability criteria and known failure signals.
+
+Only fall back to component README files for details that are missing from the
+recipe, or to verify that the source repository still supports the recorded
+steps. If repository behavior has changed, update the recipe with the new
+evidence instead of leaving the knowledge only in the conversation.
+
 ## Target Environment Requirement
 
 A recipe can describe a platform-neutral composition, but an executable demo or
@@ -112,6 +131,19 @@ include obstacles at scan height and within range; a camera recipe should includ
 visible geometry and lighting; a contact recipe should include an object along
 the expected path.
 
+Do not treat launcher exit alone as success. A launcher may intentionally stop
+all assets after a scripted controller exits. For runtime demos, record behavior
+evidence such as:
+
+- the expected model, manifest, world, or generated artifact was loaded;
+- simulation time or steps advanced;
+- robot pose, joints, sensor values, or PDU contents changed as expected;
+- route or controller phases completed;
+- viewer, plot, log, or artifact output matched the intended observation path.
+
+If only process startup or launcher shutdown was checked, mark that step as
+partial evidence rather than full runtime verification.
+
 ## Core Shape
 
 Every recipe should make these sections explicit:
@@ -130,6 +162,7 @@ Every recipe should make these sections explicit:
 - `missing_pieces`
 - `demo`
 - `demo.observability`
+- `demo.verification_checks`
 - `expected_result`
 - `source_catalogs`
 - `source_artifacts`

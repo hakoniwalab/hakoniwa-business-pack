@@ -503,6 +503,22 @@ demo:
     automation:
       - tb3_route_demo.py provides joystick-free GameControllerOperation commands.
       - tb3-mbody-demo-launch.json starts the simulator before hako-cmd start and starts route/LiDAR assets after simulation start.
+  verification_checks:
+    lifecycle:
+      - hako_launcher reports tb3_sim_mbody, lidar_visualizer, and route_demo assets.
+      - hako-cmd start exits with status 0.
+      - route_demo exit may intentionally trigger launcher abort-all shutdown after the route completes.
+    behavior:
+      - tb3_sim_mbody loads the selected MBody manifest and minimal world.
+      - TB3 log lines show step advancement after simulation start.
+      - TB3 position or joint values change during the route.
+      - LiDAR log fields show nonzero lidar_hits and nearby lidar_min values around sensor-visible obstacles.
+      - route_demo logs show figure-eight phases and TB3 route demo finished.
+    logs:
+      - logs/tb3_sim_mbody.out contains "Loaded TB3 manifest" and "TB3 model loaded successfully".
+      - logs/tb3_sim_mbody.out contains "[TB3] step=" lines with changing pos, joint_pos, or lidar_min.
+      - logs/route_demo.out contains "TB3 route demo finished".
+      - logs/lidar_visualizer.out contains "PduManager initialized".
 
 expected_result: >
   TurtleBot3 Burger, Waffle, or Waffle Pi generated from MBody Registry runs in MuJoCo,
