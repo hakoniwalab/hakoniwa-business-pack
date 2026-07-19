@@ -259,7 +259,7 @@ runtime motion can be verified while Godot visualization remains untested.
 If the user asks for an implementation, create or update a Recipe first unless
 the requested Recipe already exists.
 
-## Commercial And Private Components
+## Commercial, Non-Commercial, And Private Components
 
 Catalog entries use:
 
@@ -267,13 +267,17 @@ Catalog entries use:
 repository:
   visibility: public | private | unknown
 distribution:
-  channel: oss | commercial | unknown
+  channel: oss | non-commercial | commercial | unknown
 ```
+
+Repository visibility and distribution rights are separate facts. A public
+repository can still carry non-commercial or otherwise restricted licensing.
 
 When proposing a user-facing Recipe:
 
-- Mention when a required component is `commercial`.
-- Prefer OSS components when the user asks for an OSS-only or public setup.
+- Mention when a required component is `commercial` or `non-commercial`.
+- Prefer OSS components when the user asks for an OSS-only setup.
+- Do not treat a public repository as OSS unless its license supports that claim.
 - Do not claim a private/commercial repository is publicly available.
 - Do not expose local filesystem paths. Use `repository`, `path`, and `revision`
   triples from `source_refs` or `source_artifacts`.
