@@ -207,6 +207,28 @@ Report both the lifecycle result and the behavior evidence. If only the
 launcher lifecycle was checked, say the demo launch was checked but runtime
 behavior was not verified.
 
+## Multi-Process Mirror Demos
+
+For multi-robot Hakoniwa demos, check `recipes/README.md` for the
+Multi-Process Mirror Pattern before proposing an implementation.
+
+Do not collapse this pattern into a single simulator plus an external viewer.
+The intended pattern can require multiple Hakoniwa simulator processes, where
+each process has one real robot in its local MJCF world and mirrored bodies for
+remote robots.
+
+When describing or implementing such a demo, make these roles explicit:
+
+- which simulator process owns Conductor startup;
+- which simulator process owns the viewer;
+- which robot is real in each process;
+- which robots are mirrored in each process;
+- which pose PDUs are published and subscribed;
+- which controller process targets each real robot.
+
+Only one simulator process should start Conductor. Other simulator processes
+must run with Conductor startup disabled.
+
 ## Recipe Principles
 
 A Recipe is not source code and not a generic implementation spec.

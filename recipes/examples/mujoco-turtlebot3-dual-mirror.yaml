@@ -1,0 +1,492 @@
+id: mujoco-turtlebot3-dual-mirror
+title: MuJoCo Dual TurtleBot3 Mirror Demo
+recipe_version: 0.1
+
+goal:
+  user_request: TB3 BurgerとWaffleを別プロセスで動かし、片方のViewerで相互ミラーとLiDARを見たい
+  description: >
+    Run TurtleBot3 Burger and TurtleBot3 Waffle as separate Hakoniwa MuJoCo
+    simulator assets. Each process owns one real robot and mirrors the other
+    robot through pose PDUs. A single Conductor owner controls simulation time,
+    Process A opens the MuJoCo viewer, and two LiDAR visualizers show each real
+    robot's scan output.
+
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - hakoniwa-mujoco-robots provides TB3 Burger and Waffle simulator targets.
+    - The runtime supports per-process robot names, endpoint names, mirror bindings, and optional Conductor startup.
+    - The validated launcher starts two simulator processes, two route controllers, and two LiDAR visualizers.
+    - Only one simulator process owns Conductor startup, avoiding multi-Conductor failure.
+
+validation:
+  status: verified
+  summary: >
+    The dual-process Burger/Waffle mirror demo was executed locally on macOS
+    arm64 with MuJoCo viewer, two joystick-free route controllers, bidirectional
+    mirror updates, and two LiDAR plot windows.
+  steps:
+    - id: dual_mjcf_load
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: models/tb3/tb3_burger_real_waffle_mirror.xml
+          revision: local-validation-2026-07-19
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: models/tb3/tb3_waffle_real_burger_mirror.xml
+          revision: local-validation-2026-07-19
+      notes:
+        - Both dual MJCF files load in MuJoCo.
+        - Process A contains real Burger plus mirrored Waffle.
+        - Process B contains real Waffle plus mirrored Burger.
+    - id: single_conductor_topology
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: tb3-dual-mirror-demo-launch.json
+          revision: local-validation-2026-07-19
+      notes:
+        - Process A owns Conductor startup.
+        - Process B sets HAKO_TB3_DISABLE_CONDUCTOR_START=1.
+        - Viewer is enabled only for Process A.
+    - id: bidirectional_mirror_runtime
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: logs/tb3_burger_real.out
+          revision: local-validation-2026-07-19
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: logs/tb3_waffle_real.out
+          revision: local-validation-2026-07-19
+      notes:
+        - Process A logs showed TB3_WAFFLE mirror update counts increasing.
+        - Process B logs showed TB3_BURGER mirror update counts increasing.
+    - id: dual_lidar_observability
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: python/lidar_visualizer.py
+          revision: local-validation-2026-07-19
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: tb3-dual-mirror-demo-launch.json
+          revision: local-validation-2026-07-19
+      notes:
+        - The launcher opened separate LiDAR visualizers for TB3_BURGER/laser_scan and TB3_WAFFLE/laser_scan.
+        - Runtime logs showed nonzero lidar_hits for both robots.
+
+constraints:
+  - no-ros-runtime
+  - single-pc
+  - shared-memory-pdu
+  - mujoco-only
+  - multi-process
+  - one-conductor-owner
+
+target_environment:
+  required_for: executable-demo
+  status: recorded
+  os: macOS
+  os_version: unknown
+  architecture: arm64
+  execution_mode: native
+  runtimes:
+    - name: MuJoCo
+      required: true
+      version: "3.9.0"
+      path: thirdparty/mujoco
+    - name: Python
+      required: true
+      version: "3.12"
+      path: unknown
+  hakoniwa:
+    install_prefix: /usr/local/hakoniwa
+    components_built:
+      - hakoniwa-core-pro
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-mujoco-robots
+  notes:
+    - GUI access is required for the MuJoCo viewer and LiDAR plot windows.
+
+execution_environment:
+  required_for: executable-demo
+  status: recorded
+  os: macOS
+  os_version: unknown
+  architecture: arm64
+  execution_mode: native
+  gui:
+    required: true
+    status: available
+  shared_memory:
+    required: true
+    access: requires-unsandboxed-command
+  devices:
+    - name: joystick
+      required: false
+      available: not_required
+  python:
+    environment: venv
+    hakopy_available: true
+  hakoniwa:
+    install_prefix: /usr/local/hakoniwa
+    hako_cmd_access: requires-unsandboxed-command
+  notes:
+    - Python 3.12, hakopy, PyQt5, matplotlib, and hakoniwa-pdu must be available in the same Python environment.
+    - Route controllers are scripted, so gamepad input is intentionally not required.
+
+process_topology:
+  required_for: multi-process-demo
+  conductor_owner: process-a
+  viewer_owner: process-a
+  simulator_processes:
+    - id: process-a
+      asset_name: tb3_burger_real
+      conductor: owner
+      viewer: enabled
+      real_robots:
+        - robot_name: TB3_BURGER
+          model: tb3_burger_real_waffle_mirror.xml
+          publishes:
+            - base_link_pos
+            - base_scan_pos
+            - laser_scan
+      mirrored_robots:
+        - robot_name: TB3_WAFFLE
+          body_name: waffle_mirror_base_link
+          subscribes:
+            - base_link_pos
+    - id: process-b
+      asset_name: tb3_waffle_real
+      conductor: disabled
+      viewer: disabled
+      real_robots:
+        - robot_name: TB3_WAFFLE
+          model: tb3_waffle_real_burger_mirror.xml
+          publishes:
+            - base_link_pos
+            - base_scan_pos
+            - laser_scan
+      mirrored_robots:
+        - robot_name: TB3_BURGER
+          body_name: burger_mirror_base_link
+          subscribes:
+            - base_link_pos
+  controller_processes:
+    - id: controller-a
+      target_robot: TB3_BURGER
+      target_pdu: hako_cmd_game
+    - id: controller-b
+      target_robot: TB3_WAFFLE
+      target_pdu: hako_cmd_game
+  notes:
+    - Do not start Conductor in both simulator processes.
+    - Do not replace Process B with an external viewer; Process B owns real Waffle physics.
+    - Process A's viewer is the combined observation point because it mirrors the remote Waffle.
+
+components:
+  - id: hakoniwa-mujoco-robots
+    roles:
+      - physics_runtime
+      - simulation_core
+      - visualizer
+    purpose: Run both TB3 simulator processes, publish/mirror pose PDUs, and provide MuJoCo plus LiDAR visualization.
+  - id: hakoniwa-core-pro
+    roles:
+      - simulation_core
+      - time_sync
+    purpose: Provide Hakoniwa lifecycle, Conductor ownership, hako-cmd, and shared-memory simulation time.
+  - id: hakoniwa-pdu-endpoint
+    roles:
+      - communication_infrastructure
+      - integration_boundary
+    purpose: Provide SHM PDU transport between simulator processes, route controllers, and visualizers.
+  - id: hakoniwa-pdu-registry
+    roles:
+      - data_model
+      - registry
+    purpose: Provide PDU type contracts for command, pose, and LaserScan data.
+  - id: hakoniwa-mbody-registry
+    roles:
+      - asset_generator
+      - data_model
+    purpose: Provide the generated TurtleBot3 Burger and Waffle MJCF patterns used by the demo.
+
+connections:
+  - from: hakoniwa-mujoco-robots
+    to: hakoniwa-pdu-endpoint
+    interface: pdu
+    data:
+      - TB3_BURGER/base_link_pos
+      - TB3_WAFFLE/base_link_pos
+      - TB3_BURGER/laser_scan
+      - TB3_WAFFLE/laser_scan
+      - TB3_BURGER/hako_cmd_game
+      - TB3_WAFFLE/hako_cmd_game
+    contract:
+      status: verified
+      requires:
+        - shared-memory-pdu
+        - per-robot-pdu-names
+        - dual-pdu-definition
+        - endpoint-config-per-process
+      validation_notes:
+        - Both route controllers sent robot-specific command PDUs.
+        - Both simulator processes published robot-specific pose and LaserScan PDUs.
+        - Both LiDAR visualizers initialized against the dual PDU definition.
+    notes: PDU robot names distinguish the two real robots inside one shared PDU space.
+  - from: hakoniwa-core-pro
+    to: hakoniwa-mujoco-robots
+    interface: command
+    data:
+      - hako-cmd start
+      - simulation lifecycle
+    contract:
+      status: verified
+      requires:
+        - exactly-one-conductor-owner
+        - process-b-conductor-disabled
+      validation_notes:
+        - Process B logged that Conductor startup was disabled.
+        - hako_launcher started simulation through hako-cmd start once.
+    notes: Multi-process simulator recipes must explicitly assign Conductor ownership.
+  - from: hakoniwa-mbody-registry
+    to: hakoniwa-mujoco-robots
+    interface: generated-artifact
+    data:
+      - TurtleBot3 Burger MJCF shape
+      - TurtleBot3 Waffle MJCF shape
+    contract:
+      status: verified
+      requires:
+        - mirror-body-world-composition
+        - non-colliding-mirror-geoms
+        - visual-parity-with-generated-mjcf
+      validation_notes:
+        - Waffle mirror uses the same primitive shape pattern as the generated Waffle MJCF rather than a downsampled STL.
+        - Mirror bodies are visualized but do not collide with the real robot.
+    notes: MBody-generated robot geometry informs both real and mirror model composition.
+
+data_flow:
+  summary: >
+    Two MuJoCo simulator processes exchange robot poses through shared PDU
+    channels. Each process publishes its real robot state and mirrors the
+    remote robot. Two Python route controllers send independent command PDUs,
+    and two LiDAR visualizers read each real robot's scan PDU.
+  steps:
+    - from: controller-a
+      to: process-a
+      data:
+        - TB3_BURGER/hako_cmd_game
+      description: Scripted route control drives the real Burger.
+    - from: controller-b
+      to: process-b
+      data:
+        - TB3_WAFFLE/hako_cmd_game
+      description: Scripted route control drives the real Waffle.
+    - from: process-a
+      to: process-b
+      data:
+        - TB3_BURGER/base_link_pos
+      description: Process B mirrors Burger pose into burger_mirror_base_link.
+    - from: process-b
+      to: process-a
+      data:
+        - TB3_WAFFLE/base_link_pos
+      description: Process A mirrors Waffle pose into waffle_mirror_base_link.
+    - from: process-a
+      to: burger_lidar_visualizer
+      data:
+        - TB3_BURGER/laser_scan
+      description: Burger LiDAR plot shows sensor results from real Burger physics.
+    - from: process-b
+      to: waffle_lidar_visualizer
+      data:
+        - TB3_WAFFLE/laser_scan
+      description: Waffle LiDAR plot shows sensor results from real Waffle physics.
+
+time_model:
+  mode: shared-simulation-time
+  components:
+    - hakoniwa-core-pro
+    - hakoniwa-mujoco-robots
+  notes:
+    - Process A owns Conductor startup.
+    - Process B joins the same simulation time and must not start another Conductor.
+
+artifact_sets:
+  physics_artifacts:
+    description: Dual-world MJCFs for real robot plus mirrored remote robot.
+    status: verified
+    artifacts:
+      - tb3_burger_real_waffle_mirror.xml
+      - tb3_waffle_real_burger_mirror.xml
+    notes:
+      - Marker fixtures are non-colliding and placed to avoid stopping the route.
+      - Mirror bodies use non-colliding geoms so only real robots participate in physics.
+  visualization_artifacts:
+    description: MuJoCo viewer and two LiDAR plot windows.
+    status: verified
+    artifacts:
+      - MuJoCo viewer
+      - python/lidar_visualizer.py
+    notes:
+      - Viewer is enabled only in Process A.
+      - LiDAR windows are positioned separately through environment variables.
+  pdu_artifacts:
+    description: Dual robot PDU definitions and endpoint configs.
+    status: verified
+    artifacts:
+      - tb3-dual-pdudef-compact.json
+      - tb3_dual_burger_endpoint.json
+      - tb3_dual_waffle_endpoint.json
+      - shm_tb3_dual_comm.json
+    notes:
+      - Both robots expose command, pose, and LaserScan PDUs under distinct robot names.
+  runtime_artifacts:
+    description: Launcher, wrapper, controllers, and mirror bindings.
+    status: verified
+    artifacts:
+      - tb3-dual-mirror-demo.bash
+      - tb3-dual-mirror-demo-launch.json
+      - tb3-dual-burger-real-waffle-mirror-bindings.json
+      - tb3-dual-waffle-real-burger-mirror-bindings.json
+      - tb3_route_demo.py
+    notes:
+      - hako_launcher starts simulators before hako-cmd start and starts visualizers/controllers after simulation start.
+
+artifacts:
+  - name: tb3_burger_real_waffle_mirror.xml
+    kind: mjcf
+    producer: hakoniwa-mujoco-robots
+    consumer:
+      - hakoniwa-mujoco-robots
+    path: models/tb3/tb3_burger_real_waffle_mirror.xml
+  - name: tb3_waffle_real_burger_mirror.xml
+    kind: mjcf
+    producer: hakoniwa-mujoco-robots
+    consumer:
+      - hakoniwa-mujoco-robots
+    path: models/tb3/tb3_waffle_real_burger_mirror.xml
+  - name: tb3-dual-mirror-demo-launch.json
+    kind: command
+    producer: hakoniwa-mujoco-robots
+    consumer:
+      - hakoniwa-mujoco-robots
+      - hakoniwa-core-pro
+    path: tb3-dual-mirror-demo-launch.json
+  - name: tb3-dual-pdudef-compact.json
+    kind: pdu-definition
+    producer: hakoniwa-mujoco-robots
+    consumer:
+      - hakoniwa-mujoco-robots
+      - hakoniwa-pdu-endpoint
+    path: config/tb3-dual-pdudef-compact.json
+  - name: python/lidar_visualizer.py
+    kind: command
+    producer: hakoniwa-mujoco-robots
+    consumer:
+      - hakoniwa-mujoco-robots
+    path: python/lidar_visualizer.py
+
+missing_pieces:
+  - Replace local-validation revisions with concrete commit SHAs after repository changes are pushed.
+  - Decide whether to add a screenshot or short recording as visual validation evidence.
+  - Consider whether mirror-body generation should be automated from MBody artifacts instead of hand-composed MJCF.
+
+demo:
+  objective: >
+    Show two independent TurtleBot3 simulator processes moving under scripted
+    control, mirrored into each other's world, with both robots' LiDAR scans
+    visible.
+  steps:
+    - order: 1
+      component: hakoniwa-mujoco-robots
+      action: Check runtime prerequisites.
+      command: ./doctor.bash
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: doctor.bash
+          revision: local-validation-2026-07-19
+    - order: 2
+      component: hakoniwa-mujoco-robots
+      action: Run the dual mirror launcher with viewer and LiDAR plots.
+      command: HAKO_TB3_ROUTE_LOOPS=1 HAKO_TB3_HOLD_SEC=4 ./tb3-dual-mirror-demo.bash
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: tb3-dual-mirror-demo.bash
+          revision: local-validation-2026-07-19
+  observability:
+    success_signals:
+      - Process A MuJoCo viewer shows real Burger and mirrored Waffle.
+      - Burger and Waffle move under separate scripted route controllers.
+      - Two LiDAR plot windows open, one for TB3_BURGER and one for TB3_WAFFLE.
+      - Simulator logs show increasing TB3-MIRROR update counts for both mirrored robots.
+      - Simulator logs show nonzero lidar_hits for both robots.
+    failure_signals:
+      - Both simulator processes try to start Conductor.
+      - Process A viewer opens but the remote Waffle mirror remains static.
+      - A controller sends commands to TB3 instead of TB3_BURGER or TB3_WAFFLE.
+      - LiDAR visualizer reads the single-robot PDU config instead of the dual PDU config.
+    fixtures:
+      - Demo marker boxes must be high enough to intersect the TurtleBot3 LiDAR scan plane.
+      - Marker boxes should be non-colliding or placed far enough away to avoid stopping the route.
+    automation:
+      - tb3-dual-mirror-demo-launch.json starts all six assets in the correct lifecycle order.
+      - tb3_route_demo.py removes joystick dependency for both real robots.
+  verification_checks:
+    lifecycle:
+      - hako_launcher reports tb3_burger_real, tb3_waffle_real, two LiDAR visualizers, and two route demos.
+      - Process B logs "Conductor start is disabled".
+      - hako-cmd start exits with status 0.
+    behavior:
+      - logs/tb3_burger_real.out contains TB3_WAFFLE mirror update counts.
+      - logs/tb3_waffle_real.out contains TB3_BURGER mirror update counts.
+      - logs/tb3_burger_real.out and logs/tb3_waffle_real.out contain nonzero lidar_hits.
+      - logs/burger_lidar_visualizer.out and logs/waffle_lidar_visualizer.out contain "PduManager initialized".
+
+expected_result: >
+  Process A's MuJoCo viewer shows real TurtleBot3 Burger and mirrored TurtleBot3
+  Waffle moving together, while two LiDAR plot windows show live scan output for
+  TB3_BURGER and TB3_WAFFLE.
+
+source_catalogs:
+  - component_id: hakoniwa-mujoco-robots
+    catalog_path: ../catalog/components/hakoniwa-mujoco-robots.yaml
+  - component_id: hakoniwa-core-pro
+    catalog_path: ../catalog/components/hakoniwa-core-pro.yaml
+  - component_id: hakoniwa-pdu-endpoint
+    catalog_path: ../catalog/components/hakoniwa-pdu-endpoint.yaml
+  - component_id: hakoniwa-pdu-registry
+    catalog_path: ../catalog/components/hakoniwa-pdu-registry.yaml
+  - component_id: hakoniwa-mbody-registry
+    catalog_path: ../catalog/components/hakoniwa-mbody-registry.yaml
+
+source_artifacts:
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: tb3-dual-mirror-demo-launch.json
+    revision: local-validation-2026-07-19
+    description: Launcher config for two simulators, two route controllers, and two LiDAR visualizers.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: models/tb3/tb3_burger_real_waffle_mirror.xml
+    revision: local-validation-2026-07-19
+    description: Process A MJCF with real Burger and mirrored Waffle.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: models/tb3/tb3_waffle_real_burger_mirror.xml
+    revision: local-validation-2026-07-19
+    description: Process B MJCF with real Waffle and mirrored Burger.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: python/lidar_visualizer.py
+    revision: local-validation-2026-07-19
+    description: LiDAR plotter used for both robot-specific LaserScan PDUs.
+
+tags:
+  - hakoniwa
+  - recipe
+  - turtlebot3
+  - mujoco
+  - multi-process
+  - mirror-body
+  - lidar
+  - no-ros-runtime
+  - no-godot

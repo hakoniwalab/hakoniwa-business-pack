@@ -153,6 +153,79 @@ evidence such as:
 If only process startup or launcher shutdown was checked, mark that step as
 partial evidence rather than full runtime verification.
 
+## Multi-Process Mirror Pattern
+
+For multi-robot Hakoniwa demos, do not assume that one viewer process must own
+all real robots. A useful pattern is to run multiple Hakoniwa simulator
+processes, each with a local MJCF world that contains:
+
+- one real robot controlled by that process;
+- one or more mirrored robots driven by pose PDUs published by other processes.
+
+For example, a two-TurtleBot3 demo can use two MJCF worlds:
+
+```text
+Process A world:
+  real:   TB3 Burger
+  mirror: TB3 Waffle
+
+Process B world:
+  real:   TB3 Waffle
+  mirror: TB3 Burger
+```
+
+Each process publishes the pose of its real robot and subscribes to the pose of
+the other process's real robot:
+
+```text
+Process A publishes: TB3_BURGER/base_link_pos
+Process A mirrors:   TB3_WAFFLE/base_link_pos
+
+Process B publishes: TB3_WAFFLE/base_link_pos
+Process B mirrors:   TB3_BURGER/base_link_pos
+```
+
+Control programs are separate from simulator processes. In the two-robot case,
+use two controller processes:
+
+```text
+Controller A -> TB3_BURGER/hako_cmd_game
+Controller B -> TB3_WAFFLE/hako_cmd_game
+```
+
+The minimum visible demo does not need every simulator process to open a
+viewer. Prefer one viewer owner:
+
+```text
+Process A:
+  conductor: owner
+  viewer: enabled
+
+Process B:
+  conductor: disabled
+  viewer: disabled
+```
+
+This keeps the visible scene simple while still proving that two real physics
+processes exist and exchange pose through PDU. The viewer owner shows its local
+real robot plus mirrored remote robots.
+
+When documenting this pattern in a Recipe, make the process topology explicit:
+
+- which simulator processes run;
+- which process owns Conductor startup;
+- which process owns the viewer;
+- which robot is real in each process;
+- which robots are mirrored in each process;
+- which PDU names are published by real robots;
+- which PDU names are subscribed by mirrored bodies;
+- which controller process targets each real robot.
+
+Do not describe a PDU-only external viewer as equivalent to this pattern. An
+external viewer can be useful for inspection, but it does not prove the same
+multi-process mirror composition as a simulator world that contains both real
+and mirrored bodies.
+
 ## Core Shape
 
 Every recipe should make these sections explicit:
@@ -162,6 +235,7 @@ Every recipe should make these sections explicit:
 - `validation`
 - `constraints`
 - `execution_environment`
+- `process_topology` when multiple Hakoniwa processes or controllers are used
 - `components`
 - `connections`
 - `data_flow`
@@ -188,6 +262,16 @@ recipes/
 └── examples/
     └── <recipe-id>.yaml
 ```
+
+## Current Examples
+
+- `mujoco-turtlebot3-mbody.yaml`: single TurtleBot3 Burger, Waffle, or Waffle Pi
+  generated from MBody Registry and run in MuJoCo with scripted route control
+  and LiDAR observability.
+- `mujoco-turtlebot3-dual-mirror.yaml`: two MuJoCo simulator processes for TB3
+  Burger and Waffle, with one Conductor owner, one MuJoCo viewer, bidirectional
+  mirror bodies, two route controllers, and two LiDAR visualizers.
+- `mujoco-turtlebot3-godot.yaml`: planned MuJoCo plus Godot visualization path.
 
 ## Authoring Rules
 

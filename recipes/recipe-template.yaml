@@ -83,6 +83,50 @@ execution_environment:
   notes:
     - Runtime verification must state these assumptions.
 
+process_topology:
+  required_for: multi-process-demo
+  conductor_owner: process-a
+  viewer_owner: process-a
+  simulator_processes:
+    - id: process-a
+      asset_name: asset-a
+      conductor: owner | disabled
+      viewer: enabled | disabled
+      real_robots:
+        - robot_name: ROBOT_A
+          model: model-or-mjcf-name
+          publishes:
+            - base_link_pos
+      mirrored_robots:
+        - robot_name: ROBOT_B
+          body_name: mirror-body-name
+          subscribes:
+            - base_link_pos
+    - id: process-b
+      asset_name: asset-b
+      conductor: owner | disabled
+      viewer: enabled | disabled
+      real_robots:
+        - robot_name: ROBOT_B
+          model: model-or-mjcf-name
+          publishes:
+            - base_link_pos
+      mirrored_robots:
+        - robot_name: ROBOT_A
+          body_name: mirror-body-name
+          subscribes:
+            - base_link_pos
+  controller_processes:
+    - id: controller-a
+      target_robot: ROBOT_A
+      target_pdu: hako_cmd_game
+    - id: controller-b
+      target_robot: ROBOT_B
+      target_pdu: hako_cmd_game
+  notes:
+    - Use only one Conductor owner when multiple simulator processes run.
+    - A viewer may be enabled for only one process when that process mirrors remote robots.
+
 components:
   - id: hakoniwa-component-id
     roles:
