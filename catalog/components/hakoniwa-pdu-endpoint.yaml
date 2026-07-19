@@ -3,7 +3,6 @@ name: Hakoniwa PDU Endpoint
 repository:
   owner: hakoniwalab
   name: hakoniwa-pdu-endpoint
-  path: ../hakoniwa-pdu-endpoint
   url: https://github.com/hakoniwalab/hakoniwa-pdu-endpoint
   visibility: public
 distribution:

@@ -4,7 +4,6 @@ name: Human Readable Component Name
 repository:
   owner: hakoniwalab
   name: component-directory
-  path: ../component-directory
   url: https://github.com/hakoniwalab/component-directory
   visibility: public | private | unknown
 distribution:
@@ -20,7 +19,6 @@ category:
   primary: communication
   secondary:
     - integration
-    - commercial
 
 status:
   maturity: draft

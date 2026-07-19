@@ -1,0 +1,88 @@
+id: recipe-id
+title: Human readable recipe title
+recipe_version: 0.1
+
+goal:
+  user_request: Original or normalized user request.
+  description: >
+    One paragraph describing the target Hakoniwa system.
+
+feasibility:
+  status: feasible | partially_feasible | not_feasible | unknown
+  confidence: high | medium | low
+  rationale:
+    - Why the current catalog supports this judgement.
+
+constraints:
+  - no-ros-runtime
+  - single-pc
+
+components:
+  - id: hakoniwa-component-id
+    roles:
+      - recipe_role_from_catalog_schema
+    purpose: Why this component is used in this recipe.
+
+connections:
+  - from: source-component-id
+    to: target-component-id
+    interface: pdu | endpoint | file | api | command | generated-artifact
+    data:
+      - data item or artifact name
+    notes: How this connection works.
+
+data_flow:
+  summary: Short explanation of runtime data movement.
+  steps:
+    - from: producer
+      to: consumer
+      data:
+        - pdu-or-artifact
+      description: What moves here.
+
+time_model:
+  mode: shared-simulation-time | visualization-polling | wall-clock | external | unknown
+  components:
+    - component-id
+  notes:
+    - Timing assumption or synchronization strategy.
+
+artifacts:
+  - name: artifact-name
+    kind: mjcf | urdf | glb | godot-scene | endpoint-config | pdu-definition | profile | command | source
+    producer: component-id
+    consumer:
+      - component-id
+    path: optional/repo/path
+
+missing_pieces:
+  - Confirm exact runtime wiring.
+
+demo:
+  objective: What the minimal demo should prove.
+  steps:
+    - order: 1
+      component: component-id
+      action: Concrete action.
+      command: optional command
+      evidence:
+        - repository: hakoniwalab/component
+          path: README.md
+          revision: main
+
+expected_result: >
+  What the user should see when the recipe works.
+
+source_catalogs:
+  - component_id: component-id
+    catalog_path: ../catalog/components/component-id.yaml
+
+source_artifacts:
+  - repository: hakoniwalab/component
+    path: path/to/artifact
+    revision: main
+    description: Why this artifact matters.
+
+tags:
+  - hakoniwa
+

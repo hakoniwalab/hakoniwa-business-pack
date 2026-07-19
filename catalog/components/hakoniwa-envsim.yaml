@@ -3,7 +3,6 @@ name: Hakoniwa Envsim
 repository:
   owner: hakoniwalab
   name: hakoniwa-envsim
-  path: ../hakoniwa-envsim
   url: https://github.com/hakoniwalab/hakoniwa-envsim
   visibility: public
 distribution:

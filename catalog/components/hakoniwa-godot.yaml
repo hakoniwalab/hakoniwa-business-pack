@@ -3,7 +3,6 @@ name: Hakoniwa Godot
 repository:
   owner: hakoniwalab
   name: hakoniwa-godot
-  path: ../hakoniwa-godot
   url: https://github.com/hakoniwalab/hakoniwa-godot
   visibility: public
 distribution:

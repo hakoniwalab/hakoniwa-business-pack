@@ -3,13 +3,12 @@ name: Hakoniwa Core Pro
 repository:
   owner: hakoniwalab
   name: hakoniwa-core-pro
-  path: ../hakoniwa-core-pro
   url: https://github.com/hakoniwalab/hakoniwa-core-pro
-  visibility: private
+  visibility: public
 distribution:
-  channel: commercial
+  channel: oss
   notes:
-    - Private/pro repository; treat as commercial Hakoniwa core component.
+    - Public OSS Hakoniwa component under the MIT license.
 verification:
   verified_at: 2026-07-19
   source_revision: 98a057ab91184921e283ab43279b8ed05cf25363
@@ -18,7 +17,6 @@ summary: Hakoniwa core runtime extension layer built on hakoniwa-core-cpp, provi
 category:
   primary: simulation-core
   secondary:
-    - commercial
     - infrastructure
     - time-sync
     - control-plane
@@ -62,7 +60,6 @@ capabilities:
         revision: 98a057ab91184921e283ab43279b8ed05cf25363
 
 limitations:
-  - Commercial/private core component; recipes should consider distribution constraints.
   - Low-level shared-memory runtime requires correct installation and configuration.
   - Legacy C API remains for compatibility but README indicates newer polling API should be preferred.
 
@@ -129,7 +126,7 @@ connects_to:
   - component_id: hakoniwa-conductor-pro
     direction: used_by
     interface: runtime and install layout
-    notes: Conductor-pro builds on commercial core runtime concepts.
+    notes: Conductor-pro builds on Hakoniwa core runtime concepts.
   - component_id: hakoniwa-mujoco-robots
     direction: used_by
     interface: hako-cmd / sync / PDU runtime
@@ -226,10 +223,10 @@ source_refs:
 tags:
   - hakoniwa
   - core
-  - commercial
+  - oss
+  - mit
   - shm
   - pdu
   - asset
   - time-sync
   - hako-cmd
-

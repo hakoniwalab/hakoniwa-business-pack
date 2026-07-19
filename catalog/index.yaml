@@ -66,12 +66,11 @@ components:
   name: Hakoniwa Core Pro
   category: simulation-core
   secondary_categories:
-  - commercial
   - infrastructure
   - time-sync
   - control-plane
   maturity: active
-  distribution: commercial
+  distribution: oss
   summary: Hakoniwa core runtime extension layer built on hakoniwa-core-cpp, providing
     shared-memory simulation hub integration, asset APIs, commands, events, and RPC
     services.
@@ -89,7 +88,8 @@ components:
   tags:
   - hakoniwa
   - core
-  - commercial
+  - oss
+  - mit
   - shm
   - pdu
   - asset

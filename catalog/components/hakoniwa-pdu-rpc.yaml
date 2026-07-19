@@ -3,7 +3,6 @@ name: Hakoniwa PDU RPC
 repository:
   owner: hakoniwalab
   name: hakoniwa-pdu-rpc
-  path: ../hakoniwa-pdu-rpc
   url: https://github.com/hakoniwalab/hakoniwa-pdu-rpc
   visibility: public
 distribution:

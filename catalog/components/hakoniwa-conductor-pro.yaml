@@ -3,7 +3,6 @@ name: Hakoniwa Conductor Pro
 repository:
   owner: hakoniwalab
   name: hakoniwa-conductor-pro
-  path: ../hakoniwa-conductor-pro
   url: https://github.com/hakoniwalab/hakoniwa-conductor-pro
   visibility: private
 distribution:

@@ -3,7 +3,6 @@ name: Hakoniwa Conductor Light
 repository:
   owner: hakoniwalab
   name: hakoniwa-conductor-light
-  path: ../hakoniwa-conductor-light
   url: https://github.com/hakoniwalab/hakoniwa-conductor-light
   visibility: public
 distribution:

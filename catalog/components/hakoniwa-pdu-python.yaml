@@ -3,7 +3,6 @@ name: Hakoniwa PDU Python
 repository:
   owner: hakoniwalab
   name: hakoniwa-pdu-python
-  path: ../hakoniwa-pdu-python
   url: https://github.com/hakoniwalab/hakoniwa-pdu-python
   visibility: public
 distribution:

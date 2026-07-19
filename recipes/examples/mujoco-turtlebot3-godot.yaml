@@ -1,0 +1,317 @@
+id: mujoco-turtlebot3-godot
+title: MuJoCo TurtleBot3 with Godot Visualization
+recipe_version: 0.1
+
+goal:
+  user_request: ROSを使わず、MuJoCoでTurtleBot3を動かして、Godotで3D表示したい
+  description: >
+    Simulate TurtleBot3 with MuJoCo and visualize its robot state in Godot using
+    existing Hakoniwa PDU, endpoint, and robot sync artifacts without requiring a
+    ROS runtime.
+
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - hakoniwa-mbody-registry already contains generated TurtleBot3 URDF, MJCF, GLB parts, PDU definition, endpoint config, Godot scene, and robot_sync.profile.json artifacts.
+    - hakoniwa-mujoco-robots already contains a TurtleBot3 MuJoCo simulator and matching TB3 PDU definitions for base_link_pos and joint_states.
+    - hakoniwa-godot already contains examples/mujoco config using robot_sync.profile.json and endpoint_shm_poll_with_pdu.json.
+    - The MuJoCo-side and Godot-side TB3 pdutypes define the same robot-state PDU names and types needed for sync.
+
+constraints:
+  - no-ros-runtime
+  - single-pc
+  - shared-memory-pdu
+  - visualization-polling
+
+components:
+  - id: hakoniwa-mbody-registry
+    roles:
+      - asset_generator
+      - visualization_asset_source
+    purpose: Generate and provide TurtleBot3 MJCF, GLB parts, Godot scene, endpoint config, PDU definition, and robot sync profile.
+
+  - id: hakoniwa-mujoco-robots
+    roles:
+      - physics_runtime
+      - simulation_core
+    purpose: Run the TurtleBot3 MuJoCo physics simulation and publish robot state PDUs.
+
+  - id: hakoniwa-pdu-endpoint
+    roles:
+      - communication_infrastructure
+      - integration_boundary
+    purpose: Provide SHM poll endpoint configuration and PDU send/receive semantics between MuJoCo and Godot.
+
+  - id: hakoniwa-pdu-registry
+    roles:
+      - data_model
+      - registry
+    purpose: Provide canonical PDU type contracts for geometry_msgs/Twist and sensor_msgs/JointState.
+
+  - id: hakoniwa-godot
+    roles:
+      - visualizer
+      - integration_boundary
+    purpose: Consume robot_sync.profile.json and endpoint config to update the TurtleBot3 Godot model from PDU state.
+
+  - id: hakoniwa-core-pro
+    roles:
+      - simulation_core
+      - time_sync
+    purpose: Provide Hakoniwa runtime, hako-cmd lifecycle control, shared memory, and simulation time base.
+
+connections:
+  - from: hakoniwa-mbody-registry
+    to: hakoniwa-mujoco-robots
+    interface: generated-artifact
+    data:
+      - turtlebot3_burger.xml
+      - turtlebot3_burger.actuated.xml
+      - pdutypes.json
+      - pdu_def.json
+    notes: MBody-generated robot body and PDU artifacts define the physical model and communication contract consumed by MuJoCo-side recipes.
+
+  - from: hakoniwa-mbody-registry
+    to: hakoniwa-godot
+    interface: generated-artifact
+    data:
+      - TurtleBot3.generated.tscn
+      - robot_sync.profile.json
+      - endpoint_shm_with_pdu.json
+      - GLB parts
+    notes: Godot robot sync consumes the generated scene/profile/config artifacts.
+
+  - from: hakoniwa-mujoco-robots
+    to: hakoniwa-pdu-endpoint
+    interface: pdu
+    data:
+      - TB3/base_link_pos
+      - TB3/joint_states
+    notes: tb3_sim publishes robot pose and joint states through the TB3 endpoint.
+
+  - from: hakoniwa-pdu-endpoint
+    to: hakoniwa-godot
+    interface: pdu
+    data:
+      - TB3/base_link_pos
+      - TB3/joint_states
+    notes: Godot examples/mujoco uses SHM poll endpoint config and robot_sync.profile.json to receive and apply robot state.
+
+  - from: hakoniwa-core-pro
+    to: hakoniwa-mujoco-robots
+    interface: command
+    data:
+      - hako-cmd start
+    notes: The MuJoCo TurtleBot3 quick start uses hako-cmd to start the simulation.
+
+data_flow:
+  summary: >
+    TurtleBot3 state is produced by the MuJoCo simulator as Hakoniwa PDU data.
+    Godot receives base pose and joint states through an SHM poll endpoint and
+    applies them to the generated TurtleBot3 scene nodes.
+  steps:
+    - from: hakoniwa-mbody-registry
+      to: hakoniwa-mujoco-robots
+      data:
+        - MJCF robot model
+        - PDU definition
+      description: Robot body and PDU config artifacts establish the MuJoCo runtime inputs.
+    - from: hakoniwa-mbody-registry
+      to: hakoniwa-godot
+      data:
+        - Godot scene
+        - robot_sync.profile.json
+      description: Generated visual assets and profile map PDU names to Godot node paths.
+    - from: hakoniwa-mujoco-robots
+      to: hakoniwa-godot
+      data:
+        - base_link_pos
+        - joint_states
+      description: Runtime state flows as PDU through endpoint SHM poll communication.
+
+time_model:
+  mode: visualization-polling
+  components:
+    - hakoniwa-core-pro
+    - hakoniwa-mujoco-robots
+    - hakoniwa-godot
+  notes:
+    - MuJoCo participates in the Hakoniwa runtime and starts via hako-cmd.
+    - Godot robot sync uses poll behavior and applies latest state in the Godot loop.
+    - Enable HakoniwaSimNode physics time synchronization only if the demo needs Godot physics to advance under Hakoniwa world time.
+    - conductor-light is not required for the minimal visualization path, but can be considered if strict multi-asset virtual-time coordination is needed.
+
+artifacts:
+  - name: turtlebot3_burger.xml
+    kind: mjcf
+    producer: hakoniwa-mbody-registry
+    consumer:
+      - hakoniwa-mujoco-robots
+    path: bodies/turtlebot3/generated/turtlebot3_burger.xml
+
+  - name: turtlebot3_burger.actuated.xml
+    kind: mjcf
+    producer: hakoniwa-mbody-registry
+    consumer:
+      - hakoniwa-mujoco-robots
+    path: bodies/turtlebot3/generated/turtlebot3_burger.actuated.xml
+
+  - name: TurtleBot3.generated.tscn
+    kind: godot-scene
+    producer: hakoniwa-mbody-registry
+    consumer:
+      - hakoniwa-godot
+    path: bodies/turtlebot3/godot_tb3_reference/TurtleBot3.generated.tscn
+
+  - name: GLB parts
+    kind: glb
+    producer: hakoniwa-mbody-registry
+    consumer:
+      - hakoniwa-godot
+    path: bodies/turtlebot3/generated/parts
+
+  - name: robot_sync.profile.json
+    kind: profile
+    producer: hakoniwa-mbody-registry
+    consumer:
+      - hakoniwa-godot
+    path: bodies/turtlebot3/generated/godot/robot_sync.profile.json
+
+  - name: endpoint_shm_poll_with_pdu.json
+    kind: endpoint-config
+    producer: hakoniwa-godot
+    consumer:
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-godot
+    path: examples/mujoco/config/endpoint_shm_poll_with_pdu.json
+
+  - name: tb3-pdutypes.json
+    kind: pdu-definition
+    producer: hakoniwa-mujoco-robots
+    consumer:
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-godot
+      - hakoniwa-mujoco-robots
+    path: config/tb3-pdutypes.json
+
+missing_pieces:
+  - Confirm whether the current Godot examples/mujoco directory is a complete runnable Godot project or a reusable config/assets bundle for another project.
+  - Confirm exact Godot run command for the MuJoCo TurtleBot3 sync scene.
+  - Confirm whether mbody-generated endpoint_shm_with_pdu.json should replace or be copied into Godot's examples/mujoco endpoint_shm_poll_with_pdu.json for the current runtime.
+  - Validate the demo end-to-end on the target machine after builds are available.
+
+demo:
+  objective: Display a MuJoCo-simulated TurtleBot3 moving synchronously in Godot using existing TB3 PDU state.
+  steps:
+    - order: 1
+      component: hakoniwa-mbody-registry
+      action: Verify or regenerate TurtleBot3 MJCF, GLB, PDU, endpoint, scene, and robot sync artifacts.
+      command: ./tools/forge.sh sources/tb3.yaml turtlebot3_description/urdf/turtlebot3_burger.urdf
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mbody-registry
+          path: bodies/turtlebot3/generated
+          revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
+
+    - order: 2
+      component: hakoniwa-mujoco-robots
+      action: Start the TurtleBot3 MuJoCo simulator.
+      command: ./src/cmake-build/main_for_sample/tb3/tb3_sim
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: README.md
+          revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+
+    - order: 3
+      component: hakoniwa-godot
+      action: Start a Godot project that includes the Hakoniwa addon, generated TurtleBot3 scene, robot_sync.profile.json, and endpoint SHM poll config.
+      command: <GODOT_BIN> --path <godot-project-with-examples-mujoco-assets>
+      evidence:
+        - repository: hakoniwalab/hakoniwa-godot
+          path: examples/mujoco
+          revision: 8f5d7d1765b319f107420f8ac4f87b24ab26ae76
+
+    - order: 4
+      component: hakoniwa-core-pro
+      action: Start the Hakoniwa simulation.
+      command: hako-cmd start
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: README.md
+          revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+
+    - order: 5
+      component: hakoniwa-godot
+      action: Verify that Godot receives TB3/base_link_pos and TB3/joint_states and updates the TurtleBot3 scene.
+      command: ""
+      evidence:
+        - repository: hakoniwalab/hakoniwa-godot
+          path: examples/mujoco/config/robot_sync.profile.json
+          revision: 8f5d7d1765b319f107420f8ac4f87b24ab26ae76
+
+expected_result: >
+  TurtleBot3 simulated in MuJoCo is displayed in Godot, with the generated model
+  following TB3/base_link_pos and TB3/joint_states PDU updates.
+
+source_catalogs:
+  - component_id: hakoniwa-mbody-registry
+    catalog_path: ../catalog/components/hakoniwa-mbody-registry.yaml
+  - component_id: hakoniwa-mujoco-robots
+    catalog_path: ../catalog/components/hakoniwa-mujoco-robots.yaml
+  - component_id: hakoniwa-pdu-endpoint
+    catalog_path: ../catalog/components/hakoniwa-pdu-endpoint.yaml
+  - component_id: hakoniwa-pdu-registry
+    catalog_path: ../catalog/components/hakoniwa-pdu-registry.yaml
+  - component_id: hakoniwa-godot
+    catalog_path: ../catalog/components/hakoniwa-godot.yaml
+  - component_id: hakoniwa-core-pro
+    catalog_path: ../catalog/components/hakoniwa-core-pro.yaml
+
+source_artifacts:
+  - repository: hakoniwalab/hakoniwa-mbody-registry
+    path: bodies/turtlebot3/generated/turtlebot3_burger.xml
+    revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
+    description: Generated TurtleBot3 MuJoCo XML.
+  - repository: hakoniwalab/hakoniwa-mbody-registry
+    path: bodies/turtlebot3/generated/turtlebot3_burger.actuated.xml
+    revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
+    description: Generated actuated TurtleBot3 MuJoCo XML.
+  - repository: hakoniwalab/hakoniwa-mbody-registry
+    path: bodies/turtlebot3/godot_tb3_reference/TurtleBot3.generated.tscn
+    revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
+    description: Generated Godot scene.
+  - repository: hakoniwalab/hakoniwa-mbody-registry
+    path: bodies/turtlebot3/generated/godot/robot_sync.profile.json
+    revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
+    description: Generated robot sync profile.
+  - repository: hakoniwalab/hakoniwa-godot
+    path: examples/mujoco/config/robot_sync.profile.json
+    revision: 8f5d7d1765b319f107420f8ac4f87b24ab26ae76
+    description: Godot example robot sync profile copy.
+  - repository: hakoniwalab/hakoniwa-godot
+    path: examples/mujoco/config/endpoint_shm_poll_with_pdu.json
+    revision: 8f5d7d1765b319f107420f8ac4f87b24ab26ae76
+    description: Godot SHM poll endpoint config.
+  - repository: hakoniwalab/hakoniwa-godot
+    path: examples/mujoco/config/comm/tb3-pdutypes.json
+    revision: 8f5d7d1765b319f107420f8ac4f87b24ab26ae76
+    description: Godot-side TB3 PDU types.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: config/tb3-pdutypes.json
+    revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+    description: MuJoCo-side TB3 PDU types.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: src/main_for_sample/tb3/main.cpp
+    revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+    description: TurtleBot3 MuJoCo sample runtime.
+
+tags:
+  - hakoniwa
+  - recipe
+  - turtlebot3
+  - mujoco
+  - godot
+  - pdu
+  - robot-sync
+  - no-ros-runtime
+

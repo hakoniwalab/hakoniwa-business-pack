@@ -3,7 +3,6 @@ name: Hakoniwa PDU Foxglove
 repository:
   owner: hakoniwalab
   name: hakoniwa-pdu-foxglove
-  path: ../hakoniwa-pdu-foxglove
   url: https://github.com/hakoniwalab/hakoniwa-pdu-foxglove
   visibility: public
 distribution:

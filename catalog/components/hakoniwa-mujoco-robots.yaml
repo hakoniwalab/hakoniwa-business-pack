@@ -3,7 +3,6 @@ name: Hakoniwa MuJoCo Robots
 repository:
   owner: hakoniwalab
   name: hakoniwa-mujoco-robots
-  path: ../hakoniwa-mujoco-robots
   url: https://github.com/hakoniwalab/hakoniwa-mujoco-robots
   visibility: public
 distribution:

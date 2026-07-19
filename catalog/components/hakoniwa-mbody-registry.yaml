@@ -3,7 +3,6 @@ name: Hakoniwa MBody Registry
 repository:
   owner: hakoniwalab
   name: hakoniwa-mbody-registry
-  path: ../hakoniwa-mbody-registry
   url: https://github.com/hakoniwalab/hakoniwa-mbody-registry
   visibility: public
 distribution:
