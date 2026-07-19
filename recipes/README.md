@@ -271,6 +271,10 @@ recipes/
 - `mujoco-turtlebot3-dual-mirror.yaml`: two MuJoCo simulator processes for TB3
   Burger and Waffle, with one Conductor owner, one MuJoCo viewer, bidirectional
   mirror bodies, two route controllers, and two LiDAR visualizers.
+- `mujoco-turtlebot3-wall-follower.yaml`: single TurtleBot3 Waffle/Burger/Waffle
+  Pi in MuJoCo with a joystick-free LiDAR wall-following controller. The current
+  validation covers smoother short-run behavior; full one-loop completion is
+  still a tuning target.
 - `mujoco-turtlebot3-godot.yaml`: planned MuJoCo plus Godot visualization path.
 
 ## Authoring Rules

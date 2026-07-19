@@ -1,0 +1,414 @@
+id: mujoco-turtlebot3-wall-follower
+title: MuJoCo TurtleBot3 LiDAR Wall Follower
+recipe_version: 0.1
+
+goal:
+  user_request: TB3 WaffleをLiDARで障害物回避しながら滑らかに一周させたい
+  description: >
+    Run a TurtleBot3 Waffle or related TurtleBot3 model in MuJoCo and control it
+    with a joystick-free Python wall-following controller that reads LaserScan
+    PDU data and sends GameControllerOperation PDU commands. The current demo
+    validates smoother local wall-following behavior, while full one-loop
+    completion remains a tuning target.
+
+feasibility:
+  status: feasible
+  confidence: medium
+  rationale:
+    - hakoniwa-mujoco-robots already publishes TurtleBot3 LaserScan PDUs and accepts GameControllerOperation command PDUs.
+    - Existing route and LiDAR visualizer scripts show the required Python PDU read/write patterns.
+    - A local wall-following controller and launcher were created and executed on Waffle.
+    - Smooth obstacle following is feasible, but robust one-loop navigation depends on world fixture design and controller tuning.
+
+validation:
+  status: partially_verified
+  summary: >
+    A wall-following controller and launcher were created and executed locally
+    with TurtleBot3 Waffle on macOS arm64. The improved controller ran for 20
+    seconds headless and 30 seconds with GUI, published smoother continuous
+    commands, and consumed LiDAR data. Completing one full loop around obstacles
+    has not yet been verified.
+  steps:
+    - id: controller_implementation
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: python/tb3_obstacle_avoider.py
+          revision: local-validation-2026-07-19
+      notes:
+        - Controller reads LaserScan PDU and writes GameControllerOperation PDU.
+        - Controller uses sector percentiles, low-pass filtering, command slew limits, front-distance slowdown, and bounded wall-follow yaw.
+    - id: launcher_implementation
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: tb3-obstacle-avoidance-demo-launch.json
+          revision: local-validation-2026-07-19
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: tb3-obstacle-avoidance-demo.bash
+          revision: local-validation-2026-07-19
+      notes:
+        - Launcher starts the MuJoCo TB3 simulator before hako-cmd start, then starts LiDAR visualization and wall follower after simulation start.
+        - Demo supports HAKO_TB3_MODEL=burger, waffle, or waffle_pi when matching simulator targets are available.
+    - id: waffle_runtime_smoke
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: logs/obstacle_avoider.out
+          revision: local-validation-2026-07-19
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: logs/tb3_sim_mbody.out
+          revision: local-validation-2026-07-19
+      notes:
+        - Waffle demo ran headless for 20 seconds and with GUI for 30 seconds.
+        - Runtime logs showed nonzero lidar_hits and changing robot pose.
+        - Controller logs showed continuous FOLLOWING mode with bounded yaw instead of rapid corner-state toggling.
+    - id: one_loop_completion
+      status: not_tested
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: python/tb3_obstacle_avoider.py
+          revision: local-validation-2026-07-19
+      notes:
+        - A full loop around an obstacle course has not yet been measured.
+        - This requires an explicit wall-following fixture and success criteria.
+
+constraints:
+  - no-ros-runtime
+  - single-pc
+  - shared-memory-pdu
+  - mujoco-only
+  - no-joystick
+  - reactive-controller
+
+target_environment:
+  required_for: executable-demo
+  status: recorded
+  os: macOS
+  os_version: unknown
+  architecture: arm64
+  execution_mode: native
+  runtimes:
+    - name: MuJoCo
+      required: true
+      version: "3.9.0"
+      path: thirdparty/mujoco
+    - name: Python
+      required: true
+      version: "3.12"
+      path: unknown
+  hakoniwa:
+    install_prefix: /usr/local/hakoniwa
+    components_built:
+      - hakoniwa-core-pro
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-mujoco-robots
+  notes:
+    - GUI is required when validating the visual demo with MuJoCo viewer and LiDAR plot.
+
+execution_environment:
+  required_for: executable-demo
+  status: recorded
+  os: macOS
+  os_version: unknown
+  architecture: arm64
+  execution_mode: native
+  gui:
+    required: true
+    status: available
+  shared_memory:
+    required: true
+    access: requires-unsandboxed-command
+  devices:
+    - name: joystick
+      required: false
+      available: not_required
+  python:
+    environment: venv
+    hakopy_available: true
+  hakoniwa:
+    install_prefix: /usr/local/hakoniwa
+    hako_cmd_access: requires-unsandboxed-command
+  notes:
+    - Python 3.12, hakopy, hakoniwa-pdu, PyQt5, matplotlib, and numpy must be available in the same Python environment.
+    - The controller uses scripted PDU commands, so manual gamepad operation is not required.
+
+components:
+  - id: hakoniwa-mujoco-robots
+    roles:
+      - physics_runtime
+      - simulation_core
+      - visualizer
+    purpose: Run the TurtleBot3 MuJoCo simulator, publish LaserScan data, receive command PDUs, and provide LiDAR visualization.
+  - id: hakoniwa-core-pro
+    roles:
+      - simulation_core
+      - time_sync
+    purpose: Provide Hakoniwa lifecycle, hako-cmd, shared memory, and simulation time.
+  - id: hakoniwa-pdu-endpoint
+    roles:
+      - communication_infrastructure
+      - integration_boundary
+    purpose: Provide shared-memory PDU transport for simulator, controller, and visualizer processes.
+  - id: hakoniwa-pdu-registry
+    roles:
+      - data_model
+      - registry
+    purpose: Provide PDU type contracts for GameControllerOperation and LaserScan.
+  - id: hakoniwa-mbody-registry
+    roles:
+      - asset_generator
+      - data_model
+    purpose: Provide TurtleBot3 MBody-generated MuJoCo worlds used by the Waffle/Burger/Waffle Pi simulator targets.
+
+connections:
+  - from: hakoniwa-mujoco-robots
+    to: hakoniwa-pdu-endpoint
+    interface: pdu
+    data:
+      - TB3/laser_scan
+      - TB3/base_scan_pos
+      - TB3/hako_cmd_game
+    contract:
+      status: verified
+      requires:
+        - tb3-pdudef-compact.json
+        - hakoniwa-shared-memory-access
+        - python-environment-with-hakopy-and-hakoniwa-pdu
+      validation_notes:
+        - tb3_obstacle_avoider.py read LaserScan PDU and sent GameControllerOperation PDU.
+        - tb3_lidar_visualizer.py initialized against the same PDU definition.
+    notes: Sensor feedback and control commands share the local TB3 PDU namespace.
+  - from: hakoniwa-core-pro
+    to: hakoniwa-mujoco-robots
+    interface: command
+    data:
+      - hako-cmd start
+      - simulation lifecycle
+    contract:
+      status: verified
+      requires:
+        - hakoniwa-runtime-installed
+        - unsandboxed-shared-memory-access
+      validation_notes:
+        - hako_launcher started simulation with hako-cmd start and stopped assets after the controller duration ended.
+    notes: The launcher owns lifecycle order for simulator, visualizer, and controller processes.
+  - from: hakoniwa-mbody-registry
+    to: hakoniwa-mujoco-robots
+    interface: generated-artifact
+    data:
+      - TurtleBot3 Waffle minimal MuJoCo world
+      - TurtleBot3 Burger minimal MuJoCo world
+      - TurtleBot3 Waffle Pi minimal MuJoCo world
+    contract:
+      status: partially_verified
+      requires:
+        - sensor-visible-world-fixtures
+        - wall-following-fixture-for-loop-validation
+      validation_notes:
+        - Existing marker boxes exercise LiDAR detection and local following.
+        - A dedicated loop-course fixture is still needed to verify one full obstacle-following lap.
+    notes: MBody-generated worlds supply the robot and simple fixtures; navigation demos may require course-specific world composition.
+
+data_flow:
+  summary: >
+    MuJoCo publishes LaserScan PDU data for the TurtleBot3. The wall follower
+    reads the scan, estimates front and right-side distances, applies smoothing
+    and command slew limits, then sends GameControllerOperation commands back to
+    the simulator. A LiDAR visualizer reads the same scan stream for observation.
+  steps:
+    - from: hakoniwa-mujoco-robots
+      to: tb3_obstacle_avoider.py
+      data:
+        - TB3/laser_scan
+      description: Controller consumes LaserScan ranges as obstacle and wall-following feedback.
+    - from: tb3_obstacle_avoider.py
+      to: hakoniwa-mujoco-robots
+      data:
+        - TB3/hako_cmd_game
+      description: Controller sends forward and yaw commands as GameControllerOperation PDU data.
+    - from: hakoniwa-mujoco-robots
+      to: tb3_lidar_visualizer.py
+      data:
+        - TB3/laser_scan
+        - TB3/base_scan_pos
+      description: Visualizer shows the LiDAR point cloud and robot trail.
+
+time_model:
+  mode: shared-simulation-time
+  components:
+    - hakoniwa-core-pro
+    - hakoniwa-mujoco-robots
+  notes:
+    - Simulator starts before hako-cmd start.
+    - Controller and visualizer start after simulation start.
+    - Controller duration intentionally ends the launcher-managed demo.
+
+artifact_sets:
+  physics_artifacts:
+    description: TurtleBot3 MuJoCo worlds and simulator targets.
+    status: verified
+    artifacts:
+      - turtlebot3_waffle.minimal_world.xml
+      - tb3_sim_waffle
+      - tb3-mbody-waffle-asset.json
+    notes:
+      - Waffle was used for the local smoke validations.
+  visualization_artifacts:
+    description: MuJoCo viewer and LiDAR visualizer used to inspect behavior.
+    status: verified
+    artifacts:
+      - MuJoCo viewer
+      - tb3_lidar_visualizer.py
+    notes:
+      - GUI execution was checked for 30 seconds.
+  pdu_artifacts:
+    description: PDU definitions used by command, scan, and pose streams.
+    status: verified
+    artifacts:
+      - tb3-pdudef-compact.json
+      - tb3-pdutypes.json
+    notes:
+      - Controller and visualizer use the same PDU config as the simulator.
+  runtime_artifacts:
+    description: New wall-following controller and launcher wrapper.
+    status: partially_verified
+    artifacts:
+      - python/tb3_obstacle_avoider.py
+      - tb3-obstacle-avoidance-demo-launch.json
+      - tb3-obstacle-avoidance-demo.bash
+    notes:
+      - 20-second headless and 30-second GUI smoke tests passed.
+      - Full one-loop wall-following behavior remains unverified.
+
+artifacts:
+  - name: tb3_obstacle_avoider.py
+    kind: command
+    producer: hakoniwa-mujoco-robots
+    consumer:
+      - hakoniwa-mujoco-robots
+    path: python/tb3_obstacle_avoider.py
+  - name: tb3-obstacle-avoidance-demo-launch.json
+    kind: command
+    producer: hakoniwa-mujoco-robots
+    consumer:
+      - hakoniwa-mujoco-robots
+      - hakoniwa-core-pro
+    path: tb3-obstacle-avoidance-demo-launch.json
+  - name: tb3-obstacle-avoidance-demo.bash
+    kind: command
+    producer: hakoniwa-mujoco-robots
+    consumer:
+      - hakoniwa-mujoco-robots
+      - hakoniwa-core-pro
+    path: tb3-obstacle-avoidance-demo.bash
+  - name: tb3-pdudef-compact.json
+    kind: pdu-definition
+    producer: hakoniwa-mujoco-robots
+    consumer:
+      - hakoniwa-mujoco-robots
+      - hakoniwa-pdu-endpoint
+    path: config/tb3-pdudef-compact.json
+
+missing_pieces:
+  - Verify one full loop around a wall-following obstacle course.
+  - Add an explicit MuJoCo world fixture designed for wall following rather than only LiDAR detection.
+  - Define quantitative success metrics such as loop completion, no-stuck timeout, minimum clearance, and maximum yaw oscillation.
+  - Tune controller parameters separately for Burger, Waffle, and Waffle Pi if their dynamics differ.
+  - Replace local-validation revisions with concrete commit SHAs after repository changes are pushed.
+
+demo:
+  objective: >
+    Run TurtleBot3 Waffle in MuJoCo with a joystick-free LiDAR wall-following
+    controller and observe smoother obstacle-following motion plus LiDAR output.
+  steps:
+    - order: 1
+      component: hakoniwa-mujoco-robots
+      action: Check runtime prerequisites.
+      command: ./doctor.bash
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: doctor.bash
+          revision: local-validation-2026-07-19
+    - order: 2
+      component: hakoniwa-mujoco-robots
+      action: Run the Waffle wall-following demo with viewer and LiDAR plot.
+      command: HAKO_TB3_MODEL=waffle HAKO_TB3_DURATION_SEC=30 bash tb3-obstacle-avoidance-demo.bash
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: tb3-obstacle-avoidance-demo-launch.json
+          revision: local-validation-2026-07-19
+  observability:
+    success_signals:
+      - MuJoCo viewer shows TurtleBot3 Waffle moving without joystick input.
+      - LiDAR plot shows scan points and trail while the robot follows nearby fixtures.
+      - Controller logs show FOLLOWING mode with bounded yaw and changing front/right distances.
+      - Simulator logs show nonzero lidar_hits and changing robot pose.
+    failure_signals:
+      - Robot remains stopped while LaserScan data is available.
+      - Controller yaw alternates sharply between left and right commands.
+      - Robot collides with the marker and remains stuck.
+      - LiDAR visualizer cannot initialize or reads the wrong PDU config.
+    fixtures:
+      - Obstacles must intersect the TurtleBot3 LiDAR scan plane.
+      - A full loop validation needs a course-like wall fixture, not only isolated marker boxes.
+    automation:
+      - tb3_obstacle_avoider.py provides reactive LaserScan-based commands.
+      - tb3-obstacle-avoidance-demo-launch.json starts simulator, LiDAR visualizer, and controller in lifecycle order.
+  verification_checks:
+    lifecycle:
+      - hako_launcher reports tb3_sim_mbody, lidar_visualizer, and obstacle_avoider assets.
+      - hako-cmd start exits with status 0.
+      - obstacle_avoider exits after the configured duration and stops launcher-managed assets.
+    behavior:
+      - logs/obstacle_avoider.out contains "Wall follower started".
+      - logs/obstacle_avoider.out contains FOLLOWING mode status lines with bounded yaw.
+      - logs/tb3_sim_mbody.out contains "[TB3] step=" lines with changing pos and nonzero lidar_hits.
+      - logs/lidar_visualizer.out contains "PduManager initialized".
+
+expected_result: >
+  TurtleBot3 Waffle runs in MuJoCo, reads LiDAR feedback, and follows nearby
+  obstacles more smoothly than a threshold-only obstacle avoidance controller.
+  Full one-loop navigation is a remaining validation target.
+
+source_catalogs:
+  - component_id: hakoniwa-mujoco-robots
+    catalog_path: ../catalog/components/hakoniwa-mujoco-robots.yaml
+  - component_id: hakoniwa-core-pro
+    catalog_path: ../catalog/components/hakoniwa-core-pro.yaml
+  - component_id: hakoniwa-pdu-endpoint
+    catalog_path: ../catalog/components/hakoniwa-pdu-endpoint.yaml
+  - component_id: hakoniwa-pdu-registry
+    catalog_path: ../catalog/components/hakoniwa-pdu-registry.yaml
+  - component_id: hakoniwa-mbody-registry
+    catalog_path: ../catalog/components/hakoniwa-mbody-registry.yaml
+
+source_artifacts:
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: python/tb3_obstacle_avoider.py
+    revision: local-validation-2026-07-19
+    description: Reactive LiDAR wall-following controller.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: tb3-obstacle-avoidance-demo-launch.json
+    revision: local-validation-2026-07-19
+    description: Launcher config for simulator, LiDAR visualizer, and wall-following controller.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: tb3-obstacle-avoidance-demo.bash
+    revision: local-validation-2026-07-19
+    description: Demo wrapper for Burger, Waffle, or Waffle Pi wall-following runs.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: logs/obstacle_avoider.out
+    revision: local-validation-2026-07-19
+    description: Local validation log showing smoother bounded wall-following commands.
+
+tags:
+  - hakoniwa
+  - recipe
+  - turtlebot3
+  - mujoco
+  - lidar
+  - wall-following
+  - obstacle-avoidance
+  - no-ros-runtime
+  - no-godot
+  - no-joystick
