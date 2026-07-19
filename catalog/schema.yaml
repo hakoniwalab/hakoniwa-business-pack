@@ -60,11 +60,12 @@ controlled_fields:
       - private
       - unknown
   distribution.channel:
-    description: Product distribution channel for recipe and business-pack planning. Repository visibility is tracked separately and does not imply license rights.
+    description: Product distribution or licensing model for recipe and business-pack planning. Repository visibility is tracked separately and does not imply license rights.
     values:
       - oss
       - non-commercial
       - commercial
+      - dual-license
       - unknown
   interfaces.kind:
     description: Interface artifact types consumed or produced by a component.
@@ -133,6 +134,9 @@ authoring_rules:
   - Keep category values broad; use tags for search-specific vocabulary.
   - Keep recipe roles stable because recipe generation uses them as planning primitives.
   - Treat repository visibility and distribution/license rights as separate facts; a public repository is not automatically OSS.
-  - Mark public Hakoniwa components with non-commercial usage restrictions as `distribution.channel: non-commercial`.
-  - Mark private Hakoniwa business/product repositories as `distribution.channel: commercial`.
+  - Use `distribution.channel: non-commercial` when a component is only available under non-commercial terms.
+  - Use `distribution.channel: commercial` when a component is only available through commercial licensing.
+  - Use `distribution.channel: dual-license` when one technical component or codebase is offered under distinct non-commercial/OSS and commercial licensing paths.
+  - Do not create separate catalog components solely to represent different licenses for the same codebase; represent those variants in the component's license metadata instead.
+  - Mark private Hakoniwa business/product repositories as `distribution.channel: commercial` only when they represent a distinct technical component, not merely a commercial distribution of an existing component.
   - Treat `connects_to` as component-level planning knowledge. Put recipe-specific connection contracts, required adapters, and validation status in recipe `connections[].contract`.
