@@ -66,18 +66,18 @@ capabilities:
       interop tests. CDR support is a separate layer and must not be inferred
       from fixed-offset converter generation.
     evidence:
-      - repository: local-worktree
+      - repository: hakoniwalab/hakoniwa-pdu-registry
         path: template/pdu_ruby_types_rb.tpl
-        revision: 2026-07-20-local-validation
-      - repository: local-worktree
+        revision: fa60dbb9c6036dc0843801655ea9b7a4b602381b
+      - repository: hakoniwalab/hakoniwa-pdu-registry
         path: template/pdu_elixir_types_ex.tpl
-        revision: 2026-07-20-local-validation
-      - repository: local-worktree
+        revision: fa60dbb9c6036dc0843801655ea9b7a4b602381b
+      - repository: hakoniwalab/hakoniwa-pdu-registry
         path: template/pdu_ruby_conv_rb.tpl
-        revision: 2026-07-20-local-validation
-      - repository: local-worktree
+        revision: fa60dbb9c6036dc0843801655ea9b7a4b602381b
+      - repository: hakoniwalab/hakoniwa-pdu-registry
         path: template/pdu_elixir_conv_ex.tpl
-        revision: 2026-07-20-local-validation
+        revision: fa60dbb9c6036dc0843801655ea9b7a4b602381b
 
 limitations:
   - Not a runtime communication component.
@@ -214,12 +214,12 @@ data_contracts:
       variable arrays, nested variable arrays, and empty variable arrays in the
       test set.
     source:
-      - repository: local-worktree
+      - repository: hakoniwalab/hakoniwa-pdu-registry
         path: tests/test_ruby_elixir_generator.py
-        revision: 2026-07-20-local-validation
-      - repository: local-worktree
+        revision: fa60dbb9c6036dc0843801655ea9b7a4b602381b
+      - repository: hakoniwalab/hakoniwa-pdu-registry
         path: tests/test_ruby_elixir_generated_artifacts.py
-        revision: 2026-07-20-local-validation
+        revision: fa60dbb9c6036dc0843801655ea9b7a4b602381b
 
 recipe_roles:
   - role: registry
@@ -270,9 +270,9 @@ demo_candidates:
     required_components:
       - hakoniwa-pdu-registry
     source_examples:
-      - repository: local-worktree
+      - repository: hakoniwalab/hakoniwa-pdu-registry
         path: tests/test_ruby_elixir_generated_artifacts.py
-        revision: 2026-07-20-local-validation
+        revision: fa60dbb9c6036dc0843801655ea9b7a4b602381b
 
 operations:
   build:
