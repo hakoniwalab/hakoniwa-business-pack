@@ -1,0 +1,58 @@
+id: knowledge-candidate-id
+title: Human readable knowledge candidate title
+status: candidate | validating | promoted | rejected
+
+knowledge_type:
+  - implementation_fact | capability | interface_contract | runtime_rule | design_intent | architectural_principle | usage_pattern | known_pitfall | validation_rule | agency_boundary
+
+summary: >
+  What was learned and why it may matter beyond the current task.
+
+observation:
+  context: >
+    What the agent or human was doing when this knowledge was discovered.
+  details:
+    - Concrete observed fact, correction, runtime behavior, or design explanation.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/component
+      path: path/to/source-or-doc
+      revision: main
+  runtime_evidence:
+    - description: Optional runtime, test, CI, log, screenshot, or generated-artifact evidence.
+  expert_input:
+    - source: developer-or-domain-expert
+      statement: Optional concise explanation or correction.
+
+confidence: low | medium | high
+
+contradictions:
+  - target: path/or/catalog-entry
+    existing_claim: Existing understanding, if any.
+    new_evidence: What appears to contradict or refine it.
+
+validation:
+  status: not_tested | partially_verified | verified | blocked
+  required:
+    - What still needs to be checked before promotion.
+  notes:
+    - Validation findings or remaining uncertainty.
+
+promotion_targets:
+  catalog:
+    - component-id
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - optional-recipe-or-pattern-id
+
+promotion_rationale:
+  - Why the selected knowledge layer is appropriate.
+
+resolution:
+  promoted_to:
+    - Optional path or Catalog entry after promotion.
+  notes:
+    - Final decision, rejection reason, or follow-up.
