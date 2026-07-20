@@ -58,11 +58,27 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-pdu-python
         path: README.md
         revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+  - name: Hakoniwa launcher application
+    description: Provides the installed launcher entrypoint `python -m hakoniwa_pdu.apps.launcher.hako_launcher` for orchestrating multiple Hakoniwa assets from a JSON file.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: README.md
+        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: src/hakoniwa_pdu/apps/launcher
+        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+  - name: Launcher schema packaging
+    description: Includes launcher JSON schemas as package data in the `hakoniwa-pdu` Python package.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: pyproject.toml
+        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
 
 limitations:
   - Requires offset files via HAKO_BINARY_PATH or default install path for binary conversion.
   - WebSocket URI scope must be explicitly configured.
   - This is a Python-facing library, not the C++ endpoint abstraction.
+  - The launcher requires `hako-cmd` and any simulator commands it invokes to be available in the runtime environment; `hakoniwa-pdu` alone does not install `hakopy` or the Hakoniwa core runtime.
 
 interfaces:
   inputs:
@@ -99,12 +115,14 @@ interfaces:
       description: Example service config.
     - path: docs/rpc/async_shared_runtime.md
       description: Shared SHM RPC runtime design notes.
+    - path: src/hakoniwa_pdu/apps/launcher/schemas/launcher.schema.json
+      description: Launcher JSON schema for assets, activation_timing, dependencies, environment operations, logs, and notifications.
 
 dependencies:
   required:
     - name: Python
       type: runtime
-      notes: Required runtime.
+      notes: Python 3.12 is the expected runtime unless a recipe explicitly verifies another version.
     - name: hakoniwa-pdu package
       type: package
       notes: Install with pip install hakoniwa-pdu.
@@ -112,6 +130,9 @@ dependencies:
       type: repository
       notes: Offset definitions are required for binary conversion.
   optional:
+    - name: hakoniwa-core-pro
+      type: repository
+      notes: Required when Python 3.12 workflows need hakopy, hako-cmd, and the local Hakoniwa SHM runtime.
     - name: WebSocket bridge/server
       type: runtime
       notes: Required for WebSocket examples.
@@ -125,7 +146,7 @@ platforms:
     - Linux
     - Windows
   notes:
-    - Python package platform support should be verified from package metadata.
+    - Python 3.12 is the expected runtime for Hakoniwa recipes using this package unless another version is explicitly verified.
 
 connects_to:
   - component_id: hakoniwa-pdu-registry
@@ -140,6 +161,10 @@ connects_to:
     direction: related
     interface: PDU semantics / SHM backend
     notes: Separate Python-oriented stack that shares PDU concepts with endpoint.
+  - component_id: hakoniwa-core-pro
+    direction: related
+    interface: hako-cmd / hakopy / SHM runtime
+    notes: SHM demos and launcher-managed Hakoniwa assets often require core-pro installation; hakopy must be available in the same Python 3.12 environment as hakoniwa-pdu when both are used.
   - component_id: hakoniwa-mujoco-robots
     direction: used_by
     interface: Python controllers and visualizers
@@ -158,6 +183,15 @@ data_contracts:
       - repository: hakoniwalab/hakoniwa-pdu-python
         path: README.md
         revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+  - name: Launcher JSON contract
+    description: The launcher uses assets[], activation_timing, depends_on, delays, environment operations, log paths, immediate/serve modes, and abort-on-asset-exit monitoring.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: README.md
+        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: src/hakoniwa_pdu/apps/launcher/model.py
+        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
 
 recipe_roles:
   - role: language_binding
@@ -165,18 +199,20 @@ recipe_roles:
   - role: communication_infrastructure
     description: Supplies WebSocket and SHM communication managers.
   - role: control_plane
-    description: Supports Python RPC client/server workflows.
+    description: Supports Python RPC client/server workflows and launcher-managed demo lifecycle.
 
 typical_usecases:
   - Build Python controllers, visualizers, or tools for Hakoniwa simulations.
   - Run WebSocket topic or RPC demos.
   - Convert PDU binary data into Python types for analysis.
   - Use shared SHM RPC for high fan-out Python clients.
+  - Launch multi-process Hakoniwa demos from Python with hako_launcher.
 
 anti_usecases:
   - C++ endpoint integration.
   - Browser or Node.js clients.
   - PDU type generation.
+  - Providing `hakopy` or installing the Hakoniwa core runtime by itself.
 
 demo_candidates:
   - name: WebSocket Twist topic
@@ -195,6 +231,15 @@ demo_candidates:
       - repository: hakoniwalab/hakoniwa-pdu-python
         path: examples/rpc/websocket
         revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+  - name: Hakoniwa launcher smoke run
+    description: Run `python -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json` with a known-good Recipe launcher file and verify asset ordering, hako-cmd start, logs, and cleanup.
+    required_components:
+      - hakoniwa-pdu-python
+      - hakoniwa-core-pro
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: README.md
+        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
 
 operations:
   build:
@@ -202,19 +247,23 @@ operations:
       - pip install hakoniwa-pdu
     notes:
       - Set HAKO_BINARY_PATH when using custom offset files.
+      - Use the same Python 3.12 interpreter for `hakoniwa-pdu` and any required `hakopy` import checks.
   test:
     commands: []
     notes: GitHub Actions test badge exists; exact local command should be cataloged.
   run:
     commands:
+      - python -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json
+      - python3.12 -c "import hakopy; import hakoniwa_pdu"
       - python examples/topic/websocket/remote_publisher.py --uri ws://localhost:8080 --pdu-config examples/pdu_config.json --service-config examples/service.json
       - python examples/topic/websocket/remote_subscriber.py --uri ws://localhost:8080 --pdu-config examples/pdu_config.json --service-config examples/service.json
     notes:
       - Requires a matching WebSocket communication peer.
+      - Launcher runs require hako-cmd and the referenced asset commands to be available.
 
 known_gaps:
   - Need to catalog package metadata and exact test command.
-  - Need to map app-specific Python modules such as drone and launcher subpackages.
+  - Need to map app-specific Python modules such as drone subpackages.
 
 source_refs:
   - repository: hakoniwalab/hakoniwa-pdu-python
@@ -225,6 +274,14 @@ source_refs:
     path: docs/rpc/async_shared_runtime.md
     revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
     description: Shared SHM RPC runtime.
+  - repository: hakoniwalab/hakoniwa-pdu-python
+    path: src/hakoniwa_pdu/apps/launcher
+    revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+    description: Hakoniwa launcher implementation installed by the hakoniwa-pdu Python package.
+  - repository: hakoniwalab/hakoniwa-pdu-python
+    path: pyproject.toml
+    revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+    description: Package metadata showing hakoniwa-pdu distribution name and launcher schema package data.
 
 tags:
   - hakoniwa
@@ -234,4 +291,4 @@ tags:
   - shm
   - rpc
   - conversion
-
+  - launcher

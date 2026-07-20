@@ -83,6 +83,7 @@ components:
   connects_to:
   - hakoniwa-pdu-endpoint
   - hakoniwa-pdu-bridge-core
+  - hakoniwa-pdu-python
   - hakoniwa-conductor-pro
   - hakoniwa-mujoco-robots
   - hakoniwa-godot
@@ -405,6 +406,7 @@ components:
   - hakoniwa-pdu-registry
   - hakoniwa-pdu-bridge-core
   - hakoniwa-pdu-endpoint
+  - hakoniwa-core-pro
   - hakoniwa-mujoco-robots
   tags:
   - hakoniwa
@@ -414,6 +416,7 @@ components:
   - shm
   - rpc
   - conversion
+  - launcher
   catalog_path: components/hakoniwa-pdu-python.yaml
 - id: hakoniwa-pdu-registry
   name: Hakoniwa PDU Registry
@@ -474,6 +477,39 @@ components:
   - cplusplus
   - control-plane
   catalog_path: components/hakoniwa-pdu-rpc.yaml
+- id: hakoniwa-scratch
+  name: Hakoniwa Scratch
+  category: language-binding
+  secondary_categories:
+  - browser
+  - integration
+  maturity: active
+  distribution: oss
+  summary: Scratch and TurboWarp integration for controlling Hakoniwa drone simulations
+    through visual programming blocks, with WebSocket-based bidirectional communication,
+    system lifecycle control, and drone RPC operations.
+  recipe_roles:
+  - language_binding
+  - integration_boundary
+  - control_plane
+  connects_to:
+  - hakoniwa-pdu-javascript
+  - hakoniwa-drone-core
+  - hakoniwa-pdu-bridge-core
+  tags:
+  - hakoniwa
+  - scratch
+  - turbowarp
+  - visual-programming
+  - education
+  - browser
+  - websocket
+  - rpc
+  - drone
+  - pdu
+  - mit
+  - oss
+  catalog_path: components/hakoniwa-scratch.yaml
 - id: hakoniwa-threejs-drone
   name: Hakoniwa Three.js Drone
   category: visualization
@@ -484,8 +520,8 @@ components:
   maturity: active
   distribution: oss
   summary: Three.js-based browser viewer for Hakoniwa Drone that receives drone state
-    over WebSocket and visualizes single- or multi-drone fleets with configurable scenes,
-    dynamic spawning, follow cameras, and fleet-oriented display settings.
+    over WebSocket and visualizes single- or multi-drone fleets with configurable
+    scenes, dynamic spawning, follow cameras, and fleet-oriented display settings.
   recipe_roles:
   - visualizer
   - integration_boundary
@@ -505,3 +541,4 @@ components:
   - multi-drone
   - 100-drones
   catalog_path: components/hakoniwa-threejs-drone.yaml
+

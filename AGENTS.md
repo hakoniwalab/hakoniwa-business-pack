@@ -10,6 +10,7 @@ code project first. Treat it as structured knowledge:
 User goal
   -> catalog/index.yaml
   -> catalog/components/*.yaml
+  -> docs/hakoniwa-runtime-primer.md
   -> recipes/examples/*.yaml
   -> proposed Recipe or Demo plan
 ```
@@ -25,11 +26,14 @@ Read these files in order:
 3. `catalog/schema.yaml`
    - Controlled vocabulary for categories, roles, maturity, distribution, and
      graph edge direction.
-4. Relevant `catalog/components/*.yaml`
+4. `docs/hakoniwa-runtime-primer.md`
+   - Hakoniwa runtime rules: assets, PDU, shared memory, simulation time,
+     Conductor, launchers, external clients, and cleanup.
+5. Relevant `catalog/components/*.yaml`
    - Detailed component facts for shortlisted candidates.
-5. `recipes/README.md`
+6. `recipes/README.md`
    - Definition of a Hakoniwa Recipe.
-6. Relevant `recipes/examples/*.yaml`
+7. Relevant `recipes/examples/*.yaml`
    - Existing system compositions to reuse or adapt.
 
 ## How To Answer User Goals
@@ -44,9 +48,11 @@ For a user asking "Can Hakoniwa do X?" or "How should I build X?":
    - `connects_to`
    - `tags`
    - `distribution`
-3. Read the detailed YAML for shortlisted components.
-4. Follow `connects_to` edges only when the interface and direction make sense.
-5. Search `recipes/examples/*.yaml` for an existing Recipe that matches the
+3. Read `docs/hakoniwa-runtime-primer.md` before proposing runtime topology or
+   executable commands.
+4. Read the detailed YAML for shortlisted components.
+5. Follow `connects_to` edges only when the interface and direction make sense.
+6. Search `recipes/examples/*.yaml` for an existing Recipe that matches the
    goal, selected components, tags, or demo intent.
    - If one exists, read it before opening source repositories or proposing
      commands.
@@ -57,12 +63,12 @@ For a user asking "Can Hakoniwa do X?" or "How should I build X?":
    - Treat the Recipe as the current system-composition memory, including
      validation notes, environment assumptions, launcher behavior, and known
      failure signals.
-6. Decide feasibility:
+7. Decide feasibility:
    - `feasible`: existing components and artifacts are enough for a minimal demo.
    - `partially_feasible`: core path exists, but missing pieces remain.
    - `not_feasible`: current catalog has no credible implementation path.
    - `unknown`: catalog is insufficient; state what must be verified.
-7. Produce a Recipe-shaped answer:
+8. Produce a Recipe-shaped answer:
    - Goal
    - Feasibility
    - Validation
@@ -85,6 +91,12 @@ Do not execute a demo from a component README until you have checked whether a
 matching Recipe exists and read that Recipe. Catalogs identify candidate
 components; Recipes explain proven or planned compositions and should guide demo
 execution.
+
+Do not jump from a capability question directly into adjacent source
+repositories. If `catalog/index.yaml` identifies relevant components but no
+matching Recipe exists, first answer with the Recipe shape and validation state.
+Then, if the user asks to proceed, create or update a Recipe before running
+build, fetch, install, launch, or long-running server commands.
 
 ## Ambiguous Requests
 
@@ -182,6 +194,8 @@ Required information:
 - Godot installation and binary path when Godot is involved
 - MuJoCo installation when MuJoCo is involved
 - Python/Node.js/.NET/Docker versions when relevant
+- Python 3.12 for Hakoniwa Python workflows unless the selected Recipe
+  explicitly states another supported version
 - Python environment policy, such as system Python, venv, conda, and whether
   `hakopy` is available when SHM/service features are required
 - Hakoniwa install prefix, usually `/usr/local/hakoniwa`
@@ -199,6 +213,25 @@ demo. Treat a passing doctor check as environment evidence, not as proof that
 the demo behavior is verified. If the doctor check fails, report the missing
 requirements and do not continue to destructive setup or install steps without
 explicit user approval.
+
+Treat these actions as execution side effects, not harmless exploration:
+
+- fetching release assets or external dependencies;
+- building native binaries;
+- starting simulator, bridge, viewer, web server, or background service
+  processes;
+- opening GUI windows or browser viewers;
+- modifying adjacent source repositories to make a demo work.
+
+Before taking those actions, make sure the user is asking for local execution,
+not only asking "Can Hakoniwa do this?" or "What is possible?" For local
+execution, state which Recipe or draft Recipe is being followed, run the
+available preflight checks, and keep track of cleanup commands.
+
+When starting long-running processes, record how to stop them. Prefer launcher
+or conductor-managed lifecycles when available. If a tool session, quota limit,
+or interruption occurs, do not leave services running silently; stop them or
+report the exact remaining processes.
 
 ## Demo Observability Requirements
 

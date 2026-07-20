@@ -24,6 +24,11 @@ A Hakoniwa recipe is a structured system composition document:
 The first goal is not code generation. The first goal is to convert an ambiguous
 user request into a Hakoniwa-valid system composition.
 
+Before writing executable topology or runbook steps, read
+`../docs/hakoniwa-runtime-primer.md`. Recipes depend on Hakoniwa runtime
+concepts such as assets, shared-memory PDU, simulation time, Conductor
+ownership, launcher timing, and external clients.
+
 ## Using Existing Recipes
 
 When an AI or human receives a user request, do not stop at the catalog search.
@@ -58,6 +63,8 @@ Before producing executable steps, collect or state:
 - whether the target is native, container, VM, or WSL
 - required installed runtimes such as Godot, MuJoCo, Python, Node.js, Docker, or
   .NET
+- Python 3.12 for Hakoniwa Python controllers, visualizers, launchers, or SHM
+  helpers unless the recipe explicitly verifies another version
 - required Hakoniwa install prefixes such as `/usr/local/hakoniwa`
 - whether required components are already built or must be built
 - commercial/private component availability
@@ -71,6 +78,23 @@ make it an explicit preflight step in executable recipes. A passing doctor check
 supports the environment claim; it does not by itself verify runtime behavior.
 If the diagnostic fails, record the missing requirement as a blocker or
 environment gap.
+
+Executable recipes must also describe side effects and cleanup. Starting a
+simulator, bridge, viewer, HTTP server, or other long-running process is part of
+the demo contract, not incidental setup.
+
+For each long-running asset, record:
+
+- whether it is started by a launcher or manually;
+- whether it opens a GUI, browser, socket, shared-memory segment, or background
+  service;
+- which log file or console output proves it started correctly;
+- which command or launcher behavior stops it;
+- which process names should be checked if execution is interrupted.
+
+Do not run fetch, build, install, launch, or server commands only to answer a
+capability question. First identify or draft the Recipe, then execute it when
+the user asks for local validation.
 
 ## Feasibility, Validation, And Connection Contracts
 

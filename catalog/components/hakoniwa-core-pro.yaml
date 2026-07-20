@@ -58,10 +58,18 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-core-pro
         path: README.md
         revision: 98a057ab91184921e283ab43279b8ed05cf25363
+  - name: External SHM topic and service clients
+    description: Provides Python examples where external clients join through shared-memory topic publish/subscribe or service APIs without being ordinary registered simulation assets.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-core-pro
+        path: examples/external
+        revision: 98a057ab91184921e283ab43279b8ed05cf25363
 
 limitations:
   - Low-level shared-memory runtime requires correct installation and configuration.
   - Legacy C API remains for compatibility but README indicates newer polling API should be preferred.
+  - "`hako-cmd stop` controls simulation lifecycle but does not necessarily terminate all OS processes; recipes must document launcher termination or cleanup."
+  - Only one process should own conductor startup in a composed shared-memory runtime unless source documentation says otherwise.
 
 interfaces:
   inputs:
@@ -105,7 +113,7 @@ dependencies:
   optional:
     - name: Python
       type: runtime
-      notes: Used by Python bindings and asset examples.
+      notes: Python 3.12 is the expected runtime for Hakoniwa Python bindings and asset examples unless a recipe explicitly verifies another version.
 
 platforms:
   supported:
@@ -123,6 +131,10 @@ connects_to:
     direction: used_by
     interface: core libraries / callback asset runtime
     notes: Bridge and web bridge can run inside Hakoniwa runtime contexts.
+  - component_id: hakoniwa-pdu-python
+    direction: related
+    interface: Python package / launcher / SHM client environment
+    notes: hakoniwa-pdu supplies Python PDU APIs and the launcher; hakopy comes from the core-pro install and must be importable in the same Python environment for SHM demos.
   - component_id: hakoniwa-conductor-pro
     direction: used_by
     interface: runtime and install layout
@@ -149,6 +161,21 @@ data_contracts:
       - repository: hakoniwalab/hakoniwa-core-pro
         path: README.md
         revision: 98a057ab91184921e283ab43279b8ed05cf25363
+  - name: Core startup and lifecycle contract
+    description: Core examples establish the user-facing pattern of starting assets first, using hako-cmd to start/stop/reset simulation lifecycle, and verifying behavior after the runtime reaches RUNNING.
+    source:
+      - repository: hakoniwalab/hakoniwa-core-pro
+        path: examples/hello_world/README.md
+        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+      - repository: hakoniwalab/hakoniwa-core-pro
+        path: examples/pdu_communication/README.md
+        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+  - name: External client contract
+    description: External topic/service examples use SHM service configuration and PDU offset data to join the runtime without ordinary asset lifecycle callbacks.
+    source:
+      - repository: hakoniwalab/hakoniwa-core-pro
+        path: examples/external
+        revision: 98a057ab91184921e283ab43279b8ed05cf25363
 
 recipe_roles:
   - role: simulation_core
@@ -156,7 +183,7 @@ recipe_roles:
   - role: communication_infrastructure
     description: Supplies shared-memory PDU buffers and asset-side data access.
   - role: control_plane
-    description: Provides command and conductor operations for simulation lifecycle.
+    description: Provides command, hakopy, and conductor operations for simulation lifecycle.
   - role: time_sync
     description: Supplies world and asset time synchronization primitives.
 
@@ -165,13 +192,23 @@ typical_usecases:
   - Coordinate simulation start, stop, and time progression.
   - Build C/C++/Python assets that participate in the Hakoniwa runtime.
   - Provide the runtime base for MuJoCo, endpoint SHM, bridge, and Godot integrations.
+  - Build external Python tools that publish/subscribe PDU topics or call PDU-based services against an existing shared-memory runtime.
 
 anti_usecases:
   - Browser-only visualization without local Hakoniwa runtime.
   - Pure data schema generation.
   - Simple standalone simulations that do not need asset synchronization.
+  - Treating a viewer, bridge, or service client as proof that a simulator/runtime producer exists.
 
 demo_candidates:
+  - name: Hello world asset lifecycle
+    description: Run examples/hello_world to verify asset registration, WAIT START, hako-cmd start, callbacks, stop, and reset behavior.
+    required_components:
+      - hakoniwa-core-pro
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-core-pro
+        path: examples/hello_world
+        revision: 98a057ab91184921e283ab43279b8ed05cf25363
   - name: PDU communication asset sample
     description: Build and run examples/pdu_communication to verify asset registration, start, and PDU exchange.
     required_components:
@@ -179,6 +216,22 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-core-pro
         path: examples/pdu_communication
+        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+  - name: PDU service sample
+    description: Run examples/service to verify PDU-based request/response service behavior between server and client assets.
+    required_components:
+      - hakoniwa-core-pro
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-core-pro
+        path: examples/service
+        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+  - name: External SHM topic/service clients
+    description: Run examples/external/topic or examples/external/service to verify loose external participation through SHM topic or service APIs.
+    required_components:
+      - hakoniwa-core-pro
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-core-pro
+        path: examples/external
         revision: 98a057ab91184921e283ab43279b8ed05cf25363
 
 operations:
@@ -197,10 +250,12 @@ operations:
       - hako-cmd stop
     notes:
       - Command availability depends on installation.
+      - Asset processes normally need to be started before hako-cmd start.
+      - Use hako-cmd reset or launcher termination/cleanup according to the selected runbook.
 
 known_gaps:
-  - Catalog should be refined after reading hakoniwa-core-cpp API and shared memory specs.
   - Commercial licensing and redistribution constraints should be documented outside this technical catalog.
+  - Recipe-level validation should record exact launcher provider, launcher mode, Python environment, and cleanup commands for each composed demo.
 
 source_refs:
   - repository: hakoniwalab/hakoniwa-core-pro
@@ -219,6 +274,18 @@ source_refs:
     path: hakoniwa-core-cpp/SHARED_MEMORY_SPEC.md
     revision: 98a057ab91184921e283ab43279b8ed05cf25363
     description: Shared memory layout.
+  - repository: hakoniwalab/hakoniwa-core-pro
+    path: examples/hello_world/README.md
+    revision: 98a057ab91184921e283ab43279b8ed05cf25363
+    description: Basic asset lifecycle sample.
+  - repository: hakoniwalab/hakoniwa-core-pro
+    path: examples/pdu_communication/README.md
+    revision: 98a057ab91184921e283ab43279b8ed05cf25363
+    description: Two-asset PDU communication sample.
+  - repository: hakoniwalab/hakoniwa-core-pro
+    path: examples/external
+    revision: 98a057ab91184921e283ab43279b8ed05cf25363
+    description: External SHM topic and service examples.
 
 tags:
   - hakoniwa
