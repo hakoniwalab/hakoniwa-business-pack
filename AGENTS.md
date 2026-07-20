@@ -18,6 +18,12 @@ User goal
   -> proposed Recipe or Demo plan
   -> Agency Boundary check
   -> Execution
+
+Source / Runtime / Expert correction
+  -> Observation
+  -> Knowledge Candidate
+  -> Validation / Review
+  -> Promotion to the appropriate knowledge layer
 ```
 
 The documents have different responsibilities:
@@ -38,6 +44,13 @@ The documents have different responsibilities:
   - Defines where an agent may proceed autonomously and where a human decision,
     physical action, permission, credential, license entitlement, or explicit
     approval is required.
+- `docs/hakoniwa-knowledge-refinement-loop.md`
+  - Defines how newly discovered implementation facts, runtime rules, design
+    intent, architectural principles, usage patterns, and pitfalls become durable
+    Business Pack knowledge.
+- `knowledge/`
+  - Stores observations and Knowledge Candidates before they are promoted into
+    Catalog, ecosystem guides, Runtime Primer, Component / Asset Guide, or Recipes.
 - `recipes/`
   - Describes concrete or planned system compositions.
 
@@ -57,6 +70,9 @@ Read these files in order:
 10. `docs/hakoniwa-agent-human-boundary.md` before execution or when a Recipe
     includes human involvement, real hardware, external permissions, or
     consequential decisions.
+11. `docs/hakoniwa-knowledge-refinement-loop.md` when source inspection, runtime
+    validation, or expert conversation reveals reusable knowledge that may need
+    to update the Business Pack knowledge base.
 
 Do not answer only from the README or from a repository-name search.
 
@@ -76,6 +92,9 @@ For a user asking "Can Hakoniwa do X?" or "How should I build X?":
 10. State validation separately from feasibility.
 11. Evaluate the Agency Boundary before execution.
 12. Produce a Recipe-shaped answer.
+13. When investigation or execution reveals reusable knowledge, capture it as a
+    Knowledge Candidate instead of leaving it only in the conversation or silently
+    rewriting high-level documentation.
 
 A useful Recipe-shaped answer should cover:
 
@@ -313,6 +332,55 @@ State validation separately for each artifact set.
 
 If the user asks for implementation, create or update a Recipe first unless an
 appropriate Recipe already exists.
+
+## Knowledge Refinement Loop
+
+Do not let reusable knowledge discovered during source inspection, runtime
+validation, Recipe work, or expert conversation disappear into a one-off answer.
+
+Use this flow:
+
+```text
+Source code / Docs / Runtime evidence / Expert correction
+  -> Observation
+  -> Knowledge Candidate
+  -> Validation / Review
+  -> Promotion
+```
+
+When a discovery is potentially reusable, decide whether it is:
+
+- `implementation_fact`
+- `runtime_rule`
+- `design_intent`
+- `architectural_principle`
+- `usage_pattern`
+- `known_pitfall`
+
+Create or update a Knowledge Candidate under `knowledge/` with source evidence,
+confidence, validation status, contradictions, and likely promotion targets.
+
+Do not directly rewrite high-level guides from a weak inference or a single code
+search hit. Promote knowledge only to the layer that owns the concept:
+
+- **Catalog**: component-specific facts, capabilities, interfaces, constraints.
+- **Runtime Primer**: runtime contracts, startup/order rules, execution behavior.
+- **Base Ecosystem Guide**: common architecture, cross-cutting design principles.
+- **Component / Asset Guide**: ecosystem positioning and component role distinctions.
+- **Recipe / Pattern**: reusable compositions, connection contracts, proven workflows.
+
+Developer or domain-expert corrections are important evidence, especially for
+`design_intent` and `architectural_principle`. Preserve the reasoning behind why a
+component or architecture exists, not only what the current code happens to do.
+
+When promoted knowledge changes an existing document, update the source Knowledge
+Candidate with the promotion target and revision so provenance remains traceable.
+
+For the full process and candidate format, read:
+
+- `docs/hakoniwa-knowledge-refinement-loop.md`
+- `knowledge/README.md`
+- `knowledge/candidate-template.yaml`
 
 ## Licensing, Distribution, And Private Repositories
 
