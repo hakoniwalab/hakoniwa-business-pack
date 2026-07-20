@@ -3,15 +3,20 @@
 This document explains the runtime assumptions that an AI or human must
 understand before writing Hakoniwa Recipes.
 
-Catalog entries describe parts. Recipes describe system compositions. This
-primer describes the runtime rules that make those compositions valid.
+For the conceptual structure of the Hakoniwa ecosystem, including PDU, PDU
+Registry, MBody Registry, Endpoint, Bridge Core, RPC, and time coordination,
+see [箱庭ベースエコシステムガイド](hakoniwa-base-ecosystem-ja.md).
+
+Catalog entries describe parts. Recipes describe system compositions. The
+Ecosystem Guide explains where those parts fit. This primer focuses on the
+runtime rules that make concrete compositions executable.
 
 ## Core Mental Model
 
 Hakoniwa is not just a set of libraries. A running Hakoniwa system is a group of
 assets that participate in a shared simulation runtime.
 
-The usual runtime model is:
+The usual local runtime model is:
 
 ```text
 Hakoniwa core runtime
@@ -141,36 +146,31 @@ The core examples show the basic pattern:
   can join through SHM topic or service APIs without being ordinary registered
   simulation assets.
 
-## PDU
+## PDU Runtime Contracts
 
-PDU means Protocol Data Unit. In Hakoniwa Recipes, a PDU is the typed data
-contract exchanged between components.
+The conceptual meaning of PDU and the role of PDU Registry belong to the
+[Ecosystem Guide](hakoniwa-base-ecosystem-ja.md). This primer only covers what a
+Recipe must know at runtime.
 
-Examples:
-
-- robot pose;
-- wheel or game controller commands;
-- LiDAR scans;
-- drone position and attitude;
-- camera or sensor state;
-- service request/response payloads.
-
-A PDU contract is more than a topic name. A Recipe should identify:
+A Recipe should identify:
 
 - PDU name or channel;
 - PDU type;
 - producer;
 - consumer;
-- transport path, such as SHM, endpoint, bridge, WebSocket, or RPC;
+- transport path, such as SHM, Endpoint, Bridge, WebSocket, or RPC;
 - PDU definition/config file used by both sides.
 
-If the PDU type, name, or config path is unknown, the connection is not fully
-specified.
+If the PDU type, name, producer/consumer, or config path is unknown, the
+connection is not fully specified.
+
+Do not assume two components are compatible only because both mention "PDU".
+They must agree on names, types, sizes, generated bindings, and runtime config.
 
 ## PDU Definition Files
 
-Hakoniwa PDU configuration usually has two different layers. Do not collapse
-them into one concept.
+Hakoniwa runtime PDU configuration usually has two different layers. Do not
+collapse them into one concept.
 
 ```text
 PDU schemas and generated bindings
@@ -187,8 +187,8 @@ runtime participants
      same PDU definition/config
 ```
 
-`pdutypes.json` defines the contents of a PDU type set. It usually lists
-entries such as:
+`pdutypes.json` defines the contents of a PDU type set. It usually lists entries
+such as:
 
 - `channel_id`: numeric channel inside that type set;
 - `pdu_size`: binary payload size;
@@ -208,8 +208,8 @@ Example shape:
 ]
 ```
 
-`pdudef.json` or `pdu_def.json` assigns those PDU type sets to runtime names.
-In the compact format, it commonly maps `paths[].id` to a `pdutypes.json` file,
+`pdudef.json` or `pdu_def.json` assigns those PDU type sets to runtime names. In
+the compact format, it commonly maps `paths[].id` to a `pdutypes.json` file,
 then maps each `robots[].name` to one of those IDs:
 
 ```json
@@ -230,11 +230,11 @@ In short:
 - generated bindings: language-specific structs/classes and converters for the
   PDU types;
 - offset files: binary layout metadata used by converters and runtime tools;
-- endpoint/bridge/viewer configs: runtime wiring that must refer to compatible
+- Endpoint/Bridge/viewer configs: runtime wiring that must refer to compatible
   PDU names, types, sizes, and assignments.
 
 For existing demos, reuse the provided `pdutypes` and `pdudef` files unless the
-Recipe explicitly changes the PDU space. For new systems, design both layers:
+Recipe explicitly changes the PDU space. For new systems:
 
 1. define the PDU channels and types needed by the producers and consumers;
 2. generate or select matching bindings, sizes, and offsets;
@@ -248,63 +248,9 @@ asset, it must identify both the new PDU channels and where those channels live
 in the runtime PDU definition. Otherwise the Recipe is only conceptual, not a
 complete Hakoniwa composition.
 
-## PDU Registry
-
-`hakoniwa-pdu-registry` is the source of PDU schemas and generated bindings for
-Hakoniwa components. It is the data-model authority for many Recipes.
-
-Use it when a Recipe needs to answer:
-
-- what PDU types exist;
-- which generated language bindings are needed;
-- whether Python, JavaScript, Ruby, Elixir, C++, Godot, or Foxglove can read the data;
-- which compact PDU definition or endpoint configuration should be shared by
-  simulator, controller, bridge, and visualizer.
-
-Do not assume two components are compatible only because both mention "PDU".
-They must agree on names, types, sizes, generated bindings, and config files.
-
-## Generated Bindings And Converters
-
-Generated language support has multiple layers. Do not treat "Ruby support",
-"Elixir support", "JavaScript support", or any other binding label as one
-binary yes/no capability.
-
-Separate these concerns:
-
-- type definitions: generated structs/classes/modules representing the PDU
-  fields in a target language;
-- fixed-offset binary converters: `pdu_to_*` and `*_to_pdu` style converters
-  that read and write the Hakoniwa shared-memory PDU binary layout using known
-  offsets;
-- offset metadata: generated layout data that tells converters where fields and
-  heap-backed variable arrays live;
-- CDR runtime and converters: a separate wire-format path for DDS/CDR-style
-  serialization;
-- size registries: generated lookup tables for fixed PDU size or CDR minimum
-  size;
-- interop tests: cross-language checks that prove generated data can be decoded
-  by another known-good implementation.
-
-A fixed-offset converter implementation is not CDR support. CDR support needs
-its own runtime, converter templates, size handling, and interop tests. Likewise,
-a generated type file is not enough to claim that a language can participate in
-PDU communication.
-
-When adding a new language binding, use staged validation:
-
-1. generate type definitions for simple scalar and nested struct messages;
-2. generate fixed-offset converters from offset files;
-3. test syntax or compilation in the target language;
-4. test same-language round trips for fixed fields, arrays, and variable arrays;
-5. test interop against an existing oracle such as C++ or Python;
-6. include nested variable arrays and empty variable arrays in the test set;
-7. treat CDR as a later independent milestone unless it is implemented and
-   verified explicitly.
-
-For Recipe work, this matters because a component may need only fixed-offset
-SHM PDU conversion, while a bridge, DDS adapter, or external wire protocol may
-need CDR. Record which layer is required and which layer is verified.
+Details about PDU schema generation, language bindings, fixed-offset converters,
+CDR converters, and Registry capabilities are intentionally kept in the
+Ecosystem Guide and Catalog instead of this runtime primer.
 
 ## Simulation Time
 
@@ -373,6 +319,10 @@ Some APIs expose explicit conductor calls, such as `conductor_start()` /
 `conductor_stop()` or helper wrappers that start the conductor internally. That
 does not change the singleton rule. A Recipe must still identify which process
 is allowed to call those APIs.
+
+For the distinction between Core PRO, Conductor PRO, and Conductor Light, see
+the Ecosystem Guide. This primer focuses only on runtime ownership and startup
+rules for the selected composition.
 
 ## Standard Process Roles
 
@@ -556,10 +506,6 @@ Avoid these mistakes:
 - leaving bridge, viewer, HTTP server, or simulator processes running;
 - inventing component IDs that do not exist in the catalog;
 - calling a browser viewer a simulator;
-- claiming "PDU-compatible" without naming the PDU contract.
-- claiming a language binding is complete when only type generation exists;
-- claiming CDR support from fixed-offset converter generation or CDR size file
-  regeneration;
-- skipping cross-language oracle tests for generated converters;
-- ignoring nested variable arrays or empty variable arrays when validating
-  generated PDU converters.
+- claiming "PDU-compatible" without naming the PDU contract;
+- confusing `pdutypes` with `pdudef`;
+- ignoring runtime compatibility between PDU names, types, sizes, and assignments.
