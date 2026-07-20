@@ -448,6 +448,10 @@ components:
   - ros2
   - cdr
   - codegen
+  - fixed-offset
+  - language-binding
+  - ruby
+  - elixir
   catalog_path: components/hakoniwa-pdu-registry.yaml
 - id: hakoniwa-pdu-rpc
   name: Hakoniwa PDU RPC

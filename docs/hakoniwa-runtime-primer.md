@@ -264,6 +264,48 @@ Use it when a Recipe needs to answer:
 Do not assume two components are compatible only because both mention "PDU".
 They must agree on names, types, sizes, generated bindings, and config files.
 
+## Generated Bindings And Converters
+
+Generated language support has multiple layers. Do not treat "Ruby support",
+"Elixir support", "JavaScript support", or any other binding label as one
+binary yes/no capability.
+
+Separate these concerns:
+
+- type definitions: generated structs/classes/modules representing the PDU
+  fields in a target language;
+- fixed-offset binary converters: `pdu_to_*` and `*_to_pdu` style converters
+  that read and write the Hakoniwa shared-memory PDU binary layout using known
+  offsets;
+- offset metadata: generated layout data that tells converters where fields and
+  heap-backed variable arrays live;
+- CDR runtime and converters: a separate wire-format path for DDS/CDR-style
+  serialization;
+- size registries: generated lookup tables for fixed PDU size or CDR minimum
+  size;
+- interop tests: cross-language checks that prove generated data can be decoded
+  by another known-good implementation.
+
+A fixed-offset converter implementation is not CDR support. CDR support needs
+its own runtime, converter templates, size handling, and interop tests. Likewise,
+a generated type file is not enough to claim that a language can participate in
+PDU communication.
+
+When adding a new language binding, use staged validation:
+
+1. generate type definitions for simple scalar and nested struct messages;
+2. generate fixed-offset converters from offset files;
+3. test syntax or compilation in the target language;
+4. test same-language round trips for fixed fields, arrays, and variable arrays;
+5. test interop against an existing oracle such as C++ or Python;
+6. include nested variable arrays and empty variable arrays in the test set;
+7. treat CDR as a later independent milestone unless it is implemented and
+   verified explicitly.
+
+For Recipe work, this matters because a component may need only fixed-offset
+SHM PDU conversion, while a bridge, DDS adapter, or external wire protocol may
+need CDR. Record which layer is required and which layer is verified.
+
 ## Simulation Time
 
 Hakoniwa separates process startup from simulation time progression.
@@ -515,3 +557,9 @@ Avoid these mistakes:
 - inventing component IDs that do not exist in the catalog;
 - calling a browser viewer a simulator;
 - claiming "PDU-compatible" without naming the PDU contract.
+- claiming a language binding is complete when only type generation exists;
+- claiming CDR support from fixed-offset converter generation or CDR size file
+  regeneration;
+- skipping cross-language oracle tests for generated converters;
+- ignoring nested variable arrays or empty variable arrays when validating
+  generated PDU converters.

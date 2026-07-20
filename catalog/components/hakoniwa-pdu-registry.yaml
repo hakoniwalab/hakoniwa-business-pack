@@ -59,12 +59,33 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-pdu-registry
         path: README.md
         revision: 7bc8839ba14b5dcba471257d660ea53beee00ce1
+  - name: Extensible language binding generation
+    description: >
+      New language support can be added in stages: type definitions,
+      fixed-offset binary converters, syntax/compile checks, and cross-language
+      interop tests. CDR support is a separate layer and must not be inferred
+      from fixed-offset converter generation.
+    evidence:
+      - repository: local-worktree
+        path: template/pdu_ruby_types_rb.tpl
+        revision: 2026-07-20-local-validation
+      - repository: local-worktree
+        path: template/pdu_elixir_types_ex.tpl
+        revision: 2026-07-20-local-validation
+      - repository: local-worktree
+        path: template/pdu_ruby_conv_rb.tpl
+        revision: 2026-07-20-local-validation
+      - repository: local-worktree
+        path: template/pdu_elixir_conv_ex.tpl
+        revision: 2026-07-20-local-validation
 
 limitations:
   - Not a runtime communication component.
   - Local non-Docker generation is documented as reference only and not guaranteed reproducible.
   - ROS 2 type hash generation expects ROS 2 Jazzy and fails on other distros for guarded metadata paths.
   - Generated artifacts can create large diffs, intentionally trading repository size for reproducibility.
+  - Generated language support is layered; type generation, fixed-offset binary conversion, CDR conversion, size registries, and interop tests are separate claims.
+  - Ruby and Elixir fixed-offset converter generation can be validated independently from CDR; Ruby/Elixir CDR support should be treated as not implemented unless explicit converter/runtime artifacts and tests exist.
 
 interfaces:
   inputs:
@@ -90,6 +111,12 @@ interfaces:
     - name: JavaScript PDU types and converters
       kind: file
       description: Generated JavaScript artifacts under pdu/javascript.
+    - name: Ruby PDU types and fixed-offset converters
+      kind: file
+      description: Generated Ruby artifacts under pdu/ruby when Ruby templates are enabled.
+    - name: Elixir PDU types and fixed-offset converters
+      kind: file
+      description: Generated Elixir artifacts under pdu/elixir when Elixir templates are enabled.
     - name: C# PDU types
       kind: file
       description: Generated C# artifacts under pdu/csharp.
@@ -179,6 +206,20 @@ data_contracts:
       - repository: hakoniwalab/hakoniwa-pdu-registry
         path: README.md
         revision: 7bc8839ba14b5dcba471257d660ea53beee00ce1
+  - name: Generated binding validation strategy
+    description: >
+      For a new language binding, verify type generation separately from
+      fixed-offset conversion and CDR conversion. Use existing C++ or Python
+      generated artifacts as an oracle, and include fixed fields, arrays,
+      variable arrays, nested variable arrays, and empty variable arrays in the
+      test set.
+    source:
+      - repository: local-worktree
+        path: tests/test_ruby_elixir_generator.py
+        revision: 2026-07-20-local-validation
+      - repository: local-worktree
+        path: tests/test_ruby_elixir_generated_artifacts.py
+        revision: 2026-07-20-local-validation
 
 recipe_roles:
   - role: registry
@@ -193,11 +234,15 @@ typical_usecases:
   - Ensure Python, JavaScript, C++, C#, Godot, bridge, and endpoint components share the same binary layout.
   - Generate CDR converters for Foxglove or ROS-compatible payload paths.
   - Audit binary compatibility changes through committed generated diffs.
+  - Add a new language binding by first generating types, then fixed-offset converters, then cross-language interop tests.
 
 anti_usecases:
   - Runtime message transport.
   - Robot body geometry conversion.
   - Quick ad hoc schema generation where reproducibility does not matter.
+  - Claiming a language binding is complete when only type definitions are generated.
+  - Claiming CDR support from fixed-offset converter templates or regenerated CDR size files.
+  - Validating generated converters only with trivial scalar messages.
 
 demo_candidates:
   - name: Generate PDU artifacts from ros_msgs.txt
@@ -217,6 +262,17 @@ demo_candidates:
       - repository: hakoniwalab/hakoniwa-pdu-registry
         path: pdu
         revision: 7bc8839ba14b5dcba471257d660ea53beee00ce1
+  - name: Validate a new fixed-offset language binding
+    description: >
+      Generate target-language type definitions and fixed-offset converters,
+      compile or syntax-check the generated files, then run interop tests
+      against C++ or Python oracle data for representative nested messages.
+    required_components:
+      - hakoniwa-pdu-registry
+    source_examples:
+      - repository: local-worktree
+        path: tests/test_ruby_elixir_generated_artifacts.py
+        revision: 2026-07-20-local-validation
 
 operations:
   build:
@@ -226,8 +282,12 @@ operations:
     notes:
       - Docker generation is the recommended reproducible path.
   test:
-    commands: []
-    notes: Add exact validation commands after cataloging tests and docs/README.md.
+    commands:
+      - python3.12 -m unittest tests.test_generated_artifacts
+      - python3.12 -m unittest tests.test_ruby_elixir_generator tests.test_ruby_elixir_generated_artifacts
+    notes:
+      - Use the same Python 3.12 environment that has the generator dependencies installed.
+      - Language-binding tests should include syntax or compile checks and cross-language oracle checks.
   run:
     commands:
       - bash docker/run.bash
@@ -240,6 +300,7 @@ known_gaps:
   - Catalog does not yet enumerate generator options and validation scripts.
   - Need to map major PDU packages and frequently used message types for recipe search.
   - Need to distinguish generated native PDU binary from CDR payload use cases in downstream recipes.
+  - Ruby/Elixir CDR converter/runtime support is not established by fixed-offset converter validation.
 
 source_refs:
   - repository: hakoniwalab/hakoniwa-pdu-registry
@@ -271,3 +332,7 @@ tags:
   - ros2
   - cdr
   - codegen
+  - fixed-offset
+  - language-binding
+  - ruby
+  - elixir

@@ -179,6 +179,8 @@ catalog entries, existing recipes, or source evidence:
   files such as `pdudef.json` or `pdu_def.json`;
 - any new PDU channel proposal identifies name, type, size/source schema,
   producer, consumer, generated bindings or offsets, and runtime assignment;
+- any generated language-binding claim separates type generation, fixed-offset
+  binary conversion, CDR conversion, size registry generation, and interop tests;
 - missing commercial/private components are called out explicitly;
 - validation status matches actual execution evidence.
 
@@ -271,6 +273,14 @@ Do not edit generated launch files during demo execution unless the Recipe
 explicitly names them as user-editable. If a generated file looks wrong, inspect
 the generator, environment variables, or source Recipe, then record the finding
 as an issue or Recipe update.
+
+When working on PDU registry or generated bindings, do not collapse generated
+artifacts into one capability claim. A target language can have generated type
+definitions without fixed-offset converters, fixed-offset converters without CDR
+support, and regenerated CDR size files without CDR converter support for that
+language. To claim a generated binding is verified, require syntax/compile
+checks and interop evidence against an existing oracle such as C++ or Python.
+Include nested variable arrays and empty variable arrays in converter tests.
 
 Avoid broad cleanup such as killing every `python3.12` process. Stop the
 launcher session, use `hako-cmd stop`, and only terminate known demo process
