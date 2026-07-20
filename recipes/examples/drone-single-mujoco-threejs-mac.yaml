@@ -1,0 +1,547 @@
+id: drone-single-mujoco-threejs-mac
+title: Single Hakoniwa Drone MuJoCo Three.js Demo on macOS
+recipe_version: 0.1
+
+goal:
+  user_request: Macで箱庭ドローンを1台飛ばし、Python APIで動かしてThree.jsで可視化したい
+  description: >
+    Run one Hakoniwa Drone instance on macOS arm64, control it from a Python
+    3.12 external_rpc script, publish visual state from the simulator into
+    Hakoniwa PDU shared memory, bridge that state to WebSocket, and observe the
+    drone in the Three.js browser viewer.
+
+feasibility:
+  status: feasible
+  confidence: medium
+  rationale:
+    - hakoniwa-drone-core provides macOS prebuilt binaries, MuJoCo drone service, DroneVisualStatePublisher, and Python external_rpc APIs.
+    - hakoniwa-threejs-drone documents a fleets viewer mode that consumes DroneVisualStateArray through WebSocket.
+    - hakoniwa-pdu-bridge-core provides the WebSocket bridge configuration used by the Three.js fleets viewer.
+    - The Mac binary acquisition and MuJoCo dylib link steps are documented, but this exact Recipe has not yet been executed end-to-end.
+
+validation:
+  status: partially_verified
+  summary: >
+    The Mac one-drone runtime was launched locally on 2026-07-20 with
+    hakoniwa-drone-core release binaries under ./lib, MuJoCo 3.9.0 linked into
+    those binaries, Python 3.12 external_rpc control, DroneVisualStatePublisher,
+    WebBridge, and the Three.js HTTP server. Python control and visual-state
+    publication were verified from logs. Browser-side Connect and rendered pose
+    updates still require manual observation.
+  steps:
+    - id: mac_binary_setup
+      status: verified
+      evidence:
+        - repository: toppers/hakoniwa-drone-core
+          path: tools/fetch_libs.sh
+          revision: local-research-2026-07-20
+        - repository: toppers/hakoniwa-drone-core
+          path: README.md
+          revision: local-research-2026-07-20
+      notes:
+        - tools/fetch_libs.sh downloads the OS release archive and installs binaries into ./lib.
+        - Older Mac articles and docs may show manual mac.zip extraction into ./mac.
+        - Local validation found executable ./lib/mac-main_hako_drone_service and ./lib/mac-drone_visual_state_publisher.
+    - id: mujoco_link_setup
+      status: verified
+      evidence:
+        - repository: toppers/hakoniwa-drone-core
+          path: tools/install-mujoco-mac.bash
+          revision: local-research-2026-07-20
+        - repository: toppers/hakoniwa-drone-core
+          path: tools/link-mujoco-mac.bash
+          revision: local-research-2026-07-20
+      notes:
+        - MuJoCo is installed under vendor/mujoco.
+        - Release binaries must be patched with an rpath to vendor/mujoco/lib.
+        - Local validation ran tools/install-mujoco-mac.bash and tools/link-mujoco-mac.bash against ./lib.
+    - id: python_external_rpc_control
+      status: verified
+      evidence:
+        - repository: toppers/hakoniwa-drone-core
+          path: drone_api/external_rpc/README.md
+          revision: local-research-2026-07-20
+        - repository: toppers/hakoniwa-drone-core
+          path: docs/fleets/external-rpc-tutorial.md
+          revision: local-research-2026-07-20
+      notes:
+        - The documented command sequence is SetReady, TakeOff, GetState, GoTo, Land.
+        - Local validation ran run_single_mission.bash against Drone-1 and received ok=True for takeoff, goto, and land.
+    - id: visual_state_and_http_path
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-threejs-drone
+          path: README.md
+          revision: local-research-2026-07-20
+        - repository: hakoniwalab/hakoniwa-pdu-bridge-core
+          path: config/web_bridge_fleets/bridge/bridge.json
+          revision: local-research-2026-07-20
+      notes:
+        - The viewer expects a WebSocket stream and fleets viewer configuration.
+        - The visual path requires DroneVisualStatePublisher; WebBridge alone does not create visual state.
+        - Local validation confirmed VisualStatePublisher publishes DroneVisualStateArray and HTTP server returns 200 for /index.html.
+    - id: browser_render_observation
+      status: not_tested
+      evidence:
+        - repository: hakoniwalab/hakoniwa-threejs-drone
+          path: README.md
+          revision: local-research-2026-07-20
+      notes:
+        - Browser-side Connect and visible rendered motion were not yet recorded as evidence.
+        - On macOS, opening the viewer URL automatically is useful, but the user may still need to press the browser Connect button.
+
+constraints:
+  - macos-first
+  - single-pc
+  - native
+  - python-api-control
+  - threejs-visualization
+  - shared-memory-pdu
+  - no-px4
+  - no-unity
+
+target_environment:
+  required_for: executable-demo
+  status: specified
+  os: macOS
+  os_version: unknown
+  architecture: arm64
+  execution_mode: native
+  runtimes:
+    - name: MuJoCo
+      required: true
+      version: "3.9.0"
+      path: vendor/mujoco
+    - name: Python
+      required: true
+      version: "3.12"
+      path: unknown
+    - name: Browser
+      required: true
+      version: unknown
+      path: unknown
+  hakoniwa:
+    install_prefix: /usr/local/hakoniwa
+    components_built:
+      - hakoniwa-core-pro
+      - hakoniwa-pdu-bridge-core
+      - hakoniwa-drone-core
+  notes:
+    - This Recipe intentionally targets macOS first. Linux/Docker generalization should be a later Recipe variant.
+    - Python 3.12 must be the environment that can import both hakopy and hakoniwa_pdu.
+
+execution_environment:
+  required_for: executable-demo
+  status: specified
+  os: macOS
+  os_version: unknown
+  architecture: arm64
+  execution_mode: native
+  gui:
+    required: true
+    status: unknown
+  shared_memory:
+    required: true
+    access: requires-unsandboxed-command
+  devices:
+    - name: joystick
+      required: false
+      available: not_required
+  python:
+    environment: venv
+    hakopy_available: unknown
+  hakoniwa:
+    install_prefix: /usr/local/hakoniwa
+    hako_cmd_access: requires-unsandboxed-command
+  notes:
+    - Required preflight includes python3.12 import checks for hakopy and hakoniwa_pdu.
+    - Ports 8000 and 8765 must be available for the browser viewer and WebSocket bridge.
+    - Use an absolute HAKO_THREEJS_VIEWER_PATH. A relative value can be resolved relative to the launch file and point at the wrong directory.
+    - For Mac demos, it is acceptable to open the browser automatically and then ask the user to press Connect in the viewer UI.
+
+components:
+  - id: hakoniwa-drone-core
+    roles:
+      - physics_runtime
+      - simulation_core
+    purpose: Run the MuJoCo drone service, publish drone state, provide DroneVisualStatePublisher, and expose Python external_rpc control APIs.
+  - id: hakoniwa-core-pro
+    roles:
+      - simulation_core
+      - time_sync
+    purpose: Provide Hakoniwa shared-memory runtime, PDU space, hako-cmd lifecycle, and simulation time.
+  - id: hakoniwa-pdu-python
+    roles:
+      - language_binding
+      - control_plane
+    purpose: Provide the Python 3.12 launcher/runtime package and PDU/RPC Python bindings used by external_rpc clients.
+  - id: hakoniwa-pdu-registry
+    roles:
+      - data_model
+      - registry
+    purpose: Provide PDU type contracts for drone service RPC, drone state, and visual-state packets.
+  - id: hakoniwa-pdu-bridge-core
+    roles:
+      - bridge
+      - communication_infrastructure
+    purpose: Bridge DroneVisualStateArray from shared memory to WebSocket for browser consumption.
+  - id: hakoniwa-threejs-drone
+    roles:
+      - visualizer
+    purpose: Render the drone in a browser using the fleets viewer configuration and WebSocket PDU stream.
+
+connections:
+  - from: hakoniwa-core-pro
+    to: hakoniwa-drone-core
+    interface: pdu
+    data:
+      - shared-memory-pdu-space
+      - simulation-time
+      - hako-cmd lifecycle
+    contract:
+      status: verified
+      requires:
+        - hakoniwa-core-pro-installed-under-usr-local-hakoniwa
+        - one-conductor-for-the-demo
+        - shared-memory-access
+      validation_notes:
+        - Local validation showed drone-service-1 registered DroneService entries and reached WAIT RUNNING after hako-cmd start.
+    notes: The drone service owns the simulated drone runtime and participates in Hakoniwa lifecycle.
+  - from: hakoniwa-pdu-python
+    to: hakoniwa-drone-core
+    interface: api
+    data:
+      - DroneSetReady
+      - DroneTakeOff
+      - DroneGetState
+      - DroneGoTo
+      - DroneLand
+    contract:
+      status: verified
+      requires:
+        - python3.12
+        - hakopy importable in the same Python environment
+        - hakoniwa_pdu importable in the same Python environment
+        - generated service config matching the active fleet config
+      validation_notes:
+        - Local validation ran run_single_mission.bash with pyenv Python 3.12 and received successful takeoff, goto, and land responses.
+    notes: Python control is external to the simulator asset and joins through Hakoniwa SHM/RPC.
+  - from: hakoniwa-drone-core
+    to: hakoniwa-pdu-bridge-core
+    interface: pdu
+    data:
+      - DroneVisualStateArray
+    contract:
+      status: verified
+      requires:
+        - DroneVisualStatePublisher running
+        - web_bridge_fleets configuration
+        - matching DroneVisualStateArray PDU definition
+      validation_notes:
+        - Local validation showed DroneVisualStatePublisher collecting Drone-1 pose and publishing DroneVisualStateArray chunks.
+    notes: DroneVisualStatePublisher is the adapter between drone simulation state and browser-oriented visual state.
+  - from: hakoniwa-pdu-bridge-core
+    to: hakoniwa-threejs-drone
+    interface: pdu
+    data:
+      - WebSocket DroneVisualStateArray stream
+    contract:
+      status: partially_verified
+      requires:
+        - WebSocket endpoint on ws://127.0.0.1:8765
+        - viewer-config-fleets.json
+        - wireVersion=v2
+      validation_notes:
+        - Local validation confirmed WebBridge startup and HTTP 200 from the Three.js webserver.
+        - Browser Connect and rendered pose updates remain to be manually verified.
+    notes: The browser viewer is an external observer; it does not run physics or own Hakoniwa simulation time.
+
+data_flow:
+  summary: >
+    The drone service simulates one drone and exposes control services through
+    Hakoniwa PDU/RPC. A Python external_rpc script sends flight commands. The
+    visual-state publisher converts the drone state into DroneVisualStateArray.
+    The WebBridge transfers that PDU from shared memory to WebSocket, and the
+    Three.js viewer renders the result in the browser.
+  steps:
+    - from: Python external_rpc client
+      to: hakoniwa-drone-core
+      data:
+        - set_ready
+        - takeoff
+        - goto
+        - land
+      description: Python 3.12 commands the single drone through the Hakoniwa RPC service definitions.
+    - from: hakoniwa-drone-core
+      to: DroneVisualStatePublisher
+      data:
+        - drone state PDU
+      description: Runtime drone state is read and converted into the viewer-facing visual-state packet.
+    - from: DroneVisualStatePublisher
+      to: hakoniwa-pdu-bridge-core
+      data:
+        - DroneVisualStateArray
+      description: Visual state is published into shared memory for the bridge.
+    - from: hakoniwa-pdu-bridge-core
+      to: hakoniwa-threejs-drone
+      data:
+        - DroneVisualStateArray over WebSocket
+      description: Browser receives the compact visual-state stream over ws://127.0.0.1:8765.
+
+time_model:
+  mode: shared-simulation-time
+  components:
+    - hakoniwa-core-pro
+    - hakoniwa-drone-core
+    - hakoniwa-pdu-bridge-core
+  notes:
+    - Process startup and simulation start are separate.
+    - Long-running Hakoniwa assets should be launcher-managed where possible.
+    - The browser viewer and Python external client are external participants; they observe or command through PDU/RPC but do not own simulation time.
+
+artifact_sets:
+  physics_artifacts:
+    description: Drone simulator binaries, MuJoCo runtime, and one-drone fleet configuration.
+    status: verified
+    artifacts:
+      - lib/mac-main_hako_drone_service
+      - vendor/mujoco/lib/libmujoco.3.9.0.dylib
+      - config/drone/fleets/api-current.json
+      - config/drone/mujoco-current/drone.xml
+    notes:
+      - tools/fetch_libs.sh installs release binaries into ./lib.
+      - tools/link-mujoco-mac.bash must target the directory where the binaries were installed.
+  visualization_artifacts:
+    description: Visual-state publisher, WebBridge fleets configuration, and Three.js viewer config.
+    status: partially_verified
+    artifacts:
+      - lib/mac-drone_visual_state_publisher
+      - config/assets/visual_state_publisher/visual_state_publisher.runtime.json
+      - web_bridge_fleets configuration
+      - config/viewer-config-fleets.json
+    notes:
+      - DroneVisualStatePublisher is required; WebBridge alone is insufficient.
+      - Local logs confirmed visual-state publication. Browser rendering remains manual observation evidence.
+  pdu_artifacts:
+    description: Drone PDU definitions and service definitions for RPC and visual state.
+    status: verified
+    artifacts:
+      - config/pdudef/drone-pdudef-current.json
+      - config/drone/fleets/services/api-current-service.json
+      - config/pdudef/drone-visual-state.json
+    notes:
+      - Fleet, service, and PDU definition files must be generated or selected as a matching set.
+  runtime_artifacts:
+    description: Launcher or shell commands used to start the end-to-end demo.
+    status: partially_verified
+    artifacts:
+      - tools/launch-fleets-scale-perf.bash
+      - config/launcher/fleets-scale-perf-nproc.generated.launch.json
+      - drone_api/external_rpc apps or custom single-drone flight script
+    notes:
+      - Existing scripts can generate a one-drone launch config, but the default Mac binary path may need environment overrides.
+      - Local validation required absolute HAKO_THREEJS_VIEWER_PATH.
+
+artifacts:
+  - name: mac-drone-service-binary
+    kind: command
+    producer: hakoniwa-drone-core
+    consumer:
+      - hakoniwa-drone-core
+    path: lib/mac-main_hako_drone_service
+  - name: mac-visual-state-publisher-binary
+    kind: command
+    producer: hakoniwa-drone-core
+    consumer:
+      - hakoniwa-drone-core
+    path: lib/mac-drone_visual_state_publisher
+  - name: mujoco-dylib
+    kind: command
+    producer: hakoniwa-drone-core
+    consumer:
+      - hakoniwa-drone-core
+    path: vendor/mujoco/lib/libmujoco.3.9.0.dylib
+  - name: fleets-viewer-url
+    kind: command
+    producer: hakoniwa-threejs-drone
+    consumer:
+      - hakoniwa-threejs-drone
+    path: http://127.0.0.1:8000/index.html?viewerConfigPath=/config/viewer-config-fleets.json&wsUri=ws://127.0.0.1:8765&wireVersion=v2
+
+missing_pieces:
+  - Record browser-side evidence that Three.js Connect succeeds and rendered drone pose updates are visible.
+  - Decide whether to keep using run_single_mission.bash or create a smaller named one-drone demo script for this Recipe.
+  - Decide whether MuJoCo native viewer should also be enabled, or whether Three.js is the only intended visual output.
+
+demo:
+  objective: >
+    Show one Hakoniwa Drone taking off, moving through a short scripted path,
+    and landing while its pose updates in the Three.js browser viewer.
+  steps:
+    - order: 1
+      component: hakoniwa-drone-core
+      action: Download Mac prebuilt Hakoniwa Drone binaries.
+      command: bash tools/fetch_libs.sh
+      evidence:
+        - repository: toppers/hakoniwa-drone-core
+          path: tools/fetch_libs.sh
+          revision: local-research-2026-07-20
+    - order: 2
+      component: hakoniwa-drone-core
+      action: Install MuJoCo for macOS under vendor/mujoco.
+      command: bash tools/install-mujoco-mac.bash .
+      evidence:
+        - repository: toppers/hakoniwa-drone-core
+          path: tools/install-mujoco-mac.bash
+          revision: local-research-2026-07-20
+    - order: 3
+      component: hakoniwa-drone-core
+      action: Patch Mac binary rpath so the drone service can load MuJoCo.
+      command: bash tools/link-mujoco-mac.bash ./lib --lib-dir ./vendor/mujoco/lib
+      evidence:
+        - repository: toppers/hakoniwa-drone-core
+          path: tools/link-mujoco-mac.bash
+          revision: local-research-2026-07-20
+    - order: 4
+      component: hakoniwa-pdu-python
+      action: Confirm Python 3.12 can import required Hakoniwa modules.
+      command: python3.12 -c "import hakopy; import hakoniwa_pdu"
+      evidence:
+        - repository: hakoniwalab/hakoniwa-business-pack
+          path: docs/hakoniwa-runtime-primer.md
+          revision: local-research-2026-07-20
+    - order: 5
+      component: hakoniwa-drone-core
+      action: Launch one-drone runtime, visual-state publisher, WebBridge, and Three.js webserver with Mac binary path overrides.
+      command: >
+        PYTHON_BIN=python3.12 HAKO_DRONE_SERVICE_BIN=./lib/mac-main_hako_drone_service
+        HAKO_VISUAL_STATE_PUBLISHER_BIN=./lib/mac-drone_visual_state_publisher
+        HAKO_THREEJS_VIEWER_PATH=/absolute/path/to/hakoniwa-threejs-drone
+        bash tools/launch-fleets-scale-perf.bash 1 "" 1
+      evidence:
+        - repository: toppers/hakoniwa-drone-core
+          path: tools/launch-fleets-scale-perf.bash
+          revision: local-research-2026-07-20
+    - order: 6
+      component: hakoniwa-threejs-drone
+      action: Open the fleets viewer and ask the user to press Connect.
+      command: >
+        open 'http://127.0.0.1:8000/index.html?viewerConfigPath=/config/viewer-config-fleets.json&wsUri=ws://127.0.0.1:8765&wireVersion=v2'
+      evidence:
+        - repository: hakoniwalab/hakoniwa-threejs-drone
+          path: README.md
+          revision: local-research-2026-07-20
+    - order: 7
+      component: hakoniwa-pdu-python
+      action: Run a Python external_rpc command sequence for one drone.
+      command: >
+        PATH=/path/to/python3.12/bin:$PATH bash drone_api/external_rpc/apps/run_single_mission.bash
+        --drone Drone-1 --alt 1.0 --x 1.5 --y 0.5 --z 1.0 --yaw 30
+        --speed 1.0 --timeout-sec 20 --land
+      evidence:
+        - repository: toppers/hakoniwa-drone-core
+          path: docs/fleets/external-rpc-tutorial.md
+          revision: local-research-2026-07-20
+  observability:
+    success_signals:
+      - The Three.js viewer connects to ws://127.0.0.1:8765.
+      - One drone appears in the browser.
+      - The drone takes off, moves, and lands.
+      - Python logs show successful set_ready, takeoff, goto, get_state, and land responses.
+      - Drone service or publisher logs show simulation steps and visual-state publication.
+    failure_signals:
+      - mac-main_hako_drone_service fails to load libmujoco.
+      - Python 3.12 cannot import hakopy or hakoniwa_pdu.
+      - WebBridge starts but the browser has no DroneVisualStateArray channels.
+      - The drone appears but pose does not change after Python commands.
+      - Port 8000 or 8765 is already in use.
+    fixtures:
+      - One generated fleet drone with a matching service config and PDU definition.
+      - Browser with WebGL support.
+      - WebSocket bridge configured for fleets visual state.
+    automation:
+      - Use a scripted Python external_rpc controller instead of manual keyboard or joystick input.
+      - Prefer hakoniwa-pdu hako_launcher for multi-process lifecycle once the final launch config is confirmed.
+      - On macOS, open the Three.js viewer URL automatically after the HTTP server starts, then prompt the user to press Connect.
+  verification_checks:
+    lifecycle:
+      - hako_launcher starts drone-service before hako-cmd start.
+      - visual-state-publisher and WebBridge start before or with simulation lifecycle.
+      - hako-cmd start succeeds.
+      - Long-running processes are stopped by launcher cleanup or explicit hako-cmd stop.
+    behavior:
+      - Drone position z increases after takeoff.
+      - Drone position x or y changes after goto.
+      - Drone altitude returns near ground after land.
+      - Three.js pose updates track the same movement.
+    logs:
+      - Python external_rpc prints ok responses for set_ready, takeoff, goto, and land.
+      - WebBridge logs show ws=ws://127.0.0.1:8765 or equivalent startup.
+      - Browser console reports fleets visual-state channels.
+
+expected_result: >
+  On macOS arm64, one Hakoniwa Drone is controlled by a Python 3.12 script and
+  is visible in the Three.js browser viewer as it takes off, moves through a
+  short path, and lands.
+
+source_catalogs:
+  - component_id: hakoniwa-drone-core
+    catalog_path: ../catalog/components/hakoniwa-drone-core.yaml
+  - component_id: hakoniwa-core-pro
+    catalog_path: ../catalog/components/hakoniwa-core-pro.yaml
+  - component_id: hakoniwa-pdu-python
+    catalog_path: ../catalog/components/hakoniwa-pdu-python.yaml
+  - component_id: hakoniwa-pdu-registry
+    catalog_path: ../catalog/components/hakoniwa-pdu-registry.yaml
+  - component_id: hakoniwa-pdu-bridge-core
+    catalog_path: ../catalog/components/hakoniwa-pdu-bridge-core.yaml
+  - component_id: hakoniwa-threejs-drone
+    catalog_path: ../catalog/components/hakoniwa-threejs-drone.yaml
+
+source_artifacts:
+  - repository: toppers/hakoniwa-drone-core
+    path: tools/fetch_libs.sh
+    revision: local-research-2026-07-20
+    description: Downloads OS-specific Hakoniwa Drone release binaries into ./lib.
+  - repository: toppers/hakoniwa-drone-core
+    path: tools/install-mujoco-mac.bash
+    revision: local-research-2026-07-20
+    description: Installs MuJoCo under vendor/mujoco on macOS.
+  - repository: toppers/hakoniwa-drone-core
+    path: tools/link-mujoco-mac.bash
+    revision: local-research-2026-07-20
+    description: Patches Mac release binaries to find MuJoCo dylib through rpath.
+  - repository: toppers/hakoniwa-drone-core
+    path: tools/launch-fleets-scale-perf.bash
+    revision: local-research-2026-07-20
+    description: Generates and launches the fleet runtime, visual-state publisher, bridge, and webserver path.
+  - repository: toppers/hakoniwa-drone-core
+    path: drone_api/external_rpc/README.md
+    revision: local-research-2026-07-20
+    description: Documents Python external_rpc clients and command sequence.
+  - repository: hakoniwalab/hakoniwa-threejs-drone
+    path: README.md
+    revision: local-research-2026-07-20
+    description: Documents fleets viewer URL and WebSocket/PDU configuration.
+  - repository: external/qiita
+    path: https://qiita.com/kanetugu2018/items/e463e12a7ae3439cbd66
+    revision: 2026-07-05
+    description: Mac setup reference for Hakoniwa Drone binaries, MuJoCo install, and binary link flow.
+  - repository: external/qiita
+    path: https://qiita.com/kanetugu2018/items/947a4c6eda5d8f3c482c
+    revision: 2026-04-23
+    description: MuJoCo external_rpc reference for SetReady, TakeOff, GoTo, GetState, and Land command flow.
+  - repository: external/qiita
+    path: https://qiita.com/kanetugu2018/items/3dfc169046bd8265e8ef
+    revision: local-research-2026-07-20
+    description: Three.js/WebBridge fleets reference; Linux oriented, used only for visualization architecture.
+
+tags:
+  - hakoniwa
+  - drone
+  - macos
+  - mujoco
+  - threejs
+  - web-bridge
+  - python
+  - external-rpc

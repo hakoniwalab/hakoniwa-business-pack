@@ -2,6 +2,51 @@
 
 > **A catalog and recipe hub for composing Hakoniwa components with AI to turn user ideas into working demos and products.**
 
+## AI Bootstrap Prompt
+
+If you are an AI agent, do not summarize this repository after reading only this
+README.
+
+Before answering that you understand `hakoniwa-business-pack`, read these files
+in order:
+
+1. `AGENTS.md`
+2. `catalog/index.yaml`
+3. `catalog/schema.yaml`
+4. `docs/hakoniwa-runtime-primer.md`
+5. relevant `catalog/components/*.yaml`
+6. `recipes/README.md`
+7. relevant `recipes/examples/*.yaml`
+
+Then answer in this shape:
+
+```text
+I have read:
+- AGENTS.md: yes/no
+- catalog/index.yaml: yes/no
+- catalog/schema.yaml: yes/no
+- docs/hakoniwa-runtime-primer.md: yes/no
+- relevant component catalogs: <names or none>
+- relevant recipes: <names or none>
+
+Current understanding:
+- what this repository is
+- what Hakoniwa runtime assumptions matter
+- what can be proposed from catalog evidence
+- what is feasible, verified, unknown, or blocked
+```
+
+Do not jump from "Can Hakoniwa do X?" to adjacent source repositories or local
+execution. First use the Catalog and Recipes. If no Recipe exists, propose a
+Recipe-shaped plan with `feasibility` and `validation` states. Run build, fetch,
+install, launch, GUI, browser, or server commands only after the user asks for
+local execution.
+
+For Hakoniwa Python workflows, assume Python 3.12 unless a Recipe explicitly
+verifies another version. `hakopy` comes from `hakoniwa-core-pro`; `hakoniwa-pdu`
+comes from `pip install hakoniwa-pdu`. Verify both in the same Python 3.12
+environment before running SHM/PDU demos.
+
 ## 箱庭で、何をしたいですか？
 
 箱庭には、MuJoCo、Godot、PDU、Endpoint、Conductor、Foxglove など、
