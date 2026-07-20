@@ -136,6 +136,36 @@ For each important connection, state:
 - whether that connection is verified, partially verified, blocked, not tested,
   or only inferred from catalog evidence.
 
+## Evidence And Unknown Runtime Paths
+
+Do not infer executable feasibility from source-code text matches alone. A
+string such as `takeoff`, `land`, `drone`, `server`, or `launcher` is a search
+hit, not evidence that a complete Hakoniwa Recipe exists.
+
+Before creating or presenting a runnable Recipe, confirm these facts from
+catalog entries, existing recipes, or source evidence:
+
+- every `components[].id` exists in `catalog/components/*.yaml`;
+- every component role uses `catalog/schema.yaml`;
+- the simulator or runtime entrypoint is identified;
+- launcher assets use real commands, not placeholders;
+- required PDU, service, endpoint, and sync configs are identified;
+- missing commercial/private components are called out explicitly;
+- validation status matches actual execution evidence.
+
+If any required runtime entrypoint or component identity is unknown:
+
+- set `feasibility.status: unknown` or `partially_feasible`, not `feasible`;
+- set `validation.status: blocked` or `not_tested`, not `verified`;
+- record missing facts in `missing_pieces`;
+- ask for or inspect the missing repository/component;
+- do not write a runnable-looking launch file with placeholder commands.
+
+Do not invent component IDs inside a Recipe. If a needed component is missing
+from the catalog, describe it as a `missing_pieces` or `known_gap` item such as
+"catalog candidate: drone simulator runtime", then stop or mark the Recipe as
+blocked until the component is cataloged.
+
 ## Executable Demo And Runbook Requirements
 
 Before writing executable demo steps or a runbook, collect the target

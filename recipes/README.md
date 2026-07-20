@@ -96,6 +96,28 @@ Each `connections[]` entry should therefore include a `contract`:
   needed for the connection to work.
 - `validation_notes`: evidence or blockers discovered during testing.
 
+## Blocked Or Unknown Recipes
+
+A recipe may document a blocked investigation, but it must not look runnable
+when a runtime path is unknown.
+
+If a simulator, service, launcher asset, or component identity cannot be found:
+
+- do not use `feasibility.status: feasible`;
+- do not invent component IDs outside the catalog;
+- do not put placeholder commands such as `/path/to/...` in
+  `demo.steps.command` unless the step is explicitly marked as blocked and
+  non-executable;
+- put unknowns in `missing_pieces`;
+- use cataloged component IDs only, and treat missing components as catalog
+  candidates;
+- prefer a short blocked recipe or issue note over a long runnable-looking
+  runbook.
+
+Search hits are not evidence. Code containing words such as `takeoff`, `land`,
+`drone`, or `server` does not prove that the end-to-end simulator/runtime path
+is available.
+
 ## Artifact Sets
 
 Do not assume a robot model has one universal artifact path.
@@ -285,3 +307,5 @@ recipes/
 - Keep `demo.steps` concrete enough to validate against existing repositories.
 - Do not assume code has been generated unless `source_artifacts` or a demo step
   points to an existing implementation.
+- Do not create runnable-looking recipes around unknown runtime commands,
+  uncataloged components, or placeholder launch assets.
