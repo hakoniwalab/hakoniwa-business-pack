@@ -316,6 +316,24 @@ The `hakoniwa-pdu` launcher model uses:
   `reset`, `terminate`, and `status`;
 - watch behavior that aborts all assets if one asset exits unexpectedly.
 
+The launcher is normally a long-running lifecycle manager, not a setup command
+that returns after startup. In `immediate` mode it may remain in the foreground
+after `hako-cmd start` because it is watching the assets it started. Treat that
+as normal runtime behavior. If an AI or script needs to run later commands, it
+must either keep the launcher session alive in the background, use a separate
+terminal/session for controllers, or use `serve` mode where appropriate.
+
+Do not conclude that a launcher-based demo failed only because the launcher did
+not exit. Also do not conclude that an asset failed only because its log file is
+empty. Some assets, such as `python -m http.server`, may write no stdout until a
+browser request arrives. Prefer active readiness checks:
+
+- launcher output reaches `hako-cmd start exited with 0`;
+- the expected asset is still running;
+- the expected socket responds, such as `curl -I http://127.0.0.1:8000/`;
+- the expected bridge endpoint accepts a browser or client connection;
+- downstream PDU, service, or visual-state logs show changing data.
+
 Launcher timing is expressed through `activation_timing`:
 
 ```text
@@ -337,6 +355,13 @@ Use `depends_on` for asset ordering constraints, and `delay_sec` /
 `start_grace_sec` for practical startup timing. Do not invent launcher fields
 from another generation of the tooling; check the installed `hakoniwa-pdu`
 version and schema if the Recipe depends on launcher behavior.
+
+Some launchers generate concrete launch files as intermediate artifacts. Do not
+edit generated launch files during a demo run unless the Recipe explicitly says
+that is the intended customization point. Regeneration can discard the edit. If
+a command needs to change, find the source script, environment variable, or
+Recipe parameter that controls generation, and record the change as a new
+issue or Recipe update before treating it as a fix.
 
 When writing a Recipe, record:
 

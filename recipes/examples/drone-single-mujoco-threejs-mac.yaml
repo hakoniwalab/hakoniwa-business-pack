@@ -335,6 +335,8 @@ artifact_sets:
     description: Launcher or shell commands used to start the end-to-end demo.
     status: partially_verified
     artifacts:
+      - tools/doctor.bash
+      - tools/doctor-mac.bash
       - tools/launch-fleets-scale-perf.bash
       - config/launcher/fleets-scale-perf-nproc.generated.launch.json
       - drone_api/external_rpc apps or custom single-drone flight script
@@ -379,6 +381,14 @@ demo:
     and landing while its pose updates in the Three.js browser viewer.
   steps:
     - order: 1
+      component: hakoniwa-core-pro
+      action: Run the Business Pack common preflight.
+      command: bash tools/doctor-mac.bash
+      evidence:
+        - repository: hakoniwalab/hakoniwa-business-pack
+          path: tools/doctor-mac.bash
+          revision: local-validation-2026-07-20
+    - order: 2
       component: hakoniwa-drone-core
       action: Download Mac prebuilt Hakoniwa Drone binaries.
       command: bash tools/fetch_libs.sh
@@ -386,7 +396,7 @@ demo:
         - repository: toppers/hakoniwa-drone-core
           path: tools/fetch_libs.sh
           revision: local-research-2026-07-20
-    - order: 2
+    - order: 3
       component: hakoniwa-drone-core
       action: Install MuJoCo for macOS under vendor/mujoco.
       command: bash tools/install-mujoco-mac.bash .
@@ -394,7 +404,7 @@ demo:
         - repository: toppers/hakoniwa-drone-core
           path: tools/install-mujoco-mac.bash
           revision: local-research-2026-07-20
-    - order: 3
+    - order: 4
       component: hakoniwa-drone-core
       action: Patch Mac binary rpath so the drone service can load MuJoCo.
       command: bash tools/link-mujoco-mac.bash ./lib --lib-dir ./vendor/mujoco/lib
@@ -402,7 +412,7 @@ demo:
         - repository: toppers/hakoniwa-drone-core
           path: tools/link-mujoco-mac.bash
           revision: local-research-2026-07-20
-    - order: 4
+    - order: 5
       component: hakoniwa-pdu-python
       action: Confirm Python 3.12 can import required Hakoniwa modules.
       command: python3.12 -c "import hakopy; import hakoniwa_pdu"
@@ -410,7 +420,7 @@ demo:
         - repository: hakoniwalab/hakoniwa-business-pack
           path: docs/hakoniwa-runtime-primer.md
           revision: local-research-2026-07-20
-    - order: 5
+    - order: 6
       component: hakoniwa-drone-core
       action: Launch one-drone runtime, visual-state publisher, WebBridge, and Three.js webserver with Mac binary path overrides.
       command: >
@@ -422,7 +432,7 @@ demo:
         - repository: toppers/hakoniwa-drone-core
           path: tools/launch-fleets-scale-perf.bash
           revision: local-research-2026-07-20
-    - order: 6
+    - order: 7
       component: hakoniwa-threejs-drone
       action: Open the fleets viewer and ask the user to press Connect.
       command: >
@@ -431,7 +441,7 @@ demo:
         - repository: hakoniwalab/hakoniwa-threejs-drone
           path: README.md
           revision: local-research-2026-07-20
-    - order: 7
+    - order: 8
       component: hakoniwa-pdu-python
       action: Run a Python external_rpc command sequence for one drone.
       command: >

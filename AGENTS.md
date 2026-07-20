@@ -98,6 +98,19 @@ matching Recipe exists, first answer with the Recipe shape and validation state.
 Then, if the user asks to proceed, create or update a Recipe before running
 build, fetch, install, launch, or long-running server commands.
 
+Before local execution of any SHM/PDU Recipe, run or ask the user to run:
+
+```bash
+bash tools/doctor.bash
+```
+
+This is the Business Pack common preflight. It verifies shared runtime
+assumptions such as `/usr/local/hakoniwa`, `hako-cmd`, Python 3.12, `hakopy`,
+`hakoniwa_pdu`, and the installed Python launcher. A passing result is
+environment evidence, not proof that the target Recipe behavior is verified.
+For OS-specific Recipes, prefer the matching explicit script, such as
+`tools/doctor-mac.bash`, when the Recipe names one.
+
 ## Ambiguous Requests
 
 When important constraints are missing:
@@ -213,6 +226,12 @@ demo. Treat a passing doctor check as environment evidence, not as proof that
 the demo behavior is verified. If the doctor check fails, report the missing
 requirements and do not continue to destructive setup or install steps without
 explicit user approval.
+
+Use `tools/doctor.bash` in this repository as the common check before
+component-specific diagnostics. Component doctors can then add narrower checks
+such as MuJoCo, Godot, bridge configs, or recipe-specific binaries.
+`tools/doctor.bash` is a dispatcher; OS-specific implementations should live in
+files such as `tools/doctor-mac.bash` and future `tools/doctor-linux.bash`.
 
 Treat these actions as execution side effects, not harmless exploration:
 

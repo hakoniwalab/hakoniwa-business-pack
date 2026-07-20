@@ -79,6 +79,20 @@ supports the environment claim; it does not by itself verify runtime behavior.
 If the diagnostic fails, record the missing requirement as a blocker or
 environment gap.
 
+For Recipes that use Hakoniwa shared memory, PDU, Python controllers, or the
+launcher, include the Business Pack common preflight before component-specific
+setup:
+
+```bash
+bash tools/doctor.bash
+```
+
+This catches common cross-Recipe issues such as using a Python 3.12 interpreter
+that can import `hakopy` but not `hakoniwa_pdu`, or vice versa.
+For platform-specific Recipes, prefer an explicit OS doctor such as
+`tools/doctor-mac.bash` when available. Keep `tools/doctor.bash` as the
+portable dispatcher.
+
 Executable recipes must also describe side effects and cleanup. Starting a
 simulator, bridge, viewer, HTTP server, or other long-running process is part of
 the demo contract, not incidental setup.

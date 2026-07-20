@@ -47,6 +47,18 @@ verifies another version. `hakopy` comes from `hakoniwa-core-pro`; `hakoniwa-pdu
 comes from `pip install hakoniwa-pdu`. Verify both in the same Python 3.12
 environment before running SHM/PDU demos.
 
+Before executing a local Hakoniwa Recipe, run the common preflight:
+
+```bash
+bash tools/doctor.bash
+```
+
+This checks the shared assumptions used by many Recipes: Hakoniwa core install,
+`hako-cmd`, Python 3.12, `hakopy`, `hakoniwa_pdu`, and the Python launcher.
+The common doctor dispatches to an OS-specific script such as
+`tools/doctor-mac.bash`. `tools/docker-mac.bash` is kept as a compatibility
+alias for the Mac preflight name discussed during early trials.
+
 ## 箱庭で、何をしたいですか？
 
 箱庭には、MuJoCo、Godot、PDU、Endpoint、Conductor、Foxglove など、
