@@ -12,22 +12,23 @@ goal:
 
 feasibility:
   status: feasible
-  confidence: medium
+  confidence: high
   rationale:
     - hakoniwa-drone-core provides macOS prebuilt binaries, MuJoCo drone service, DroneVisualStatePublisher, and Python external_rpc APIs.
     - hakoniwa-threejs-drone documents a fleets viewer mode that consumes DroneVisualStateArray through WebSocket.
     - hakoniwa-pdu-bridge-core provides the WebSocket bridge configuration used by the Three.js fleets viewer.
-    - The Mac binary acquisition and MuJoCo dylib link steps are documented, but this exact Recipe has not yet been executed end-to-end.
+    - The Mac binary acquisition, MuJoCo dylib link, launcher flow, Python mission, and Three.js browser visualization were exercised locally.
 
 validation:
-  status: partially_verified
+  status: verified
+  verified_at: 2026-07-20
   summary: >
     The Mac one-drone runtime was launched locally on 2026-07-20 with
     hakoniwa-drone-core release binaries under ./lib, MuJoCo 3.9.0 linked into
     those binaries, Python 3.12 external_rpc control, DroneVisualStatePublisher,
-    WebBridge, and the Three.js HTTP server. Python control and visual-state
-    publication were verified from logs. Browser-side Connect and rendered pose
-    updates still require manual observation.
+    WebBridge, and the Three.js HTTP server. Python control, visual-state
+    publication, HTTP serving, browser Connect, and visible Three.js drone
+    motion were confirmed.
   steps:
     - id: mac_binary_setup
       status: verified
@@ -81,14 +82,15 @@ validation:
         - The visual path requires DroneVisualStatePublisher; WebBridge alone does not create visual state.
         - Local validation confirmed VisualStatePublisher publishes DroneVisualStateArray and HTTP server returns 200 for /index.html.
     - id: browser_render_observation
-      status: not_tested
+      status: verified
       evidence:
         - repository: hakoniwalab/hakoniwa-threejs-drone
           path: README.md
           revision: local-research-2026-07-20
       notes:
-        - Browser-side Connect and visible rendered motion were not yet recorded as evidence.
-        - On macOS, opening the viewer URL automatically is useful, but the user may still need to press the browser Connect button.
+        - User confirmed pressing Connect in the Three.js browser viewer.
+        - User confirmed the drone was visible and moved in the browser during the Python external_rpc mission.
+        - On macOS, opening the viewer URL automatically is useful, but the user still needs to press the browser Connect button.
 
 constraints:
   - macos-first
@@ -246,14 +248,14 @@ connections:
     data:
       - WebSocket DroneVisualStateArray stream
     contract:
-      status: partially_verified
+      status: verified
       requires:
         - WebSocket endpoint on ws://127.0.0.1:8765
         - viewer-config-fleets.json
         - wireVersion=v2
       validation_notes:
         - Local validation confirmed WebBridge startup and HTTP 200 from the Three.js webserver.
-        - Browser Connect and rendered pose updates remain to be manually verified.
+        - User confirmed browser Connect and visible rendered drone motion.
     notes: The browser viewer is an external observer; it does not run physics or own Hakoniwa simulation time.
 
 data_flow:
@@ -313,7 +315,7 @@ artifact_sets:
       - tools/link-mujoco-mac.bash must target the directory where the binaries were installed.
   visualization_artifacts:
     description: Visual-state publisher, WebBridge fleets configuration, and Three.js viewer config.
-    status: partially_verified
+    status: verified
     artifacts:
       - lib/mac-drone_visual_state_publisher
       - config/assets/visual_state_publisher/visual_state_publisher.runtime.json
@@ -321,7 +323,7 @@ artifact_sets:
       - config/viewer-config-fleets.json
     notes:
       - DroneVisualStatePublisher is required; WebBridge alone is insufficient.
-      - Local logs confirmed visual-state publication. Browser rendering remains manual observation evidence.
+      - Local logs confirmed visual-state publication, and user observation confirmed browser rendering.
   pdu_artifacts:
     description: Drone PDU definitions and service definitions for RPC and visual state.
     status: verified
@@ -371,7 +373,6 @@ artifacts:
     path: http://127.0.0.1:8000/index.html?viewerConfigPath=/config/viewer-config-fleets.json&wsUri=ws://127.0.0.1:8765&wireVersion=v2
 
 missing_pieces:
-  - Record browser-side evidence that Three.js Connect succeeds and rendered drone pose updates are visible.
   - Decide whether to keep using run_single_mission.bash or create a smaller named one-drone demo script for this Recipe.
   - Decide whether MuJoCo native viewer should also be enabled, or whether Three.js is the only intended visual output.
 
@@ -459,7 +460,7 @@ demo:
         --speed 1.0 --timeout-sec 20 --land
       notes:
         - Run this only after the launcher is still alive and the user has confirmed Three.js Connect.
-        - The mission response validates Python/API control, but browser rendering still requires user-visible or browser-console evidence.
+        - The mission response validates Python/API control; this Recipe also records user-visible browser motion as validation evidence.
       evidence:
         - repository: toppers/hakoniwa-drone-core
           path: docs/fleets/external-rpc-tutorial.md
