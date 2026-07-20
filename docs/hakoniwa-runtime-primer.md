@@ -257,7 +257,7 @@ Use it when a Recipe needs to answer:
 
 - what PDU types exist;
 - which generated language bindings are needed;
-- whether Python, JavaScript, C++, Godot, or Foxglove can read the data;
+- whether Python, JavaScript, Ruby, Elixir, C++, Godot, or Foxglove can read the data;
 - which compact PDU definition or endpoint configuration should be shared by
   simulator, controller, bridge, and visualizer.
 
