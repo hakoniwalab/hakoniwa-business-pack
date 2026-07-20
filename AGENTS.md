@@ -3,11 +3,13 @@
 This repository is a catalog and recipe hub for composing Hakoniwa components
 into feasible demos and product designs.
 
-When answering user requests, do not treat this repository as a normal source
-code project first. Treat it as structured knowledge:
+Do not treat this repository as a normal source-code project first. Treat it as
+structured system knowledge.
 
 ```text
 User goal
+  -> docs/hakoniwa-base-ecosystem-ja.md
+  -> docs/hakoniwa-component-asset-guide-ja.md
   -> catalog/index.yaml
   -> catalog/components/*.yaml
   -> docs/hakoniwa-runtime-primer.md
@@ -15,60 +17,87 @@ User goal
   -> proposed Recipe or Demo plan
 ```
 
+The documents have different responsibilities:
+
+- `docs/hakoniwa-base-ecosystem-ja.md`
+  - Explains the common Hakoniwa foundations and their relationships.
+  - Use it to understand PDU, PDU Registry, MBody Registry, Endpoint, Bridge,
+    RPC, Core, Conductor, and declarative JSON configuration.
+- `docs/hakoniwa-component-asset-guide-ja.md`
+  - Explains where major simulation, SDK, integration, visualization, and
+    interaction components fit in the ecosystem.
+  - Use it before choosing concrete Catalog entries.
+- `catalog/index.yaml` and `catalog/components/*.yaml`
+  - Describe component facts, capabilities, interfaces, dependencies, and gaps.
+- `docs/hakoniwa-runtime-primer.md`
+  - Explains runtime rules required to make a concrete composition executable.
+  - Keep conceptual ecosystem explanations in the ecosystem guides instead of
+    duplicating them here.
+- `recipes/`
+  - Describes concrete or planned system compositions.
+
 ## First Files To Read
 
 Read these files in order:
 
 1. `README.md`
    - Project concept and intent.
-2. `catalog/index.yaml`
+2. `docs/hakoniwa-base-ecosystem-ja.md`
+   - Common ecosystem architecture and design model.
+3. `docs/hakoniwa-component-asset-guide-ja.md`
+   - Positioning of major Catalog components and assets.
+4. `catalog/index.yaml`
    - Lightweight component search index.
-3. `catalog/schema.yaml`
+5. `catalog/schema.yaml`
    - Controlled vocabulary for categories, roles, maturity, distribution, and
      graph edge direction.
-4. `docs/hakoniwa-runtime-primer.md`
-   - Hakoniwa runtime rules: assets, PDU, shared memory, simulation time,
-     Conductor, launchers, external clients, and cleanup.
-5. Relevant `catalog/components/*.yaml`
+6. `docs/hakoniwa-runtime-primer.md`
+   - Runtime rules: shared memory, PDU runtime contracts, simulation time,
+     Conductor ownership, launchers, external clients, and cleanup.
+7. Relevant `catalog/components/*.yaml`
    - Detailed component facts for shortlisted candidates.
-6. `recipes/README.md`
+8. `recipes/README.md`
    - Definition of a Hakoniwa Recipe.
-7. Relevant `recipes/examples/*.yaml`
+9. Relevant `recipes/examples/*.yaml`
    - Existing system compositions to reuse or adapt.
+
+Do not answer only from the README or from a repository-name search.
 
 ## How To Answer User Goals
 
 For a user asking "Can Hakoniwa do X?" or "How should I build X?":
 
 1. Normalize the user goal and constraints.
-2. Use `catalog/index.yaml` to shortlist components by:
+2. Use the Base Ecosystem Guide to identify which foundation capabilities are
+   relevant: data model, body model, communication, transfer, RPC, or time
+   coordination.
+3. Use the Component / Asset Guide to identify the likely system roles:
+   simulation runtime, environment/world model, SDK, external integration,
+   visualization, or interaction.
+4. Use `catalog/index.yaml` to shortlist components by:
    - `summary`
    - `category`
    - `recipe_roles`
    - `connects_to`
    - `tags`
    - `distribution`
-3. Read `docs/hakoniwa-runtime-primer.md` before proposing runtime topology or
+5. Read the detailed YAML for shortlisted components.
+6. Follow `connects_to` edges only when the interface and direction make sense.
+7. Read `docs/hakoniwa-runtime-primer.md` before proposing runtime topology or
    executable commands.
-4. Read the detailed YAML for shortlisted components.
-5. Follow `connects_to` edges only when the interface and direction make sense.
-6. Search `recipes/examples/*.yaml` for an existing Recipe that matches the
+8. Search `recipes/examples/*.yaml` for an existing Recipe that matches the
    goal, selected components, tags, or demo intent.
    - If one exists, read it before opening source repositories or proposing
      commands.
-   - Listing recipe filenames is not enough. Open and use the matching Recipe
-     before executing a demo.
+   - Listing Recipe filenames is not enough. Open and use the matching Recipe.
    - Prefer adapting an existing Recipe over rediscovering execution steps from
      component README files.
-   - Treat the Recipe as the current system-composition memory, including
-     validation notes, environment assumptions, launcher behavior, and known
-     failure signals.
-7. Decide feasibility:
+9. Decide feasibility:
    - `feasible`: existing components and artifacts are enough for a minimal demo.
    - `partially_feasible`: core path exists, but missing pieces remain.
    - `not_feasible`: current catalog has no credible implementation path.
-   - `unknown`: catalog is insufficient; state what must be verified.
-8. Produce a Recipe-shaped answer:
+   - `unknown`: catalog evidence is insufficient; state what must be verified.
+10. Produce a Recipe-shaped answer:
    - Goal
    - Feasibility
    - Validation
@@ -84,32 +113,51 @@ For a user asking "Can Hakoniwa do X?" or "How should I build X?":
    - Minimal Demo
    - Expected Result
 
-Do not output only a repository list. A useful answer explains how the selected
-components work together as a Hakoniwa system.
+Do not output only a repository list. Explain how the selected components work
+together as a Hakoniwa system.
 
-Do not execute a demo from a component README until you have checked whether a
-matching Recipe exists and read that Recipe. Catalogs identify candidate
-components; Recipes explain proven or planned compositions and should guide demo
-execution.
+## Important Component Distinctions
 
-Do not jump from a capability question directly into adjacent source
-repositories. If `catalog/index.yaml` identifies relevant components but no
-matching Recipe exists, first answer with the Recipe shape and validation state.
-Then, if the user asks to proceed, create or update a Recipe before running
-build, fetch, install, launch, or long-running server commands.
+Do not collapse components that solve similar-looking problems at different
+layers.
 
-Before local execution of any SHM/PDU Recipe, run or ask the user to run:
+Examples:
 
-```bash
-bash tools/doctor.bash
-```
+- `hakoniwa-pdu-endpoint`
+  - Communication endpoint infrastructure.
+  - Treat ROS 2 / Zenoh support here as a transport/integration path at the
+    Endpoint layer.
+- `hakoniwa-pdu-ros`
+  - Lightweight Python bridge that inspects PDU and ROS 2 message types at
+    runtime, converts fields, and transfers data bidirectionally.
+  - Do not describe it as the same mechanism as Endpoint-side ROS 2 / Zenoh
+    connectivity.
+  - Prefer it when the goal is simply to connect existing ROS 2 nodes and PDU
+    without requiring Zenoh as part of the architecture.
+- `hakoniwa-pdu-python`
+  - Do not describe it only as a Python language binding.
+  - It includes multiple concerns such as PDU conversion, WebSocket topics,
+    WebSocket RPC, SHM backend support, and launcher/runtime utilities.
+  - Select the needed capability explicitly.
+- `hakoniwa-mbody-registry`
+  - Treat it as a body-model conversion and asset-generation hub.
+  - It can produce artifacts consumed by MuJoCo and Godot; do not treat one
+    generated representation as universal across runtimes.
+- `hakoniwa-envsim`
+  - Treat it broadly as environment modeling, world generation, visualization,
+    querying, and external-data conversion.
+  - It can support flows such as transforming PLATEAU-derived world data for use
+    in MuJoCo-oriented simulation environments.
+- `hakoniwa-godot`
+  - Do not reduce it to a passive viewer. It can participate in PDU exchange,
+    interaction, control, and optional time synchronization.
+- `hakoniwa-mujoco-robots`
+  - Treat it as Hakoniwa robot simulation assets and integration around MuJoCo,
+    not merely the MuJoCo engine itself.
 
-This is the Business Pack common preflight. It verifies shared runtime
-assumptions such as `/usr/local/hakoniwa`, `hako-cmd`, Python 3.12, `hakopy`,
-`hakoniwa_pdu`, and the installed Python launcher. A passing result is
-environment evidence, not proof that the target Recipe behavior is verified.
-For OS-specific Recipes, prefer the matching explicit script, such as
-`tools/doctor-mac.bash`, when the Recipe names one.
+Athrill-related components may exist in the Catalog, but the current Japanese
+Component / Asset Guide intentionally does not position them yet. Do not infer
+that omission means the Catalog entries do not exist.
 
 ## Ambiguous Requests
 
@@ -126,303 +174,198 @@ Example:
 
 - If the user says "I want to visualize a robot", do not immediately require
   them to choose a component.
-- Explain that Godot is a good fit for 3D scene visualization, while Foxglove is
-  a good fit for sensor streams, time series, and schema-aware inspection.
+- Explain that Godot is a good fit for 3D scene visualization and interaction,
+  while Foxglove is a good fit for sensor streams, time series, and schema-aware
+  inspection.
 
 ## Feasibility vs Validation
 
 Do not confuse design feasibility with runtime verification.
 
-- `feasible`: the catalog and known artifacts support a credible implementation
-  path.
-- `verified`: the recipe or demo has actually been executed successfully.
-- `partially_feasible`: the main architecture exists, but missing pieces or
-  validation gaps remain.
+- `feasible`: catalog and known artifacts support a credible implementation path.
+- `verified`: the Recipe or Demo has actually been executed successfully.
+- `partially_feasible`: the main architecture exists, but gaps remain.
 - `unknown`: the catalog is insufficient to make a defensible claim.
 
-Never claim a recipe is verified unless explicit validation evidence exists,
+Never claim a Recipe is verified unless explicit validation evidence exists,
 such as a checked demo run, test result, CI result, or recorded execution note.
-If a recipe has only been validated structurally against catalog entries and
-source artifacts, say that clearly.
 
 Component capability and composition validation are separate claims.
 
-- A component can be capable of generating or consuming an artifact.
-- Another component can be capable of running a compatible runtime.
-- The connection between them may still require an adapter, world composition
-  step, runtime-specific configuration, generated manifest, device, or execution
-  permission.
+For every important `connections[]` entry, state:
 
-When proposing a Recipe, treat `connections[]` as first-class design objects.
-For each important connection, state:
-
-- what interface or artifact crosses the boundary,
-- what contract must hold for the connection to work,
-- whether that connection is verified, partially verified, blocked, not tested,
-  or only inferred from catalog evidence.
+- what interface or artifact crosses the boundary;
+- what contract must hold;
+- whether the connection is verified, partially verified, blocked, not tested,
+  or inferred from catalog evidence.
 
 ## Evidence And Unknown Runtime Paths
 
 Do not infer executable feasibility from source-code text matches alone. A
-string such as `takeoff`, `land`, `drone`, `server`, or `launcher` is a search
-hit, not evidence that a complete Hakoniwa Recipe exists.
+keyword hit is not evidence that a complete Hakoniwa Recipe exists.
 
-Before creating or presenting a runnable Recipe, confirm these facts from
-catalog entries, existing recipes, or source evidence:
+Before creating or presenting a runnable Recipe, confirm:
 
 - every `components[].id` exists in `catalog/components/*.yaml`;
 - every component role uses `catalog/schema.yaml`;
 - the simulator or runtime entrypoint is identified;
 - launcher assets use real commands, not placeholders;
-- required PDU, service, endpoint, and sync configs are identified;
-- PDU type-set files such as `pdutypes.json` are not confused with assignment
-  files such as `pdudef.json` or `pdu_def.json`;
-- any new PDU channel proposal identifies name, type, size/source schema,
-  producer, consumer, generated bindings or offsets, and runtime assignment;
-- any generated language-binding claim separates type generation, fixed-offset
-  binary conversion, CDR conversion, size registry generation, and interop tests;
-- missing commercial/private components are called out explicitly;
+- required PDU, service, Endpoint, Bridge, RPC, and sync configs are identified;
+- `pdutypes.json` is not confused with `pdudef.json` / `pdu_def.json`;
+- new PDU channels identify name, type, source schema or size, producer,
+  consumer, generated bindings or offsets, and runtime assignment;
+- generated binding claims separate type generation, fixed-offset conversion,
+  CDR conversion, size registries, and interop tests;
+- commercial/private dependencies are called out explicitly;
 - validation status matches actual execution evidence.
 
-If any required runtime entrypoint or component identity is unknown:
+If a required runtime path is unknown:
 
-- set `feasibility.status: unknown` or `partially_feasible`, not `feasible`;
-- set `validation.status: blocked` or `not_tested`, not `verified`;
+- use `unknown` or `partially_feasible`, not `feasible`;
+- use `blocked` or `not_tested`, not `verified`;
 - record missing facts in `missing_pieces`;
-- ask for or inspect the missing repository/component;
-- do not write a runnable-looking launch file with placeholder commands.
+- inspect or request the missing evidence;
+- do not write runnable-looking placeholder launch commands.
 
-Do not invent component IDs inside a Recipe. If a needed component is missing
-from the catalog, describe it as a `missing_pieces` or `known_gap` item such as
-"catalog candidate: drone simulator runtime", then stop or mark the Recipe as
-blocked until the component is cataloged.
+Do not invent component IDs. If a needed component is missing from the Catalog,
+record it as a gap and stop or mark the Recipe blocked until cataloged.
 
 ## Executable Demo And Runbook Requirements
 
-Before writing executable demo steps or a runbook, collect the target
-environment. This is required because Hakoniwa commands, build steps, dynamic
-library paths, and Godot/MuJoCo setup differ by platform.
-
-Required information:
+Before writing executable demo steps, collect the target environment when it
+changes commands or feasibility:
 
 - OS and version
 - CPU architecture
 - native/container/VM/WSL execution mode
 - GUI or headless execution
-- shared-memory access permissions when Hakoniwa PDU SHM is involved
-- Godot installation and binary path when Godot is involved
-- MuJoCo installation when MuJoCo is involved
+- SHM access permissions
+- Godot and MuJoCo installation when relevant
 - Python/Node.js/.NET/Docker versions when relevant
-- Python 3.12 for Hakoniwa Python workflows unless the selected Recipe
-  explicitly states another supported version
-- Python environment policy, such as system Python, venv, conda, and whether
-  `hakopy` is available when SHM/service features are required
+- Python 3.12 for Hakoniwa Python workflows unless a Recipe verifies another version
+- Python environment policy and `hakopy` availability
 - Hakoniwa install prefix, usually `/usr/local/hakoniwa`
-- whether required components are already built or must be built
-- whether required physical devices such as joysticks are available
-- availability of commercial/private components and required license variants
+- whether components are already built
+- required physical devices
+- availability of commercial/private components and license variants
 
-If missing information changes commands or feasibility, ask the user before
-producing the runbook. If it does not change the architecture, state assumptions
-and continue.
+Before local execution of any SHM/PDU Recipe, run or ask the user to run:
 
-If a selected runtime repository provides a diagnostic command such as
-`doctor.bash`, run or instruct the user to run it before attempting an executable
-demo. Treat a passing doctor check as environment evidence, not as proof that
-the demo behavior is verified. If the doctor check fails, report the missing
-requirements and do not continue to destructive setup or install steps without
-explicit user approval.
+```bash
+bash tools/doctor.bash
+```
 
-Use `tools/doctor.bash` in this repository as the common check before
-component-specific diagnostics. Component doctors can then add narrower checks
-such as MuJoCo, Godot, bridge configs, or recipe-specific binaries.
-`tools/doctor.bash` is a dispatcher; OS-specific implementations should live in
-files such as `tools/doctor-mac.bash` and future `tools/doctor-linux.bash`.
+A passing doctor check is environment evidence, not proof that the target
+Recipe behavior is verified.
 
-Treat these actions as execution side effects, not harmless exploration:
+Treat these actions as execution side effects:
 
 - fetching release assets or external dependencies;
 - building native binaries;
-- starting simulator, bridge, viewer, web server, or background service
-  processes;
+- starting simulator, bridge, viewer, web server, or background services;
 - opening GUI windows or browser viewers;
-- modifying adjacent source repositories to make a demo work.
+- modifying adjacent source repositories.
 
-Before taking those actions, make sure the user is asking for local execution,
-not only asking "Can Hakoniwa do this?" or "What is possible?" For local
-execution, state which Recipe or draft Recipe is being followed, run the
-available preflight checks, and keep track of cleanup commands.
+Make sure the user is asking for local execution before taking those actions.
+Track cleanup commands for long-running processes.
 
-When starting long-running processes, record how to stop them. Prefer launcher
-or conductor-managed lifecycles when available. If a tool session, quota limit,
-or interruption occurs, do not leave services running silently; stop them or
-report the exact remaining processes.
+For launcher-based demos:
 
-For launcher-based Hakoniwa demos, do not treat foreground blocking as failure.
-The launcher may intentionally stay alive after `hako-cmd start` to supervise
-assets. Once startup reaches the expected ready point, keep the launcher session
-alive and continue with later controller, viewer, or browser steps from another
-session.
+- foreground blocking may be normal;
+- keep the launcher alive while later controllers or viewers run elsewhere;
+- do not use empty stdout/stderr as the only failure signal;
+- use active readiness checks such as process state, HTTP/WebSocket response,
+  PDU changes, or service responses;
+- do not edit generated launch files unless the Recipe explicitly names them as
+  user-editable.
 
-Do not use empty stdout/stderr files as the only evidence that a launcher asset
-failed. Some assets emit logs only after a request or data update. Check active
-readiness signals such as `hako-cmd start exited with 0`, process state, HTTP
-response, WebSocket/browser connection, PDU changes, or service responses.
-
-Do not edit generated launch files during demo execution unless the Recipe
-explicitly names them as user-editable. If a generated file looks wrong, inspect
-the generator, environment variables, or source Recipe, then record the finding
-as an issue or Recipe update.
-
-When working on PDU registry or generated bindings, do not collapse generated
-artifacts into one capability claim. A target language can have generated type
-definitions without fixed-offset converters, fixed-offset converters without CDR
-support, and regenerated CDR size files without CDR converter support for that
-language. To claim a generated binding is verified, require syntax/compile
-checks and interop evidence against an existing oracle such as C++ or Python.
-Include nested variable arrays and empty variable arrays in converter tests.
-
-Avoid broad cleanup such as killing every `python3.12` process. Stop the
-launcher session, use `hako-cmd stop`, and only terminate known demo process
-names or recorded PIDs.
+Avoid broad cleanup such as killing every Python process. Stop known launcher
+sessions and recorded PIDs only.
 
 ## Demo Observability Requirements
 
-A runnable demo must make the intended behavior observable. Do not stop at
-"processes start" unless the recipe goal is only lifecycle validation.
+A runnable Demo must make the intended behavior observable.
 
-For each executable demo, state:
+For each executable Demo, state:
 
-- what the user should see or measure,
-- which PDU, log line, plot, viewer, or generated artifact proves progress,
-- what fixture or environment condition makes sensors produce meaningful data,
-- which controller or script drives the system without relying on manual input,
+- what the user should see or measure;
+- which PDU, log line, plot, viewer, or generated artifact proves progress;
+- what environment condition makes sensors produce meaningful data;
+- which controller or script drives the system;
 - which failure signal means the composition did not work.
 
-For sensor demos, verify that the simulated world actually intersects the sensor
-model. For example, a LiDAR demo needs obstacles at the scan height and within
-range; a camera demo needs visible geometry and lighting; a contact demo needs a
-collision object along the motion path.
-
-When a demo uses a launcher, include the launcher as a runtime artifact and
-state which assets it starts before simulation start and after simulation start.
-
-Launcher termination is not enough to claim success. For example,
-`asset exited: route_demo -> abort all` can be expected launcher behavior after a
-scripted route completes, but it only proves the controller process exited. To
-claim the demo worked, inspect observation evidence such as:
-
-- simulator logs showing the intended model or manifest was loaded,
-- simulation steps advancing after `hako-cmd start`,
-- robot pose, joint, or sensor values changing,
-- route/controller logs showing the intended phases completed,
-- viewer, plot, PDU, or generated-artifact evidence matching
-  `demo.observability.success_signals`.
-
-Report both the lifecycle result and the behavior evidence. If only the
-launcher lifecycle was checked, say the demo launch was checked but runtime
-behavior was not verified.
+Launcher termination alone is not proof of behavior. Report lifecycle results
+and behavioral evidence separately.
 
 ## Multi-Process Mirror Demos
 
 For multi-robot Hakoniwa demos, check `recipes/README.md` for the
-Multi-Process Mirror Pattern before proposing an implementation.
+Multi-Process Mirror Pattern.
 
-Do not collapse this pattern into a single simulator plus an external viewer.
-The intended pattern can require multiple Hakoniwa simulator processes, where
-each process has one real robot in its local MJCF world and mirrored bodies for
-remote robots.
-
-When describing or implementing such a demo, make these roles explicit:
+Make explicit:
 
 - which simulator process owns Conductor startup;
-- which simulator process owns the viewer;
+- which process owns the viewer;
 - which robot is real in each process;
-- which robots are mirrored in each process;
+- which robots are mirrored;
 - which pose PDUs are published and subscribed;
-- which controller process targets each real robot.
+- which controller targets each real robot.
 
 Only one simulator process should start Conductor. Other simulator processes
-must run with Conductor startup disabled.
+must use the documented non-owner mode.
 
 ## Recipe Principles
 
-A Recipe is not source code and not a generic implementation spec.
+A Hakoniwa Recipe is a system-composition document that explains:
 
-A Hakoniwa Recipe is a system composition document that explains:
+- which assets run;
+- which runtime owns physics or visualization;
+- what data is exchanged as PDU;
+- which Endpoint or Bridge connects components;
+- which time model is used;
+- which Registry generates or supplies artifacts;
+- what minimal Demo validates the composition.
 
-- which assets run,
-- which runtime owns physics or visualization,
-- what data is exchanged as PDU,
-- which endpoint or bridge connects components,
-- which time model is used,
-- which registry generates or supplies artifacts,
-- what minimal demo can validate the composition.
+Separate artifact sets by consumer intent:
 
-Separate artifact sets by consumer intent. Do not treat a URDF-derived robot as
-one universal runtime artifact:
+- `physics_artifacts`: MuJoCo or another physics runtime;
+- `visualization_artifacts`: Godot, Foxglove, or another viewer;
+- `pdu_artifacts`: PDU names, types, Endpoint configs, and sync profiles;
+- `runtime_artifacts`: generated worlds, manifests, launchers, and commands.
 
-- `physics_artifacts` are consumed by MuJoCo or another physics runtime.
-- `visualization_artifacts` are consumed by Godot, Foxglove, or another viewer.
-- `pdu_artifacts` define PDU names, types, endpoint configs, and sync profiles.
-- `runtime_artifacts` include generated worlds, manifests, and commands needed
-  to run the demo.
-
-State validation separately for each set. For example, GLB generation can be
-verified while MuJoCo world composition is only partially verified, or MuJoCo
-runtime motion can be verified while Godot visualization remains untested.
+State validation separately for each artifact set.
 
 If the user asks for an implementation, create or update a Recipe first unless
-the requested Recipe already exists.
+an appropriate Recipe already exists.
 
 ## Licensing, Distribution, And Private Repositories
 
-Catalog entries use:
-
-```yaml
-repository:
-  visibility: public | private | unknown
-distribution:
-  channel: oss | non-commercial | commercial | dual-license | unknown
-```
-
-Repository visibility, technical component identity, and distribution/license
-rights are separate facts. A public repository can carry non-commercial terms,
-and the same technical component can be offered under a separate commercial
-license.
-
-When `distribution.channel` is `dual-license`:
-
-- Treat the catalog entry as one technical component unless the source evidence
-  shows distinct implementations.
-- Read the component's `license` metadata to determine the applicable license
-  variant for the user's intended use.
-- Do not model a commercial license name as a separate component dependency when
-  it is only another licensing path for the same codebase.
-- Treat optional commercially licensed capabilities as conditional; do not
-  assume they are available to every commercial user.
+Catalog entries use repository visibility and distribution/license metadata as
+separate facts.
 
 When proposing a user-facing Recipe:
 
-- Mention when a required component is `commercial`, `non-commercial`, or
-  `dual-license` when that affects the user's intended use.
-- Prefer OSS components when the user asks for an OSS-only setup.
-- Do not treat a public repository as OSS unless its license supports that claim.
-- Do not claim a private repository or commercial source distribution is publicly
-  available.
-- Do not expose local filesystem paths. Use `repository`, `path`, and `revision`
-  triples from `source_refs` or `source_artifacts`.
+- mention `commercial`, `non-commercial`, or `dual-license` dependencies when
+  relevant;
+- prefer OSS components when the user requests OSS-only;
+- do not treat a public repository as OSS unless its license supports that;
+- do not claim private/commercial source distribution is publicly available;
+- do not expose local filesystem paths; use repository/path/revision evidence.
+
+For `dual-license` entries, treat one technical component as one component unless
+source evidence shows distinct implementations. Select the applicable license
+variant separately.
 
 ## Validation Commands
 
-Run these after changing catalog entries:
+Run after changing catalog entries:
 
 ```bash
 ruby catalog/tools/validate_catalog.rb
 ruby catalog/tools/generate_index.rb
 ```
 
-Run this after changing recipes:
+Run after changing recipes:
 
 ```bash
 ruby recipes/tools/validate_recipes.rb
@@ -434,7 +377,7 @@ The index is generated from detailed component YAML files. Do not hand-edit
 ## Authoring Rules
 
 - Keep facts grounded in source repositories.
-- Preserve `verification.source_revision` for catalog entries.
+- Preserve `verification.source_revision` for Catalog entries.
 - Put uncertainty in `known_gaps` or `missing_pieces`.
 - Use controlled vocabulary from `catalog/schema.yaml`.
 - Keep `connects_to.direction` precise:
