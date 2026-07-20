@@ -132,6 +132,75 @@ PDU契約はtopic名だけではありません。Recipeでは次の情報を明
 
 PDU型、名前、設定ファイルのパスが不明な場合、その接続は完全には定義されていません。
 
+## PDU定義ファイル
+
+箱庭のPDU設定には、通常2つの異なる層があります。これらを1つの概念として扱わないでください。
+
+```text
+PDU schemas and generated bindings
+  -> concrete PDU type layouts, sizes, offsets, converters
+
+pdutypes.json
+  -> the PDU channels available in one PDU type set
+
+pdudef.json or pdu_def.json
+  -> which PDU type set is assigned to which robot or asset name
+
+runtime participants
+  -> simulator, controller, bridge, visualizer, or external client using the
+     same PDU definition/config
+```
+
+`pdutypes.json` は、1つのPDU type setの中身を定義します。通常、次のようなエントリを列挙します。
+
+- `channel_id`: そのtype set内での数値チャネルID。
+- `pdu_size`: バイナリpayloadのサイズ。
+- `name`: `laser_scan` や `hako_cmd_game` などの意味的なPDU名。
+- `type`: `sensor_msgs/LaserScan` などのmessage type。
+
+形式例:
+
+```json
+[
+  {
+    "channel_id": 3,
+    "pdu_size": 8192,
+    "name": "laser_scan",
+    "type": "sensor_msgs/LaserScan"
+  }
+]
+```
+
+`pdudef.json` または `pdu_def.json` は、それらのPDU type setをランタイム上の名前に割り当てます。compact formatでは、一般に `paths[].id` を `pdutypes.json` ファイルに対応づけ、その後、各 `robots[].name` をそれらのIDのいずれかに対応づけます。
+
+```json
+{
+  "paths": [
+    { "id": "tb3-endpoint", "path": "pdutypes.json" }
+  ],
+  "robots": [
+    { "name": "TB3", "pdutypes_id": "tb3-endpoint" }
+  ]
+}
+```
+
+要するに、次のような役割分担です。
+
+- `pdutypes`: 1つのsetに、どのチャネルとバイナリレイアウトが存在するか。
+- `pdudef`: そのsetを、robot名またはasset名によってシステム上のどこに配置するか。
+- generated bindings: PDU型に対応する言語固有のstruct／classとconverter。
+- offset files: converterやruntime toolが使用するバイナリレイアウトのmetadata。
+- endpoint/bridge/viewer configs: 互換性のあるPDU名、型、サイズ、割り当てを参照しなければならないランタイム配線設定。
+
+既存のデモでは、RecipeがPDU空間を明示的に変更しない限り、提供されている `pdutypes` と `pdudef` ファイルを再利用してください。新しいシステムでは、両方の層を設計する必要があります。
+
+1. producerとconsumerに必要なPDUチャネルと型を定義する。
+2. 対応するbinding、size、offsetを生成または選択する。
+3. 生成したPDU type setを、ランタイムで使用するrobot名またはasset名に割り当てる。
+4. すべてのsimulator、controller、bridge、visualizer、external clientで、同じ互換性のある定義ファイルを使用する。
+
+AIがweather、wind、sensor、controllerなどの新しいアセットを提案する場合は、新しいPDUチャネルと、そのチャネルをランタイムPDU定義上のどこに配置するかの両方を明確にしなければなりません。そうでなければ、そのRecipeは概念的な案にとどまり、完全な箱庭システム構成にはなりません。
+
 ## PDU Registry
 
 `hakoniwa-pdu-registry` は、箱庭コンポーネント向けPDU schemaと生成済みbindingの情報源です。多くのRecipeにおけるデータモデルの基準となります。
