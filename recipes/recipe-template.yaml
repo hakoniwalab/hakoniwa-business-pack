@@ -26,6 +26,54 @@ validation:
       notes:
         - Concrete validation note or blocker.
 
+# Optional. Add this section when execution involves meaningful human judgement,
+# physical action, external permissions/credentials, license entitlement, cost,
+# deployment, or a simulation-to-real-world boundary.
+#
+# Keep this separate from feasibility and validation:
+# feasible != agent_can_execute
+# verified != safe_to_execute_without_human
+agency_boundary:
+  agent_actions:
+    - id: generate_configs
+      description: Generate PDU, Endpoint, Bridge, launcher, or other simulation configuration.
+      autonomous: true
+      preconditions:
+        - user_requested_execution
+
+    - id: run_simulation
+      description: Launch and validate the simulation-only composition.
+      autonomous: true
+      preconditions:
+        - user_requested_execution
+        - target_environment_confirmed
+
+  human_decisions:
+    - id: approve_model_fidelity
+      description: Decide whether the selected physics, sensor, and environment models are sufficient.
+      status: required | satisfied | not_required
+      required_before:
+        - customer_acceptance
+
+  human_actions:
+    - id: connect_physical_device
+      description: Physically connect the target device when the Recipe crosses into hardware execution.
+      status: required | confirmed | not_required
+      confirmation_required: true
+      required_before:
+        - hardware_execution
+
+  required_permissions:
+    - id: external_access_or_license
+      description: Confirm required private-repository access, credentials, license entitlement, or approval.
+      status: required | satisfied | not_required
+      required_before:
+        - protected_or_commercial_execution
+
+  notes:
+    - Do not silently cross from simulation to real-world actuation.
+    - Dependent steps must stop until required human or permission gates are satisfied.
+
 constraints:
   - no-ros-runtime
   - single-pc
@@ -208,9 +256,13 @@ demo:
   objective: What the minimal demo should prove.
   steps:
     - order: 1
+      id: demo-step-id
       component: component-id
       action: Concrete action.
       command: optional command
+      agency: agent_action | human_decision | human_action | required_permission
+      requires_gates:
+        - optional-agency-boundary-id
       evidence:
         - repository: hakoniwalab/component
           path: README.md
