@@ -213,6 +213,22 @@ evidence such as:
 If only process startup or launcher shutdown was checked, mark that step as
 partial evidence rather than full runtime verification.
 
+For launcher-based demos, distinguish "launcher is still running" from
+"launcher is stuck". A Hakoniwa launcher may stay in the foreground after
+`hako-cmd start` because it is supervising long-running assets. Recipes should
+state the ready signal that allows the next step to proceed, such as
+`hako-cmd start exited with 0`, an HTTP readiness check, a WebSocket connection,
+or a PDU/service response.
+
+If a demo requires a human action after launch, such as pressing Connect in a
+browser viewer, model that action as an explicit gate before running the
+controller or mission script. Do not treat the controller run as visual
+validation unless the viewer was connected and the visual change was observed.
+
+Do not ask users or agents to edit generated launch files as part of ordinary
+execution. Generated launch files are evidence and diagnostics; stable changes
+belong in the Recipe, generator input, environment variables, or source script.
+
 ## Multi-Process Mirror Pattern
 
 For multi-robot Hakoniwa demos, do not assume that one viewer process must own

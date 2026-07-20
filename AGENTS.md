@@ -252,6 +252,26 @@ or conductor-managed lifecycles when available. If a tool session, quota limit,
 or interruption occurs, do not leave services running silently; stop them or
 report the exact remaining processes.
 
+For launcher-based Hakoniwa demos, do not treat foreground blocking as failure.
+The launcher may intentionally stay alive after `hako-cmd start` to supervise
+assets. Once startup reaches the expected ready point, keep the launcher session
+alive and continue with later controller, viewer, or browser steps from another
+session.
+
+Do not use empty stdout/stderr files as the only evidence that a launcher asset
+failed. Some assets emit logs only after a request or data update. Check active
+readiness signals such as `hako-cmd start exited with 0`, process state, HTTP
+response, WebSocket/browser connection, PDU changes, or service responses.
+
+Do not edit generated launch files during demo execution unless the Recipe
+explicitly names them as user-editable. If a generated file looks wrong, inspect
+the generator, environment variables, or source Recipe, then record the finding
+as an issue or Recipe update.
+
+Avoid broad cleanup such as killing every `python3.12` process. Stop the
+launcher session, use `hako-cmd stop`, and only terminate known demo process
+names or recorded PIDs.
+
 ## Demo Observability Requirements
 
 A runnable demo must make the intended behavior observable. Do not stop at
