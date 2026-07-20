@@ -175,6 +175,10 @@ catalog entries, existing recipes, or source evidence:
 - the simulator or runtime entrypoint is identified;
 - launcher assets use real commands, not placeholders;
 - required PDU, service, endpoint, and sync configs are identified;
+- PDU type-set files such as `pdutypes.json` are not confused with assignment
+  files such as `pdudef.json` or `pdu_def.json`;
+- any new PDU channel proposal identifies name, type, size/source schema,
+  producer, consumer, generated bindings or offsets, and runtime assignment;
 - missing commercial/private components are called out explicitly;
 - validation status matches actual execution evidence.
 

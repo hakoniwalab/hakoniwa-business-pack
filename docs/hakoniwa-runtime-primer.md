@@ -167,6 +167,87 @@ A PDU contract is more than a topic name. A Recipe should identify:
 If the PDU type, name, or config path is unknown, the connection is not fully
 specified.
 
+## PDU Definition Files
+
+Hakoniwa PDU configuration usually has two different layers. Do not collapse
+them into one concept.
+
+```text
+PDU schemas and generated bindings
+  -> concrete PDU type layouts, sizes, offsets, converters
+
+pdutypes.json
+  -> the PDU channels available in one PDU type set
+
+pdudef.json or pdu_def.json
+  -> which PDU type set is assigned to which robot or asset name
+
+runtime participants
+  -> simulator, controller, bridge, visualizer, or external client using the
+     same PDU definition/config
+```
+
+`pdutypes.json` defines the contents of a PDU type set. It usually lists
+entries such as:
+
+- `channel_id`: numeric channel inside that type set;
+- `pdu_size`: binary payload size;
+- `name`: semantic PDU name, such as `laser_scan` or `hako_cmd_game`;
+- `type`: message type, such as `sensor_msgs/LaserScan`.
+
+Example shape:
+
+```json
+[
+  {
+    "channel_id": 3,
+    "pdu_size": 8192,
+    "name": "laser_scan",
+    "type": "sensor_msgs/LaserScan"
+  }
+]
+```
+
+`pdudef.json` or `pdu_def.json` assigns those PDU type sets to runtime names.
+In the compact format, it commonly maps `paths[].id` to a `pdutypes.json` file,
+then maps each `robots[].name` to one of those IDs:
+
+```json
+{
+  "paths": [
+    { "id": "tb3-endpoint", "path": "pdutypes.json" }
+  ],
+  "robots": [
+    { "name": "TB3", "pdutypes_id": "tb3-endpoint" }
+  ]
+}
+```
+
+In short:
+
+- `pdutypes`: what channels and binary layouts exist in a set;
+- `pdudef`: where that set is placed in the system, by robot or asset name;
+- generated bindings: language-specific structs/classes and converters for the
+  PDU types;
+- offset files: binary layout metadata used by converters and runtime tools;
+- endpoint/bridge/viewer configs: runtime wiring that must refer to compatible
+  PDU names, types, sizes, and assignments.
+
+For existing demos, reuse the provided `pdutypes` and `pdudef` files unless the
+Recipe explicitly changes the PDU space. For new systems, design both layers:
+
+1. define the PDU channels and types needed by the producers and consumers;
+2. generate or select matching bindings, sizes, and offsets;
+3. assign the resulting PDU type set to the robot or asset names used at
+   runtime;
+4. make every simulator, controller, bridge, visualizer, and external client use
+   the same compatible definition files.
+
+If an AI proposes a new asset, such as a weather, wind, sensor, or controller
+asset, it must identify both the new PDU channels and where those channels live
+in the runtime PDU definition. Otherwise the Recipe is only conceptual, not a
+complete Hakoniwa composition.
+
 ## PDU Registry
 
 `hakoniwa-pdu-registry` is the source of PDU schemas and generated bindings for
