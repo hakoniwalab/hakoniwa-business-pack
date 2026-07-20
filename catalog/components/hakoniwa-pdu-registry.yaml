@@ -10,8 +10,8 @@ distribution:
   notes:
     - Public OSS Hakoniwa component.
 verification:
-  verified_at: 2026-07-19
-  source_revision: 7bc8839ba14b5dcba471257d660ea53beee00ce1
+  verified_at: 2026-07-20
+  source_revision: cdc812ce31199acd4246a9a7664ed8172f204a51
   source_ref: main
 summary: Authoritative registry and reproducible generator for Hakoniwa PDU binary layouts derived from ROS 2 message and service definitions.
 category:
@@ -34,31 +34,31 @@ capabilities:
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-registry
         path: README.md
-        revision: 7bc8839ba14b5dcba471257d660ea53beee00ce1
+        revision: cdc812ce31199acd4246a9a7664ed8172f204a51
   - name: Multi-language generated artifacts
-    description: Generates C/C++, Python, JavaScript, C#, Godot GDScript, Godot C++ types, converters, offsets, sizes, and CDR converters.
+    description: Generates C/C++, Python, JavaScript, Ruby, Elixir, C#, and Godot artifacts, including language-specific types and fixed-offset converters; CDR converters remain C++, Python, and JavaScript.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-registry
         path: README.md
-        revision: 7bc8839ba14b5dcba471257d660ea53beee00ce1
+        revision: cdc812ce31199acd4246a9a7664ed8172f204a51
   - name: Reproducible Docker generation
     description: Provides Docker workflow pinned to ROS 2 Jazzy for deterministic generation and type hash metadata.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-registry
         path: README.md
-        revision: 7bc8839ba14b5dcba471257d660ea53beee00ce1
+        revision: cdc812ce31199acd4246a9a7664ed8172f204a51
   - name: ROS 2 type hash metadata
     description: Generates type hash JSON files with hash algorithm, hash value, dependencies, and source message path.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-registry
         path: README.md
-        revision: 7bc8839ba14b5dcba471257d660ea53beee00ce1
+        revision: cdc812ce31199acd4246a9a7664ed8172f204a51
   - name: CDR compatibility artifacts
     description: Generates C++, Python, and JavaScript CDR payload converters and minimum payload size registries.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-registry
         path: README.md
-        revision: 7bc8839ba14b5dcba471257d660ea53beee00ce1
+        revision: cdc812ce31199acd4246a9a7664ed8172f204a51
   - name: Extensible language binding generation
     description: >
       New language support can be added in stages: type definitions,
@@ -193,19 +193,19 @@ data_contracts:
     source:
       - repository: hakoniwalab/hakoniwa-pdu-registry
         path: docs/specs/pdu-binary-format.md
-        revision: 7bc8839ba14b5dcba471257d660ea53beee00ce1
+        revision: cdc812ce31199acd4246a9a7664ed8172f204a51
   - name: Committed generated artifact contract
     description: Fully resolved, compiled, offset-calculated outputs are committed as long-lived binary compatibility records.
     source:
       - repository: hakoniwalab/hakoniwa-pdu-registry
         path: README.md
-        revision: 7bc8839ba14b5dcba471257d660ea53beee00ce1
+        revision: cdc812ce31199acd4246a9a7664ed8172f204a51
   - name: ROS 2 type hash metadata
     description: Type hash files include type name, algorithm, hash string/value, dependency hashes, and source path.
     source:
       - repository: hakoniwalab/hakoniwa-pdu-registry
         path: README.md
-        revision: 7bc8839ba14b5dcba471257d660ea53beee00ce1
+        revision: cdc812ce31199acd4246a9a7664ed8172f204a51
   - name: Generated binding validation strategy
     description: >
       For a new language binding, verify type generation separately from
@@ -231,7 +231,7 @@ recipe_roles:
 
 typical_usecases:
   - Add or update a PDU type for multiple Hakoniwa runtimes.
-  - Ensure Python, JavaScript, C++, C#, Godot, bridge, and endpoint components share the same binary layout.
+  - Ensure Python, JavaScript, Ruby, Elixir, C++, C#, Godot, bridge, and endpoint components share the same binary layout.
   - Generate CDR converters for Foxglove or ROS-compatible payload paths.
   - Audit binary compatibility changes through committed generated diffs.
   - Add a new language binding by first generating types, then fixed-offset converters, then cross-language interop tests.
@@ -246,13 +246,13 @@ anti_usecases:
 
 demo_candidates:
   - name: Generate PDU artifacts from ros_msgs.txt
-    description: Run the Docker workflow and generator to update pdu/types, pdu/python, pdu/javascript, offsets, sizes, and hashes.
+    description: Run the Docker workflow and generator to update pdu/types, pdu/python, pdu/javascript, pdu/ruby, pdu/elixir, offsets, sizes, and hashes.
     required_components:
       - hakoniwa-pdu-registry
     source_examples:
       - repository: hakoniwalab/hakoniwa-pdu-registry
         path: README.md
-        revision: 7bc8839ba14b5dcba471257d660ea53beee00ce1
+        revision: cdc812ce31199acd4246a9a7664ed8172f204a51
   - name: Validate PDU binary layout use in endpoint
     description: Use generated PDU definitions and sizes as endpoint pdu_def inputs in a transport demo.
     required_components:
@@ -261,7 +261,7 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-pdu-registry
         path: pdu
-        revision: 7bc8839ba14b5dcba471257d660ea53beee00ce1
+        revision: cdc812ce31199acd4246a9a7664ed8172f204a51
   - name: Validate a new fixed-offset language binding
     description: >
       Generate target-language type definitions and fixed-offset converters,
@@ -305,23 +305,23 @@ known_gaps:
 source_refs:
   - repository: hakoniwalab/hakoniwa-pdu-registry
     path: README.md
-    revision: 7bc8839ba14b5dcba471257d660ea53beee00ce1
+    revision: cdc812ce31199acd4246a9a7664ed8172f204a51
     description: Main overview, philosophy, artifact list, quick start, and generation workflow.
   - repository: hakoniwalab/hakoniwa-pdu-registry
     path: docs/README.md
-    revision: 7bc8839ba14b5dcba471257d660ea53beee00ce1
+    revision: cdc812ce31199acd4246a9a7664ed8172f204a51
     description: Documentation index.
   - repository: hakoniwalab/hakoniwa-pdu-registry
     path: docs/specs/pdu-binary-format.md
-    revision: 7bc8839ba14b5dcba471257d660ea53beee00ce1
+    revision: cdc812ce31199acd4246a9a7664ed8172f204a51
     description: PDU binary format specification.
   - repository: hakoniwalab/hakoniwa-pdu-registry
     path: generators
-    revision: 7bc8839ba14b5dcba471257d660ea53beee00ce1
+    revision: cdc812ce31199acd4246a9a7664ed8172f204a51
     description: Generator entrypoints.
   - repository: hakoniwalab/hakoniwa-pdu-registry
     path: pdu
-    revision: 7bc8839ba14b5dcba471257d660ea53beee00ce1
+    revision: cdc812ce31199acd4246a9a7664ed8172f204a51
     description: Generated committed artifacts.
 
 tags:
