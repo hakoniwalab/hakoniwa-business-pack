@@ -1,23 +1,31 @@
 # Hakoniwa Business Pack Agent Guide
 
-This repository is a catalog and recipe hub for composing Hakoniwa components
-into feasible demos and product designs.
+This repository is a structured knowledge base for translating user requirements
+into defensible Hakoniwa Recipes.
+
+The primary output is a Recipe that explains a credible system composition,
+its feasibility, assumptions, evidence, and gaps. A Demo is optional downstream
+validation of a Recipe, not the primary goal.
 
 Do not treat this repository as a normal source-code project first. Treat it as
 structured system knowledge.
 
 ```text
-User goal
+User requirement
+  -> Use Case interpretation
+  -> required Capabilities
   -> docs/hakoniwa-base-ecosystem-ja.md
   -> docs/hakoniwa-component-asset-guide-ja.md
   -> catalog/index.yaml
   -> catalog/components/*.yaml
   -> docs/hakoniwa-runtime-primer.md
   -> recipes/examples/*.yaml
+  -> feasibility and gap assessment
+  -> proposed Recipe
+  -> optional Demo / Validation plan
   -> docs/hakoniwa-agent-human-boundary.md
-  -> proposed Recipe or Demo plan
   -> Agency Boundary check
-  -> Execution
+  -> Execution when requested
 
 Source / Runtime / Expert correction
   -> Observation
@@ -53,6 +61,9 @@ The documents have different responsibilities:
     Catalog, ecosystem guides, Runtime Primer, Component / Asset Guide, or Recipes.
 - `recipes/`
   - Describes concrete or planned system compositions.
+- `MAINTAINER.md`
+  - Defines maintainer-side reflection for use-case fragments, recurring demand,
+    Catalog gaps, and promotion into reusable knowledge.
 
 ## First Files To Read
 
@@ -73,6 +84,8 @@ Read these files in order:
 11. `docs/hakoniwa-knowledge-refinement-loop.md` when source inspection, runtime
     validation, or expert conversation reveals reusable knowledge that may need
     to update the Business Pack knowledge base.
+12. `MAINTAINER.md` only when curating recurring use-case fragments or performing
+    repository-level reflection and promotion.
 
 Do not answer only from the README or from a repository-name search.
 
@@ -81,24 +94,33 @@ Do not answer only from the README or from a repository-name search.
 For a user asking "Can Hakoniwa do X?" or "How should I build X?":
 
 1. Normalize the user goal and constraints.
-2. Use the Base Ecosystem Guide to identify relevant foundation capabilities.
-3. Use the Component / Asset Guide to identify likely system roles.
-4. Use `catalog/index.yaml` to shortlist components.
-5. Read the detailed YAML for shortlisted components.
-6. Follow `connects_to` edges only when interface and direction make sense.
-7. Read the Runtime Primer before proposing runtime topology or executable commands.
-8. Search `recipes/examples/*.yaml` for an existing Recipe and read it when found.
-9. Decide feasibility.
-10. State validation separately from feasibility.
-11. Evaluate the Agency Boundary before execution.
-12. Produce a Recipe-shaped answer.
-13. When investigation or execution reveals reusable knowledge, capture it as a
+2. Interpret the goal as a Use Case: what the user wants to achieve independent
+   of one specific Hakoniwa implementation.
+3. Identify the Capabilities required to satisfy that Use Case.
+4. Use the Base Ecosystem Guide to identify relevant foundation capabilities.
+5. Use the Component / Asset Guide to identify likely system roles.
+6. Use `catalog/index.yaml` to shortlist components.
+7. Read the detailed YAML for shortlisted components.
+8. Follow `connects_to` edges only when interface and direction make sense.
+9. Read the Runtime Primer before proposing runtime topology or executable commands.
+10. Search `recipes/examples/*.yaml` for an existing Recipe and read it when found.
+11. Decide feasibility and classify unresolved gaps.
+12. State validation separately from feasibility.
+13. Evaluate the Agency Boundary before execution.
+14. Produce a Recipe-shaped answer as the primary result.
+15. Propose a Demo or other validation strategy only when it helps verify the Recipe.
+16. When investigation or execution reveals reusable system knowledge, capture it as a
     Knowledge Candidate instead of leaving it only in the conversation or silently
     rewriting high-level documentation.
+17. When the user's goal appears potentially reusable as a demand signal, note it as
+    a Use Case Fragment candidate for later maintainer reflection. Do not interrupt
+    the user interaction by forcing it into a canonical Use Case immediately.
 
 A useful Recipe-shaped answer should cover:
 
 - Goal
+- Use Case interpretation
+- Required Capabilities
 - Feasibility
 - Validation
 - Agency Boundary
@@ -108,12 +130,47 @@ A useful Recipe-shaped answer should cover:
 - Data Flow
 - Time Model
 - Required Artifacts
-- Missing Pieces
-- Minimal Demo
+- Missing Pieces and Gap Classification
+- Validation Strategy
+- Optional Minimal Demo when useful
 - Expected Result
 
 Do not output only a repository list. Explain how the selected components work
 together as a Hakoniwa system.
+
+## User Requirement, Use Case, Capability, Catalog, And Recipe
+
+Keep these layers distinct:
+
+- **User Requirement**: what the user actually asks for, including concrete constraints.
+- **Use Case**: the underlying user goal expressed independently from one specific
+  Hakoniwa implementation.
+- **Capability**: an ability required to satisfy the Use Case or provided by a component.
+- **Catalog Component**: a concrete Hakoniwa component or asset that provides relevant
+  capabilities, interfaces, artifacts, or runtime roles.
+- **Recipe**: a concrete system composition that explains how selected components can
+  satisfy the requirement.
+
+Use this conceptual flow:
+
+```text
+User Requirement
+  -> Use Case
+  -> Required Capabilities
+  -> Catalog Components
+  -> Recipe
+```
+
+Do not require every user request to match a pre-existing canonical Use Case.
+The agent may derive a provisional Use Case during the conversation.
+
+Multiple Recipes may satisfy the same Use Case. One reusable Recipe may also support
+multiple related Use Cases.
+
+The purpose of the Use Case layer is not to create a large manually curated list before
+users arrive. It is to preserve the meaning of what the user is trying to achieve so
+that component selection is driven by required capabilities rather than repository-name
+matching.
 
 ## Capability, Feasibility, Validation, And Agency Boundary
 
@@ -128,6 +185,7 @@ Keep these four questions separate:
 The key rules are:
 
 ```text
+feasible != verified
 feasible != agent_can_execute
 verified != safe_to_execute_without_human
 ```
@@ -151,6 +209,7 @@ gate. Do not continue as though the Recipe were fully autonomous.
 Examples include:
 
 - reading ecosystem, Catalog, Runtime Primer, and Recipe knowledge;
+- interpreting user goals as provisional Use Cases and required Capabilities;
 - selecting components and proposing topology;
 - generating Recipe YAML, PDU definitions, declarative JSON, source code, launchers,
   adapters, and tests;
@@ -246,6 +305,10 @@ Do not confuse design feasibility with runtime verification.
 - `unknown`: evidence is insufficient.
 - `verified`: actual execution evidence exists for the intended Recipe or Demo behavior.
 
+A Recipe may still be useful when it is `partially_feasible`, `not_feasible`, or
+`unknown`, provided the answer clearly explains what is missing and why.
+Failure to produce a runnable Demo does not make the analysis a failure.
+
 Never claim a Recipe is verified from source-code text matches, process startup,
 or component capability alone.
 
@@ -255,6 +318,28 @@ For every important `connections[]` entry, state:
 - what contract must hold;
 - whether the connection is verified, partially verified, blocked, not tested,
   or inferred from catalog evidence.
+
+## Gap Classification
+
+When a complete Recipe cannot be established, do not stop at "not feasible" or
+"unknown". Explain the reason using the most useful gap category.
+
+Use these categories when applicable:
+
+- `missing_capability`: no known Catalog component currently provides a required ability.
+- `missing_catalog_entry`: a relevant implementation or asset may exist, but it is not
+  represented in the Catalog.
+- `undocumented_capability`: a Catalog component may support the requirement, but the
+  capability is not stated clearly enough in current Business Pack knowledge.
+- `unresolved_connection`: the needed components exist, but their interface, direction,
+  artifact exchange, or runtime contract is not sufficiently known.
+
+A gap is useful output. It tells the user what must be added, documented, inspected,
+or verified before a stronger Recipe can be produced.
+
+Do not invent a capability to make the composition look complete.
+If source inspection or runtime validation resolves a gap, feed the discovered fact into
+the Knowledge Refinement Loop.
 
 ## Evidence And Unknown Runtime Paths
 
@@ -279,6 +364,9 @@ write runnable-looking placeholder commands.
 
 ## Executable Demo And Runbook Requirements
 
+A Demo is optional validation downstream from a Recipe. Do not make Demo generation
+a prerequisite for answering the user's requirement.
+
 Before executable steps, collect target-environment details when they change
 commands, feasibility, or Agency Boundary: OS, architecture, execution mode, GUI,
 SHM access, runtime versions, Python environment, Hakoniwa install prefix, build
@@ -302,9 +390,10 @@ sessions and recorded PIDs only.
 
 ## Demo Observability Requirements
 
-A runnable Demo must make intended behavior observable. State success signals,
-failure signals, required fixtures, automatic controllers or scripted inputs,
-and the evidence used to distinguish process lifecycle from actual behavior.
+When a runnable Demo is used to validate a Recipe, it must make intended behavior
+observable. State success signals, failure signals, required fixtures, automatic
+controllers or scripted inputs, and the evidence used to distinguish process
+lifecycle from actual behavior.
 
 Launcher termination or startup alone is not proof that the composition worked.
 
@@ -317,9 +406,14 @@ Only one simulator process should own Conductor startup.
 
 ## Recipe Principles
 
-A Hakoniwa Recipe is a system-composition document. It should explain assets,
-runtime ownership, PDU exchange, Endpoint/Bridge connections, time model,
-Registry-generated artifacts, validation, observability, and Agency Boundary.
+A Hakoniwa Recipe is the primary system-composition answer to a concrete user
+requirement. It should explain how the selected architecture can satisfy the interpreted
+Use Case and required Capabilities, while making assumptions, evidence, gaps, and
+validation status explicit.
+
+It should explain assets, runtime ownership, PDU exchange, Endpoint/Bridge connections,
+time model, Registry-generated artifacts, validation, observability when needed, and
+Agency Boundary.
 
 Separate artifact sets by consumer intent:
 
@@ -332,6 +426,30 @@ State validation separately for each artifact set.
 
 If the user asks for implementation, create or update a Recipe first unless an
 appropriate Recipe already exists.
+
+A Recipe can be valuable before execution. Do not require a runnable Demo when the
+user primarily needs architecture, feasibility, missing pieces, or a credible path to
+implementation.
+
+## Use Case Fragments
+
+During normal user interaction, do not try to maintain a complete use-case taxonomy.
+However, recognize when a user's request may represent a reusable demand pattern.
+
+A promising request can be treated as a Use Case Fragment candidate even when it is
+incomplete, customer-specific, or not yet feasible.
+
+The agent's responsibility is limited to preserving the signal conceptually:
+
+- what the user is trying to achieve;
+- why it may be reusable;
+- which required Capabilities appear relevant;
+- which gaps were exposed by Recipe analysis.
+
+Do not promote fragments into canonical Use Cases during ordinary conversation unless
+the user explicitly asks for repository curation.
+Periodic clustering, generalization, and promotion are maintainer responsibilities.
+See `MAINTAINER.md`.
 
 ## Knowledge Refinement Loop
 
