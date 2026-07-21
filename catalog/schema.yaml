@@ -35,6 +35,7 @@ controlled_fields:
       - registry
       - robot-arm
       - robot-body
+      - ros2
       - rpc
       - simulator
       - time-sync
