@@ -4,12 +4,20 @@
 require "date"
 require "yaml"
 
+def load_yaml_file(path)
+  YAML.load_file(path, permitted_classes: [Date])
+rescue ArgumentError
+  # Older Psych (e.g. macOS system Ruby) does not accept permitted_classes
+  # and already loads Date safely by default.
+  YAML.load_file(path)
+end
+
 ROOT = File.expand_path("..", __dir__)
 COMPONENTS_DIR = File.join(ROOT, "components")
 INDEX_PATH = File.join(ROOT, "index.yaml")
 
 def compact_component(path)
-  data = YAML.load_file(path, permitted_classes: [Date])
+  data = load_yaml_file(path)
   {
     "id" => data.fetch("id"),
     "name" => data.fetch("name"),

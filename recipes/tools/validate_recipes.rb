@@ -5,6 +5,14 @@ require "set"
 require "yaml"
 require "date"
 
+def load_yaml_file(path)
+  YAML.load_file(path, permitted_classes: [Date])
+rescue ArgumentError
+  # Older Psych (e.g. macOS system Ruby) does not accept permitted_classes
+  # and already loads Date safely by default.
+  YAML.load_file(path)
+end
+
 ROOT = File.expand_path("../..", __dir__)
 CATALOG_DIR = File.join(ROOT, "catalog")
 RECIPE_DIRS = [File.join(ROOT, "recipes", "examples")]
@@ -32,10 +40,10 @@ REQUIRED_FIELDS = %w[
   source_artifacts
 ].freeze
 
-schema = YAML.load_file(File.join(CATALOG_DIR, "schema.yaml"), permitted_classes: [Date]).fetch("controlled_fields")
+schema = load_yaml_file(File.join(CATALOG_DIR, "schema.yaml")).fetch("controlled_fields")
 catalog_paths = Dir[File.join(CATALOG_DIR, "components", "*.yaml")]
 catalog = catalog_paths.to_h do |path|
-  data = YAML.load_file(path, permitted_classes: [Date])
+  data = load_yaml_file(path)
   [data.fetch("id"), data]
 end
 catalog_ids = catalog.keys.to_set
@@ -50,7 +58,7 @@ errors = []
 warnings = []
 
 recipe_paths.each do |path|
-  data = YAML.load_file(path, permitted_classes: [Date])
+  data = load_yaml_file(path)
   label = File.basename(path)
   missing = REQUIRED_FIELDS.select { |key| !data.key?(key) }
   errors << "#{label}: missing required fields: #{missing.join(', ')}" unless missing.empty?

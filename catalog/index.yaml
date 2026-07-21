@@ -453,6 +453,39 @@ components:
   - ruby
   - elixir
   catalog_path: components/hakoniwa-pdu-registry.yaml
+- id: hakoniwa-pdu-ros
+  name: Hakoniwa PDU ROS
+  category: communication
+  secondary_categories:
+  - integration
+  - bridge
+  - ros2
+  - language-binding
+  maturity: active
+  distribution: oss
+  summary: Config-driven Python bridge between Hakoniwa PDU data and ROS 2 topics
+    that resolves message mappings at runtime from PDU definitions and binding configuration
+    without per-type bridge code.
+  recipe_roles:
+  - bridge
+  - integration_boundary
+  - communication_infrastructure
+  connects_to:
+  - hakoniwa-pdu-endpoint
+  - hakoniwa-pdu-python
+  - hakoniwa-pdu-registry
+  - hakoniwa-core-pro
+  tags:
+  - hakoniwa
+  - pdu
+  - ros2
+  - bridge
+  - endpoint
+  - python
+  - integration
+  - runtime-mapping
+  - zenoh
+  catalog_path: components/hakoniwa-pdu-ros.yaml
 - id: hakoniwa-pdu-rpc
   name: Hakoniwa PDU RPC
   category: communication

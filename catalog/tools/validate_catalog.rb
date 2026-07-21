@@ -5,6 +5,14 @@ require "set"
 require "yaml"
 require "date"
 
+def load_yaml_file(path)
+  YAML.load_file(path, permitted_classes: [Date])
+rescue ArgumentError
+  # Older Psych (e.g. macOS system Ruby) does not accept permitted_classes
+  # and already loads Date safely by default.
+  YAML.load_file(path)
+end
+
 ROOT = File.expand_path("..", __dir__)
 COMPONENTS_DIR = File.join(ROOT, "components")
 SCHEMA_PATH = File.join(ROOT, "schema.yaml")
@@ -33,9 +41,9 @@ def error(errors, path, message)
   errors << "#{path}: #{message}"
 end
 
-schema = YAML.load_file(SCHEMA_PATH, permitted_classes: [Date]).fetch("controlled_fields")
+schema = load_yaml_file(SCHEMA_PATH).fetch("controlled_fields")
 paths = Dir[File.join(COMPONENTS_DIR, "*.yaml")].sort
-entries = paths.to_h { |path| [path, YAML.load_file(path, permitted_classes: [Date])] }
+entries = paths.to_h { |path| [path, load_yaml_file(path)] }
 ids = entries.values.map { |entry| entry["id"] }
 known_ids = ids.to_set
 errors = []
