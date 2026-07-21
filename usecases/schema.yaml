@@ -13,6 +13,23 @@ required_fields:
   - limitations
   - next_steps
 
+controlled_fields:
+  audience.primary:
+    description: Stable audience identifiers used to search and group Usecases.
+    values:
+      - control-software-developer
+      - demonstration-owner
+      - development-team
+      - manufacturing-engineering-team
+      - robot-control-developer
+      - robot-development-team
+      - robot-system-integrator
+      - technical-sales
+    authoring_notes:
+      - Reuse an existing value when it represents the same audience role.
+      - Add a new value to this list before using it in a Usecase.
+      - Prefer role-oriented identifiers over organization names or market segments.
+
 status:
   feasibility:
     allowed:
@@ -40,6 +57,16 @@ reference_rules:
     target: catalog/components/*.yaml
     notes:
       - Every component ID must exist in the Catalog.
+
+communication_rules:
+  current_model: inline-usecase-guardrails
+  notes:
+    - communication_notes stores Usecase-specific safe and unsafe wording.
+    - A future Claim layer may own reusable claims and restrictions.
+    - When Claim IDs are introduced, retain inline notes only for context-specific boundaries and migrate reusable statements to claim_refs.
+
+validation:
+  command: ruby usecases/tools/validate_usecases.rb
 
 authoring_rules:
   - Separate feasibility from validation.
