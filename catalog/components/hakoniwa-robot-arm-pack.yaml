@@ -1,0 +1,262 @@
+id: hakoniwa-robot-arm-pack
+name: Hakoniwa Robot Arm Pack
+repository:
+  owner: hakoniwalab
+  name: hakoniwa-robot-arm-pack
+  url: https://github.com/hakoniwalab/hakoniwa-robot-arm-pack
+  visibility: private
+distribution:
+  channel: commercial
+  notes:
+    - Commercial robot-arm integration pack maintained by Hakoniwa Lab.
+    - The implementation repository is private; access and licensing require approval from Hakoniwa Lab.
+    - Public Hakoniwa runtime components are used underneath the private integration assets.
+verification:
+  verified_at: 2026-07-21
+  source_revision: 18a1ea7334b8836400fe2adfa2da28ece8928112
+  source_ref: main
+summary: Manifest-driven Hakoniwa and MuJoCo integration pack for industrial robot arms, accepting JointTrajectory commands and publishing JointState through Hakoniwa PDU. A FAIRINO FR5 reference integration has been executed locally.
+category:
+  primary: physics-environment
+  secondary:
+    - robot-arm
+    - simulator
+    - integration
+    - commercial
+
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - FAIRINO FR5 is the first locally verified reference integration.
+    - Robot-specific models, tuned configuration, recipes, and sample applications are maintained privately.
+
+capabilities:
+  - name: Industrial robot arm simulation
+    description: Runs industrial robot-arm models as Hakoniwa assets in MuJoCo.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-robot-arm-pack
+        path: README.md
+        revision: 18a1ea7334b8836400fe2adfa2da28ece8928112
+  - name: Manifest-driven robot integration
+    description: Resolves the MuJoCo model, PDU definition, Endpoint configuration, actuator configuration, and state-output configuration from one asset manifest.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-robot-arm-pack
+        path: recipes/fr5/asset-manifest.json
+        revision: 18a1ea7334b8836400fe2adfa2da28ece8928112
+  - name: JointTrajectory command control
+    description: Accepts trajectory_msgs/JointTrajectory-compatible PDU commands and interpolates joint targets at each MuJoCo simulation step.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-robot-arm-pack
+        path: examples/fr5/README.md
+        revision: 18a1ea7334b8836400fe2adfa2da28ece8928112
+  - name: JointState publishing
+    description: Publishes simulated robot joint positions and related state as JointState-compatible Hakoniwa PDU data.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-robot-arm-pack
+        path: recipes/fr5/asset-manifest.json
+        revision: 18a1ea7334b8836400fe2adfa2da28ece8928112
+  - name: Custom robot model onboarding
+    description: Provides a repeatable path for adding another robot arm through generated body assets, robot-specific configuration, and a validated runtime recipe.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-robot-arm-pack
+        path: README.md
+        revision: 18a1ea7334b8836400fe2adfa2da28ece8928112
+
+limitations:
+  - The integration repository and robot-specific production assets are private and require commercial access approval.
+  - Model fidelity, actuator characteristics, collision parameters, payloads, and physical validity must be reviewed for each target robot and intended experiment.
+  - The currently verified reference implementation is FAIRINO FR5; other robot arms require onboarding and validation.
+  - Simulation verification does not authorize connection to or actuation of physical robot hardware.
+
+interfaces:
+  inputs:
+    - name: Robot body model
+      kind: file
+      description: MuJoCo XML produced or curated for the target robot arm.
+    - name: Asset manifest
+      kind: config
+      description: Declares model, PDU definition, Endpoint configuration, actuator configuration, and state-output components.
+    - name: JointTrajectory
+      kind: pdu
+      description: Command-style multi-waypoint trajectory input accepted once per newly received command.
+  outputs:
+    - name: JointState
+      kind: pdu
+      description: Periodic simulated joint-state output for monitoring, visualization, or integration.
+    - name: MuJoCo visualization
+      kind: gui
+      description: Interactive viewer showing the simulated robot-arm motion.
+  protocols:
+    - name: Hakoniwa PDU
+      role: local
+      notes: Carries JointTrajectory commands and JointState output between the simulator and external applications.
+  configuration:
+    - path: recipes/<robot>/asset-manifest.json
+      description: Robot-specific runtime entry manifest.
+    - path: recipes/<robot>/config
+      description: PDU, Endpoint, actuator, and state-output configuration.
+
+dependencies:
+  required:
+    - name: hakoniwa-mujoco-robots
+      type: repository
+      notes: Public MuJoCo/Hakoniwa runtime and reusable sensor-actuator framework.
+    - name: hakoniwa-mbody-registry
+      type: repository
+      notes: Public robot-body conversion and generated asset source.
+    - name: hakoniwa-pdu-endpoint
+      type: repository
+      notes: PDU communication, cache, and receive-event infrastructure.
+    - name: hakoniwa-core-pro
+      type: repository
+      notes: Hakoniwa runtime integration and hako-cmd lifecycle control.
+    - name: MuJoCo
+      type: runtime
+      notes: Physics runtime for robot-arm simulation.
+    - name: C++ toolchain
+      type: tool
+      notes: Required to build the simulator asset.
+    - name: Python
+      type: runtime
+      notes: Used by the reference JointTrajectory sender.
+  optional:
+    - name: ROS 2 trajectory generator or bridge
+      type: runtime
+      notes: May produce or bridge JointTrajectory data when its PDU contract is matched.
+
+platforms:
+  supported:
+    - macOS
+    - Linux
+  notes:
+    - Exact supported versions depend on MuJoCo and the underlying Hakoniwa runtime components.
+
+connects_to:
+  - component_id: hakoniwa-mujoco-robots
+    direction: uses
+    interface: MuJoCo asset runtime and reusable actuator/state-output components
+    notes: Provides the public simulation runtime used by the private robot-specific pack.
+  - component_id: hakoniwa-mbody-registry
+    direction: uses
+    interface: generated MJCF and robot-body assets
+    notes: Supplies or regenerates robot-body artifacts for onboarding.
+  - component_id: hakoniwa-pdu-endpoint
+    direction: uses
+    interface: PDU cache, SHM transport, receive events, send and receive APIs
+    notes: JointTrajectory arrival is detected using Endpoint receive-event tracking while application processing remains polling-based.
+  - component_id: hakoniwa-core-pro
+    direction: uses
+    interface: asset lifecycle, simulation synchronization, and hako-cmd
+    notes: Starts and coordinates the robot-arm simulation as a Hakoniwa asset.
+  - component_id: hakoniwa-pdu-python
+    direction: connects
+    interface: Python JointTrajectory sender and PDU conversion
+    notes: The FR5 reference sender publishes a nine-waypoint trajectory through Hakoniwa PDU.
+
+data_contracts:
+  - name: JointTrajectory PDU contract
+    description: A trajectory command contains joint names, multiple points, positions, and nested duration fields. The command is accepted once for each newly received PDU and then interpolated internally.
+    source:
+      - repository: hakoniwalab/hakoniwa-robot-arm-pack
+        path: examples/fr5/README.md
+        revision: 18a1ea7334b8836400fe2adfa2da28ece8928112
+  - name: JointState PDU contract
+    description: Joint state is published periodically as state data and does not use command-arrival semantics.
+    source:
+      - repository: hakoniwalab/hakoniwa-robot-arm-pack
+        path: recipes/fr5/asset-manifest.json
+        revision: 18a1ea7334b8836400fe2adfa2da28ece8928112
+  - name: Asset manifest contract
+    description: One manifest resolves the robot model and all runtime configuration paths needed by the simulator and sender.
+    source:
+      - repository: hakoniwalab/hakoniwa-robot-arm-pack
+        path: recipes/fr5/asset-manifest.json
+        revision: 18a1ea7334b8836400fe2adfa2da28ece8928112
+
+recipe_roles:
+  - role: physics_runtime
+    description: Simulates robot-arm dynamics and actuator behavior in MuJoCo.
+  - role: simulation_core
+    description: Runs the robot arm as a synchronized Hakoniwa asset.
+  - role: integration_boundary
+    description: Connects trajectory generators and state consumers through explicit PDU contracts.
+  - role: commercial_pack
+    description: Packages public Hakoniwa components with private robot-specific models, configuration, validation, and support.
+
+typical_usecases:
+  - Validate industrial robot-arm joint trajectories before using physical hardware.
+  - Introduce a customer-specific robot arm into a Hakoniwa simulation.
+  - Connect external Python or ROS-compatible trajectory generation to a MuJoCo robot arm.
+  - Combine robot arms with other Hakoniwa assets in a heterogeneous simulation.
+  - Build education, research, demonstration, and pre-integration environments without requiring the physical robot during early development.
+
+anti_usecases:
+  - Safety certification or proof of physical robot performance based only on simulation results.
+  - Direct real-hardware actuation without an explicit safety review and human approval gate.
+  - Robot-body conversion alone without a simulation or integration objective.
+  - Generic mobile-robot simulation where no articulated robot-arm capability is needed.
+
+demo_candidates:
+  - name: FAIRINO FR5 JointTrajectory control
+    description: Start the FR5 MuJoCo asset from its manifest, send a nine-waypoint trajectory from Python, move all six joints, and publish JointState during simulation.
+    required_components:
+      - hakoniwa-robot-arm-pack
+      - hakoniwa-mujoco-robots
+      - hakoniwa-mbody-registry
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-core-pro
+      - hakoniwa-pdu-python
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-robot-arm-pack
+        path: examples/fr5/README.md
+        revision: 18a1ea7334b8836400fe2adfa2da28ece8928112
+
+operations:
+  build:
+    commands: []
+    notes:
+      - Build commands are maintained in the private repository and require repository access.
+  test:
+    commands: []
+    notes:
+      - FAIRINO FR5 trajectory execution was locally verified on 2026-07-21.
+  run:
+    commands: []
+    notes:
+      - Runtime commands are intentionally not duplicated in the public catalog because required assets are private.
+      - Authorized users should follow the private repository recipe and README.
+
+known_gaps:
+  - Add public product or inquiry documentation for organizations without private repository access.
+  - Add reference integrations for additional industrial robot arms.
+  - Define repeatable acceptance criteria for model fidelity, actuator tuning, collision behavior, and payload validation.
+  - Decide whether a public demonstration video or screenshots should be linked from this catalog entry.
+
+source_refs:
+  - repository: hakoniwalab/hakoniwa-robot-arm-pack
+    path: README.md
+    revision: 18a1ea7334b8836400fe2adfa2da28ece8928112
+    description: Private pack overview and FR5 manifest-driven architecture.
+  - repository: hakoniwalab/hakoniwa-robot-arm-pack
+    path: recipes/fr5/asset-manifest.json
+    revision: 18a1ea7334b8836400fe2adfa2da28ece8928112
+    description: FR5 model, PDU, Endpoint, actuator, and JointState component composition.
+  - repository: hakoniwalab/hakoniwa-robot-arm-pack
+    path: examples/fr5/README.md
+    revision: 18a1ea7334b8836400fe2adfa2da28ece8928112
+    description: Build, run, trajectory-control, and verification instructions.
+
+tags:
+  - hakoniwa
+  - robot-arm
+  - industrial-robot
+  - mujoco
+  - joint-trajectory
+  - joint-state
+  - pdu
+  - endpoint
+  - simulation
+  - integration
+  - commercial
+  - private
