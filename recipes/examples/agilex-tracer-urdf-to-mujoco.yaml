@@ -11,18 +11,29 @@ goal:
     downstream Hakoniwa MuJoCo runtime.
 
 feasibility:
-  status: partially_feasible
+  status: feasible
   confidence: high
   rationale:
     - hakoniwa-mbody-registry documents a ROS-free forge path from xacro or URDF to plain URDF and canonical MJCF.
     - forge.sh orchestrates fetch, normalization, MJCF conversion, optional actuator generation, GLB generation, optional PDU generation, and optional minimal-world composition.
-    - Tracer-specific source closure, compatibility adaptation, joint mapping, and downstream runtime wiring remain unverified.
+    - Tracer-specific source closure and conversion were locally validated with a pinned AgileX tracer_ros revision.
+    - Tracer-specific actuator mapping and minimal-world composition were locally validated as tool-chain inputs layered on the generated MJCF.
+    - A first downstream Hakoniwa PDU runtime smoke was locally validated with geometry_msgs/Twist command input after the MuJoCo-only sample passed.
 
 validation:
   status: partially_verified
+  verified_at: 2026-07-22
   summary: >
-    The generic MBody forge and source-adaptation path is repository-backed.
-    Tracer-specific conversion and runtime execution are not yet verified.
+    The generic MBody forge path, Tracer-specific source adaptation,
+    DAE-to-OBJ preprocessing, actuator injection, primitive collision overlay,
+    contact excludes, and minimal-world composition were locally validated.
+    AgileX tracer_ros master at
+    151b53c548fe2f5d6dd67a9c1478ea340ad43f21 was fetched, adapted for
+    ROS-free xacro processing, forged into URDF, MJCF, GLB, actuated MJCF, and
+    a MuJoCo minimal world. The generated canonical and minimal-world MJCF files
+    loaded successfully in MuJoCo, a MuJoCo-only C++ actuator smoke check
+    completed, and a first Hakoniwa geometry_msgs/Twist PDU runtime smoke
+    advanced the Tracer base through the rover asset prototype.
   steps:
     - id: mbody_forge_pipeline
       status: verified
@@ -41,19 +52,108 @@ validation:
       notes:
         - Unsupported ROS-style $(find ...) expressions must be adapted before conversion.
     - id: tracer_conversion
-      status: not_tested
+      status: verified
+      evidence:
+        - repository: agilexrobotics/tracer_ros
+          path: tracer_description/urdf/tracer_v1.xacro
+          revision: 151b53c548fe2f5d6dd67a9c1478ea340ad43f21
+        - repository: hakoniwalab/hakoniwa-mbody-registry
+          path: sources/agilex_tracer.yaml
+          revision: local-validation-2026-07-22
+        - repository: hakoniwalab/hakoniwa-mbody-registry
+          path: tools/adapt_agilex_tracer_source.py
+          revision: local-validation-2026-07-22
+        - repository: hakoniwalab/hakoniwa-mbody-registry
+          path: bodies/agilex_tracer/generated/tracer_v1.xml
+          revision: local-validation-2026-07-22
       notes:
-        - Exact Tracer entry file, fetched dependencies, mesh paths, and adapter patch still need validation.
-    - id: tracer_runtime
-      status: not_tested
+        - Entry file is tracer_description/urdf/tracer_v1.xacro.
+        - Fetch closure is tracer_description/ from agilexrobotics/tracer_ros.
+        - Adapter removes ROS-style xacro include paths, removes the Gazebo include from the MuJoCo conversion path, and rewrites package mesh URIs to relative paths.
+        - forge.sh converted 4 DAE mesh files to OBJ, rewrote 18 URDF mesh references, generated tracer_v1.xml and GLB artifacts, and printed Forge complete.
+    - id: tracer_mujoco_load
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mbody-registry
+          path: bodies/agilex_tracer/generated/tracer_v1.xml
+          revision: local-validation-2026-07-22
       notes:
-        - Generated MJCF must be integrated and tested in hakoniwa-mujoco-robots separately from conversion.
+        - mujoco.MjModel.from_xml_path loaded tracer_v1.xml successfully.
+        - Loaded model summary was nbody=13, njnt=10, ngeom=18, nmesh=4, nu=0.
+        - Expected wheel/castor joints are present in the canonical MJCF.
+    - id: tracer_actuator_world_composition
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mbody-registry
+          path: bodies/agilex_tracer/config/actuators.yaml
+          revision: local-validation-2026-07-22
+        - repository: hakoniwalab/hakoniwa-mbody-registry
+          path: bodies/agilex_tracer/config/mujoco_world.yaml
+          revision: local-validation-2026-07-22
+        - repository: hakoniwalab/hakoniwa-mbody-registry
+          path: bodies/agilex_tracer/generated/tracer_v1.actuated.xml
+          revision: local-validation-2026-07-22
+        - repository: hakoniwalab/hakoniwa-mbody-registry
+          path: bodies/agilex_tracer/generated/tracer_v1.minimal_world.xml
+          revision: local-validation-2026-07-22
+      notes:
+        - forge.sh applied 2 velocity actuators from actuators.yaml to left_wheel and right_wheel.
+        - As-is mesh contact produced internal base/caster contacts and poor wheel-driven translation, so collision_primitives.yaml and contact_excludes.yaml were added as tool-chain inputs.
+        - Viewer inspection later showed that the initial 0.082m drive-wheel collision cylinders were visibly larger than the visual wheel mesh radius of about 0.0605m. The drive wheel collision radius was then tuned to 0.0605m and robot initial z to 0.1425. Treat these primitives as tuning inputs that still require visual scale, stance, and tilt validation.
+        - mjcf_compose_world.py composed a ground plane, camera, light, named base_freejoint, copied actuators, and copied contact excludes into tracer_v1.minimal_world.xml.
+        - MuJoCo loaded tracer_v1.minimal_world.xml with nbody=13, njnt=11, ngeom=25, nu=2, nexclude=10.
+        - Recognized actuators were left_motor and right_motor.
+    - id: tracer_mujoco_only_actuator_smoke
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: examples/actuators/agilex_tracer/agilex-tracer-rover-example.cpp
+          revision: local-validation-2026-07-22
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: config/actuator/joint/agilex_tracer_left_wheel.json
+          revision: local-validation-2026-07-22
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: config/actuator/joint/agilex_tracer_right_wheel.json
+          revision: local-validation-2026-07-22
+      notes:
+        - CMake target agilex-tracer-rover-example built successfully.
+        - Non-viewer --check loaded the minimal world, bound both JointActuatorImpl configs, applied Twist-like linear.x/angular.z wheel targets, advanced simulation for 1 second, and exited with check ok.
+        - The smoke check verifies finite actuator/world execution and positive forward displacement for a positive linear.x command.
+        - Headless smoke result after visual-scale primitive collision/contact tuning was base=(0.055, 0.000, 0.142), wheel_target=(-2.439, 2.439), wheel_qvel=(-1.525, 1.531).
+    - id: tracer_twist_pdu_runtime_smoke
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: include/robots/rover/differential_drive_kinematics.hpp
+          revision: local-validation-2026-07-22
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: examples/actuators/agilex_tracer/rover-twist-hakoniwa-asset.cpp
+          revision: local-validation-2026-07-22
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: examples/actuators/agilex_tracer/send_rover_twist.py
+          revision: local-validation-2026-07-22
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: config/rover-twist-pdudef-compact.json
+          revision: local-validation-2026-07-22
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: config/endpoint/rover_twist_endpoint.json
+          revision: local-validation-2026-07-22
+      notes:
+        - rover-twist-hakoniwa-asset starts the conductor, registers RoverTwistAsset, opens the rover_twist_endpoint, and waits for hako-cmd start.
+        - The asset opens a MuJoCo viewer by default so the Hakoniwa PDU-driven rover motion is visible; --no-viewer keeps the previous headless mode for restricted environments.
+        - Both the MuJoCo-only sample and Hakoniwa asset use include/robots/rover/differential_drive_kinematics.hpp for the Twist-like linear.x/angular.z to left/right wheel velocity conversion.
+        - send_rover_twist.py registers RoverTwistSender and writes geometry_msgs/Twist to RoverTwistAsset/cmd_vel after start.
+        - The verified runtime order was start the asset program, start the Python sender, then run /usr/local/hakoniwa/bin/hako-cmd start.
+        - The asset log after visual-scale collision tuning showed cmd=(0.200, 0.000), wheel=(-2.439, 2.439), and base x progressing from 0.000m to 0.300m.
+        - Shared-memory runtime commands had to run outside the Codex sandbox in the local validation environment.
 
 constraints:
   - no-ros-runtime
   - single-pc
   - source-adaptation-may-be-required
+  - dae-mesh-preconversion-required
   - conversion-and-runtime-are-separate-stages
+  - prefer-tool-chain-inputs-over-hand-maintained-mjcf-forks
 
 target_environment:
   required_for: executable-demo
@@ -85,8 +185,8 @@ execution_environment:
     required: true
     status: unknown
   shared_memory:
-    required: false
-    access: not-required-for-conversion
+    required: true
+    access: required-for-hakoniwa-runtime
   python:
     environment: venv
     hakopy_available: not-required-for-conversion
@@ -95,7 +195,7 @@ execution_environment:
     hako_cmd_access: unknown
   notes:
     - MBody conversion itself does not require Hakoniwa shared memory or hako-cmd.
-    - Runtime requirements are evaluated only after the generated MJCF is handed to the downstream simulator.
+    - Hakoniwa PDU runtime validation requires shared memory access and /usr/local/hakoniwa/bin/hako-cmd start after assets are registered.
 
 components:
   - id: hakoniwa-mbody-registry
@@ -118,13 +218,14 @@ connections:
       - optional actuated Tracer MJCF
       - optional minimal MuJoCo world
     contract:
-      status: not_tested
+      status: partially_verified
       requires:
         - Successful Tracer forge output.
         - Runtime-specific actuator and control configuration when motion is required.
         - A downstream runner configuration that references the generated artifacts.
       validation_notes:
-        - Successful forge does not by itself verify runtime control or Hakoniwa PDU wiring.
+        - Generated tracer_v1.xml loaded successfully in MuJoCo.
+        - Successful forge and model loading do not by themselves verify runtime control or Hakoniwa PDU wiring.
     notes: Runtime wiring belongs to the downstream MuJoCo integration layer.
 
 data_flow:
@@ -134,22 +235,43 @@ data_flow:
     consumed by hakoniwa-mujoco-robots.
   steps:
     - from: external-tracer-source
-      to: source-adapter
+      to: hakoniwa-mbody-registry-fetch
       data:
         - xacro or URDF
         - included description files
         - mesh assets
+      description: Sparse-fetch tracer_description/ from the pinned AgileX tracer_ros revision.
+    - from: hakoniwa-mbody-registry-fetch
+      to: source-adapter
+      data:
+        - fetched source tree
       description: Resolve ROS/package assumptions and make the source usable in the fetched local tree.
     - from: source-adapter
       to: hakoniwa-mbody-registry
       data:
         - adapted entry URDF or Xacro
-      description: Feed the adapted source into the standard forge pipeline.
+      description: Feed the adapted source into the standard forge pipeline with DAE-to-OBJ preprocessing enabled.
     - from: hakoniwa-mbody-registry
       to: hakoniwa-mujoco-robots
       data:
         - generated MJCF
-      description: Hand the generated body artifact to the runtime without treating conversion as runtime validation.
+        - generated actuated MJCF
+        - generated minimal-world MJCF
+      description: Hand generated artifacts to the runtime without hand-maintaining a fork of the generated MJCF.
+    - from: hakoniwa-mbody-registry
+      to: hakoniwa-mujoco-robots-mujoco-only-sample
+      data:
+        - tracer_v1.minimal_world.xml
+        - left and right wheel actuator JSON bindings
+      description: Validate MuJoCo-only actuator binding and finite simulation before Hakoniwa PDU integration.
+    - from: python-rover-twist-sender
+      to: hakoniwa-mujoco-robots-rover-asset
+      data:
+        - geometry_msgs/Twist
+      description: >
+        After the plant asset and sender have registered and hako-cmd start is
+        issued, send AI-friendly linear.x/angular.z command input to the rover
+        asset through RoverTwistAsset/cmd_vel.
 
 time_model:
   mode: unknown
@@ -162,36 +284,50 @@ time_model:
 artifact_sets:
   physics_artifacts:
     description: Body and world artifacts consumed by MuJoCo.
-    status: not_tested
+    status: partially_verified
     artifacts:
-      - Tracer canonical MJCF
-      - Tracer actuated MJCF when actuator config is supplied
-      - Tracer minimal world when mujoco_world.yaml is supplied
+      - bodies/agilex_tracer/generated/tracer_v1.xml
+      - bodies/agilex_tracer/generated/tracer_description/urdf/tracer_v1.urdf
+      - bodies/agilex_tracer/generated/tracer_description/urdf/tracer_v1.obj.urdf
+      - bodies/agilex_tracer/generated/tracer_v1.actuated.xml
+      - bodies/agilex_tracer/generated/tracer_v1.actuated.collision.xml
+      - bodies/agilex_tracer/generated/tracer_v1.actuated.collision.contact.xml
+      - bodies/agilex_tracer/generated/tracer_v1.minimal_world.xml
     notes:
-      - Exact filenames follow the selected Tracer entry-file basename and MBody configuration.
+      - Canonical MJCF and minimal-world MJCF were generated and loaded in MuJoCo.
+      - Actuators, primitive collision geoms, contact excludes, and the minimal world are produced from config inputs rather than by hand-editing generated MJCF.
   visualization_artifacts:
     description: GLB assets optionally produced by the MBody forge pipeline.
-    status: not_tested
+    status: verified
     artifacts:
-      - Tracer GLB
-      - Tracer split parts GLB
+      - bodies/agilex_tracer/generated/tracer_v1.glb
+      - bodies/agilex_tracer/generated/parts/*.glb
     notes:
-      - GLB generation can be skipped for physics-only validation.
+      - forge.sh generated a single Tracer GLB and 11 split body-local GLB parts.
   pdu_artifacts:
-    description: Optional PDU artifacts generated only when Tracer-specific PDU config is added.
-    status: not_tested
+    description: PDU artifacts used by the first rover Twist runtime smoke.
+    status: verified
     artifacts:
-      - pdutypes.json
-      - pdu_def.json
+      - config/rover-twist-pdutypes.json
+      - config/rover-twist-pdudef-compact.json
+      - config/endpoint/rover_twist_endpoint.json
+      - config/endpoint/comm/shm_rover_twist_comm.json
     notes:
-      - PDU artifacts are not prerequisites for URDF-to-MJCF validation.
+      - PDU artifacts are not prerequisites for URDF-to-MJCF validation, but they were locally verified in the downstream Twist runtime smoke.
   runtime_artifacts:
     description: Runtime-specific files needed after body conversion.
-    status: not_tested
+    status: partially_verified
     artifacts:
-      - hakoniwa-mujoco-robots runtime configuration
+      - config/actuator/joint/agilex_tracer_left_wheel.json
+      - config/actuator/joint/agilex_tracer_right_wheel.json
+      - include/robots/rover/differential_drive_kinematics.hpp
+      - examples/actuators/agilex_tracer/agilex-tracer-rover-example.cpp
+      - examples/actuators/agilex_tracer/rover-twist-hakoniwa-asset.cpp
+      - examples/actuators/agilex_tracer/send_rover_twist.py
     notes:
-      - Do not invent runtime asset names or hako-cmd commands until the downstream contract is confirmed.
+      - MuJoCo-only actuator smoke was verified.
+      - Hakoniwa asset registration, Endpoint config, hako-cmd start flow, and geometry_msgs/Twist PDU wiring were verified as a first prototype.
+      - The rover asset is not yet generic; geometry and limits still need to move from example constants to config before promotion to a reusable component pattern.
 
 artifacts:
   - name: Tracer upstream description
@@ -207,11 +343,11 @@ artifacts:
       - hakoniwa-mujoco-robots
 
 missing_pieces:
-  - Add and validate the exact Tracer sources YAML definition, including a pinned revision when reproducibility is required.
-  - Determine the exact Tracer entry URDF or Xacro path and fetched dependency closure.
-  - Record the minimal adapter patch required to remove ROS or package-path assumptions, if any.
-  - Define actuator mapping only after generated MJCF joint names are confirmed.
-  - Define the downstream hakoniwa-mujoco-robots runtime and PDU control path only after the body model loads correctly.
+  - Decide whether the generated AgileX Tracer artifacts should be committed as registry outputs or treated as validation-only artifacts.
+  - Observe the Tracer minimal world in the MuJoCo viewer and confirm that the headless positive-displacement result is visually acceptable.
+  - Tune primitive wheel/caster collision dimensions and robot initial height so contact behavior, visual scale, and chassis stance are all acceptable.
+  - Generalize the downstream rover Hakoniwa asset so geometry, limits, asset names, and command channels are config-driven rather than Tracer example constants.
+  - Add a controlled shutdown story for demos where hako-cmd stop is unavailable or unsuitable.
 
 demo:
   objective: >
@@ -225,33 +361,76 @@ demo:
     - order: 2
       id: define_tracer_source
       component: hakoniwa-mbody-registry
-      action: Add a Tracer sources YAML definition with repo, branch or revision, fetched paths, and entry URDF when using the new-style forge flow.
+      action: Use sources/agilex_tracer.yaml with agilexrobotics/tracer_ros pinned to 151b53c548fe2f5d6dd67a9c1478ea340ad43f21 and entry_urdf tracer_description/urdf/tracer_v1.xacro.
     - order: 3
+      id: fetch_tracer_source
+      component: hakoniwa-mbody-registry
+      action: Fetch tracer_description/ into the explicit generated directory so the adapter can run before forge.
+      command: .venv/bin/python tools/fetch.py sources/agilex_tracer.yaml --output-dir bodies/agilex_tracer/generated
+    - order: 4
       id: adapt_tracer_source
       component: hakoniwa-mbody-registry
-      action: Adapt the fetched source so xacro2urdf.py sees only supported local or relative paths.
-    - order: 4
+      action: Run tools/adapt_agilex_tracer_source.py against the fetched generated directory so xacro2urdf.py sees supported local or relative paths and MuJoCo does not receive Gazebo-only plugin filename attributes.
+      command: .venv/bin/python tools/adapt_agilex_tracer_source.py bodies/agilex_tracer/generated
+    - order: 5
       id: forge_tracer
       component: hakoniwa-mbody-registry
-      action: Run the standard forge pipeline into an explicit generated directory.
-      command: PATH=$PWD/.venv/bin:$PATH ./tools/forge.sh sources/<tracer-source>.yaml <generated-dir>
-    - order: 5
+      action: Run the standard forge pipeline into an explicit generated directory. If bodies/agilex_tracer/config/actuators.yaml, collision_primitives.yaml, contact_excludes.yaml, and mujoco_world.yaml are present, forge emits actuated, collision-overlaid, contact-excluded, and minimal-world MJCF files.
+      command: PATH=$PWD/.venv/bin:$PATH HAKO_SKIP_FETCH=1 ./tools/forge.sh sources/agilex_tracer.yaml bodies/agilex_tracer/generated
+    - order: 6
       id: inspect_generated_mjcf
       component: hakoniwa-mbody-registry
-      action: Verify the generated canonical MJCF loads and preserves credible base, wheel, joint, mesh, and inertial structure.
-    - order: 6
-      id: integrate_mujoco_runtime
+      action: Verify the generated canonical MJCF and minimal-world MJCF load and preserve credible base, wheel, joint, mesh, actuator, and inertial structure.
+    - order: 7
+      id: run_mujoco_only_actuator_smoke
       component: hakoniwa-mujoco-robots
-      action: Add runtime-specific world, actuator, and control configuration only after the model conversion is accepted.
+      action: Build agilex-tracer-rover-example and run its non-viewer smoke check against tracer_v1.minimal_world.xml.
+      command: cmake --build src/cmake-build --target agilex-tracer-rover-example && ./src/cmake-build/examples/actuators/agilex_tracer/agilex-tracer-rover-example --check
+    - order: 8
+      id: observe_contact_in_viewer
+      component: hakoniwa-mujoco-robots
+      action: Run agilex-tracer-rover-example with viewer enabled and observe wheel/contact behavior before adding Hakoniwa PDU integration.
+      notes:
+        - Check not only forward motion but also whether primitive collision geoms look oversized relative to visual meshes and whether the chassis visibly tilts.
+    - order: 9
+      id: run_twist_pdu_runtime_smoke
+      component: hakoniwa-mujoco-robots
+      action: Start the rover Twist plant asset, start the Python Twist sender, then issue hako-cmd start after both assets have registered.
+      command: ./src/cmake-build/examples/actuators/agilex_tracer/rover-twist-hakoniwa-asset
+      notes:
+        - The asset opens a MuJoCo viewer by default. Use --no-viewer for headless checks.
+    - order: 10
+      id: run_twist_sender
+      component: hakoniwa-mujoco-robots
+      action: In a second terminal, register the Python sender and wait for start.
+      command: python3 examples/actuators/agilex_tracer/send_rover_twist.py --linear-x 0.2 --duration-sec 3
+    - order: 11
+      id: start_hakoniwa_simulation
+      component: hakoniwa-core-pro
+      action: In a third terminal, start the already-registered Hakoniwa assets.
+      command: /usr/local/hakoniwa/bin/hako-cmd start
   observability:
     success_signals:
       - forge.sh completes successfully.
       - A normalized Tracer URDF and canonical MJCF are generated.
+      - Actuator-injected, collision-overlaid, contact-excluded, and minimal-world MJCF files are generated from config inputs.
       - The canonical MJCF loads without MuJoCo compiler errors.
+      - The minimal-world MJCF loads with two wheel velocity actuators, primitive wheel/caster contacts, contact excludes, and a named base freejoint.
+      - agilex-tracer-rover-example --check exits with check ok and positive forward displacement.
+      - Viewer inspection confirms primitive collision size, robot stance, and tilt are acceptable for a demo.
+      - rover-twist-hakoniwa-asset reaches WAIT START after conductor startup, asset registration, and Endpoint setup.
+      - send_rover_twist.py reaches WAIT START after sender asset registration.
+      - hako-cmd start creates PDU data and the asset log shows Twist command reception plus positive base x displacement.
+      - DAE meshes are converted to OBJ before MuJoCo compilation.
     failure_signals:
       - Unsupported ROS-style path expressions remain.
       - Required includes or mesh assets are missing.
       - Generated wheel or body transforms are structurally incorrect.
+      - MuJoCo-only smoke produces non-finite base pose or cannot bind wheel actuators.
+      - Primitive collision geoms produce acceptable headless motion but are visibly oversized or distort the robot stance in the viewer.
+      - Runtime smoke is started before asset registration completes.
+      - hako-cmd start is issued before the plant asset and sender are both waiting for start.
+      - Shared-memory access is unavailable to the runtime processes.
     fixtures:
       - No environment fixture is required for conversion-only validation.
     automation:
@@ -261,14 +440,21 @@ demo:
       - The forge process exits successfully.
     behavior:
       - Canonical MJCF opens in MuJoCo.
-      - Expected Tracer base and wheel joints exist before actuator mapping is authored.
+      - Expected Tracer base and wheel joints exist.
+      - Minimal-world MJCF exposes base_freejoint, left_motor, and right_motor.
+      - MuJoCo-only actuator smoke completes before Hakoniwa PDU integration is attempted and rejects non-finite or non-forward motion.
+      - Hakoniwa Twist PDU smoke starts only after asset registration and confirms RoverTwistAsset/cmd_vel command reception.
     logs:
       - Forge output contains Forge complete.
 
 expected_result: >
   A reproducible Tracer conversion path exists in which external source adaptation is
-  explicit, forge.sh produces normalized URDF and MJCF artifacts, and the resulting
-  MJCF can be inspected in MuJoCo. Hakoniwa runtime control remains a separate validation step.
+  explicit, forge.sh produces normalized URDF, OBJ-rewritten URDF, canonical MJCF,
+  actuator-injected MJCF, collision-overlaid MJCF, contact-excluded MJCF,
+  minimal-world MJCF, and GLB artifacts. The generated MuJoCo world loads, the
+  MuJoCo-only actuator smoke check passes with positive forward displacement, and
+  the first Hakoniwa geometry_msgs/Twist runtime smoke demonstrates Python PDU
+  command input moving the rover.
 
 source_catalogs:
   - component_id: hakoniwa-mbody-registry
@@ -283,15 +469,61 @@ source_artifacts:
     description: Documents the MBody conversion and artifact-registry role.
   - repository: hakoniwalab/hakoniwa-mbody-registry
     path: tools/forge.sh
-    revision: main
-    description: Authoritative forge orchestration.
+    revision: local-validation-2026-07-22
+    description: Authoritative forge orchestration, locally extended with optional DAE-to-OBJ preprocessing for this validation.
   - repository: hakoniwalab/hakoniwa-mbody-registry
     path: tools/xacro2urdf.py
     revision: main
     description: Defines the ROS-free xacro conversion guardrails.
+  - repository: hakoniwalab/hakoniwa-mbody-registry
+    path: tools/urdf_dae2obj.py
+    revision: 862bb8d137d0f82b40adf4e7ed499399d14de54c
+    description: Converts URDF-referenced DAE meshes to OBJ before MuJoCo compilation.
+  - repository: hakoniwalab/hakoniwa-mbody-registry
+    path: tools/adapt_agilex_tracer_source.py
+    revision: local-validation-2026-07-22
+    description: Tracer-specific ROS-free source adapter used before forge.
+  - repository: hakoniwalab/hakoniwa-mbody-registry
+    path: bodies/agilex_tracer/config/actuators.yaml
+    revision: local-validation-2026-07-22
+    description: Tracer wheel velocity actuator definitions injected into generated MJCF by the forge pipeline.
+  - repository: hakoniwalab/hakoniwa-mbody-registry
+    path: tools/mjcf_apply_collision_primitives.py
+    revision: local-validation-2026-07-22
+    description: Tool-chain layer used to disable generated mesh collisions and add simple primitive wheel/caster collision geoms.
+  - repository: hakoniwalab/hakoniwa-mbody-registry
+    path: bodies/agilex_tracer/config/collision_primitives.yaml
+    revision: local-validation-2026-07-22
+    description: Tracer primitive wheel/caster collision overlay used after as-is mesh contact produced poor drive behavior.
+    notes:
+      - The drive-wheel collision radius was tuned from 0.082m to 0.0605m to match the visual mesh radius, and the minimal-world base z was lowered from 0.16 to 0.1425 to preserve contact.
+  - repository: hakoniwalab/hakoniwa-mbody-registry
+    path: bodies/agilex_tracer/config/contact_excludes.yaml
+    revision: local-validation-2026-07-22
+    description: Tracer base-to-wheel/caster contact excludes applied as a tool-chain layer.
+  - repository: hakoniwalab/hakoniwa-mbody-registry
+    path: bodies/agilex_tracer/config/mujoco_world.yaml
+    revision: local-validation-2026-07-22
+    description: Minimal MuJoCo world composition config with ground, camera, light, named freejoint, and actuator copy.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: include/robots/rover/differential_drive_kinematics.hpp
+    revision: local-validation-2026-07-22
+    description: Shared stateless helper for converting linear.x/angular.z rover commands into signed left/right wheel velocity targets.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: examples/actuators/agilex_tracer/agilex-tracer-rover-example.cpp
+    revision: local-validation-2026-07-22
+    description: MuJoCo-only Tracer actuator sample with Twist-like wheel target conversion and --check smoke mode.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: examples/actuators/agilex_tracer/rover-twist-hakoniwa-asset.cpp
+    revision: local-validation-2026-07-22
+    description: Hakoniwa plant asset prototype that starts the conductor, registers RoverTwistAsset, receives geometry_msgs/Twist, and applies wheel velocity targets.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: examples/actuators/agilex_tracer/send_rover_twist.py
+    revision: local-validation-2026-07-22
+    description: Python controller asset that sends geometry_msgs/Twist to RoverTwistAsset/cmd_vel after hako-cmd start.
   - repository: agilexrobotics/tracer_ros
     path: tracer_description
-    revision: to-be-pinned
+    revision: 151b53c548fe2f5d6dd67a9c1478ea340ad43f21
     description: External upstream Tracer robot-description source; not a Hakoniwa catalog component.
 
 tags:

@@ -260,16 +260,34 @@ Starting a simulator process does not necessarily mean simulation time is
 running. In many demos:
 
 ```text
-1. start simulator-like assets
-2. initialize shared memory and PDU data
-3. issue hako-cmd start
-4. start controllers, visualizers, or bridge clients
-5. observe state changes
-6. issue hako-cmd stop or let the launcher stop assets
+1. start the process that owns Conductor, if the demo uses an embedded owner
+2. start simulator-like assets and required controller assets
+3. wait until required assets are registered and show WAIT START or equivalent
+4. issue hako-cmd start
+5. start after-start controllers, visualizers, or bridge clients
+6. observe state changes
+7. issue hako-cmd stop where supported, or let the launcher/process policy stop assets
 ```
 
 `hako-cmd start` and `hako-cmd stop` control simulation lifecycle. They are not
 the same as starting or killing OS processes.
+
+For asset programs that embed Conductor startup, starting the executable is often
+the step that creates the Hakoniwa runtime domain and registers the plant asset.
+In that pattern, the correct manual sequence is:
+
+```text
+terminal 1: start the Conductor-owning plant asset program
+            wait for asset registration, PDU channel creation, and WAIT START
+terminal 2: start controller or sender assets that must join before time starts
+            wait for their registration and WAIT START
+terminal 3: hako-cmd start
+```
+
+Do not treat `hako-cmd start` as the first command in the demo. It is the
+transition from the registered/waiting state into running simulation time. If a
+controller is an ordinary external client rather than a registered asset, the
+Recipe must say whether it starts before or after `hako-cmd start`.
 
 Runtime validation must therefore check behavior after simulation start:
 
@@ -482,6 +500,8 @@ Before writing executable steps, answer these questions:
 - Which component owns the core simulation runtime?
 - Which process starts or owns Conductor?
 - Which assets must exist before `hako-cmd start`?
+- Which executable performs asset registration, and what log line proves it is
+  waiting for start?
 - Which assets start after simulation time begins?
 - Which processes are external clients rather than assets?
 - Which PDU definitions/configs are shared across participants?
@@ -500,6 +520,7 @@ Avoid these mistakes:
 - treating a repository README command as a full Hakoniwa Recipe;
 - searching source text for a keyword and claiming executable feasibility;
 - starting a simulator without identifying the PDU config;
+- issuing `hako-cmd start` before required assets have registered;
 - starting a controller before simulation time exists;
 - starting multiple Conductor owners in one composed demo;
 - treating `hako-cmd stop` as process cleanup;

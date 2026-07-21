@@ -1,0 +1,115 @@
+id: generic-rover-asset-from-fr5-and-tb3-patterns
+title: Generic rover asset pattern should combine FR5 manifest discipline with TB3 mobile-base runtime behavior
+status: candidate
+
+knowledge_type:
+  - architectural_principle
+  - usage_pattern
+  - interface_contract
+  - validation_rule
+
+summary: >
+  AgileX Tracer should not become a one-off dedicated asset if the goal is a
+  reusable Hakoniwa mobile-base pattern. A generic rover asset can reuse the
+  manifest-driven integration discipline validated by hakoniwa-robot-arm-pack
+  and the mobile-base control behavior already present in the TurtleBot3 runtime,
+  while using geometry_msgs/Twist as the AI-friendly command PDU.
+
+observation:
+  context: >
+    Reviewing hakoniwa-robot-arm-pack after validating the AgileX Tracer
+    URDF-to-MuJoCo conversion Recipe and discussing the next Tracer runtime Recipe.
+  details:
+    - hakoniwa-robot-arm-pack keeps robot-specific assets and tuned configuration in a pack while reusing public MBody and MuJoCo runtime components.
+    - The FR5 flow uses one asset-manifest.json as the runtime entry point for model, PDU definition, Endpoint configuration, actuator configuration, and state-output configuration.
+    - The FR5 forge flow applies robot-specific source adaptation, DAE-to-OBJ conversion, actuator injection, and contact excludes before runtime validation.
+    - TurtleBot3 in hakoniwa-mujoco-robots already implements mobile-base command application, wheel velocity actuator control, state publication, sensors, and Hakoniwa lifecycle.
+    - The current TurtleBot3 runtime is not fully generic; it still assumes TB3-specific body names, component IDs, PDU names, and runtime configuration fields.
+    - A first Tracer rover prototype in hakoniwa-mujoco-robots validated the generic command direction by receiving geometry_msgs/Twist on RoverTwistAsset/cmd_vel and applying it to left/right wheel velocity actuators.
+    - The Twist-to-left/right-wheel conversion was factored into a shared stateless helper, include/robots/rover/differential_drive_kinematics.hpp, so Tracer and later rover samples can share the same kinematic conversion while keeping robot-specific wheel radius, separation, signs, and limits in configuration or sample parameters.
+    - For AgileX Tracer, geometry_msgs/Twist is preferable to hako_msgs/GameControllerOperation as the first command PDU because it is semantically direct for AI-generated control, ROS-adjacent, and easier to explain in Recipes.
+    - Contact should initially be validated as generated rather than over-engineered. Primitive collision or contact excludes should be introduced only after a concrete instability is observed.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-robot-arm-pack
+      path: recipes/fr5/asset-manifest.json
+      revision: 18a1ea7334b8836400fe2adfa2da28ece8928112
+    - repository: hakoniwalab/hakoniwa-robot-arm-pack
+      path: recipes/fr5/forge-fr5.sh
+      revision: 18a1ea7334b8836400fe2adfa2da28ece8928112
+    - repository: hakoniwalab/hakoniwa-robot-arm-pack
+      path: examples/fr5/fr5-hakoniwa-asset.cpp
+      revision: 18a1ea7334b8836400fe2adfa2da28ece8928112
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      path: src/robots/tb3/tb3_robot.cpp
+      revision: local-review-2026-07-22
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      path: src/robots/tb3/tb3_hakoniwa_adapter.cpp
+      revision: local-review-2026-07-22
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      path: config/assets/tb3-mbody-burger-asset.json
+      revision: local-review-2026-07-22
+    - repository: local/hakoniwa-mujoco-robots
+      path: include/robots/rover/differential_drive_kinematics.hpp
+      revision: local-working-tree-2026-07-22
+  runtime_evidence:
+    - description: >
+        FR5 reference integration is cataloged as locally verified on
+        2026-07-21 for JointTrajectory command acceptance and JointState output.
+    - description: >
+        AgileX Tracer conversion is locally verified through MuJoCo model loading,
+        MuJoCo-only actuator smoke, and a first Hakoniwa Twist PDU runtime smoke.
+    - description: >
+        The rover-twist-hakoniwa-asset prototype received linear.x=0.200,
+        angular.z=0.000 from send_rover_twist.py after hako-cmd start and
+        advanced the Tracer base x position from 0.000m to 0.333m in the
+        initial validation and 0.300m after collision/height tuning.
+  expert_input:
+    - source: user
+      statement: >
+        Prefer geometry_msgs/Twist for command PDU because AI can handle it more
+        easily; prefer a generic asset over a dedicated Tracer asset; start with
+        generated contacts as-is and address contact issues only if observed.
+
+confidence: medium
+
+contradictions:
+  - target: recipes/examples/agilex-tracer-urdf-to-mujoco.yaml
+    existing_claim: Downstream runtime wiring is undefined after conversion.
+    new_evidence: >
+      The likely runtime direction is now a generic rover/mobile-base asset using
+      Twist command input, wheel velocity actuators, manifest-driven configuration,
+      and as-is contact validation first.
+
+validation:
+  status: partially_verified
+  required:
+    - Generalize the Tracer-specific prototype into a reusable rover/mobile-base asset configuration.
+    - Move Tracer wheel geometry, signs, command limits, and channel names from sample constants into a config or manifest before treating the asset as generic.
+    - Add a controlled shutdown path that does not require hako-cmd stop in environments where stop is unavailable.
+    - Verify state output and optional sensor output after command input is stable.
+  notes:
+    - The Twist command direction is now validated by a local Tracer prototype.
+    - The shared kinematics helper is generic, but the asset is not yet generic because wheel geometry, signs, asset names, and command limits are still hard-coded in the example.
+    - The contact policy was empirical: primitive wheel/caster collisions and excludes were added only after as-is mesh contact failed drive validation.
+
+promotion_targets:
+  catalog:
+    - hakoniwa-mujoco-robots
+    - hakoniwa-robot-arm-pack
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - agilex-tracer-mujoco-rover-runtime
+
+promotion_rationale:
+  - The manifest-driven pack pattern belongs in component Catalog and Recipes.
+  - The generic rover asset decision belongs in the next AgileX Tracer Recipe.
+  - This is not yet a Runtime Primer rule because no new shared runtime invariant has been validated.
+
+resolution:
+  promoted_to: []
+  notes:
+    - Promote after the Tracer-specific prototype is generalized or explicitly accepted as a recipe-local stepping stone.

@@ -54,6 +54,27 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-mujoco-robots
         path: README.md
         revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+  - name: MuJoCo-only robot actuator validation
+    description: Supports validating generated robot MJCF, actuator JSON bindings, and finite MuJoCo execution before adding Hakoniwa Endpoint/PDU integration.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: examples/actuators/joint/README.md
+        revision: 3c7b6504d6cd82299fd05e7a02fb03b272d5c954
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: examples/actuators/agilex_tracer/agilex-tracer-rover-example.cpp
+        revision: local-validation-2026-07-22
+  - name: Rover Twist PDU runtime prototype
+    description: Supports a staged mobile-base runtime pattern where a viewer-capable plant asset registers with Hakoniwa, a Python controller sends geometry_msgs/Twist, shared rover kinematics convert commands to wheel targets, and hako-cmd start begins synchronized simulation after registration.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: include/robots/rover/differential_drive_kinematics.hpp
+        revision: local-validation-2026-07-22
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: examples/actuators/agilex_tracer/rover-twist-hakoniwa-asset.cpp
+        revision: local-validation-2026-07-22
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: examples/actuators/agilex_tracer/send_rover_twist.py
+        revision: local-validation-2026-07-22
   - name: Forklift context and RD-light demos
     description: Includes forklift samples with context save/restore and advanced RD-light handoff.
     evidence:
@@ -80,6 +101,9 @@ interfaces:
     - name: Controller commands
       kind: pdu
       description: Python controller output consumed by simulator.
+    - name: Rover Twist command
+      kind: pdu
+      description: geometry_msgs/Twist command input for mobile-base linear.x/angular.z control.
   outputs:
     - name: Robot state PDU
       kind: pdu
@@ -182,6 +206,8 @@ typical_usecases:
   - Run TurtleBot3 with gamepad control and 2D LiDAR.
   - Compare LiDAR noise profiles for Sim2Real validation.
   - Test standalone MuJoCo sensor or actuator behavior.
+  - Validate a newly converted robot body with MuJoCo-only actuator smoke before Hakoniwa PDU wiring.
+  - Validate a rover/mobile-base Twist command path after plant and controller assets register, then start with hako-cmd.
   - Demonstrate forklift context save/restore and RD-light handoff.
 
 anti_usecases:
@@ -261,4 +287,3 @@ tags:
   - actuator
   - forklift
   - pdu
-

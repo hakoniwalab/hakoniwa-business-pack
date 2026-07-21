@@ -1,0 +1,101 @@
+id: hakoniwa-asset-program-starts-conductor-before-hako-cmd-start
+title: A Hakoniwa asset program can own conductor startup, asset registration, then wait for hako-cmd start
+status: candidate
+
+knowledge_type:
+  - usage_pattern
+  - runtime_lifecycle
+  - validation_rule
+
+summary: >
+  For a local single-process plant asset, the asset executable may start the
+  Hakoniwa conductor, register itself as an asset, open its Endpoint/PDU
+  channels, and then block in WAIT START until an external hako-cmd start is
+  issued. Demo recipes should treat hako-cmd start as the transition after all
+  required assets/controllers have registered, not as the first runtime step.
+
+observation:
+  context: >
+    Validating the AgileX Tracer rover Twist PDU sample in
+    hakoniwa-mujoco-robots after the MuJoCo-only actuator sample passed.
+  details:
+    - The rover-twist-hakoniwa-asset executable calls hako_conductor_start(), then hako_asset_register(), then opens/starts a PDU Endpoint for RoverTwistAsset/cmd_vel.
+    - Starting the asset program alone produced hako_conductor thread start, asset registration, channel creation, and WAIT START.
+    - The Python sender then registered as RoverTwistSender and also waited for start.
+    - Running /usr/local/hakoniwa/bin/hako-cmd start after both programs had registered created PDU data and transitioned both assets into simulation.
+    - The asset received geometry_msgs/Twist and advanced the Tracer base from x=0.000m to x=0.333m during the first 3 second command-window validation. After later collision/height tuning, the same flow advanced to x=0.300m.
+    - On this local validation environment, Hakoniwa shared memory access had to run outside the Codex sandbox.
+    - hako-cmd stop was intentionally not used in this validation; the user reported that this environment should start from hako-cmd start.
+
+sources:
+  repositories:
+    - repository: local/hakoniwa-mujoco-robots
+      path: examples/actuators/agilex_tracer/rover-twist-hakoniwa-asset.cpp
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-mujoco-robots
+      path: examples/actuators/agilex_tracer/send_rover_twist.py
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-mujoco-robots
+      path: examples/actuators/agilex_tracer/README.md
+      revision: local-working-tree-2026-07-22
+  runtime_evidence:
+    - description: >
+        rover-twist-hakoniwa-asset reached WAIT START after conductor startup,
+        RoverTwistAsset registration, and RoverTwistAsset/cmd_vel channel creation.
+    - description: >
+        send_rover_twist.py reached WAIT START after RoverTwistSender
+        registration.
+    - description: >
+        /usr/local/hakoniwa/bin/hako-cmd start created PDU data and both assets
+        entered simulation. The plant log showed cmd=(0.200, 0.000),
+        wheel=(-2.439, 2.439), and base x progressing to 0.333m in the initial validation and 0.300m after collision/height tuning.
+  expert_input:
+    - source: user
+      statement: >
+        The principle is conductor startup, then asset registration, then
+        hako-cmd start. In this case, if the asset program performs asset
+        registration, starting that program should be sufficient before
+        hako-cmd start.
+
+confidence: medium
+
+contradictions:
+  - target: recipes/examples/agilex-tracer-urdf-to-mujoco.yaml
+    existing_claim: Hakoniwa PDU control remains unverified.
+    new_evidence: >
+      A first Twist PDU runtime smoke was verified with the Tracer plant asset
+      and Python sender after the asset program started the conductor and
+      registered the plant asset.
+
+validation:
+  status: verified
+  required:
+    - Add a controlled shutdown pattern that does not rely on hako-cmd stop in environments where stop is unavailable.
+  notes:
+    - This candidate captures the runtime ordering and the local Tracer smoke.
+    - The current rover sample is still a prototype path, not a fully generic rover asset.
+    - The startup-order rule has been promoted to the Runtime Primer because it clarifies an existing Hakoniwa lifecycle invariant.
+
+promotion_targets:
+  catalog:
+    - hakoniwa-mujoco-robots
+    - hakoniwa-core-pro
+  runtime_primer: true
+  base_ecosystem_guide: false
+  component_asset_guide: true
+  recipes:
+    - agilex-tracer-urdf-to-mujoco
+    - agilex-tracer-mujoco-rover-runtime
+
+promotion_rationale:
+  - Demo recipes need a precise lifecycle order for hako-cmd start.
+  - The rule is generally useful for Hakoniwa asset programs that own conductor startup.
+  - Promotion should wait until the shutdown expectation is clarified.
+
+resolution:
+  promoted_to:
+    - docs/hakoniwa-runtime-primer.md
+    - docs/hakoniwa-runtime-primer-ja.md
+  notes:
+    - Candidate created from the AgileX Tracer Twist PDU runtime smoke.
+    - Promoted the conductor/asset-registration/hako-cmd-start ordering rule to the Runtime Primer on 2026-07-22.

@@ -1,0 +1,105 @@
+id: primitive-collision-overlays-must-match-visual-scale-and-contact-height
+title: Primitive collision overlays must be checked against visual scale and contact height
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - validation_rule
+  - recipe_design
+
+summary: >
+  When primitive collision geoms are attached to a generated MJCF to stabilize
+  contact, they must be validated against both physics behavior and visual
+  credibility. A primitive that fixes contact can still be too large compared
+  with the visual mesh, making the demo look wrong and causing tilt or unstable
+  stance if the primitive radius, joint origin, caster contact, and initial
+  robot height are inconsistent.
+
+observation:
+  context: >
+    Reviewing the AgileX Tracer MuJoCo viewer after adding primitive wheel and
+    caster collision overlays to make the generated model drive on the ground.
+  details:
+    - The original Tracer drive wheel visual mesh bounds measured about 0.121m diameter, so the visual radius is about 0.0605m.
+    - The first added drive wheel collision primitive used a cylinder radius of 0.082m and half length of 0.045m.
+    - The Tracer wheel joint origin is z=-0.082 relative to base_link, and the first minimal world started the robot at base z=0.16.
+    - With base z=0.16, the wheel center is about z=0.078. A visual-radius primitive of 0.0605m would leave the wheel bottom around z=0.0175, while radius 0.082m places the collision bottom around z=-0.004.
+    - Therefore the oversized primitive was not arbitrary: it made the wheel contact the ground under the first world pose and joint origin. But it also made the viewer show large central tires and may contribute to visible tilt.
+    - The follow-up tuning reduced the drive wheel collision radius to 0.0605m, lowered the minimal-world base pose to z=0.1425, and reduced collision alpha from 0.35 to 0.22.
+    - After tuning, MuJoCo-only --check still passed with base=(0.055, 0.000, 0.142), wheel_target=(-2.439, 2.439), and pitch about 0.55 degrees after 1 second.
+    - The Hakoniwa Twist runtime smoke still passed after tuning, advancing base x from 0.000m to 0.300m in the 3 second command window.
+    - For Tracer, the central left/right drive-wheel layout itself is source-model behavior; the size mismatch is from the collision overlay.
+    - Primitive overlays should be treated as tuning inputs, not as final truth, until viewer observation confirms acceptable appearance, contact patch, and stance.
+
+sources:
+  repositories:
+    - repository: local/hakoniwa-mbody-registry
+      path: bodies/agilex_tracer/config/collision_primitives.yaml
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-mbody-registry
+      path: bodies/agilex_tracer/config/mujoco_world.yaml
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-mbody-registry
+      path: bodies/agilex_tracer/generated/tracer_description/urdf/tracer_v1.xacro
+      revision: local-generated-2026-07-22
+    - repository: local/hakoniwa-mbody-registry
+      path: bodies/agilex_tracer/generated/tracer_description/meshes/tracer_wheel.obj
+      revision: local-generated-2026-07-22
+    - repository: local/hakoniwa-mbody-registry
+      path: bodies/agilex_tracer/generated/tracer_v1.minimal_world.xml
+      revision: local-generated-2026-07-22
+  runtime_evidence:
+    - description: >
+        Headless drive validation passed with the oversized 0.082m drive-wheel
+        collision cylinders, but viewer inspection showed the central collision
+        wheels looked large and the robot could visibly tilt. A follow-up tune
+        changed the radius to 0.0605m and the initial base z to 0.1425 while
+        preserving MuJoCo-only and Hakoniwa Twist smoke success.
+  expert_input:
+    - source: user
+      statement: >
+        In the viewer, the tire in the middle looks large and the robot tilts.
+        This should become knowledge for future primitive attachment.
+
+confidence: medium
+
+contradictions:
+  - target: knowledge/candidates/mujoco-first-actuator-sensor-validation-sequence.yaml
+    existing_claim: >
+      Adding primitive wheel/caster collision geoms and contact excludes produced
+      stable headless forward displacement.
+    new_evidence: >
+      Headless forward displacement is not sufficient. Primitive overlays also
+      require viewer validation for visual scale, stance, tilt, and contact
+      credibility.
+
+validation:
+  status: partially_verified
+  required:
+    - Observe the viewer after the 0.0605m/0.1425 tuning to confirm the primitive no longer looks oversized and the chassis stance is acceptable.
+    - Tune caster contact geometry if viewer inspection still shows chassis tilt or poor stance.
+  notes:
+    - A primitive radius matching the mesh visual radius may require lowering the initial robot pose or adjusting joint/contact geometry.
+    - A primitive radius matching the current joint origin may look visually wrong if it diverges from mesh bounds.
+    - Recipes should record both the numeric primitive dimensions and the visual/stance checks used to accept them.
+
+promotion_targets:
+  catalog:
+    - hakoniwa-mbody-registry
+    - hakoniwa-mujoco-robots
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: true
+  recipes:
+    - agilex-tracer-urdf-to-mujoco
+
+promotion_rationale:
+  - The rule is useful for generated robot-body Recipes that add primitive contacts after mesh contact fails.
+  - It belongs near component asset guidance once validated beyond Tracer.
+  - It is not a runtime lifecycle rule.
+
+resolution:
+  promoted_to: []
+  notes:
+    - Candidate created after Tracer viewer inspection found the 0.082m wheel collision primitive visually oversized relative to the mesh.
+    - Updated after tuning the drive-wheel collision radius to 0.0605m and minimal-world base z to 0.1425.

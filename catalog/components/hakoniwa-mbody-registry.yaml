@@ -48,6 +48,39 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-mbody-registry
         path: README.md
         revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
+  - name: MuJoCo minimal-world composition
+    description: Can compose generated robot MJCF into a minimal MuJoCo world from bodies/{name}/config/mujoco_world.yaml, preserving generated robot XML as tool output instead of requiring hand-maintained MJCF forks.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: tools/mjcf_compose_world.py
+        revision: local-validation-2026-07-22
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: bodies/agilex_tracer/config/mujoco_world.yaml
+        revision: local-validation-2026-07-22
+  - name: MuJoCo collision overlay
+    description: Can layer primitive collision geoms and contact excludes onto generated MJCF from config inputs when source mesh contacts are unsuitable for stable actuation.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: tools/mjcf_apply_collision_primitives.py
+        revision: local-validation-2026-07-22
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: tools/mjcf_add_contact_excludes.py
+        revision: local-validation-2026-07-22
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: bodies/agilex_tracer/config/collision_primitives.yaml
+        revision: local-validation-2026-07-22
+  - name: DAE mesh preprocessing for MuJoCo conversion
+    description: Can preprocess URDF-referenced COLLADA DAE meshes into OBJ and feed the rewritten URDF into MuJoCo conversion for models whose DAE meshes are not accepted by the installed MuJoCo decoder.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: tools/urdf_dae2obj.py
+        revision: 862bb8d137d0f82b40adf4e7ed499399d14de54c
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: tools/forge.sh
+        revision: local-validation-2026-07-22
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: bodies/agilex_tracer/generated/tracer_v1.xml
+        revision: local-validation-2026-07-22
   - name: Godot-ready assets and sync configs
     description: Generates Godot scenes, endpoint configs, and robot_sync.profile.json consumed by hakoniwa-godot.
     evidence:
@@ -75,9 +108,21 @@ interfaces:
     - name: Xacro or URDF source
       kind: file
       description: Robot source description fetched under bodies/{name}/source.
+    - name: Source adapter
+      kind: command
+      description: Optional robot-specific source normalization step used when upstream ROS-origin xacro includes, Gazebo-only tags, or mesh URI conventions are not directly accepted by the ROS-free conversion tools.
     - name: Actuator config
       kind: config
-      description: bodies/{name}/config/actuator.yml used to add actuators to MJCF.
+      description: bodies/{name}/config/actuators.yaml used to add actuators to MJCF.
+    - name: MuJoCo world config
+      kind: config
+      description: bodies/{name}/config/mujoco_world.yaml used to compose a generated robot MJCF into a minimal MuJoCo world.
+    - name: Collision primitive config
+      kind: config
+      description: Optional bodies/{name}/config/collision_primitives.yaml used to add simple collision geoms without hand-editing generated MJCF.
+    - name: Contact exclude config
+      kind: config
+      description: Optional bodies/{name}/config/contact_excludes.yaml used to suppress internal body contacts in generated MJCF.
     - name: PDU manifest
       kind: config
       description: pdu-manifest.yaml used to produce pdutypes.json and pdu_def.json.
@@ -91,6 +136,15 @@ interfaces:
     - name: MJCF
       kind: file
       description: Canonical and actuated MuJoCo XML under bodies/{name}/generated.
+    - name: Minimal MuJoCo world
+      kind: file
+      description: Optional bodies/{name}/generated/{entry}.minimal_world.xml composed from generated robot MJCF and mujoco_world.yaml.
+    - name: Collision-overlaid MJCF
+      kind: file
+      description: Optional generated MJCF with primitive collision geoms and contact excludes applied before world composition.
+    - name: OBJ-rewritten URDF
+      kind: file
+      description: Optional intermediate URDF with DAE mesh references rewritten to OBJ before MuJoCo compilation.
     - name: GLB
       kind: file
       description: Single or split GLB visual assets.
@@ -203,6 +257,17 @@ demo_candidates:
       - repository: hakoniwalab/hakoniwa-mbody-registry
         path: sources/tb3.yaml
         revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
+  - name: AgileX Tracer source-adapted forge pipeline
+    description: Fetch AgileX tracer_ros at a pinned revision, adapt ROS-style xacro includes and package mesh paths, run forge.sh with DAE-to-OBJ preprocessing, and confirm the generated tracer_v1.xml loads in MuJoCo.
+    required_components:
+      - hakoniwa-mbody-registry
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: sources/agilex_tracer.yaml
+        revision: local-validation-2026-07-22
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: tools/adapt_agilex_tracer_source.py
+        revision: local-validation-2026-07-22
   - name: Godot robot sync artifact generation
     description: Generate endpoint_shm_with_pdu.json and robot_sync.profile.json from godot_sync.yaml for use by hakoniwa-godot.
     required_components:
@@ -237,6 +302,7 @@ known_gaps:
   - Need to catalog exact schemas under schemas/ for tool inputs.
   - Need to verify which generated artifacts are committed for each robot body.
   - Need to connect generated artifacts to concrete MuJoCo and Godot demos.
+  - Source-adapted external robots should record whether their generated artifacts are committed registry outputs or validation-only artifacts.
 
 source_refs:
   - repository: hakoniwalab/hakoniwa-mbody-registry

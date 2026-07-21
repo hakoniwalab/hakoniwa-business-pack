@@ -1,0 +1,143 @@
+id: mujoco-first-actuator-sensor-validation-sequence
+title: New MuJoCo robot recipes should validate actuator and sensor behavior before Hakoniwa PDU integration
+status: candidate
+
+knowledge_type:
+  - usage_pattern
+  - validation_rule
+  - recipe_design
+
+summary: >
+  For a new robot such as AgileX Tracer, the lowest-risk Recipe sequence is to
+  first create a MuJoCo-only sample that proves model loading, actuator binding,
+  contact behavior, and optional sensor binding. The Hakoniwa asset adapter and
+  Python PDU controller/reader should be added only after the same model and JSON
+  configs work in standalone MuJoCo. For source-derived robot bodies, actuator
+  and world additions should remain tool-chain inputs layered onto generated
+  MJCF rather than hand-maintained MJCF forks.
+
+observation:
+  context: >
+    Reviewing hakoniwa-mujoco-robots examples/actuators and examples/sensors
+    while planning the next AgileX Tracer Recipe after URDF-to-MuJoCo conversion.
+  details:
+    - The joint actuator tutorial starts with a MuJoCo-only executable that loads a model, loads JSON actuator configs, creates JointActuatorImpl instances, and directly applies SetTarget() into MuJoCo ctrl[].
+    - The joint actuator Hakoniwa example reuses the same model/config pattern, then adds Endpoint, Hakoniwa lifecycle, Float64 command PDUs, and JointState output.
+    - The Python actuator sender is a separate controller asset, so PDU behavior is validated after the MuJoCo actuator behavior is already visible.
+    - The ultrasonic tutorial follows the same sequence: first bind a sensor to an MJCF site and verify deterministic measurements and viewer ray visualization, then publish sensor_msgs/Range as a Hakoniwa PDU, then read it from Python.
+    - The color camera tutorial also separates MuJoCo camera capture from Hakoniwa image PDU publication and Python consumption.
+    - This staged structure cleanly separates physics/contact/model defects from Hakoniwa Endpoint/PDU integration defects.
+    - For AgileX Tracer, this implies a first sample with a ground plane, freejoint, left/right wheel velocity actuators, passive caster joints as generated, and keyboard or scripted Twist-like velocity targets before building a generic rover Hakoniwa asset.
+    - The Tracer validation then proceeded to the next stage with a Hakoniwa plant asset and a Python controller asset using geometry_msgs/Twist.
+    - The runtime order was plant asset executable starts conductor and registers RoverTwistAsset, Python sender registers RoverTwistSender, then hako-cmd start transitions both from WAIT START into simulation.
+    - To preserve source reproducibility, Tracer actuator, collision, contact, and world additions should be expressed as tool-chain inputs such as actuators.yaml, collision_primitives.yaml, contact_excludes.yaml, and mujoco_world.yaml, not as a hand-maintained fork of the generated MJCF.
+    - This was partially executed for Tracer by adding MBody tool-chain configs, generating tracer_v1.actuated.xml, tracer_v1.actuated.collision.xml, tracer_v1.actuated.collision.contact.xml, and tracer_v1.minimal_world.xml, and running a MuJoCo-only C++ --check smoke in hakoniwa-mujoco-robots.
+    - As-is mesh contact was not sufficient for Tracer drive validation: internal base/caster contacts appeared and wheel-driven translation was poor. Adding primitive wheel/caster collision geoms and contact excludes produced stable headless forward displacement.
+    - Viewer inspection later showed that passing headless displacement is not enough: the initial Tracer drive-wheel collision primitive radius of 0.082m was visibly larger than the visual wheel mesh radius of about 0.0605m and could contribute to tilt. The primitive radius was then reduced to 0.0605m and the initial base height was lowered to z=0.1425. Primitive overlays must be checked for visual scale, stance, and contact height together.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      path: examples/actuators/README.md
+      revision: 3c7b6504d6cd82299fd05e7a02fb03b272d5c954
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      path: examples/actuators/joint/README.md
+      revision: 3c7b6504d6cd82299fd05e7a02fb03b272d5c954
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      path: examples/actuators/joint/joint-actuator-example.cpp
+      revision: 3c7b6504d6cd82299fd05e7a02fb03b272d5c954
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      path: examples/actuators/joint/joint-actuator-hakoniwa-asset.cpp
+      revision: 3c7b6504d6cd82299fd05e7a02fb03b272d5c954
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      path: examples/actuators/joint/joint_actuator_sender.py
+      revision: 3c7b6504d6cd82299fd05e7a02fb03b272d5c954
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      path: examples/sensors/ultrasonic/README.md
+      revision: 3c7b6504d6cd82299fd05e7a02fb03b272d5c954
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      path: examples/sensors/ultrasonic/ultrasonic-example.cpp
+      revision: 3c7b6504d6cd82299fd05e7a02fb03b272d5c954
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      path: examples/sensors/ultrasonic/ultrasonic-hakoniwa-asset.cpp
+      revision: 3c7b6504d6cd82299fd05e7a02fb03b272d5c954
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      path: examples/sensors/color_camera/README.md
+      revision: 3c7b6504d6cd82299fd05e7a02fb03b272d5c954
+    - repository: local/hakoniwa-mbody-registry
+      path: bodies/agilex_tracer/config/actuators.yaml
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-mbody-registry
+      path: bodies/agilex_tracer/config/collision_primitives.yaml
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-mbody-registry
+      path: bodies/agilex_tracer/config/contact_excludes.yaml
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-mbody-registry
+      path: bodies/agilex_tracer/config/mujoco_world.yaml
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-mbody-registry
+      path: bodies/agilex_tracer/generated/tracer_v1.minimal_world.xml
+      revision: local-generated-2026-07-22
+    - repository: local/hakoniwa-mujoco-robots
+      path: examples/actuators/agilex_tracer/agilex-tracer-rover-example.cpp
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-mujoco-robots
+      path: examples/actuators/agilex_tracer/rover-twist-hakoniwa-asset.cpp
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-mujoco-robots
+      path: examples/actuators/agilex_tracer/send_rover_twist.py
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-business-pack
+      path: knowledge/candidates/primitive-collision-overlays-must-match-visual-scale-and-contact-height.yaml
+      revision: local-working-tree-2026-07-22
+  expert_input:
+    - source: user
+      statement: >
+        Prefer first making a MuJoCo-only sample that works, then adding the
+        Hakoniwa adapter, then controlling it from Python.
+
+confidence: medium
+
+contradictions:
+  - target: knowledge/candidates/generic-rover-asset-from-fr5-and-tb3-patterns.yaml
+    existing_claim: >
+      AgileX Tracer should move toward a generic rover/mobile-base Hakoniwa asset
+      using geometry_msgs/Twist.
+    new_evidence: >
+      The generic rover target is still appropriate, but implementation should
+      be staged behind a MuJoCo-only actuator/contact validation sample.
+
+validation:
+  status: partially_verified
+  required:
+    - Observe the Tracer MuJoCo-only actuator sample in the viewer and confirm acceptable base motion.
+    - Observe generated Tracer primitive contacts in the viewer and confirm the headless forward-displacement result is visually acceptable.
+    - Tune primitive wheel/caster dimensions and initial pose when viewer inspection shows oversized collision geoms or chassis tilt.
+    - Add state output and optional sensor output after command input is stable.
+    - Generalize the prototype so robot geometry and limits come from config rather than hard-coded example constants.
+  notes:
+    - The pattern is verified in existing tutorials and partially executed for AgileX Tracer through actuator/collision/contact/world generation, MuJoCo load, and a non-viewer C++ actuator smoke check.
+    - Tracer minimal-world MuJoCo load after collision/contact tuning reported nbody=13, njnt=11, ngeom=25, nu=2, nexclude=10 and actuators left_motor/right_motor.
+    - agilex-tracer-rover-example --check completed with check ok after binding both wheel actuators, advancing simulation for 1 second, and verifying positive forward displacement.
+    - rover-twist-hakoniwa-asset plus send_rover_twist.py validated Python geometry_msgs/Twist command input through Hakoniwa shared memory after hako-cmd start.
+    - The Tracer plant log after visual-scale collision tuning showed cmd=(0.200, 0.000), wheel=(-2.439, 2.439), and base x progression from 0.000m to 0.300m over the command window.
+    - Viewer observation is required before promotion because primitive collision overlays can be physically useful but visually oversized or stance-distorting.
+
+promotion_targets:
+  catalog:
+    - hakoniwa-mujoco-robots
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - agilex-tracer-mujoco-rover-runtime
+
+promotion_rationale:
+  - The staged validation flow should shape the next AgileX Tracer Recipe.
+  - Promote to primer only after at least one new robot beyond the tutorials follows the sequence successfully.
+
+resolution:
+  promoted_to: []
+  notes:
+    - Candidate updated after Tracer actuator/world tool-chain generation and MuJoCo-only smoke validation.

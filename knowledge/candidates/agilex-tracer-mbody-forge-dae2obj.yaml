@@ -1,0 +1,91 @@
+id: agilex-tracer-mbody-forge-dae2obj
+title: AgileX Tracer MBody forge requires ROS-free xacro adaptation and DAE-to-OBJ preprocessing
+status: promoted
+
+knowledge_type:
+  - implementation_fact
+  - usage_pattern
+  - known_pitfall
+  - validation_rule
+
+summary: >
+  The AgileX Tracer upstream ROS description can be converted through
+  hakoniwa-mbody-registry into MuJoCo-loadable MJCF and GLB artifacts, but it
+  requires a source adapter before xacro processing and DAE-to-OBJ preprocessing
+  before MuJoCo compilation.
+
+observation:
+  context: >
+    Validating recipes/examples/agilex-tracer-urdf-to-mujoco.yaml against local
+    clones under /Users/tmori/project/business-pack on macOS.
+  details:
+    - AgileX tracer_ros master exposes tracer_description/urdf/tracer_v1.xacro as the practical entry xacro.
+    - The upstream xacro uses ROS-style $(find tracer_description) include paths, which are rejected by tools/xacro2urdf.py before conversion.
+    - The upstream xacro includes Gazebo-only configuration whose plugin filename is not a MuJoCo mesh resource and must not be passed to urdf2mjcf.py.
+    - The Tracer URDF references COLLADA .dae meshes that the installed MuJoCo Python runtime did not decode directly.
+    - Adding a Tracer source adapter plus optional forge-level urdf_dae2obj preprocessing allowed forge.sh to generate tracer_v1.xml and GLB artifacts.
+    - The canonical generated tracer_v1.xml loaded with mujoco.MjModel.from_xml_path and contained 13 bodies, 10 joints, 18 geoms, 4 meshes, and 0 actuators before optional actuator injection.
+
+sources:
+  repositories:
+    - repository: agilexrobotics/tracer_ros
+      path: tracer_description/urdf/tracer_v1.xacro
+      revision: 151b53c548fe2f5d6dd67a9c1478ea340ad43f21
+    - repository: hakoniwalab/hakoniwa-mbody-registry
+      path: sources/agilex_tracer.yaml
+      revision: local-validation-2026-07-22
+    - repository: hakoniwalab/hakoniwa-mbody-registry
+      path: tools/adapt_agilex_tracer_source.py
+      revision: local-validation-2026-07-22
+    - repository: hakoniwalab/hakoniwa-mbody-registry
+      path: tools/forge.sh
+      revision: local-validation-2026-07-22
+    - repository: hakoniwalab/hakoniwa-mbody-registry
+      path: tools/urdf_dae2obj.py
+      revision: 862bb8d137d0f82b40adf4e7ed499399d14de54c
+  runtime_evidence:
+    - description: >
+        forge.sh completed with HAKO_SKIP_FETCH=1 after adapter execution,
+        converted 4 DAE mesh files, rewrote 18 URDF mesh references, generated
+        tracer_v1.xml, tracer_v1.glb, and 11 split GLB parts.
+    - description: >
+        mujoco.MjModel.from_xml_path('bodies/agilex_tracer/generated/tracer_v1.xml')
+        loaded successfully with nbody=13, njnt=10, ngeom=18, nmesh=4, nu=0.
+  expert_input: []
+
+confidence: high
+
+contradictions:
+  - target: recipes/examples/agilex-tracer-urdf-to-mujoco.yaml
+    existing_claim: Tracer-specific source closure, compatibility adaptation, and conversion were unverified.
+    new_evidence: Local validation identified the exact entry xacro, adapter needs, DAE conversion step, generated artifacts, and MuJoCo load result.
+
+validation:
+  status: verified
+  required:
+    - Downstream actuator mapping and Hakoniwa runtime control remain separate validation work; later Tracer actuator/world composition is tracked by mujoco-first-actuator-sensor-validation-sequence.
+    - Decide whether generated AgileX Tracer artifacts should be committed as registry outputs.
+  notes:
+    - This validates canonical conversion and MuJoCo model loading, not robot control behavior.
+    - The canonical generated model has no actuators; optional Tracer-specific actuator injection is a later tool-chain layer.
+
+promotion_targets:
+  catalog:
+    - hakoniwa-mbody-registry
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - agilex-tracer-urdf-to-mujoco
+
+promotion_rationale:
+  - The DAE preprocessing support and source-adapter need are component-specific MBody conversion knowledge.
+  - The verified Tracer conversion path belongs in the Tracer Recipe validation record.
+  - The finding is not a Hakoniwa runtime rule because no shared-memory, PDU, lifecycle, or Conductor behavior is involved.
+
+resolution:
+  promoted_to:
+    - catalog/components/hakoniwa-mbody-registry.yaml
+    - recipes/examples/agilex-tracer-urdf-to-mujoco.yaml
+  notes:
+    - Promoted after local forge and MuJoCo load validation on 2026-07-22.
