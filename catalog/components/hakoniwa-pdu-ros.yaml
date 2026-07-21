@@ -1,0 +1,230 @@
+id: hakoniwa-pdu-ros
+name: Hakoniwa PDU ROS
+repository:
+  owner: hakoniwalab
+  name: hakoniwa-pdu-ros
+  url: https://github.com/hakoniwalab/hakoniwa-pdu-ros
+  visibility: public
+distribution:
+  channel: oss
+  notes:
+    - Public OSS Hakoniwa component for runtime PDU <-> ROS 2 topic conversion.
+verification:
+  verified_at: 2026-07-21
+  source_revision: 8693f4d82a61765feb990754459427a287347bb3
+  source_ref: main
+summary: Config-driven Python bridge between Hakoniwa PDU data and ROS 2 topics that resolves message mappings at runtime from PDU definitions and binding configuration without per-type bridge code.
+category:
+  primary: communication
+  secondary:
+    - integration
+    - bridge
+    - ros2
+    - language-binding
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - Cataloged from the current README architecture, verified message coverage, configuration contract, and Ubuntu quick start.
+capabilities:
+  - name: Runtime PDU to ROS 2 mapping
+    description: Converts received Hakoniwa PDU data into ROS 2 messages and publishes them to configured topics at runtime.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: README.md
+        revision: 8693f4d82a61765feb990754459427a287347bb3
+  - name: Runtime ROS 2 to PDU mapping
+    description: Subscribes to ROS 2 topics, converts ROS messages to generated PDU Python types, and sends them through hakoniwa-pdu-endpoint.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: README.md
+        revision: 8693f4d82a61765feb990754459427a287347bb3
+  - name: Configuration-only bridge setup
+    description: Uses pdudef.json, endpoint configuration, and a compact binding JSON so new supported message types do not require bridge-side implementation code.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: README.md
+        revision: 8693f4d82a61765feb990754459427a287347bb3
+  - name: Endpoint transport independence
+    description: Delegates transport to hakoniwa-pdu-endpoint, allowing the same bridge mapping mechanism to operate across endpoint-supported communication backends.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: README.md
+        revision: 8693f4d82a61765feb990754459427a287347bb3
+  - name: Standard ROS message runtime mapping
+    description: Verified type mapping covers PointCloud2, JointState, LaserScan, CameraInfo, and Float64MultiArray.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: README.md
+        revision: 8693f4d82a61765feb990754459427a287347bb3
+limitations:
+  - Requires ROS 2 and Python runtime support; the documented quick start targets Ubuntu 24.04 with a ROS 2 distribution such as Jazzy.
+  - Binary layout conversion is provided by generated hakoniwa-pdu-python converters; this component does not implement PDU binary layouts itself.
+  - Endpoint transport behavior and availability depend on hakoniwa-pdu-endpoint configuration and enabled backends.
+  - A PDU type must have compatible generated Python conversion artifacts and field structure for recursive ROS message mapping.
+  - The current verified message list does not imply every ROS 2 message type has been tested.
+interfaces:
+  inputs:
+    - name: Binding config
+      kind: config
+      description: Maps Hakoniwa robot/PDU keys to ROS-owned topics and optional directions.
+    - name: PDU definition
+      kind: config
+      description: pdudef.json supplies PDU type, channel ID, payload size, and message type information.
+    - name: Endpoint config
+      kind: config
+      description: Selects and configures the hakoniwa-pdu-endpoint communication backend.
+    - name: ROS 2 topic messages
+      kind: api
+      description: ROS messages received by bridge subscriptions for ROS -> PDU transfer.
+  outputs:
+    - name: ROS 2 topic messages
+      kind: api
+      description: ROS messages published from PDU data on bridge-owned /pdu topic paths by default.
+    - name: Hakoniwa PDU payloads
+      kind: pdu
+      description: PDU data sent through hakoniwa-pdu-endpoint after ROS message conversion.
+  protocols:
+    - name: ROS 2 topics
+      role: publisher | subscriber
+      notes: Bidirectional topic bridge; one-way direction can be configured per binding.
+    - name: Hakoniwa PDU Endpoint
+      role: local | remote
+      notes: Endpoint owns PDU cache and transport; representative documented backends include Zenoh, WebSocket, and TCP/UDP.
+  configuration:
+    - path: config/sample/sample_binding.json
+      description: Example binding between PDU keys and ROS topics.
+    - path: config/sample/endpoint_zenoh.json
+      description: Representative Zenoh endpoint configuration used by the quick start.
+dependencies:
+  required:
+    - name: ROS 2
+      type: runtime
+      notes: Required for message types, topic publication/subscription, colcon build, and ros2 run.
+    - name: Python
+      type: runtime
+      notes: Runtime implementation and generated PDU Python converters are Python-based.
+    - name: hakoniwa-pdu-endpoint
+      type: repository
+      notes: Provides PDU cache, communication transport, receive events, and send/receive APIs.
+    - name: hakoniwa-pdu-python
+      type: package
+      notes: Provides generated PDU Python types and binary conversion used by the bridge.
+    - name: hakoniwa-pdu-registry
+      type: repository
+      notes: Defines/generates the PDU type artifacts consumed by hakoniwa-pdu-python and the runtime bridge.
+  optional:
+    - name: Zenoh backend
+      type: runtime
+      notes: Used by the documented sample configuration; other endpoint communication backends may be selected instead.
+platforms:
+  supported:
+    - Linux
+  notes:
+    - The documented quick start targets Ubuntu 24.04 and uses ROS_DISTRO such as jazzy.
+connects_to:
+  - component_id: hakoniwa-pdu-endpoint
+    direction: uses
+    interface: endpoint cache / communication backend
+    notes: Transport and PDU send/receive responsibilities remain in the Endpoint layer.
+  - component_id: hakoniwa-pdu-python
+    direction: uses
+    interface: generated Python PDU types and binary converters
+    notes: PDU binary layout responsibility remains in hakoniwa-pdu-python.
+  - component_id: hakoniwa-pdu-registry
+    direction: uses
+    interface: PDU definitions and generated type conventions
+    notes: Runtime recursive field mapping assumes the generated converter/type structure defined by the Registry toolchain.
+  - component_id: hakoniwa-core-pro
+    direction: related
+    interface: Hakoniwa runtime / PDU environment
+    notes: Typical simulation-side PDU producers and consumers participate in the Hakoniwa runtime, but the bridge itself is specifically an Endpoint-layer ROS integration component.
+data_contracts:
+  - name: PDU to ROS binding contract
+    description: A binding identifies robot_name and pdu_name and optionally direction/topic; PDU type, channel ID, and payload size are resolved from pdudef.json.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: README.md
+        revision: 8693f4d82a61765feb990754459427a287347bb3
+  - name: Default ROS topic ownership contract
+    description: By default ROS-owned topics use /<robot>/<pdu>, while PDU-owned mirror topics are published under /pdu/<robot>/<pdu>; the bridge does not subscribe to the /pdu mirror path.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: README.md
+        revision: 8693f4d82a61765feb990754459427a287347bb3
+  - name: Generated converter contract
+    description: hakoniwa-pdu-ros maps ROS messages to/from generated pdu_pytype objects while hakoniwa-pdu-python owns pdu_pytype <-> binary conversion.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: README.md
+        revision: 8693f4d82a61765feb990754459427a287347bb3
+recipe_roles:
+  - role: bridge
+    description: Bridges ROS 2 topic messages and Hakoniwa PDU data bidirectionally.
+  - role: integration_boundary
+    description: Defines a configuration-driven boundary between existing ROS 2 nodes and Hakoniwa PDU systems.
+  - role: communication_infrastructure
+    description: Participates in runtime PDU exchange while delegating actual transport to hakoniwa-pdu-endpoint.
+typical_usecases:
+  - Connect existing ROS 2 nodes to Hakoniwa PDU without writing per-message bridge code.
+  - Publish Hakoniwa sensor or state PDU data into ROS 2 topics.
+  - Accept ROS 2 command/value topics and forward them into a Hakoniwa simulation through PDU.
+  - Reuse the same PDU/ROS mapping while changing the Endpoint communication backend.
+anti_usecases:
+  - Replacing hakoniwa-pdu-endpoint transport or cache infrastructure.
+  - Generating PDU binary layouts or generated Python converters by itself.
+  - Replacing ROS 2 with a ROS-independent runtime.
+  - Claiming every ROS 2 message type is supported without validation.
+demo_candidates:
+  - name: Bidirectional PDU and ROS 2 bridge over Zenoh
+    description: Run the documented Ubuntu quick start, verify Zenoh -> ROS on /pdu/hakoniwa/drone/pos, then verify ROS -> Zenoh with the sample command publisher.
+    required_components:
+      - hakoniwa-pdu-ros
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-pdu-python
+      - hakoniwa-pdu-registry
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: README.md
+        revision: 8693f4d82a61765feb990754459427a287347bb3
+operations:
+  build:
+    commands:
+      - colcon build
+    notes:
+      - Source the selected ROS 2 distribution and Python PDU virtual environment first.
+      - Build hakoniwa-pdu-endpoint with the communication backend required by the endpoint configuration.
+  test:
+    commands:
+      - python3 -m unittest discover -s test -p 'test_type_mapper.py'
+    notes:
+      - The documented permanent type-mapping target covers standard ROS message types.
+  run:
+    commands:
+      - ros2 run hakoniwa_pdu_ros bridge --config config/sample/sample_binding.json
+    notes:
+      - Resolve HAKONIWA_PDU_ENDPOINT_PYTHON_PATH when developing against a local Endpoint build.
+      - The installed config path may differ from the source-tree relative path after colcon build.
+known_gaps:
+  - Add a Business Pack Recipe that captures the verified bidirectional ROS 2 bridge flow and its target environment.
+  - Expand runtime validation coverage for additional ROS 2 message types and Endpoint backends.
+  - Record Linux/ROS distribution compatibility beyond the documented Ubuntu 24.04 quick start.
+source_refs:
+  - repository: hakoniwalab/hakoniwa-pdu-ros
+    path: README.md
+    revision: 8693f4d82a61765feb990754459427a287347bb3
+    description: Architecture, mapping responsibilities, binding contract, verified message coverage, and Ubuntu quick start.
+  - repository: hakoniwalab/hakoniwa-pdu-ros
+    path: DESIGN.md
+    revision: 8693f4d82a61765feb990754459427a287347bb3
+    description: Detailed design for runtime ROS message and PDU Python type mapping.
+tags:
+  - hakoniwa
+  - pdu
+  - ros2
+  - bridge
+  - endpoint
+  - python
+  - integration
+  - runtime-mapping
+  - zenoh
