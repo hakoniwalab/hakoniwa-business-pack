@@ -1,0 +1,393 @@
+id: agilex-tracer-urdf-to-mujoco
+title: AgileX Tracer URDF to MuJoCo with MBody Registry
+recipe_version: 0.1
+
+goal:
+  user_request: AgileX Tracer の公開 URDF/Xacro を箱庭の MBody Registry に取り込み、MuJoCo で利用できるロボット身体モデルへ変換したい。
+  description: >
+    Reuse the AgileX Tracer robot description as an upstream body source, adapt
+    source-side ROS/package assumptions when necessary, forge normalized URDF and
+    MuJoCo artifacts with hakoniwa-mbody-registry, and hand the resulting MJCF to a
+    downstream MuJoCo runtime. This Recipe intentionally separates source adaptation,
+    body artifact generation, and runtime wiring.
+
+feasibility:
+  status: partially_feasible
+  confidence: high
+  rationale:
+    - hakoniwa-mbody-registry has a documented ROS-free forge pipeline from xacro or xacro-enabled URDF to plain URDF, canonical MJCF, optional actuated MJCF, GLB, PDU artifacts, and a minimal MuJoCo world when configured.
+    - The forge pipeline fetches upstream files from a declarative sources/*.yaml definition and can use a pinned revision.
+    - Source-side ROS assumptions such as $(find ...) are explicitly rejected by xacro2urdf.py and must be adapted to relative or locally fetched paths before conversion.
+    - AgileX publishes Tracer description sources, but this specific Tracer source has not yet been executed through the Hakoniwa MBody forge pipeline in this Recipe.
+    - Runtime execution in hakoniwa-mujoco-robots is a downstream integration step and must not be conflated with successful MBody conversion.
+
+validation:
+  status: partially_verified
+  summary: >
+    The generic MBody forge and source-adaptation path is repository-backed and has
+    been exercised with existing robot bodies. The Tracer-specific source definition,
+    adapter patch, generated MJCF, and downstream runtime wiring remain to be validated.
+  steps:
+    - id: mbody_forge_pipeline
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mbody-registry
+          path: README.md
+          revision: main
+        - repository: hakoniwalab/hakoniwa-mbody-registry
+          path: tools/forge.sh
+          revision: main
+      notes:
+        - forge.sh performs source fetch, xacro/URDF normalization, URDF to MJCF conversion, optional actuator generation, GLB generation, optional PDU generation, and optional minimal-world composition.
+    - id: ros_free_source_guard
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mbody-registry
+          path: tools/xacro2urdf.py
+          revision: main
+      notes:
+        - ROS-style $(find ...) references are rejected and must be replaced or adapted before conversion.
+    - id: tracer_source_adaptation
+      status: not_tested
+      notes:
+        - Confirm the exact Tracer entry URDF/Xacro, fetched dependency paths, mesh references, and any adapter patch required for ROS-free processing.
+    - id: tracer_mujoco_runtime
+      status: not_tested
+      notes:
+        - Confirm the generated Tracer MJCF and runtime-specific actuator/control integration in the chosen MuJoCo runner.
+
+constraints:
+  - no-ros-runtime
+  - single-pc
+  - source-adaptation-may-be-required
+  - conversion-and-runtime-are-separate-stages
+
+target_environment:
+  required_for: executable-demo
+  status: recorded
+  os: macOS | Linux
+  architecture: arm64 | x86_64
+  execution_mode: native
+  runtimes:
+    - name: Python
+      required: true
+      version: "3"
+      path: unknown
+    - name: MuJoCo
+      required: true
+      version: unknown
+      path: unknown
+  hakoniwa:
+    install_prefix: /usr/local/hakoniwa
+    components_built:
+      - hakoniwa-mbody-registry
+      - hakoniwa-mujoco-robots
+  notes:
+    - A repository-local Python virtual environment is recommended for hakoniwa-mbody-registry.
+    - The exact MuJoCo runtime command depends on the downstream hakoniwa-mujoco-robots asset/runtime configuration.
+
+execution_environment:
+  required_for: executable-demo
+  status: partially_known
+  gui:
+    required: true
+    status: unknown
+  shared_memory:
+    required: false
+    access: not-required-for-conversion
+  python:
+    environment: venv
+    hakopy_available: not-required-for-conversion
+  hakoniwa:
+    install_prefix: /usr/local/hakoniwa
+    hako_cmd_access: unknown
+  notes:
+    - MBody conversion itself does not require Hakoniwa shared memory or hako-cmd.
+    - Shared memory and hako-cmd become relevant only when the selected downstream runtime composition requires them.
+
+agency_boundary:
+  agent_actions:
+    - id: inspect_tracer_source
+      description: Inspect the fetched Tracer description for xacro includes, package paths, mesh references, and ROS-only expressions.
+      autonomous: true
+      preconditions:
+        - user_requested_execution
+    - id: prepare_source_adapter
+      description: Prepare a minimal source-side adapter patch that replaces ROS/package assumptions with paths valid inside the fetched source tree.
+      autonomous: true
+      preconditions:
+        - user_requested_execution
+        - tracer_source_fetched
+    - id: forge_tracer_body
+      description: Run the repository forge pipeline after the source tree and adapter are prepared.
+      autonomous: true
+      preconditions:
+        - user_requested_execution
+        - tracer_source_adapter_applied
+  human_decisions:
+    - id: approve_adapter_scope
+      description: Confirm that source adaptation preserves the intended Tracer body geometry and joint semantics rather than redesigning the upstream robot model.
+      status: required
+      required_before:
+        - accept_generated_body
+  human_actions: []
+  required_permissions:
+    - id: upstream_source_access
+      description: Confirm that the AgileX Tracer source repository and referenced assets can be fetched under their applicable license terms.
+      status: required
+      required_before:
+        - fetch_tracer_source
+  notes:
+    - Source adapters should be minimal compatibility patches, not a substitute robot model.
+
+components:
+  - id: hakoniwa-mbody-registry
+    roles:
+      - registry
+      - asset_generator
+      - data_model
+    purpose: Fetch, normalize, adapt, and forge Tracer body artifacts into URDF, MJCF, GLB, and optional runtime-supporting files.
+  - id: hakoniwa-mujoco-robots
+    roles:
+      - physics_runtime
+    purpose: Consume the generated MuJoCo body/world artifacts in the downstream simulation stage.
+
+connections:
+  - from: agilex-tracer-description
+    to: hakoniwa-mbody-registry
+    interface: file
+    data:
+      - Tracer xacro/URDF source
+      - mesh assets
+      - included description files
+    contract:
+      status: not_tested
+      requires:
+        - A sources/*.yaml fetch definition with the required upstream paths.
+        - An exact entry URDF/Xacro path.
+        - Replacement or adaptation of unsupported ROS-style $(find ...) expressions and package-relative assumptions.
+      validation_notes:
+        - Tracer-specific source closure has not yet been validated.
+    notes: >
+      The source tree is treated as upstream input. Compatibility adaptation occurs
+      before forging when the upstream description assumes a ROS package environment.
+  - from: hakoniwa-mbody-registry
+    to: hakoniwa-mujoco-robots
+    interface: generated-artifact
+    data:
+      - canonical Tracer MJCF
+      - optional actuated Tracer MJCF
+      - optional minimal MuJoCo world
+      - optional GLB parts
+    contract:
+      status: not_tested
+      requires:
+        - Successful Tracer forge output.
+        - Runtime-specific actuator/control configuration when motion is required.
+        - A downstream runner configuration that references the generated artifacts.
+      validation_notes:
+        - Successful forge does not by itself verify runtime control or Hakoniwa PDU wiring.
+    notes: Runtime wiring belongs to the downstream MuJoCo integration layer.
+
+data_flow:
+  summary: >
+    Fetch the upstream Tracer description, make the smallest compatibility adaptations
+    needed for ROS-free processing, forge normalized body artifacts, then use the
+    generated MJCF in a downstream MuJoCo runtime. Runtime PDU/control configuration is
+    added only after body conversion succeeds.
+  steps:
+    - from: agilex-tracer-description
+      to: source-adapter
+      data:
+        - xacro/URDF
+        - includes
+        - mesh paths
+      description: Resolve ROS-package assumptions and make the source self-contained for the fetched local tree.
+    - from: source-adapter
+      to: hakoniwa-mbody-registry
+      data:
+        - adapted entry URDF/Xacro
+      description: Feed the adapted source into the standard forge pipeline.
+    - from: hakoniwa-mbody-registry
+      to: hakoniwa-mujoco-robots
+      data:
+        - generated MJCF and optional minimal world
+      description: Hand generated body artifacts to the runtime without treating conversion as runtime validation.
+
+time_model:
+  mode: unknown
+  components:
+    - hakoniwa-mujoco-robots
+  notes:
+    - No simulation time model is required for source fetch or MBody conversion.
+    - The time model is selected and validated as part of the downstream runtime composition.
+
+artifact_sets:
+  physics_artifacts:
+    description: Body and world artifacts consumed by MuJoCo.
+    status: not_tested
+    artifacts:
+      - Tracer canonical MJCF
+      - Tracer actuated MJCF when actuator config is supplied
+      - Tracer minimal world when mujoco_world.yaml is supplied
+    notes:
+      - Exact output names follow the selected Tracer entry-file basename and MBody configuration.
+  visualization_artifacts:
+    description: Visual assets produced by the MBody forge pipeline.
+    status: not_tested
+    artifacts:
+      - Tracer GLB
+      - Tracer split parts/*.glb
+    notes:
+      - GLB generation can be skipped for physics-only checks with HAKO_SKIP_GLB=1.
+  pdu_artifacts:
+    description: Optional PDU artifacts generated only when a Tracer PDU manifest/body config is added.
+    status: not_tested
+    artifacts:
+      - pdutypes.json
+      - pdu_def.json
+    notes:
+      - These artifacts are not prerequisites for validating the URDF-to-MJCF conversion itself.
+  runtime_artifacts:
+    description: Runtime-specific files needed after the body has been forged.
+    status: not_tested
+    artifacts:
+      - downstream hakoniwa-mujoco-robots asset/runtime configuration
+    notes:
+      - Do not invent a tracer-asset.json or hako-cmd command until the downstream runtime contract is confirmed.
+
+artifacts:
+  - name: Tracer source definition
+    kind: source
+    producer: human-or-agent
+    consumer:
+      - hakoniwa-mbody-registry
+    path: sources/<tracer-source>.yaml
+  - name: Tracer normalized URDF
+    kind: urdf
+    producer: hakoniwa-mbody-registry
+    consumer:
+      - hakoniwa-mbody-registry
+  - name: Tracer canonical MJCF
+    kind: mjcf
+    producer: hakoniwa-mbody-registry
+    consumer:
+      - hakoniwa-mujoco-robots
+
+missing_pieces:
+  - Add and validate the exact Tracer sources/*.yaml definition, including a pinned upstream revision when reproducibility is required.
+  - Determine the exact Tracer entry URDF/Xacro path from the fetched AgileX description tree.
+  - Record the minimal adapter patch required to remove ROS/package-path assumptions, if any.
+  - Define Tracer-specific actuator mapping only after the generated MJCF joint names are confirmed.
+  - Define the downstream hakoniwa-mujoco-robots runner/asset configuration and PDU control path only after the body model loads correctly.
+
+demo:
+  objective: >
+    Prove the Tracer source can be converted reproducibly into a valid MuJoCo body
+    artifact before adding Hakoniwa runtime control.
+  steps:
+    - order: 1
+      id: prepare_mbody_environment
+      component: hakoniwa-mbody-registry
+      action: Create a repository-local virtual environment and install the conversion dependencies.
+      command: python3 -m venv .venv && .venv/bin/python -m pip install --upgrade pip && .venv/bin/python -m pip install -r requirements.txt
+      agency: agent_action
+    - order: 2
+      id: define_tracer_source
+      component: hakoniwa-mbody-registry
+      action: Add a Tracer sources/*.yaml definition containing repo, branch or revision, fetched paths, and forge.entry_urdf when using the new-style forge flow.
+      agency: agent_action
+    - order: 3
+      id: adapt_tracer_source
+      component: hakoniwa-mbody-registry
+      action: Inspect and adapt the fetched Tracer description so xacro2urdf.py sees only relative/local paths and no unsupported ROS-style $(find ...) expressions.
+      agency: agent_action
+      requires_gates:
+        - upstream_source_access
+    - order: 4
+      id: forge_tracer
+      component: hakoniwa-mbody-registry
+      action: Run the standard forge pipeline into an explicit generated directory.
+      command: PATH=$PWD/.venv/bin:$PATH ./tools/forge.sh sources/<tracer-source>.yaml <generated-dir>
+      agency: agent_action
+    - order: 5
+      id: inspect_generated_mjcf
+      component: hakoniwa-mbody-registry
+      action: Verify that the generated canonical MJCF loads in MuJoCo and that base, wheel bodies, wheel joints, mesh placement, and inertial structure are credible.
+      agency: human_decision
+      requires_gates:
+        - approve_adapter_scope
+    - order: 6
+      id: integrate_mujoco_runtime
+      component: hakoniwa-mujoco-robots
+      action: Add the runtime-specific world/asset/actuator configuration and only then validate motion and Hakoniwa runtime wiring.
+      agency: agent_action
+  observability:
+    success_signals:
+      - forge.sh completes and reports the generated output directory.
+      - A normalized Tracer URDF and canonical MJCF are generated.
+      - The canonical MJCF loads without XML/compiler errors in MuJoCo.
+      - The Tracer base and wheel geometry appear with credible transforms and joint structure.
+    failure_signals:
+      - xacro2urdf.py reports an unsupported $(find ...) expression.
+      - A referenced include or mesh is missing from the fetched source closure.
+      - URDF-to-MJCF conversion fails because source geometry or visual mesh formats are unsupported.
+      - The MJCF loads but wheel/body transforms or joint axes are structurally incorrect.
+    fixtures:
+      - No environment fixture is required for the conversion-only validation.
+    automation:
+      - Use forge.sh rather than reconstructing the conversion pipeline as ad-hoc one-off commands.
+  verification_checks:
+    lifecycle:
+      - The forge process exits successfully.
+      - Generated files exist under the explicit generated directory.
+    behavior:
+      - Canonical MJCF opens in MuJoCo.
+      - The expected Tracer base and wheel joints are present before actuator mapping is authored.
+    logs:
+      - Forge output contains Forge complete.
+      - No xacro, missing-file, or MuJoCo compiler error is emitted.
+
+expected_result: >
+  A reproducible Tracer body conversion path exists in which upstream source adaptation
+  is explicit, forge.sh produces normalized URDF/MJCF artifacts, and the resulting MJCF
+  can be inspected in MuJoCo. Hakoniwa runtime control is intentionally validated as a
+  separate subsequent step rather than being assumed from successful conversion.
+
+source_catalogs:
+  - component_id: hakoniwa-mbody-registry
+    catalog_path: ../catalog/components/hakoniwa-mbody-registry.yaml
+  - component_id: hakoniwa-mujoco-robots
+    catalog_path: ../catalog/components/hakoniwa-mujoco-robots.yaml
+
+source_artifacts:
+  - repository: hakoniwalab/hakoniwa-mbody-registry
+    path: README.md
+    revision: main
+    description: Documents the ROS-free toolchain, forge pipeline, generated artifacts, and ownership boundary between MBody conversion and downstream runtimes.
+  - repository: hakoniwalab/hakoniwa-mbody-registry
+    path: tools/forge.sh
+    revision: main
+    description: Authoritative forge orchestration for fetch, normalization, MJCF conversion, actuator/GLB/PDU generation, and optional minimal-world composition.
+  - repository: hakoniwalab/hakoniwa-mbody-registry
+    path: tools/xacro2urdf.py
+    revision: main
+    description: Defines ROS-free xacro conversion and the explicit failure behavior for unsupported $(find ...) expressions.
+  - repository: agilexrobotics/tracer_ros
+    path: tracer_description
+    revision: to-be-pinned
+    description: Upstream Tracer robot description source to be adapted and forged.
+
+tags:
+  - hakoniwa
+  - recipe
+  - agilex
+  - tracer
+  - agv
+  - amr
+  - urdf
+  - xacro
+  - mujoco
+  - mbody
+  - source-adapter
+  - no-ros-runtime
