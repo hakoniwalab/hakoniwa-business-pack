@@ -1,0 +1,82 @@
+id: robot-control-prevalidation
+title: 実機投入前のロボット制御ロジック事前検証
+usecase_version: 0.1
+
+audience:
+  primary:
+    - robot-development-team
+    - control-software-developer
+  notes:
+    - The current evidence is a TurtleBot3 mobile-robot reference path.
+
+situation: >
+  A development team wants to exercise robot commands, motion behavior, and sensor
+  feedback in simulation before applying the control path to physical hardware.
+
+problem: >
+  Early control integration on physical hardware requires hardware availability and
+  introduces physical-operation constraints. The team needs an observable software-only
+  path for finding command, model, and data-flow issues first.
+
+desired_outcome: >
+  Run a representative robot model under Hakoniwa and MuJoCo, drive it through PDU
+  commands, and observe motion and sensor output before deciding whether the control
+  path is ready for a physical-system validation phase.
+
+status:
+  feasibility: feasible
+  validation: verified
+  confidence: high
+  rationale:
+    - The referenced TurtleBot3 Recipe verifies MBody-generated artifacts in MuJoCo.
+    - Scripted command PDU input, robot motion, and LiDAR output were observed.
+    - Verification is limited to the recorded TurtleBot3 macOS arm64 environment.
+
+realized_by:
+  - recipe_id: mujoco-turtlebot3-mbody
+    relationship: reference_implementation
+    validation_scope: >
+      TurtleBot3 Burger, Waffle, and Waffle Pi motion and LiDAR behavior under scripted
+      PDU control on macOS arm64.
+  - recipe_id: mujoco-turtlebot3-wall-follower
+    relationship: behavior_variant
+    validation_scope: >
+      Sensor-driven mobile-robot control composition described by the Recipe.
+
+supported_by:
+  - component_id: hakoniwa-mbody-registry
+    role: Generate or provide robot-body, MuJoCo, and PDU artifacts.
+  - component_id: hakoniwa-mujoco-robots
+    role: Execute robot physics and publish observable state and sensor data.
+  - component_id: hakoniwa-core-pro
+    role: Provide Hakoniwa lifecycle and simulation time.
+  - component_id: hakoniwa-pdu-endpoint
+    role: Provide runtime PDU communication infrastructure.
+  - component_id: hakoniwa-pdu-registry
+    role: Provide canonical command, state, and sensor data contracts.
+
+communication_notes:
+  safe_statements:
+    - A representative mobile-robot control path has been executed in simulation.
+    - Command input, robot motion, and LiDAR output can be observed before a physical-system test phase.
+  avoid_statements:
+    - Simulation proves physical safety or real-world performance.
+    - The verified TurtleBot3 result applies unchanged to every robot platform.
+
+limitations:
+  - Model fidelity and physical validity require human review for each intended system.
+  - Simulation results do not authorize connection to or actuation of physical hardware.
+  - Customer-specific robot models, controllers, fixtures, and acceptance criteria require separate validation.
+  - This Usecase does not claim a complete Sim2Real transfer or production-readiness process.
+
+next_steps:
+  - Define acceptance criteria for control-path readiness before physical testing.
+  - Add Recipe variants for customer-specific robot models and controller interfaces.
+  - Record model-fidelity decisions and physical-system approval as explicit human gates.
+
+tags:
+  - robot
+  - control
+  - mujoco
+  - prevalidation
+  - simulation

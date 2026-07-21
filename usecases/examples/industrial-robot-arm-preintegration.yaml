@@ -1,0 +1,83 @@
+id: industrial-robot-arm-preintegration
+title: 産業用ロボットアーム導入前の指令・状態統合検証
+usecase_version: 0.1
+
+audience:
+  primary:
+    - manufacturing-engineering-team
+    - robot-system-integrator
+    - robot-control-developer
+  notes:
+    - The current reference implementation is FAIRINO FR5 and uses a commercial private pack.
+
+situation: >
+  A team is considering an industrial robot arm and wants to examine how trajectory
+  commands, simulated joint motion, and joint-state feedback fit into its software
+  integration path before physical-system integration.
+
+problem: >
+  Robot-specific models, actuator settings, command contracts, and state-output paths
+  must be aligned. Discovering these integration gaps only after hardware preparation
+  makes the software integration phase harder to isolate and review.
+
+desired_outcome: >
+  Run a robot-arm model in MuJoCo as a Hakoniwa asset, send JointTrajectory-compatible
+  PDU commands, observe JointState-compatible output, and identify robot-specific
+  modeling or integration gaps before planning physical-system connection.
+
+status:
+  feasibility: feasible
+  validation: partially_verified
+  confidence: high
+  rationale:
+    - The Hakoniwa Robot Arm Pack catalog records a locally executed FAIRINO FR5 reference integration.
+    - JointTrajectory command handling, simulated joint motion, and JointState output are supported by source evidence.
+    - No public Business Pack Recipe currently captures the complete FR5 runtime and validation path.
+
+realized_by: []
+
+supported_by:
+  - component_id: hakoniwa-robot-arm-pack
+    role: Provide the private robot-specific manifest, model, configuration, reference Recipe, and validated FR5 integration.
+  - component_id: hakoniwa-mujoco-robots
+    role: Provide the public MuJoCo and Hakoniwa robot simulation runtime.
+  - component_id: hakoniwa-mbody-registry
+    role: Supply or regenerate robot-body and MJCF artifacts.
+  - component_id: hakoniwa-pdu-endpoint
+    role: Provide command reception, state publication, and PDU runtime infrastructure.
+  - component_id: hakoniwa-core-pro
+    role: Provide Hakoniwa asset lifecycle and simulation synchronization.
+  - component_id: hakoniwa-pdu-python
+    role: Provide the Python reference trajectory sender and PDU conversion path.
+
+communication_notes:
+  safe_statements:
+    - A FAIRINO FR5 reference integration has been executed locally.
+    - The reference path accepts JointTrajectory-compatible PDU commands and publishes JointState-compatible data.
+    - Additional robot arms require onboarding and validation.
+  avoid_statements:
+    - Every industrial robot arm is supported without robot-specific work.
+    - Simulation results prove physical performance or safety.
+    - The commercial pack or private assets are publicly downloadable.
+
+limitations:
+  - Commercial access approval is required for the private robot-arm pack and robot-specific assets.
+  - The currently verified robot is FAIRINO FR5; other robots require model onboarding and validation.
+  - Model fidelity, actuator behavior, collision parameters, payloads, and acceptance criteria require human review.
+  - Simulation output must not be connected to physical hardware without an explicit approval and safety gate.
+  - The absence of a public Recipe limits independent reproduction from this repository alone.
+
+next_steps:
+  - Add a public metadata-only Recipe for the FR5 reference path without exposing private assets or commands.
+  - Define repeatable onboarding and acceptance criteria for additional robot arms.
+  - Add explicit human decisions for model fidelity and physical-system integration approval.
+  - Link publication-approved screenshots or video evidence when available.
+
+tags:
+  - robot-arm
+  - industrial-robot
+  - joint-trajectory
+  - joint-state
+  - mujoco
+  - commercial
+  - preintegration

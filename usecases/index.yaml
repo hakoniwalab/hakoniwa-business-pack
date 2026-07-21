@@ -1,0 +1,17 @@
+schema_version: 0.1
+usecases:
+  - id: robot-control-prevalidation
+    path: examples/robot-control-prevalidation.yaml
+    title: 実機投入前のロボット制御ロジック事前検証
+    feasibility: feasible
+    validation: verified
+  - id: browser-based-simulation-visualization
+    path: examples/browser-based-simulation-visualization.yaml
+    title: ブラウザで観察できるシミュレーション可視化デモ
+    feasibility: feasible
+    validation: verified
+  - id: industrial-robot-arm-preintegration
+    path: examples/industrial-robot-arm-preintegration.yaml
+    title: 産業用ロボットアーム導入前の指令・状態統合検証
+    feasibility: feasible
+    validation: partially_verified

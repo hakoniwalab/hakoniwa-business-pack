@@ -1,0 +1,50 @@
+schema_version: 0.1
+required_fields:
+  - id
+  - title
+  - usecase_version
+  - audience
+  - situation
+  - problem
+  - desired_outcome
+  - status
+  - realized_by
+  - supported_by
+  - limitations
+  - next_steps
+
+status:
+  feasibility:
+    allowed:
+      - feasible
+      - partially_feasible
+      - unknown
+  validation:
+    allowed:
+      - verified
+      - partially_verified
+      - not_tested
+      - blocked
+  confidence:
+    allowed:
+      - high
+      - medium
+      - low
+
+reference_rules:
+  realized_by:
+    target: recipes/examples/*.yaml
+    notes:
+      - Use an empty list when no Recipe exists.
+  supported_by:
+    target: catalog/components/*.yaml
+    notes:
+      - Every component ID must exist in the Catalog.
+
+authoring_rules:
+  - Separate feasibility from validation.
+  - A verified Recipe supports only the representative behavior and environment it records.
+  - Do not infer customer outcomes such as lower cost, higher safety, or production readiness without evidence.
+  - Do not describe local browser visualization as remote access unless networking and deployment are validated.
+  - Commercial and private dependencies must remain explicit.
+  - Missing Recipes and validation gaps belong in next_steps.
