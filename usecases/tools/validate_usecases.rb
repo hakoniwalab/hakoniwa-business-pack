@@ -3,6 +3,7 @@
 
 require "set"
 require "yaml"
+require "date"
 
 ROOT = File.expand_path("../..", __dir__)
 USECASES_DIR = File.join(ROOT, "usecases")
@@ -10,7 +11,7 @@ EXAMPLES_DIR = File.join(USECASES_DIR, "examples")
 CATALOG_DIR = File.join(ROOT, "catalog", "components")
 RECIPES_DIR = File.join(ROOT, "recipes", "examples")
 
-schema = YAML.load_file(File.join(USECASES_DIR, "schema.yaml"))
+schema = YAML.load_file(File.join(USECASES_DIR, "schema.yaml"), permitted_classes: [Date])
 required_fields = schema.fetch("required_fields")
 allowed_audiences = schema
   .fetch("controlled_fields")
@@ -22,11 +23,11 @@ allowed_validation = schema.fetch("status").fetch("validation").fetch("allowed")
 allowed_confidence = schema.fetch("status").fetch("confidence").fetch("allowed").to_set
 
 catalog_ids = Dir[File.join(CATALOG_DIR, "*.yaml")].map do |path|
-  YAML.load_file(path).fetch("id")
+  YAML.load_file(path, permitted_classes: [Date]).fetch("id")
 end.to_set
 
 recipe_ids = Dir[File.join(RECIPES_DIR, "*.yaml")].map do |path|
-  YAML.load_file(path).fetch("id")
+  YAML.load_file(path, permitted_classes: [Date]).fetch("id")
 end.to_set
 
 usecase_paths = Dir[File.join(EXAMPLES_DIR, "*.yaml")].sort
@@ -35,7 +36,7 @@ warnings = []
 seen_ids = Set.new
 
 usecase_paths.each do |path|
-  data = YAML.load_file(path)
+  data = YAML.load_file(path, permitted_classes: [Date])
   label = File.basename(path)
   id = data["id"]
 
@@ -90,7 +91,7 @@ usecase_paths.each do |path|
   warnings << "#{label}: duplicate supported_by components: #{duplicates.join(', ')}" unless duplicates.empty?
 end
 
-index = YAML.load_file(File.join(USECASES_DIR, "index.yaml"))
+index = YAML.load_file(File.join(USECASES_DIR, "index.yaml"), permitted_classes: [Date])
 index_entries = Array(index["usecases"])
 index_ids = Set.new
 
@@ -113,7 +114,7 @@ index_entries.each do |entry|
     next
   end
 
-  referenced = YAML.load_file(full_path)
+  referenced = YAML.load_file(full_path, permitted_classes: [Date])
   errors << "#{label}: #{id} path points to id #{referenced['id']}" unless referenced["id"] == id
 
   status = referenced["status"] || {}

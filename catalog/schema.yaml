@@ -33,6 +33,7 @@ controlled_fields:
       - physics-runtime
       - rd
       - registry
+      - robot-arm
       - robot-body
       - rpc
       - simulator
@@ -113,6 +114,7 @@ controlled_fields:
       - asset_generator
       - bridge
       - code_generator
+      - commercial_pack
       - communication_infrastructure
       - control_plane
       - data_model

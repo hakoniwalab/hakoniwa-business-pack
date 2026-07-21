@@ -9,7 +9,7 @@ COMPONENTS_DIR = File.join(ROOT, "components")
 INDEX_PATH = File.join(ROOT, "index.yaml")
 
 def compact_component(path)
-  data = YAML.load_file(path)
+  data = YAML.load_file(path, permitted_classes: [Date])
   {
     "id" => data.fetch("id"),
     "name" => data.fetch("name"),

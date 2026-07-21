@@ -85,7 +85,7 @@ interfaces:
       kind: pdu
       description: Periodic simulated joint-state output for monitoring, visualization, or integration.
     - name: MuJoCo visualization
-      kind: gui
+      kind: api
       description: Interactive viewer showing the simulated robot-arm motion.
   protocols:
     - name: Hakoniwa PDU
@@ -150,7 +150,7 @@ connects_to:
     interface: asset lifecycle, simulation synchronization, and hako-cmd
     notes: Starts and coordinates the robot-arm simulation as a Hakoniwa asset.
   - component_id: hakoniwa-pdu-python
-    direction: connects
+    direction: uses
     interface: Python JointTrajectory sender and PDU conversion
     notes: The FR5 reference sender publishes a nine-waypoint trajectory through Hakoniwa PDU.
 

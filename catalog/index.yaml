@@ -1,5 +1,5 @@
 index_version: 0.1
-generated_at: '2026-07-20'
+generated_at: '2026-07-21'
 generated_by: catalog/tools/generate_index.rb
 description: Lightweight search index for Hakoniwa component catalogs.
 components:
@@ -481,6 +481,44 @@ components:
   - cplusplus
   - control-plane
   catalog_path: components/hakoniwa-pdu-rpc.yaml
+- id: hakoniwa-robot-arm-pack
+  name: Hakoniwa Robot Arm Pack
+  category: physics-environment
+  secondary_categories:
+  - robot-arm
+  - simulator
+  - integration
+  - commercial
+  maturity: active
+  distribution: commercial
+  summary: Manifest-driven Hakoniwa and MuJoCo integration pack for industrial robot
+    arms, accepting JointTrajectory commands and publishing JointState through Hakoniwa
+    PDU. A FAIRINO FR5 reference integration has been executed locally.
+  recipe_roles:
+  - physics_runtime
+  - simulation_core
+  - integration_boundary
+  - commercial_pack
+  connects_to:
+  - hakoniwa-mujoco-robots
+  - hakoniwa-mbody-registry
+  - hakoniwa-pdu-endpoint
+  - hakoniwa-core-pro
+  - hakoniwa-pdu-python
+  tags:
+  - hakoniwa
+  - robot-arm
+  - industrial-robot
+  - mujoco
+  - joint-trajectory
+  - joint-state
+  - pdu
+  - endpoint
+  - simulation
+  - integration
+  - commercial
+  - private
+  catalog_path: components/hakoniwa-robot-arm-pack.yaml
 - id: hakoniwa-scratch
   name: Hakoniwa Scratch
   category: language-binding

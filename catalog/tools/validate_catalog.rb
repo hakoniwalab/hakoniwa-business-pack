@@ -3,6 +3,7 @@
 
 require "set"
 require "yaml"
+require "date"
 
 ROOT = File.expand_path("..", __dir__)
 COMPONENTS_DIR = File.join(ROOT, "components")
@@ -32,9 +33,9 @@ def error(errors, path, message)
   errors << "#{path}: #{message}"
 end
 
-schema = YAML.load_file(SCHEMA_PATH).fetch("controlled_fields")
+schema = YAML.load_file(SCHEMA_PATH, permitted_classes: [Date]).fetch("controlled_fields")
 paths = Dir[File.join(COMPONENTS_DIR, "*.yaml")].sort
-entries = paths.to_h { |path| [path, YAML.load_file(path)] }
+entries = paths.to_h { |path| [path, YAML.load_file(path, permitted_classes: [Date])] }
 ids = entries.values.map { |entry| entry["id"] }
 known_ids = ids.to_set
 errors = []
