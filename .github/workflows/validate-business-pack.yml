@@ -1,0 +1,30 @@
+name: Validate Business Pack
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+
+      - name: Validate catalog
+        run: ruby catalog/tools/validate_catalog.rb
+
+      - name: Check catalog/index.yaml is up to date
+        run: |
+          ruby catalog/tools/generate_index.rb
+          git diff --exit-code catalog/index.yaml
+
+      - name: Validate recipes
+        run: ruby recipes/tools/validate_recipes.rb
+
+      - name: Validate usecases
+        run: ruby usecases/tools/validate_usecases.rb
