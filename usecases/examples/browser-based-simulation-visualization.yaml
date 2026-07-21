@@ -1,0 +1,81 @@
+id: browser-based-simulation-visualization
+title: ブラウザで観察できるシミュレーション可視化デモ
+usecase_version: 0.1
+
+audience:
+  primary:
+    - demonstration-owner
+    - technical-sales
+    - development-team
+  notes:
+    - The verified reference is a local single-PC drone demo, not a validated remote deployment.
+
+situation: >
+  A team wants to show simulated behavior through a browser-facing viewer while the
+  physics runtime and control client remain separate Hakoniwa processes.
+
+problem: >
+  A native simulator viewer may be unsuitable as the only presentation surface. The
+  team needs a browser-based observation path that receives compact simulation state
+  without moving physics execution into the browser.
+
+desired_outcome: >
+  Simulate and control a drone in Hakoniwa, bridge visual-state PDU data to WebSocket,
+  and render the moving drone in a Three.js browser viewer.
+
+status:
+  feasibility: feasible
+  validation: verified
+  confidence: high
+  rationale:
+    - The referenced Recipe verifies Python flight control, visual-state publication,
+      WebSocket bridging, HTTP serving, browser connection, and visible drone motion.
+    - The verified environment is macOS arm64 on one local PC.
+
+realized_by:
+  - recipe_id: drone-single-mujoco-threejs-mac
+    relationship: reference_implementation
+    validation_scope: >
+      One simulated drone controlled through Python external RPC and rendered in a
+      local Three.js browser viewer on macOS arm64.
+
+supported_by:
+  - component_id: hakoniwa-drone-core
+    role: Simulate the drone and publish runtime and visual state.
+  - component_id: hakoniwa-core-pro
+    role: Provide Hakoniwa lifecycle, shared-memory PDU, and simulation time.
+  - component_id: hakoniwa-pdu-python
+    role: Provide the Python control and launcher/runtime path.
+  - component_id: hakoniwa-pdu-bridge-core
+    role: Bridge visual-state PDU data from shared memory to WebSocket.
+  - component_id: hakoniwa-threejs-drone
+    role: Render the viewer-facing drone state in a browser.
+  - component_id: hakoniwa-pdu-registry
+    role: Provide the visual-state and drone-service data contracts.
+
+communication_notes:
+  safe_statements:
+    - A verified local demo renders Hakoniwa drone motion in a browser.
+    - Physics, control, bridge, and visualization remain separate components connected by explicit data contracts.
+  avoid_statements:
+    - The current Recipe is a validated Internet-facing or multi-site remote service.
+    - The browser executes the drone physics simulation.
+    - The viewer requires no local setup beyond opening a URL.
+
+limitations:
+  - The current Recipe validates a local single-PC macOS environment.
+  - Browser Connect is a human action in the verified flow.
+  - Network security, authentication, public deployment, latency, and multi-user operation are not validated.
+  - The viewer is an observer and does not own simulation time or physics.
+
+next_steps:
+  - Add a Linux or containerized Recipe variant.
+  - Define and validate a secured network deployment before describing the Usecase as remote visualization.
+  - Add reusable screenshots or video evidence when publication approval is available.
+
+tags:
+  - browser
+  - visualization
+  - threejs
+  - drone
+  - demo
