@@ -1,5 +1,5 @@
 index_version: 0.1
-generated_at: '2026-07-21'
+generated_at: '2026-07-22'
 generated_by: catalog/tools/generate_index.rb
 description: Lightweight search index for Hakoniwa component catalogs.
 components:
