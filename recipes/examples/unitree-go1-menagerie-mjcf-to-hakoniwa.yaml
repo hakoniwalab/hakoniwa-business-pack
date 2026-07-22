@@ -5,21 +5,22 @@ recipe_version: 0.1
 goal:
   user_request: MuJoCo Menagerie の Unitree Go1 四足歩行ロボット MJCF サンプルを起点に、箱庭 MuJoCo runtime へ接続するレシピを作りたい。
   description: >
-    Use the curated Unitree Go1 MJCF model from MuJoCo Menagerie directly instead
-    of converting from URDF, then stage the integration from a MuJoCo-only model
-    load and position-actuator smoke check toward a Hakoniwa PDU-controlled
-    quadruped plant asset. The first target is joint I/O, posture, and external
-    controller wiring, not full autonomous walking.
+    Use the curated Unitree Go1 MJCF model from MuJoCo Menagerie directly
+    instead of starting from URDF conversion. Treat the first executable scope
+    as a Step 1 joint I/O smoke sample: load the Go1 scene, map the 12 position
+    actuators, apply home and small bounded joint-position targets, and observe
+    joint/trunk state. Full walking control is a later external-controller
+    integration step, not part of this recipe's first implementation target.
 
 feasibility:
   status: partially_feasible
   confidence: medium
   rationale:
     - MuJoCo Menagerie provides a curated Unitree Go1 MJCF model and a scene.xml that includes the model with a plane and light.
-    - The Go1 MJCF already defines 12 position actuators and a home keyframe, so the first control boundary can be joint-position targets rather than gait generation.
+    - The Go1 MJCF already defines 12 position actuators and a home keyframe, so Step 1 can use joint-position targets rather than gait generation.
     - hakoniwa-mujoco-robots already accepts MuJoCo model XML inputs and contains actuator examples and staged MuJoCo-only validation patterns.
-    - Hakoniwa runtime integration is credible through existing Core/PDU/Endpoint/Python patterns, but a Go1-specific plant asset, PDU schema, and controller adapter still need implementation.
-    - Walking control is intentionally out of scope for the first recipe because actuator availability does not imply a stable gait controller.
+    - Hakoniwa runtime integration is credible through existing Core/PDU/Endpoint/Python patterns, but a Go1-specific plant asset, PDU schema, and actuator adapter still need implementation.
+    - Walking control is intentionally deferred because actuator availability does not imply a stable gait controller.
 
 validation:
   status: not_tested
@@ -27,8 +28,8 @@ validation:
     This recipe has been authored from catalog evidence and upstream source
     inspection only. The Unitree Go1 source files were inspected and show an
     MJCF scene, 12 position actuators, and a home keyframe, but no local MuJoCo
-    load, Hakoniwa build, PDU wiring, or quadruped control runtime has been
-    executed for this recipe yet.
+    load, Hakoniwa build, PDU wiring, joint smoke sample, or walking controller
+    runtime has been executed for this recipe yet.
   steps:
     - id: inspect_menagerie_go1_scene
       status: verified
@@ -54,15 +55,16 @@ validation:
           revision: main
       notes:
         - Load scene.xml with MuJoCo and verify finite model initialization before adding Hakoniwa runtime wiring.
-    - id: position_actuator_smoke
+    - id: go1_joint_io_smoke_sample
       status: not_tested
       evidence:
         - repository: hakoniwalab/hakoniwa-mujoco-robots
           path: examples/actuators
           revision: main
       notes:
-        - Reuse the actuator-sample pattern to bind Go1 position actuators and apply a scripted home or small leg-lift command.
-    - id: hakoniwa_pdu_runtime
+        - Implement a Step 1 sample that maps the 12 Go1 position actuators by name, applies home ctrl values, and runs a small bounded joint perturbation.
+        - This verifies external-control readiness but does not claim walking.
+    - id: hakoniwa_pdu_joint_runtime
       status: not_tested
       evidence:
         - repository: hakoniwalab/hakoniwa-mujoco-robots
@@ -70,6 +72,14 @@ validation:
           revision: main
       notes:
         - Requires a Go1-specific plant asset, joint command/state PDU contracts, endpoint config, and Python command sender.
+    - id: walking_controller_integration
+      status: skipped
+      evidence:
+        - repository: external
+          path: ROS walking controller or gait-controller source
+          revision: TBD
+      notes:
+        - Walking should be added only after Step 1 joint I/O is verified and an external controller contract is selected.
 
 agency_boundary:
   agent_actions:
@@ -84,21 +94,21 @@ agency_boundary:
       preconditions:
         - user_requested_execution
         - target_environment_confirmed
-    - id: run_simulation_only_smoke
-      description: Run MuJoCo-only and Hakoniwa simulation-only checks after the user requests local execution.
+    - id: run_step1_joint_smoke
+      description: Run MuJoCo-only and Hakoniwa simulation-only joint I/O checks after the user requests local execution.
       autonomous: true
       preconditions:
         - user_requested_execution
         - target_environment_confirmed
         - required_external_sources_available
   human_decisions:
-    - id: approve_model_and_controller_scope
-      description: Decide whether the Menagerie Go1 model fidelity and non-walking first demo scope are acceptable for the intended business-pack use case.
+    - id: approve_step1_scope
+      description: Decide whether the Step 1 joint I/O sample is sufficient for the first business-pack validation.
       status: required
       required_before:
         - customer_acceptance
     - id: choose_external_controller
-      description: Decide whether to keep the demo at joint-position I/O, add a scripted posture controller, or connect an external gait controller.
+      description: Decide whether to connect CHAMP, Unitree SDK/ROS examples, another gait controller, or a custom controller after Step 1.
       status: required
       required_before:
         - walking_demo_claim
@@ -116,6 +126,7 @@ agency_boundary:
       required_before:
         - redistribute_model_artifacts
   notes:
+    - The recipe may claim joint I/O readiness only after the Go1 joint smoke sample is verified.
     - The recipe must not claim walking behavior until a gait controller and behavior checks are verified.
     - The recipe must not cross from simulation to a real Unitree robot without explicit human approval.
 
@@ -124,6 +135,7 @@ constraints:
   - mjcf-source-artifact
   - single-pc
   - simulation-first
+  - step1-joint-io-only
   - walking-controller-out-of-scope-in-v0
   - external-model-license-notice-required
   - gui-useful-for-first-validation
@@ -184,6 +196,36 @@ execution_environment:
   notes:
     - First validation should separate MuJoCo-only model behavior from Hakoniwa PDU runtime behavior.
     - A GUI viewer is useful for stance, contact, and actuator-direction inspection.
+
+implementation_plan:
+  phase_order:
+    - id: step1_joint_io
+      title: Go1 joint I/O smoke sample
+      target_repository: hakoniwalab/hakoniwa-mujoco-robots
+      scope:
+        - Load Menagerie Unitree Go1 scene.xml.
+        - Bind 12 position actuators by stable names.
+        - Apply the Menagerie home ctrl values.
+        - Apply one small bounded perturbation to selected leg joints.
+        - Publish or log joint position, joint velocity, and trunk pose.
+      explicit_non_goals:
+        - No autonomous walking claim.
+        - No ROS walking controller yet.
+        - No real Unitree hardware.
+    - id: step2_pdu_asset
+      title: Hakoniwa PDU joint command/state asset
+      target_repository: hakoniwalab/hakoniwa-mujoco-robots
+      scope:
+        - Add command/state PDU contract for 12 joint targets and observed state.
+        - Add Python sender for home pose and small perturbation command.
+        - Start plant asset first, then hako-cmd start for synchronized stepping.
+    - id: step3_external_controller
+      title: ROS or external walking controller connection
+      target_repository: later
+      scope:
+        - Select CHAMP, Unitree SDK/ROS, or another controller only after Step 1 and Step 2 are verified.
+        - Map controller output to the 12-joint command contract or define an adapter from cmd_vel to joint targets.
+        - Add behavior checks before claiming walking.
 
 components:
   - id: hakoniwa-mujoco-robots
@@ -277,9 +319,12 @@ connections:
 data_flow:
   summary: >
     The external Menagerie Go1 MJCF is consumed directly by the MuJoCo runtime.
-    A scripted controller publishes 12 joint-position targets through Hakoniwa PDU;
-    the Go1 plant asset maps those targets to MuJoCo ctrl slots, advances simulation
-    under Hakoniwa time, and publishes joint state and optional trunk pose.
+    For Step 1, a local scripted sample writes home or small perturbation values
+    into the 12 MuJoCo ctrl slots and observes joint/trunk state. For Step 2,
+    a scripted controller publishes 12 joint-position targets through Hakoniwa
+    PDU; the Go1 plant asset maps those targets to MuJoCo ctrl slots, advances
+    simulation under Hakoniwa time, and publishes joint state and optional trunk
+    pose.
   steps:
     - from: external-menagerie-go1-scene
       to: hakoniwa-mujoco-robots
@@ -288,11 +333,16 @@ data_flow:
         - unitree_go1/go1.xml
         - unitree_go1/assets/*
       description: Use Menagerie MJCF and mesh assets as source physics artifacts without URDF conversion.
+    - from: local-go1-joint-smoke
+      to: hakoniwa-mujoco-robots
+      data:
+        - 12-element MuJoCo ctrl vector
+      description: Step 1 applies home and bounded perturbation values directly to MuJoCo position actuators.
     - from: hakoniwa-pdu-python
       to: hakoniwa-pdu-endpoint
       data:
         - 12-element joint-position command
-      description: Publish home pose or a small scripted perturbation command to the Go1 plant asset.
+      description: Step 2 publishes home pose or a small scripted perturbation command to the Go1 plant asset.
     - from: hakoniwa-pdu-endpoint
       to: hakoniwa-mujoco-robots
       data:
@@ -313,7 +363,7 @@ time_model:
     - hakoniwa-pdu-endpoint
     - hakoniwa-pdu-python
   notes:
-    - MuJoCo-only load checks can run outside Hakoniwa time.
+    - MuJoCo-only Step 1 load and joint smoke checks can run outside Hakoniwa time.
     - Hakoniwa runtime checks should start assets first, then use hako-cmd start to begin synchronized stepping.
     - A future Conductor Light version can be added if the quadruped plant and external controller need dynamic joining or multi-process coordination.
 
@@ -350,11 +400,12 @@ artifact_sets:
     status: not_tested
     artifacts:
       - Go1 actuator mapping
+      - Go1 joint I/O smoke sample
       - Go1 Hakoniwa plant asset
       - scripted Python joint command sender
       - optional launcher profile
     notes:
-      - These are implementation targets for the downstream hakoniwa-mujoco-robots PR, not validated artifacts in this recipe.
+      - Step 1 implementation belongs in hakoniwa-mujoco-robots before the walking-controller investigation.
 
 artifacts:
   - name: Menagerie Unitree Go1 scene
@@ -369,6 +420,12 @@ artifacts:
     consumer:
       - hakoniwa-mujoco-robots
     path: unitree_go1/go1.xml
+  - name: Go1 joint I/O smoke sample
+    kind: source
+    producer: hakoniwa-mujoco-robots
+    consumer:
+      - hakoniwa-mujoco-robots
+    path: TBD
   - name: Go1 joint command PDU
     kind: pdu-definition
     producer: hakoniwa-pdu-registry
@@ -392,20 +449,24 @@ artifacts:
     path: TBD
 
 missing_pieces:
-  - Implement or select a Go1 Hakoniwa MuJoCo plant asset.
-  - Define the 12-joint command/state PDU contract and generated bindings.
-  - Map Menagerie Go1 actuator names to stable PDU field order.
+  - Implement the Step 1 Go1 joint I/O smoke sample in hakoniwa-mujoco-robots.
   - Validate MuJoCo-only loading of unitree_go1/scene.xml in the target environment.
-  - Validate a scripted home or small perturbation command before attempting walking.
-  - Decide whether a walking controller is required for the business demo or whether joint I/O is enough for the first recipe.
+  - Map Menagerie Go1 actuator names to a stable 12-element field order.
+  - Apply the home ctrl values and at least one small bounded leg-joint perturbation.
+  - Publish or log joint position, joint velocity, and trunk pose for Step 1 observability.
+  - Implement or select a Go1 Hakoniwa MuJoCo plant asset for Step 2.
+  - Define the 12-joint command/state PDU contract and generated bindings.
+  - Validate a scripted PDU home or small perturbation command before attempting walking.
+  - Decide whether a ROS walking controller is required for the business demo or whether joint I/O is enough for the first recipe.
   - Confirm BSD-3-Clause notice handling before redistributing Menagerie model artifacts inside a Hakoniwa repository.
 
 demo:
   objective: >
     Prove that a curated Menagerie quadruped MJCF can be used as an MJCF-first
-    robot asset source for Hakoniwa planning, then stage a minimal simulation-only
-    demo where Go1 receives 12 joint-position targets and publishes observable
-    joint/trunk state. The demo does not claim autonomous walking.
+    robot asset source for Hakoniwa planning. The first executable step should
+    load the Go1 scene, confirm the 12 position-actuator interface, and move a
+    small set of joints through a bounded command. The demo does not claim
+    autonomous walking.
   steps:
     - order: 1
       id: run_common_preflight
@@ -442,10 +503,9 @@ demo:
           path: README.md
           revision: main
     - order: 4
-      id: home_position_actuator_smoke
+      id: go1_joint_io_smoke
       component: hakoniwa-mujoco-robots
-      action: Apply the home keyframe ctrl values or a small scripted joint perturbation to confirm actuator-slot mapping.
-      command: TBD in hakoniwa-mujoco-robots
+      action: Apply the home keyframe ctrl values and a small scripted joint perturbation to confirm actuator-slot mapping and observable leg motion.
       agency: agent_action
       requires_gates: []
       evidence:
@@ -456,50 +516,68 @@ demo:
       id: hakoniwa_joint_pdu_smoke
       component: hakoniwa-pdu-python
       action: Publish scripted Go1 joint targets to the Hakoniwa plant asset and verify joint/trunk state output after hako-cmd start.
-      command: TBD in hakoniwa-mujoco-robots
       agency: agent_action
       requires_gates: []
       evidence:
         - repository: hakoniwalab/hakoniwa-mujoco-robots
           path: config
           revision: main
+    - order: 6
+      id: external_walking_controller
+      component: hakoniwa-pdu-python
+      action: Connect a ROS or external gait controller only after Step 1 and Step 2 are verified.
+      agency: human_decision
+      requires_gates:
+        - choose_external_controller
+      evidence:
+        - repository: external
+          path: TBD
+          revision: TBD
   observability:
     success_signals:
       - MuJoCo loads unitree_go1/scene.xml without XML, mesh, or asset errors.
       - Viewer shows Go1 standing on the floor with stable contact at the home pose.
       - Applying home ctrl values keeps the robot in the expected posture for a short finite simulation.
       - Applying a small joint-position perturbation changes the intended leg joints without NaN, explosion, or actuator-name mismatch.
+      - Joint position, joint velocity, and trunk pose remain finite during the smoke test.
       - In the Hakoniwa stage, joint command PDU updates are reflected in MuJoCo ctrl values and joint state PDU output changes accordingly.
     failure_signals:
       - Missing assets or relative mesh path errors.
       - Model falls, explodes, or produces NaN before any command input.
       - Actuator count or order does not match the expected 12 command fields.
+      - A walking claim is made before an external controller and behavior checks are verified.
       - hako-cmd start occurs before assets are registered or no PDU updates are observed.
     fixtures:
       - Flat ground plane from Menagerie scene.xml.
       - Scripted home pose command and one small bounded joint perturbation.
       - Viewer or state logger to observe trunk pose and joint positions.
     automation:
-      - Use a scripted Python command source instead of a joystick or manual gait controller for v0.
+      - Use a scripted command source instead of a joystick, cmd_vel, or gait controller for v0.
   verification_checks:
     lifecycle:
       - MuJoCo scene load completes.
-      - Hakoniwa plant asset registers and waits for hako-cmd start.
+      - Step 1 smoke sample prints or logs the 12 actuator-name mapping.
+      - Hakoniwa plant asset registers and waits for hako-cmd start in Step 2.
       - Python sender starts after endpoint/PDU setup is ready.
     behavior:
       - nu equals the expected Go1 actuator count for the selected MJCF.
       - Joint positions move toward commanded values within bounded ranges.
       - Trunk pose remains finite during the short smoke test.
+      - No walking behavior is claimed until a gait controller is connected and verified.
     logs:
       - MuJoCo load summary or model dimensions.
       - Actuator mapping summary with 12 named actuators.
+      - Step 1 joint perturbation summary.
       - PDU send/receive logs for command and state channels.
 
 expected_result: >
-  A reviewer can see why Unitree Go1 should be treated as an MJCF-first quadruped
-  recipe rather than a URDF-conversion task. The first executable demo should load
-  the curated Menagerie scene, confirm the 12 position-actuator interface, and
-  prepare a Hakoniwa PDU joint-command/state path without claiming walking control.
+  A reviewer can see why Unitree Go1 should be treated as an MJCF-first
+  quadruped recipe rather than a URDF-conversion task. The first executable
+  implementation should be a Step 1 joint I/O smoke sample in
+  hakoniwa-mujoco-robots: load the curated Menagerie scene, confirm the 12
+  position-actuator interface, apply home and small bounded joint commands, and
+  observe finite joint/trunk state. Walking control remains a later external
+  controller integration.
 
 source_catalogs:
   - component_id: hakoniwa-mujoco-robots
@@ -515,34 +593,34 @@ source_catalogs:
 
 source_artifacts:
   - repository: google-deepmind/mujoco_menagerie
-    path: README.md
-    revision: main
-    description: Describes Menagerie as curated MuJoCo models, the directory layout, model usage, and the quadruped model list.
-  - repository: google-deepmind/mujoco_menagerie
     path: unitree_go1/scene.xml
     revision: main
-    description: Go1 MuJoCo scene that includes go1.xml and supplies the ground plane and lighting.
+    description: Menagerie scene that includes Go1 with a ground plane, light, and visual settings.
   - repository: google-deepmind/mujoco_menagerie
     path: unitree_go1/go1.xml
     revision: main
-    description: Go1 MJCF model with position actuator definitions and home keyframe.
+    description: Unitree Go1 MJCF model containing 12 position actuators and the home keyframe.
   - repository: google-deepmind/mujoco_menagerie
     path: unitree_go1/LICENSE
     revision: main
-    description: BSD-3-Clause license notice for the Unitree Go1 model artifacts.
+    description: BSD-3-Clause license notice that must be retained when redistributing model artifacts.
   - repository: hakoniwalab/hakoniwa-mujoco-robots
     path: examples/actuators
     revision: main
-    description: Downstream pattern for MuJoCo actuator validation before adding full Hakoniwa runtime wiring.
+    description: Existing actuator examples that can guide the Step 1 Go1 joint I/O smoke sample.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: config
+    revision: main
+    description: Existing configuration area for downstream PDU, endpoint, actuator, and runtime configs.
 
 tags:
   - hakoniwa
   - mujoco
-  - mujoco-menagerie
+  - menagerie
   - unitree-go1
   - quadruped
   - mjcf
   - actuator
-  - joint-position
+  - joint-io
   - pdu
-  - simulation-first
+  - external-controller
