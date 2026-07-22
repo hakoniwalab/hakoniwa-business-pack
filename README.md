@@ -324,6 +324,21 @@ Catalog は部品表、Recipe は構成書です。
 PDU や Registry、Endpoint、Bridge、RPC、Core / Conductor の概念的な位置付けは、
 Runtime Primer ではなく Base Ecosystem Guide を参照してください。
 
+### Demo Recording Runbook
+
+[`docs/demo-recording-runbook-ja.md`](docs/demo-recording-runbook-ja.md) は、
+検証済みデモを動画素材として録画するための実行手順です。
+
+現在は次のデモを対象にしています。
+
+- FR5 アーム
+- AgileX Tracer
+- Unitree Go1
+- Hakoniwa Drone
+
+録画前の `git status` 確認、Python 環境、Conductor / asset / `hako-cmd start`
+の順序、各デモの成功サイン、停止方法をまとめています。
+
 ---
 
 ## Demo
@@ -372,7 +387,8 @@ hakoniwa-business-pack/
 ├── docs/
 │   ├── hakoniwa-base-ecosystem-ja.md
 │   ├── hakoniwa-component-asset-guide-ja.md
-│   └── hakoniwa-runtime-primer.md
+│   ├── hakoniwa-runtime-primer.md
+│   └── demo-recording-runbook-ja.md
 │
 ├── recipes/
 │   └── product recipes
