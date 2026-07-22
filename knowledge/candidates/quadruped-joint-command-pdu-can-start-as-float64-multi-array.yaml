@@ -1,0 +1,103 @@
+id: quadruped-joint-command-pdu-can-start-as-float64-multi-array
+title: Quadruped joint command PDU can start as Float64MultiArray with a stable joint order
+status: candidate
+
+knowledge_type:
+  - recipe_design
+  - data_contract
+  - validation_rule
+
+summary: >
+  For a simulation-first quadruped Recipe, a first Hakoniwa joint command
+  contract can use std_msgs/Float64MultiArray instead of a robot-specific PDU,
+  as long as the Recipe documents a stable joint order and validates command
+  length, actuator mapping, and state readback. This keeps the command boundary
+  generic while the walking-controller contract is still undecided.
+
+observation:
+  context: >
+    Implementing the Unitree Go1 Menagerie MJCF Step 2 Hakoniwa PDU runtime.
+  details:
+    - The Go1 MJCF already defines 12 position actuators.
+    - A robot-specific fixed struct would encode the same 12 doubles but would be less reusable before a walking-controller interface is selected.
+    - The implemented contract uses joint_position_targets as std_msgs/Float64MultiArray and joint_states as sensor_msgs/JointState.
+    - The command order is FR_hip, FR_thigh, FR_calf, FL_hip, FL_thigh, FL_calf, RR_hip, RR_thigh, RR_calf, RL_hip, RL_thigh, RL_calf.
+    - The plant asset rejects command arrays whose length is not 12.
+    - The plant clamps command values through each MJCF actuator ctrlrange before writing MuJoCo ctrl[].
+    - The Python sender uses the same order and reads JointState feedback for FR_thigh and RL_thigh.
+    - Runtime smoke verified command and state flow after plant asset registration, sender registration, and hako-cmd start.
+    - The same Float64MultiArray contract was reused for pose_bounce_go1.py and walk_go1.py without adding robot-specific command structs.
+    - An experimental open-loop trot-like sender could therefore be added as a controller-side script while keeping the plant asset and PDU schema unchanged.
+    - Before the first controller command is published, the plant should avoid tight-loop reads of an unwritten command PDU; probing at a lower rate until the first valid command prevents noisy null-PDU conversion logs.
+
+sources:
+  repositories:
+    - repository: local/hakoniwa-mujoco-robots
+      path: examples/actuators/unitree_go1/unitree-go1-joint-hakoniwa-asset.cpp
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-mujoco-robots
+      path: examples/actuators/unitree_go1/send_go1_joint_targets.py
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-mujoco-robots
+      path: examples/actuators/unitree_go1/pose_bounce_go1.py
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-mujoco-robots
+      path: examples/actuators/unitree_go1/walk_go1.py
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-mujoco-robots
+      path: config/go1-joint-pdutypes.json
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-mujoco-robots
+      path: config/go1-joint-pdudef-compact.json
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-business-pack
+      path: recipes/examples/unitree-go1-menagerie-mjcf-to-hakoniwa.yaml
+      revision: local-working-tree-2026-07-22
+  expert_input:
+    - source: user
+      statement: >
+        Prefer AI-friendly, generic command PDUs that can evolve rather than
+        jumping to a narrow robot-specific asset contract too early.
+
+confidence: medium
+
+contradictions:
+  - target: future-walking-controller-contract
+    existing_claim: >
+      A future walking controller may need a richer command abstraction than
+      raw joint-position arrays.
+    new_evidence: >
+      Float64MultiArray is suitable for Step 2 joint I/O validation but should
+      not be treated as the final walking abstraction until a controller is
+      selected and validated.
+
+validation:
+  status: partially_verified
+  required:
+    - Add automated runtime smoke coverage for the plant/sender/hako-cmd start sequence.
+    - Validate whether future controller integrations prefer JointTrajectory, cmd_vel-to-gait, or a richer quadruped-specific command.
+  notes:
+    - Unitree Go1 runtime smoke showed target changes reflected in FR_thigh and RL_thigh JointState readback.
+    - Unitree Go1 walk-pattern smoke showed warmup, trot, cooldown, and done logs with thigh JointState readback and finite plant base state over a short run.
+    - A transient invalid initial PDU read may appear before the first publisher frame; later command/state logs should be used as smoke evidence.
+    - Plant assets that can run before their first controller command should either seed the command channel or probe it at a low rate until a valid command arrives.
+
+promotion_targets:
+  catalog:
+    - hakoniwa-mujoco-robots
+    - hakoniwa-pdu-registry
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: true
+  recipes:
+    - unitree-go1-menagerie-mjcf-to-hakoniwa
+
+promotion_rationale:
+  - The rule helps future robot Recipes choose a generic first command boundary without blocking on final controller design.
+  - It belongs near component asset and PDU contract guidance after another multi-joint robot validates the same pattern.
+
+resolution:
+  promoted_to: []
+  notes:
+    - Candidate created after Unitree Go1 Step 2 Hakoniwa PDU smoke succeeded.
+    - Candidate updated after pose and open-loop walk-pattern senders reused the same generic joint command contract.

@@ -34,6 +34,14 @@ observation:
     - This was partially executed for Tracer by adding MBody tool-chain configs, generating tracer_v1.actuated.xml, tracer_v1.actuated.collision.xml, tracer_v1.actuated.collision.contact.xml, and tracer_v1.minimal_world.xml, and running a MuJoCo-only C++ --check smoke in hakoniwa-mujoco-robots.
     - As-is mesh contact was not sufficient for Tracer drive validation: internal base/caster contacts appeared and wheel-driven translation was poor. Adding primitive wheel/caster collision geoms and contact excludes produced stable headless forward displacement.
     - Viewer inspection later showed that passing headless displacement is not enough: the initial Tracer drive-wheel collision primitive radius of 0.082m was visibly larger than the visual wheel mesh radius of about 0.0605m and could contribute to tilt. The primitive radius was then reduced to 0.0605m and the initial base height was lowered to z=0.1425. Primitive overlays must be checked for visual scale, stance, and contact height together.
+    - The same staged approach was applied to Unitree Go1 from MuJoCo Menagerie: first vendor and license-check the MJCF assets, then load scene.xml in MuJoCo, then add a MuJoCo-only C++ joint I/O smoke sample before designing any Hakoniwa joint PDU or walking-controller adapter.
+    - For Go1, the first executable sample binds the 12 MJCF position actuators by stable names, resets to the Menagerie home keyframe, applies home ctrl values, and verifies a small +0.12 rad perturbation on FR_thigh and RL_thigh in --check mode.
+    - Go1 confirms that quadruped readiness should be claimed first as joint I/O readiness, not walking readiness. Walking requires a separate controller contract and behavior validation.
+    - Go1 then proceeded to the Hakoniwa PDU stage with a plant asset, Python sender, std_msgs/Float64MultiArray joint command, and sensor_msgs/JointState readback. This preserved the same joint order and perturbation behavior from the MuJoCo-only sample.
+    - After the PDU stage was stable, Go1 added pose_bounce_go1.py and walk_go1.py as controller-side Python scripts that reuse the same 12-joint contract. This is an appropriate demo layer after actuator/state validation, but it should still be labeled as scripted posture or open-loop motion until feedback walking behavior is verified.
+    - For a quadruped demo where "just move" is enough, a slow creep profile that lifts one leg at a time is more stable than a showier diagonal trot pattern. Keep amplitude, foot lift, and lateral hip sway small before increasing visual motion.
+    - In the current Menagerie Go1 rigid-body/contact setup, the backward creep sweep was more stable than the opposite sweep. The opposite direction tended to step in place or destabilize, so the demo should prefer the stable direction unless a real gait controller is introduced.
+    - Plant assets may start before a controller has written the first command PDU. If the command channel is initially empty, probe reads at a lower rate or seed a safe default command to avoid noisy null-PDU conversion logs while waiting for the first valid command.
 
 sources:
   repositories:
@@ -91,6 +99,30 @@ sources:
     - repository: local/hakoniwa-business-pack
       path: knowledge/candidates/primitive-collision-overlays-must-match-visual-scale-and-contact-height.yaml
       revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-mujoco-robots
+      path: thirdparty/mujoco_menagerie/unitree_go1/scene.xml
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-mujoco-robots
+      path: examples/actuators/unitree_go1/unitree-go1-joint-io-example.cpp
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-mujoco-robots
+      path: examples/actuators/unitree_go1/README.md
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-mujoco-robots
+      path: examples/actuators/unitree_go1/unitree-go1-joint-hakoniwa-asset.cpp
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-mujoco-robots
+      path: examples/actuators/unitree_go1/send_go1_joint_targets.py
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-mujoco-robots
+      path: examples/actuators/unitree_go1/pose_bounce_go1.py
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-mujoco-robots
+      path: examples/actuators/unitree_go1/walk_go1.py
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-business-pack
+      path: recipes/examples/unitree-go1-menagerie-mjcf-to-hakoniwa.yaml
+      revision: local-working-tree-2026-07-22
   expert_input:
     - source: user
       statement: >
@@ -122,6 +154,10 @@ validation:
     - agilex-tracer-rover-example --check completed with check ok after binding both wheel actuators, advancing simulation for 1 second, and verifying positive forward displacement.
     - rover-twist-hakoniwa-asset plus send_rover_twist.py validated Python geometry_msgs/Twist command input through Hakoniwa shared memory after hako-cmd start.
     - The Tracer plant log after visual-scale collision tuning showed cmd=(0.200, 0.000), wheel=(-2.439, 2.439), and base x progression from 0.000m to 0.300m over the command window.
+    - The Go1 MuJoCo-only C++ sample built as unitree-go1-joint-io-example and its --check run printed nu=12, the 12 actuator mapping, time=1.000, base=(0.002, 0.000, 0.265), FR_thigh=1.004, RL_thigh=0.975, and check ok.
+    - The Go1 Hakoniwa PDU smoke reached WAIT START for the plant and sender, hako-cmd start created PDU shared memory, the plant entered WAIT RUNNING, and the sender logged joint_position_targets plus JointState feedback for FR_thigh/RL_thigh.
+    - The Go1 default creep walk-pattern smoke reached warmup, creep, cooldown, and done phases, moved slowly in the stable backward direction, and kept plant base z approximately 0.264m to 0.267m during the short run.
+    - The earlier Go1 diagonal trot-pattern smoke reached warmup, trot, cooldown, and done phases with larger visible motion, but user viewer feedback showed it can tip over.
     - Viewer observation is required before promotion because primitive collision overlays can be physically useful but visually oversized or stance-distorting.
 
 promotion_targets:
@@ -132,6 +168,7 @@ promotion_targets:
   component_asset_guide: false
   recipes:
     - agilex-tracer-mujoco-rover-runtime
+    - unitree-go1-menagerie-mjcf-to-hakoniwa
 
 promotion_rationale:
   - The staged validation flow should shape the next AgileX Tracer Recipe.
@@ -141,3 +178,6 @@ resolution:
   promoted_to: []
   notes:
     - Candidate updated after Tracer actuator/world tool-chain generation and MuJoCo-only smoke validation.
+    - Candidate updated after Unitree Go1 used the same MuJoCo-first sequence for MJCF-first quadruped joint I/O.
+    - Candidate updated after Unitree Go1 completed the next Hakoniwa PDU joint command/state stage.
+    - Candidate updated after Unitree Go1 added scripted pose and open-loop walk-pattern demos as post-PDU validation layers.

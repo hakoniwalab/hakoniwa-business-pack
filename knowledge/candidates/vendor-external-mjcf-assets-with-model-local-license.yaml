@@ -1,0 +1,85 @@
+id: vendor-external-mjcf-assets-with-model-local-license
+title: Vendored external MJCF assets must keep model-local license notices and source revision
+status: candidate
+
+knowledge_type:
+  - governance_rule
+  - recipe_design
+  - validation_rule
+
+summary: >
+  When a Recipe uses curated third-party MJCF assets such as MuJoCo Menagerie
+  models, the model files, meshes, and license notice should be vendored as a
+  traceable artifact set. Record the upstream repository, exact imported
+  revision, model-local license path, and local vendored path before claiming
+  the asset is reusable inside a Hakoniwa repository.
+
+observation:
+  context: >
+    Preparing the Unitree Go1 Menagerie MJCF Recipe for Hakoniwa MuJoCo.
+  details:
+    - MuJoCo Menagerie documents that individual model directories have their own licenses.
+    - The Unitree Go1 model directory contains a BSD-3-Clause LICENSE file.
+    - The Unitree Go1 README states that the MJCF was derived from Unitree Robotics' public Go1 URDF.
+    - The Recipe should not depend on an unpinned floating upstream main branch for demos.
+    - The model-local LICENSE should remain next to redistributed scene.xml, go1.xml, and assets.
+    - The local import used upstream commit 71f066ad0be9cd271f7ed58c030243ef157af9f4.
+    - The vendored Hakoniwa path is thirdparty/mujoco_menagerie/unitree_go1 in hakoniwa-mujoco-robots.
+    - After vendoring, the local scene.xml was load-tested with MuJoCo before any Hakoniwa adapter or PDU work.
+
+sources:
+  repositories:
+    - repository: google-deepmind/mujoco_menagerie
+      path: README.md
+      revision: 71f066ad0be9cd271f7ed58c030243ef157af9f4
+    - repository: google-deepmind/mujoco_menagerie
+      path: unitree_go1/LICENSE
+      revision: 71f066ad0be9cd271f7ed58c030243ef157af9f4
+    - repository: google-deepmind/mujoco_menagerie
+      path: unitree_go1/README.md
+      revision: 71f066ad0be9cd271f7ed58c030243ef157af9f4
+    - repository: local/hakoniwa-mujoco-robots
+      path: thirdparty/mujoco_menagerie/README.md
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-mujoco-robots
+      path: thirdparty/mujoco_menagerie/unitree_go1/LICENSE
+      revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-business-pack
+      path: recipes/examples/unitree-go1-menagerie-mjcf-to-hakoniwa.yaml
+      revision: local-working-tree-2026-07-22
+  expert_input:
+    - source: user
+      statement: >
+        First confirm the license before proceeding with the challenging
+        Unitree Go1 Menagerie recipe.
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: partially_verified
+  required:
+    - Confirm repository policy for whether large mesh assets should be vendored directly or fetched by a pinned helper script.
+    - Re-run license/source checks if the imported upstream revision changes.
+  notes:
+    - This rule was applied to Unitree Go1 by copying the model-local LICENSE with the MJCF and mesh assets.
+    - The rule should be promoted after one more third-party model recipe follows the same pattern.
+
+promotion_targets:
+  catalog:
+    - hakoniwa-mujoco-robots
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: true
+  recipes:
+    - unitree-go1-menagerie-mjcf-to-hakoniwa
+
+promotion_rationale:
+  - This is a reusable asset governance rule for MJCF-first Recipes that consume third-party model assets.
+  - It belongs near component asset guidance rather than runtime lifecycle guidance.
+
+resolution:
+  promoted_to: []
+  notes:
+    - Candidate created while preparing the Unitree Go1 Menagerie MJCF Recipe.
