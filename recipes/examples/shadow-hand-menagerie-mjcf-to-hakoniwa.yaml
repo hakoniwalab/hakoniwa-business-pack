@@ -1,0 +1,429 @@
+id: shadow-hand-menagerie-mjcf-to-hakoniwa
+title: Shadow Hand Menagerie MJCF to Hakoniwa Joint Control
+recipe_version: 0.1
+
+goal:
+  user_request: MuJoCo Menagerie の Shadow Hand MJCF を起点に、箱庭アセットとして指関節を外部から動かしたい。
+  description: >
+    Use the curated Shadow Hand E3M5 MJCF directly, check upstream license and
+    attribution obligations before copying artifacts, validate MuJoCo-only joint
+    control, then expose joint-position command and JointState-compatible state
+    through Hakoniwa PDU.
+
+feasibility:
+  status: partially_feasible
+  confidence: high
+  rationale:
+    - Menagerie provides right- and left-hand Shadow Hand E3M5 MJCF assets.
+    - The upstream README states that the original URDF and assets were provided by Shadow Robot Company under Apache-2.0.
+    - right_hand.xml already defines named position actuators for wrist, thumb, and fingers.
+    - hakoniwa-mujoco-robots and the PDU stack provide credible runtime patterns, but no Shadow Hand-specific plant has been executed yet.
+
+validation:
+  status: not_tested
+  summary: Upstream model, actuator, scene, and license structure were inspected; local runtime execution remains untested.
+  steps:
+    - id: inspect_shadow_hand_license
+      status: verified
+      evidence:
+        - repository: google-deepmind/mujoco_menagerie
+          path: shadow_hand/README.md
+          revision: main
+        - repository: google-deepmind/mujoco_menagerie
+          path: shadow_hand/LICENSE
+          revision: main
+      notes:
+        - Preserve required license and attribution notices when redistributing copied model artifacts.
+    - id: inspect_shadow_hand_scene
+      status: verified
+      evidence:
+        - repository: google-deepmind/mujoco_menagerie
+          path: shadow_hand/scene_right.xml
+          revision: main
+      notes:
+        - The scene includes right_hand.xml, a floor, lights, and a free object for later grasping experiments.
+    - id: inspect_shadow_hand_actuators
+      status: verified
+      evidence:
+        - repository: google-deepmind/mujoco_menagerie
+          path: shadow_hand/right_hand.xml
+          revision: main
+      notes:
+        - Existing position actuators should be reused rather than regenerated.
+        - Tendon-coupled distal joints must not be treated as independent actuators.
+    - id: mujoco_only_joint_smoke
+      status: not_tested
+      notes:
+        - Load scene_right.xml and execute bounded open-close targets before Hakoniwa PDU integration.
+    - id: hakoniwa_joint_pdu_runtime
+      status: not_tested
+      notes:
+        - Implement the plant, command/state PDU, Endpoint config, and scripted sender.
+
+agency_boundary:
+  agent_actions:
+    - id: inspect_public_sources
+      description: Inspect upstream model/license and Hakoniwa runtime patterns.
+      autonomous: true
+      preconditions:
+        - user_requested_execution
+    - id: implement_simulation_only_adapter
+      description: Implement named-actuator mapping, PDU configuration, and scripted command sender.
+      autonomous: true
+      preconditions:
+        - user_requested_execution
+        - target_environment_confirmed
+        - shadow_hand_license_checked
+  human_decisions:
+    - id: accept_motion_scope
+      description: Decide whether bounded finger open-close motion is sufficient before adding grasping.
+      status: required
+      required_before:
+        - demo_acceptance
+  human_actions: []
+  required_permissions:
+    - id: shadow_hand_license_checked
+      description: Confirm Apache-2.0 notice and attribution obligations before redistributing copied Shadow Hand artifacts.
+      status: required
+      required_before:
+        - redistribute_shadow_hand_artifacts
+  notes:
+    - License inspection is Step 0.
+
+constraints:
+  - mjcf-source-artifact
+  - no-urdf-conversion
+  - license-check-first
+  - single-pc
+  - simulation-first
+  - grasping-out-of-scope-for-v0
+
+target_environment:
+  required_for: executable-demo
+  status: partially_known
+  os: macOS | Linux
+  architecture: arm64 | x86_64
+  execution_mode: native
+  runtimes:
+    - name: MuJoCo
+      required: true
+      version: "2.2.2 or later per upstream README"
+      path: unknown
+    - name: C++ toolchain
+      required: true
+      version: unknown
+      path: unknown
+    - name: Python
+      required: true
+      version: "3"
+      path: unknown
+  hakoniwa:
+    install_prefix: /usr/local/hakoniwa
+    components_built:
+      - hakoniwa-core-pro
+      - hakoniwa-mujoco-robots
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-pdu-registry
+      - hakoniwa-pdu-python
+
+execution_environment:
+  required_for: executable-demo
+  status: partially_known
+  gui:
+    required: true
+    status: unknown
+  shared_memory:
+    required: true
+    access: required-for-hakoniwa-runtime
+  python:
+    environment: venv
+    hakopy_available: required-for-hakoniwa-runtime
+  hakoniwa:
+    install_prefix: /usr/local/hakoniwa
+    hako_cmd_access: unknown
+
+components:
+  - id: hakoniwa-mujoco-robots
+    roles:
+      - physics_runtime
+      - simulation_core
+    purpose: Load the Shadow Hand MJCF, apply named actuator targets, and publish observed joint state.
+  - id: hakoniwa-core-pro
+    roles:
+      - simulation_core
+      - time_sync
+      - control_plane
+    purpose: Provide Hakoniwa asset lifecycle and synchronized simulation execution.
+  - id: hakoniwa-pdu-registry
+    roles:
+      - registry
+      - data_model
+      - code_generator
+    purpose: Provide or generate joint command/state PDU artifacts.
+  - id: hakoniwa-pdu-endpoint
+    roles:
+      - communication_infrastructure
+      - integration_boundary
+    purpose: Carry joint command/state PDU between the plant and external processes.
+  - id: hakoniwa-pdu-python
+    roles:
+      - language_binding
+      - control_plane
+    purpose: Provide the scripted open-close command sender.
+
+connections:
+  - from: hakoniwa-pdu-python
+    to: hakoniwa-pdu-endpoint
+    interface: pdu
+    data:
+      - joint-position command
+    contract:
+      status: not_tested
+      requires:
+        - Stable actuator ordering.
+        - Matching generated Python PDU type.
+      validation_notes:
+        - Exact command contract remains to be implemented.
+  - from: hakoniwa-pdu-endpoint
+    to: hakoniwa-mujoco-robots
+    interface: pdu
+    data:
+      - joint-position command
+      - JointState-compatible state
+    contract:
+      status: not_tested
+      requires:
+        - Shadow Hand plant asset.
+        - Explicit actuator-name mapping.
+      validation_notes:
+        - Upstream actuator names are known, but the Hakoniwa mapping is untested.
+  - from: hakoniwa-mujoco-robots
+    to: hakoniwa-core-pro
+    interface: api
+    data:
+      - asset lifecycle
+      - simulation time
+    contract:
+      status: not_tested
+      requires:
+        - Plant registration and runtime ownership consistent with existing patterns.
+      validation_notes:
+        - Validate MuJoCo-only motion first.
+
+data_flow:
+  summary: >
+    Menagerie Shadow Hand MJCF is consumed directly by MuJoCo. A scripted Python
+    sender publishes bounded joint-position targets through Hakoniwa PDU. The plant
+    maps fields to named position actuators and publishes JointState-compatible state.
+  steps:
+    - from: external-menagerie-shadow-hand
+      to: hakoniwa-mujoco-robots
+      data:
+        - shadow_hand/scene_right.xml
+        - shadow_hand/right_hand.xml
+        - shadow_hand/assets/*
+        - shadow_hand/LICENSE
+      description: Use the upstream model after the license gate is satisfied.
+    - from: hakoniwa-pdu-python
+      to: hakoniwa-pdu-endpoint
+      data:
+        - joint-position command PDU
+      description: Publish deterministic open-close targets.
+    - from: hakoniwa-pdu-endpoint
+      to: hakoniwa-mujoco-robots
+      data:
+        - joint-position command PDU
+      description: Map commands to named MuJoCo actuators.
+    - from: hakoniwa-mujoco-robots
+      to: hakoniwa-pdu-endpoint
+      data:
+        - JointState-compatible state PDU
+      description: Publish observable state for logging and downstream visualization.
+
+time_model:
+  mode: shared-simulation-time
+  components:
+    - hakoniwa-core-pro
+    - hakoniwa-mujoco-robots
+    - hakoniwa-pdu-endpoint
+    - hakoniwa-pdu-python
+  notes:
+    - MuJoCo-only joint smoke can run before Hakoniwa SHM/PDU validation.
+
+artifact_sets:
+  physics_artifacts:
+    description: Upstream MJCF and mesh assets consumed by MuJoCo.
+    status: partially_verified
+    artifacts:
+      - shadow_hand/scene_right.xml
+      - shadow_hand/right_hand.xml
+      - shadow_hand/assets/*
+  visualization_artifacts:
+    description: MuJoCo viewer output for the first demo.
+    status: not_tested
+    artifacts:
+      - MuJoCo viewer of scene_right.xml
+  pdu_artifacts:
+    description: Joint command/state definitions and Endpoint configuration.
+    status: not_tested
+    artifacts:
+      - Shadow Hand joint-position command PDU
+      - JointState-compatible state PDU
+      - Endpoint configuration
+  runtime_artifacts:
+    description: Plant asset, actuator mapping, and scripted sender.
+    status: not_tested
+    artifacts:
+      - Shadow Hand plant asset
+      - actuator-name mapping
+      - Python open-close sender
+
+artifacts:
+  - name: Menagerie Shadow Hand scene
+    kind: mjcf
+    producer: external-menagerie
+    consumer:
+      - hakoniwa-mujoco-robots
+    path: shadow_hand/scene_right.xml
+  - name: Menagerie Shadow Hand model
+    kind: mjcf
+    producer: external-menagerie
+    consumer:
+      - hakoniwa-mujoco-robots
+    path: shadow_hand/right_hand.xml
+  - name: Shadow Hand joint command PDU
+    kind: pdu-definition
+    producer: hakoniwa-pdu-registry
+    consumer:
+      - hakoniwa-pdu-python
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-mujoco-robots
+    path: TBD
+  - name: Shadow Hand JointState-compatible PDU
+    kind: pdu-definition
+    producer: hakoniwa-pdu-registry
+    consumer:
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-mujoco-robots
+    path: TBD
+
+missing_pieces:
+  - Pin an upstream Menagerie revision for reproducibility.
+  - Decide whether to reference Menagerie in-place or copy the Shadow Hand subtree with notices.
+  - Implement MuJoCo-only named-actuator open-close smoke.
+  - Define a stable actuator command ordering that respects tendon coupling.
+  - Define or reuse a JointState-compatible PDU and generated bindings.
+  - Implement and run the Hakoniwa plant and Python sender.
+
+demo:
+  objective: Prove MJCF-first Shadow Hand control through Hakoniwa without claiming grasping.
+  steps:
+    - order: 1
+      id: verify_upstream_license
+      component: hakoniwa-mujoco-robots
+      action: Inspect Shadow Hand README and LICENSE before copying model artifacts.
+      agency: required_permission
+      requires_gates:
+        - shadow_hand_license_checked
+      evidence:
+        - repository: google-deepmind/mujoco_menagerie
+          path: shadow_hand/LICENSE
+          revision: main
+    - order: 2
+      id: run_common_preflight
+      component: hakoniwa-core-pro
+      action: Check common Hakoniwa runtime assumptions.
+      command: bash tools/doctor.bash
+      agency: agent_action
+      requires_gates: []
+    - order: 3
+      id: mujoco_joint_smoke
+      component: hakoniwa-mujoco-robots
+      action: Load scene_right.xml, log actuator names, and execute bounded open-close targets.
+      agency: agent_action
+      requires_gates:
+        - shadow_hand_license_checked
+    - order: 4
+      id: hakoniwa_joint_pdu_smoke
+      component: hakoniwa-pdu-python
+      action: Publish scripted joint targets and verify JointState-compatible output changes after hako-cmd start.
+      agency: agent_action
+      requires_gates:
+        - shadow_hand_license_checked
+  observability:
+    success_signals:
+      - License/attribution handling is recorded before redistribution.
+      - MuJoCo loads the scene and enumerates expected named actuators.
+      - Scripted commands move intended fingers without NaN or actuator mismatch.
+      - JointState-compatible output changes consistently with visible motion.
+    failure_signals:
+      - Required license notice is missing from copied artifacts.
+      - Model assets fail to resolve.
+      - Tendon-coupled joints are incorrectly mapped as independent actuators.
+      - PDU state remains unchanged while fingers move.
+    fixtures:
+      - Menagerie scene_right.xml.
+      - Scripted open pose and bounded close pose.
+    automation:
+      - Use deterministic scripted targets for v0.
+  verification_checks:
+    lifecycle:
+      - MuJoCo scene loads.
+      - Plant and sender register before hako-cmd start.
+    behavior:
+      - Actuator mapping is logged.
+      - Joint values remain finite and respond to commands.
+    logs:
+      - License preflight result.
+      - MuJoCo actuator summary.
+      - Command/state PDU summary.
+
+expected_result: >
+  A reproducible path exists to inspect license obligations, load the curated Shadow
+  Hand MJCF directly, reuse its existing position actuators, command bounded finger
+  motion through Hakoniwa PDU, and publish JointState-compatible observation data.
+
+source_catalogs:
+  - component_id: hakoniwa-mujoco-robots
+    catalog_path: ../catalog/components/hakoniwa-mujoco-robots.yaml
+  - component_id: hakoniwa-core-pro
+    catalog_path: ../catalog/components/hakoniwa-core-pro.yaml
+  - component_id: hakoniwa-pdu-registry
+    catalog_path: ../catalog/components/hakoniwa-pdu-registry.yaml
+  - component_id: hakoniwa-pdu-endpoint
+    catalog_path: ../catalog/components/hakoniwa-pdu-endpoint.yaml
+  - component_id: hakoniwa-pdu-python
+    catalog_path: ../catalog/components/hakoniwa-pdu-python.yaml
+
+source_artifacts:
+  - repository: google-deepmind/mujoco_menagerie
+    path: shadow_hand/README.md
+    revision: main
+    description: Provenance, MuJoCo requirement, and license statement.
+  - repository: google-deepmind/mujoco_menagerie
+    path: shadow_hand/LICENSE
+    revision: main
+    description: Upstream license text.
+  - repository: google-deepmind/mujoco_menagerie
+    path: shadow_hand/scene_right.xml
+    revision: main
+    description: Right-hand scene.
+  - repository: google-deepmind/mujoco_menagerie
+    path: shadow_hand/right_hand.xml
+    revision: main
+    description: Named joints, tendons, and position actuators.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: examples/actuators
+    revision: main
+    description: Existing actuator integration patterns.
+
+tags:
+  - hakoniwa
+  - mujoco
+  - menagerie
+  - shadow-hand
+  - dexterous-hand
+  - mjcf
+  - joint-control
+  - pdu
+  - apache-2.0
