@@ -5,94 +5,78 @@ recipe_version: 0.1
 goal:
   user_request: 箱庭で動かしている Shadow Hand の関節状態を Foxglove に連携し、リアルタイムに観測したい。
   description: >
-    Extend the Shadow Hand Hakoniwa plant Recipe with an output-only Foxglove
-    path. Keep the simulation command path unchanged, publish JointState-compatible
-    state from the plant, convert that typed/native Hakoniwa PDU into a complete
-    Foxglove-compatible CDR payload using Registry-generated conversion artifacts,
-    and send it through hakoniwa-pdu-foxglove for live Raw Messages and Plot
-    observation. Foxglove 3D URDF visualization is a later optional extension.
+    Extend the Shadow Hand Hakoniwa plant with an output-only Foxglove path.
+    Keep the command path unchanged, publish JointState-compatible state, convert
+    it explicitly to complete Foxglove-compatible CDR using Registry-generated
+    artifacts, then forward it through hakoniwa-pdu-foxglove for Raw Messages and Plot.
 
 feasibility:
   status: partially_feasible
   confidence: high
   rationale:
-    - The base Shadow Hand Recipe defines JointState-compatible output as the simulation observation boundary.
-    - hakoniwa-pdu-foxglove is cataloged as an output-only Endpoint PduComm adapter that publishes caller-provided CDR payloads over the official Foxglove SDK WebSocket server.
-    - The Foxglove adapter supports explicit schema configuration with ros2msg, ros2idl, or omgidl schema artifacts.
-    - The adapter intentionally does not convert Hakoniwa native PDU binary to CDR, so a typed/CDR conversion layer must remain explicit.
-    - Live Raw Messages and Plot are achievable without URDF; Foxglove 3D robot rendering is intentionally outside the v0 scope.
+    - The base Shadow Hand Recipe defines JointState-compatible output as the observation boundary.
+    - hakoniwa-pdu-foxglove publishes caller-provided complete CDR over the official Foxglove SDK WebSocket server.
+    - The Foxglove adapter supports explicit schema configuration.
+    - It intentionally does not convert Hakoniwa native PDU binary to CDR, so conversion must stay explicit.
+    - Raw Messages and Plot do not require URDF; Foxglove 3D is outside v0.
 
 validation:
   status: not_tested
-  summary: >
-    The Foxglove adapter architecture and sample CDR publisher are repository-backed,
-    and the Shadow Hand base Recipe provides the intended JointState-compatible
-    simulation output contract. The composed Shadow Hand -> CDR -> Foxglove path
-    has not yet been executed.
+  summary: The component contracts are repository-backed, but the composed Shadow Hand -> CDR -> Foxglove path is not yet executed.
   steps:
     - id: inspect_shadow_hand_license
       status: verified
       evidence:
         - repository: google-deepmind/mujoco_menagerie
-          path: shadow_hand/README.md
-          revision: main
-        - repository: google-deepmind/mujoco_menagerie
           path: shadow_hand/LICENSE
           revision: main
       notes:
-        - Keep the same upstream Apache-2.0 license/attribution gate as the base Shadow Hand Recipe.
-    - id: inspect_foxglove_component_contract
+        - Reuse the base Recipe license gate.
+    - id: inspect_foxglove_contract
       status: verified
       evidence:
         - repository: hakoniwalab/hakoniwa-pdu-foxglove
           path: README.md
           revision: main
       notes:
-        - FoxgloveComm::send input must be a complete Foxglove-compatible CDR payload.
+        - send input must be complete Foxglove-compatible CDR.
         - Native Hakoniwa PDU binary must not be passed directly unless it is already valid CDR.
-    - id: inspect_foxglove_smoke_example
+    - id: inspect_foxglove_sample
       status: verified
       evidence:
         - repository: hakoniwalab/hakoniwa-pdu-foxglove
           path: examples/cdr-publisher
           revision: main
       notes:
-        - Existing sample proves the intended Endpoint::set_comm plus generated CDR converter pattern for a simple message.
-    - id: shadow_hand_jointstate_cdr_path
+        - The sample demonstrates the generated-converter plus Endpoint::set_comm publication pattern.
+    - id: shadow_hand_jointstate_cdr
       status: not_tested
       notes:
-        - Confirm a Registry-generated CDR converter and schema artifact for the selected JointState-compatible PDU type.
+        - Confirm the exact JointState-compatible type, converter, and schema asset.
     - id: shadow_hand_foxglove_live_plot
       status: not_tested
       notes:
-        - Publish changing Shadow Hand joint state to Foxglove and verify decoded names/positions and numeric plots.
+        - Verify decoded joint names/positions and changing plots during finger motion.
 
 agency_boundary:
   agent_actions:
-    - id: inspect_public_and_private_sources
-      description: Inspect the upstream Shadow Hand license plus authorized Hakoniwa Foxglove component source and sample configuration.
+    - id: inspect_authorized_sources
+      description: Inspect the Shadow Hand license plus authorized Foxglove component source and samples.
       autonomous: true
       preconditions:
         - user_requested_execution
         - foxglove_component_access
     - id: generate_foxglove_configs
-      description: Generate the JointState CDR/schema mapping and Foxglove communication configuration for simulation-only output.
+      description: Generate JointState CDR/schema mapping and Foxglove communication configuration.
       autonomous: true
       preconditions:
         - user_requested_execution
         - target_environment_confirmed
         - foxglove_component_access
         - shadow_hand_license_checked
-    - id: run_foxglove_output_demo
-      description: Run the Shadow Hand plant and Foxglove output adapter, then verify the WebSocket topic and changing state values.
-      autonomous: true
-      preconditions:
-        - user_requested_execution
-        - target_environment_confirmed
-        - foxglove_component_access
   human_decisions:
     - id: choose_visualization_scope
-      description: Decide whether Raw Messages and Plot are sufficient or whether a later URDF-backed Foxglove 3D view is required.
+      description: Decide whether Raw Messages and Plot are sufficient or whether a later URDF-backed 3D view is required.
       status: required
       required_before:
         - foxglove_3d_extension
@@ -105,7 +89,7 @@ agency_boundary:
         - claim_live_ui_visualization
   required_permissions:
     - id: shadow_hand_license_checked
-      description: Confirm Apache-2.0 notice and attribution obligations before redistributing copied Shadow Hand model artifacts.
+      description: Confirm upstream Apache-2.0 notice and attribution obligations before redistributing copied model artifacts.
       status: required
       required_before:
         - redistribute_shadow_hand_artifacts
@@ -114,9 +98,6 @@ agency_boundary:
       status: required
       required_before:
         - use_hakoniwa_pdu_foxglove
-  notes:
-    - License and commercial-access checks precede implementation.
-    - UI connection is distinct from backend WebSocket publication success.
 
 constraints:
   - depends-on-shadow-hand-base-recipe
@@ -139,7 +120,7 @@ target_environment:
       required: true
       version: unknown
       path: unknown
-    - name: Foxglove App or compatible Foxglove client
+    - name: Foxglove App
       required: true
       version: unknown
       path: unknown
@@ -155,8 +136,6 @@ target_environment:
       - hakoniwa-pdu-endpoint
       - hakoniwa-pdu-registry
       - hakoniwa-pdu-foxglove
-  notes:
-    - hakoniwa-pdu-foxglove catalog currently records macOS and Linux support with exact build/runtime validation still environment-dependent.
 
 execution_environment:
   required_for: executable-demo
@@ -174,57 +153,23 @@ execution_environment:
     install_prefix: /usr/local/hakoniwa
     hako_cmd_access: unknown
 
-implementation_plan:
-  phase_order:
-    - id: step0_permissions
-      title: License and component-access preflight
-      scope:
-        - Reuse the Shadow Hand Apache-2.0 license check from the base Recipe.
-        - Confirm authorized access to hakoniwa-pdu-foxglove.
-        - Record the Foxglove SDK and schema dependencies from the component README.
-    - id: step1_jointstate_contract
-      title: Select the state message boundary
-      scope:
-        - Reuse the base Recipe JointState-compatible state PDU.
-        - Confirm joint names and positions are sufficient for the first Foxglove Plot demo.
-        - Optionally include velocity and effort only when the PDU contract and plant provide meaningful values.
-    - id: step2_cdr_schema_path
-      title: Generate or confirm CDR and schema artifacts
-      scope:
-        - Resolve the selected PDU type through hakoniwa-pdu-registry.
-        - Confirm a complete DDS CDR converter, including encapsulation expected by Foxglove.
-        - Select an explicit schema encoding and schema file.
-        - Do not rely on FoxgloveComm for native-PDU conversion.
-    - id: step3_foxglove_output
-      title: Publish Shadow Hand state to Foxglove
-      scope:
-        - Configure one output topic for Shadow Hand joint state.
-        - Start the Foxglove WebSocket server through hakoniwa-pdu-foxglove.
-        - Forward complete CDR payloads with explicit schema metadata.
-        - Observe decoded fields in Raw Messages and plot selected joint positions.
-      explicit_non_goals:
-        - No Foxglove-to-Hakoniwa control.
-        - No MCAP recording.
-        - No custom Foxglove panel.
-        - No URDF-backed 3D robot rendering in v0.
-
 components:
   - id: hakoniwa-mujoco-robots
     roles:
       - physics_runtime
       - simulation_core
-    purpose: Run the Shadow Hand model and produce joint-state observation data.
+    purpose: Run the Shadow Hand model and produce JointState-compatible state.
   - id: hakoniwa-core-pro
     roles:
       - simulation_core
       - time_sync
-    purpose: Coordinate the Shadow Hand Hakoniwa plant lifecycle and simulation time.
+    purpose: Coordinate the Shadow Hand plant lifecycle and simulation time.
   - id: hakoniwa-pdu-registry
     roles:
       - registry
       - data_model
       - code_generator
-    purpose: Provide the JointState-compatible PDU definition, generated CDR converter, and schema asset.
+    purpose: Provide the selected state PDU definition, generated CDR converter, and schema asset.
   - id: hakoniwa-pdu-endpoint
     roles:
       - communication_infrastructure
@@ -235,90 +180,76 @@ components:
       - visualizer
       - bridge
       - integration_boundary
-    purpose: Publish complete CDR payloads through the Foxglove SDK WebSocket server for live inspection.
+    purpose: Publish complete CDR payloads through Foxglove WebSocket.
 
 connections:
   - from: hakoniwa-mujoco-robots
-    to: hakoniwa-pdu-registry
+    to: hakoniwa-pdu-endpoint
     interface: pdu
     data:
-      - JointState-compatible typed/native state
+      - JointState-compatible state
     contract:
       status: not_tested
       requires:
-        - Selected JointState-compatible PDU type.
-        - Stable Shadow Hand joint-name ordering.
+        - Base Shadow Hand plant Recipe completed.
+        - Stable joint-name ordering.
       validation_notes:
-        - The base Recipe proposes this state boundary but has not executed it yet.
+        - State publication remains untested for Shadow Hand.
   - from: hakoniwa-pdu-registry
-    to: hakoniwa-pdu-foxglove
+    to: hakoniwa-pdu-endpoint
     interface: generated-artifact
     data:
       - CDR converter
       - schema file
-      - schema name and encoding
+      - PDU definition
     contract:
-      status: partially_verified
+      status: not_tested
       requires:
-        - A generated converter for the exact selected JointState-compatible type.
-        - Complete Foxglove-compatible CDR output including encapsulation.
+        - Generated converter for the exact selected JointState-compatible type.
+        - Complete CDR output including required encapsulation.
       validation_notes:
-        - The generic converter/schema pattern is documented and used by the component sample; JointState-specific composition remains untested.
+        - Generic generated-converter usage is documented; JointState-specific composition must be confirmed.
   - from: hakoniwa-pdu-endpoint
     to: hakoniwa-pdu-foxglove
     interface: PduComm adapter / Endpoint::set_comm
     data:
-      - PduResolvedKey
+      - PDU key
       - complete CDR payload
     contract:
       status: verified
       requires:
-        - Explicit Foxglove comm configuration.
-        - Configured PDU definition and schema asset.
+        - Explicit Foxglove communication configuration.
+        - Explicit schema name, encoding, and file.
       validation_notes:
-        - This is the documented component architecture; Shadow Hand-specific runtime composition remains untested.
-  - from: hakoniwa-pdu-foxglove
-    to: foxglove-app
-    interface: Foxglove WebSocket
-    data:
-      - schema-aware JointState CDR stream
-    contract:
-      status: not_tested
-      requires:
-        - Foxglove App connection to the configured local WebSocket address.
-      validation_notes:
-        - Backend publication and UI connection must be observed separately.
+        - This is the documented component architecture; Shadow Hand-specific runtime remains untested.
 
 data_flow:
   summary: >
-    The Shadow Hand plant publishes JointState-compatible state. A typed/codec
-    layer backed by hakoniwa-pdu-registry converts that state into complete CDR.
-    The Endpoint sends the CDR through FoxgloveComm, which publishes the bytes
-    unchanged on an explicitly configured topic and schema over Foxglove WebSocket.
+    The Shadow Hand plant publishes JointState-compatible state. Registry-generated
+    logic converts that state into complete CDR. Endpoint passes the CDR to
+    FoxgloveComm, which forwards the bytes unchanged with explicit schema metadata.
   steps:
     - from: hakoniwa-mujoco-robots
-      to: shadow-hand-state-codec
-      data:
-        - joint names
-        - joint positions
-        - optional joint velocities
-      description: Produce the same state contract used by the base Shadow Hand Recipe.
-    - from: shadow-hand-state-codec
       to: hakoniwa-pdu-endpoint
       data:
-        - complete JointState-compatible CDR payload
-      description: Use Registry-generated conversion; do not pass native PDU binary as though it were CDR.
+        - JointState-compatible state PDU
+      description: Publish state from the Shadow Hand plant.
+    - from: hakoniwa-pdu-registry
+      to: hakoniwa-pdu-endpoint
+      data:
+        - generated CDR conversion artifacts
+        - schema asset
+      description: Make conversion and schema resolution explicit rather than implicit in FoxgloveComm.
     - from: hakoniwa-pdu-endpoint
       to: hakoniwa-pdu-foxglove
       data:
-        - PDU key
         - complete CDR payload
-      description: Endpoint delegates output publication through FoxgloveComm.
+      description: Delegate output publication through FoxgloveComm.
     - from: hakoniwa-pdu-foxglove
-      to: foxglove-app
+      to: external-foxglove-app
       data:
-        - configured WebSocket topic and schema
-      description: Foxglove decodes the schema-aware payload for Raw Messages and Plot.
+        - schema-aware WebSocket topic
+      description: Observe decoded values in Raw Messages and Plot; this external client is not a Catalog component.
 
 time_model:
   mode: shared-simulation-time-with-wall-clock-foxglove-log-time
@@ -328,9 +259,8 @@ time_model:
     - hakoniwa-pdu-endpoint
     - hakoniwa-pdu-foxglove
   notes:
-    - Shadow Hand simulation follows Hakoniwa shared simulation time.
-    - hakoniwa-pdu-foxglove v0.1 catalog documents wall-clock log time and does not yet broadcast simulation time.
-    - Therefore v0 proves live state visualization, not synchronized Foxglove simulation-time playback.
+    - Shadow Hand simulation follows Hakoniwa simulation time.
+    - Current hakoniwa-pdu-foxglove v0.1 records wall-clock log time and does not broadcast simulation time.
 
 artifact_sets:
   physics_artifacts:
@@ -341,17 +271,15 @@ artifact_sets:
       - shadow_hand/right_hand.xml
       - shadow_hand/assets/*
   visualization_artifacts:
-    description: Foxglove schema/topic configuration and client layout choices.
+    description: Foxglove schema/topic configuration and client selections.
     status: not_tested
     artifacts:
-      - Foxglove comm configuration
+      - Foxglove communication config
       - JointState schema file
-      - Raw Messages panel selection
-      - Plot selections for representative finger joints
-    notes:
-      - URDF and Foxglove 3D model rendering are deliberately excluded from v0.
+      - Raw Messages topic
+      - Plot selections
   pdu_artifacts:
-    description: Shadow Hand state definition plus generated CDR conversion artifacts.
+    description: Shadow Hand state definition and CDR conversion artifacts.
     status: not_tested
     artifacts:
       - JointState-compatible PDU definition
@@ -359,29 +287,52 @@ artifact_sets:
       - schema asset
       - Endpoint configuration
   runtime_artifacts:
-    description: Foxglove output adapter and launch/run configuration.
+    description: Foxglove output adapter and WebSocket server configuration.
     status: partially_verified
     artifacts:
       - hakoniwa-pdu-foxglove
-      - Foxglove WebSocket server config
-    notes:
-      - Generic component implementation exists; Shadow Hand composition is not tested.
+      - Foxglove WebSocket config
+
+artifacts:
+  - name: Shadow Hand JointState-compatible PDU
+    kind: pdu-definition
+    producer: hakoniwa-pdu-registry
+    consumer:
+      - hakoniwa-mujoco-robots
+      - hakoniwa-pdu-endpoint
+    path: TBD
+  - name: JointState CDR converter
+    kind: generated-code
+    producer: hakoniwa-pdu-registry
+    consumer:
+      - hakoniwa-pdu-endpoint
+    path: TBD
+  - name: JointState Foxglove schema
+    kind: schema
+    producer: hakoniwa-pdu-registry
+    consumer:
+      - hakoniwa-pdu-foxglove
+    path: TBD
+  - name: Shadow Hand Foxglove comm config
+    kind: config
+    producer: hakoniwa-pdu-foxglove
+    consumer:
+      - hakoniwa-pdu-foxglove
+    path: TBD
 
 missing_pieces:
   - Complete and verify the base Shadow Hand Hakoniwa joint command/state Recipe first.
   - Confirm the exact JointState-compatible PDU type and stable joint-name order.
-  - Confirm generated CDR conversion support and schema path for that exact PDU type.
-  - Add a Shadow Hand-specific Foxglove comm configuration and topic name.
-  - Decide whether the codec runs inside the Shadow Hand plant, a small bridge/application layer, or another explicit adapter without violating the FoxgloveComm contract.
-  - Execute live WebSocket validation and record decoded joint names/positions.
-  - Record that v0 uses wall-clock Foxglove log time rather than Hakoniwa simulation time.
-  - Treat Foxglove 3D URDF visualization as a separate follow-up Recipe or extension.
+  - Confirm generated CDR conversion support and schema path for that exact type.
+  - Add Shadow Hand-specific Foxglove communication configuration and topic name.
+  - Decide where the typed/native PDU to CDR codec runs without violating FoxgloveComm's contract.
+  - Execute live WebSocket validation and record decoded joint values.
+  - Treat URDF-backed Foxglove 3D visualization as a separate follow-up.
 
 demo:
   objective: >
-    Prove that Shadow Hand state generated by a Hakoniwa MuJoCo plant can be
-    converted explicitly to schema-aware CDR and observed live in Foxglove Raw
-    Messages and Plot without changing the simulation command path or requiring URDF.
+    Prove that Shadow Hand state from Hakoniwa can be converted explicitly to
+    schema-aware CDR and observed live in Foxglove Raw Messages and Plot without URDF.
   steps:
     - order: 1
       id: verify_shadow_hand_license
@@ -397,7 +348,7 @@ demo:
     - order: 2
       id: verify_foxglove_access
       component: hakoniwa-pdu-foxglove
-      action: Confirm authorized access to the private commercial Foxglove adapter before building or running it.
+      action: Confirm access to the private commercial Foxglove adapter.
       agency: required_permission
       requires_gates:
         - foxglove_component_access
@@ -408,75 +359,72 @@ demo:
     - order: 3
       id: run_shadow_hand_base
       component: hakoniwa-mujoco-robots
-      action: Run the base Shadow Hand Hakoniwa plant and scripted open-close command until JointState-compatible output is changing.
+      action: Run the base plant until JointState-compatible state changes with scripted open-close motion.
       agency: agent_action
       requires_gates:
         - shadow_hand_license_checked
     - order: 4
       id: configure_jointstate_cdr
       component: hakoniwa-pdu-registry
-      action: Resolve the selected JointState-compatible schema and generated CDR conversion path.
+      action: Resolve the exact schema and generated CDR converter.
       agency: agent_action
       requires_gates: []
     - order: 5
       id: start_foxglove_output
       component: hakoniwa-pdu-foxglove
-      action: Start the configured Foxglove WebSocket output adapter and publish Shadow Hand JointState CDR.
+      action: Start the configured WebSocket output and publish Shadow Hand state CDR.
       agency: agent_action
       requires_gates:
         - foxglove_component_access
     - order: 6
       id: connect_foxglove_ui
       component: hakoniwa-pdu-foxglove
-      action: Connect Foxglove App to the printed local WebSocket address.
+      action: Connect Foxglove App to the printed WebSocket address.
       agency: human_action
       requires_gates:
         - connect_foxglove_app
     - order: 7
       id: verify_raw_and_plot
       component: hakoniwa-pdu-foxglove
-      action: Confirm decoded joint names and changing joint positions in Raw Messages and plot representative finger joints.
+      action: Confirm decoded joint names and changing joint-position plots.
       agency: agent_action
       requires_gates:
         - connect_foxglove_app
   observability:
     success_signals:
-      - Shadow Hand base plant visibly moves under the scripted command.
-      - JointState-compatible state values change during motion.
+      - Base Shadow Hand motion is visible and state values change.
       - CDR conversion succeeds without treating native PDU bytes as CDR.
-      - Foxglove WebSocket server starts and exposes the configured topic.
-      - Foxglove Raw Messages decodes joint names and positions.
-      - Plot values for selected joints change consistently with the MuJoCo motion.
+      - Foxglove exposes the configured WebSocket topic.
+      - Raw Messages decodes joint names/positions.
+      - Selected joint plots change consistently with MuJoCo motion.
     failure_signals:
-      - Private Foxglove component access is unavailable.
-      - JointState schema or generated converter cannot be resolved.
-      - Foxglove receives undecodable raw bytes or schema mismatch errors.
-      - WebSocket publication works but the UI has not connected; do not claim live UI validation in that state.
-      - Plot values remain static while the simulated fingers move.
+      - Foxglove component access is unavailable.
+      - Schema or generated converter cannot be resolved.
+      - Foxglove reports undecodable bytes or schema mismatch.
+      - Backend publication works but the UI has not connected; do not claim live UI validation.
+      - Plot values remain static while fingers move.
     fixtures:
       - Base Shadow Hand scripted open-close motion.
-      - One configured Shadow Hand joint-state Foxglove topic.
+      - One configured joint-state Foxglove topic.
     automation:
-      - Keep the Shadow Hand input scripted so visualization can be checked deterministically.
+      - Keep input scripted for deterministic visualization checks.
   verification_checks:
     lifecycle:
-      - Base plant and sender are registered and advancing.
+      - Base plant is advancing.
       - Foxglove WebSocket server is running.
-      - Foxglove client connection is confirmed before UI claims.
+      - Client connection is confirmed before UI claims.
     behavior:
-      - CDR topic decodes with expected joint-name cardinality.
-      - At least one thumb/finger joint position changes in Foxglove during visible MuJoCo motion.
+      - Joint-state topic decodes with expected joint names.
+      - At least one finger joint value changes in Foxglove during visible motion.
     logs:
-      - Selected PDU type, schema name, encoding, and schema file.
+      - Selected PDU type, schema name, encoding, and file.
       - Foxglove topic and WebSocket address.
       - Representative changing joint values.
 
 expected_result: >
-  A reviewer can extend the Shadow Hand Hakoniwa demo with a clean visualization
-  boundary: the plant publishes JointState-compatible state, Registry-generated
+  The Shadow Hand plant publishes JointState-compatible state, Registry-generated
   logic converts it to complete CDR, hakoniwa-pdu-foxglove forwards it unchanged
-  with an explicit schema, and Foxglove displays live decoded joint values and plots.
-  No URDF is required for this v0 observability path.
+  with explicit schema metadata, and Foxglove displays live decoded values and plots.
 
 source_catalogs:
   - component_id: hakoniwa-mujoco-robots
@@ -494,23 +442,23 @@ source_artifacts:
   - repository: hakoniwalab/hakoniwa-business-pack
     path: recipes/examples/shadow-hand-menagerie-mjcf-to-hakoniwa.yaml
     revision: same-branch
-    description: Base Shadow Hand simulation, command, and JointState-compatible output Recipe.
+    description: Base Shadow Hand command/state Recipe.
   - repository: google-deepmind/mujoco_menagerie
     path: shadow_hand/LICENSE
     revision: main
-    description: Upstream Shadow Hand model license gate inherited from the base Recipe.
+    description: Upstream Shadow Hand license gate.
   - repository: hakoniwalab/hakoniwa-pdu-foxglove
     path: README.md
     revision: main
-    description: Output-only Foxglove adapter architecture, CDR contract, schema configuration, and lifecycle.
+    description: CDR contract, architecture, schema configuration, and lifecycle.
   - repository: hakoniwalab/hakoniwa-pdu-foxglove
     path: examples/cdr-publisher
     revision: main
-    description: Existing sample for generated CDR conversion plus Endpoint::set_comm and Foxglove publication.
+    description: Generated CDR conversion and Foxglove publication sample.
   - repository: hakoniwalab/hakoniwa-business-pack
     path: catalog/components/hakoniwa-pdu-foxglove.yaml
     revision: main
-    description: Cataloged distribution, capabilities, limitations, and connection contracts for the commercial Foxglove adapter.
+    description: Cataloged distribution, capabilities, limitations, and contracts.
 
 tags:
   - hakoniwa
