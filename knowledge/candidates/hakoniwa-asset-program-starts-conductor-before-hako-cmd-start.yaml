@@ -26,6 +26,9 @@ observation:
     - The asset received geometry_msgs/Twist and advanced the Tracer base from x=0.000m to x=0.333m during the first 3 second command-window validation. After later collision/height tuning, the same flow advanced to x=0.300m.
     - On this local validation environment, Hakoniwa shared memory access had to run outside the Codex sandbox.
     - hako-cmd stop was intentionally not used in this validation; the user reported that this environment should start from hako-cmd start.
+    - In the Shadow Hand Foxglove bridge smoke, the ShadowHandAsset executable also owns conductor startup, so it must be launched before bridge or sender assets.
+    - Multi-asset demos should use Hakoniwa Launcher to encode this order instead of relying on manual terminal timing.
+    - A bridge process that reads callback SHM must itself participate in the Hakoniwa asset lifecycle and should be started only after the conductor-owning plant asset is up.
 
 sources:
   repositories:
@@ -38,6 +41,12 @@ sources:
     - repository: local/hakoniwa-mujoco-robots
       path: examples/actuators/agilex_tracer/README.md
       revision: local-working-tree-2026-07-22
+    - repository: local/hakoniwa-pdu-foxglove
+      path: launch/shadow-hand-foxglove-smoke.launch.json
+      revision: local-working-tree-2026-07-23
+    - repository: local/hakoniwa-pdu-foxglove
+      path: config/shadow_hand_bridge
+      revision: local-working-tree-2026-07-23
   runtime_evidence:
     - description: >
         rover-twist-hakoniwa-asset reached WAIT START after conductor startup,
@@ -49,6 +58,16 @@ sources:
         /usr/local/hakoniwa/bin/hako-cmd start created PDU data and both assets
         entered simulation. The plant log showed cmd=(0.200, 0.000),
         wheel=(-2.439, 2.439), and base x progressing to 0.333m in the initial validation and 0.300m after collision/height tuning.
+    - description: >
+        Shadow Hand native JointState SHM-to-TCP smoke reached repeated
+        recv bytes=4096 records through hakoniwa-pdu-bridge-core after launching
+        the conductor-owning ShadowHandAsset first, then the bridge asset and
+        sender.
+    - description: >
+        The Shadow Hand Foxglove smoke extended this to native JointState TCP
+        receive, generated CDR conversion, and FoxgloveComm publication. Logs
+        showed sent JointState CDR samples and published CDR frame samples after
+        hako-cmd start.
   expert_input:
     - source: user
       statement: >
@@ -56,6 +75,11 @@ sources:
         hako-cmd start. In this case, if the asset program performs asset
         registration, starting that program should be sufficient before
         hako-cmd start.
+    - source: user
+      statement: >
+        For the Shadow Hand bridge case, start the Hand first because it owns
+        the conductor. As Hakoniwa assets increase, use Hakoniwa Launcher so the
+        startup order is explicit.
 
 confidence: medium
 
@@ -75,6 +99,9 @@ validation:
     - This candidate captures the runtime ordering and the local Tracer smoke.
     - The current rover sample is still a prototype path, not a fully generic rover asset.
     - The startup-order rule has been promoted to the Runtime Primer because it clarifies an existing Hakoniwa lifecycle invariant.
+    - Shadow Hand extended the rule from two manually launched programs to a
+      multi-asset launcher scenario: conductor-owning plant asset first,
+      callback-SHM bridge asset after registration, then hako-cmd start.
 
 promotion_targets:
   catalog:
@@ -86,10 +113,13 @@ promotion_targets:
   recipes:
     - agilex-tracer-urdf-to-mujoco
     - agilex-tracer-mujoco-rover-runtime
+    - shadow-hand-hakoniwa-to-foxglove
 
 promotion_rationale:
   - Demo recipes need a precise lifecycle order for hako-cmd start.
   - The rule is generally useful for Hakoniwa asset programs that own conductor startup.
+  - Launcher files should encode conductor ownership and callback-SHM ordering
+    for multi-asset demos.
   - Promotion should wait until the shutdown expectation is clarified.
 
 resolution:
