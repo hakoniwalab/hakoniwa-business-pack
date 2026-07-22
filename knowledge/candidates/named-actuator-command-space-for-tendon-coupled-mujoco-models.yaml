@@ -1,0 +1,100 @@
+id: named-actuator-command-space-for-tendon-coupled-mujoco-models
+title: Tendon-coupled MuJoCo models should expose named actuator command space separately from joint observation space
+status: candidate
+
+knowledge_type:
+  - interface_contract
+  - design_intent
+  - usage_pattern
+  - known_pitfall
+  - validation_rule
+
+summary: >
+  For MuJoCo models that use actuator transmissions beyond one actuator per
+  joint, such as fixed tendons in Shadow Hand, the Hakoniwa command contract
+  should be defined from stable actuator names rather than observed joint names.
+  JointState remains useful as observation, but command dimension and observation
+  dimension are allowed to differ. Hakoniwa should send actuator targets and let
+  MuJoCo apply tendon coupling internally.
+
+observation:
+  context: >
+    Implementing the Shadow Hand Menagerie MJCF Recipe in hakoniwa-mujoco-robots
+    after the user highlighted that tendon coupling is the core design risk.
+  details:
+    - Shadow Hand scene_right.xml loads with nu=20, njnt=25, and ntendon=4.
+    - The hand command space has 20 named position actuators.
+    - The observed hand joint space has 24 named hand joints; the scene also includes an unnamed freejoint for the free object that should not be part of the hand JointState contract.
+    - Four position actuators target fixed tendons: rh_A_FFJ0, rh_A_MFJ0, rh_A_RFJ0, and rh_A_LFJ0.
+    - Each fixed tendon couples two distal finger joints with coefficient 1, for example rh_FFJ0 couples rh_FFJ2 and rh_FFJ1.
+    - Treating command count as observed joint count would create invalid independent commands for tendon-coupled joints.
+    - A stable Hakoniwa contract was defined as std_msgs/Float64MultiArray[20] in explicit actuator-name order.
+    - The plant binds each command entry by actuator name through NamedActuatorImpl, then calls SetTarget(); MuJoCo handles whether the actuator targets a joint or a tendon.
+    - The state path publishes sensor_msgs/JointState for observed joints, including tendon-coupled distal joints, without exposing them as independent commands.
+    - The Hakoniwa no-viewer smoke confirmed that sending FFJ0 tendon targets changed both FFJ2 and FFJ1 observations.
+
+sources:
+  repositories:
+    - repository: local/hakoniwa-mujoco-robots
+      path: thirdparty/mujoco_menagerie/shadow_hand/scene_right.xml
+      revision: local-working-tree-2026-07-23
+    - repository: local/hakoniwa-mujoco-robots
+      path: thirdparty/mujoco_menagerie/shadow_hand/right_hand.xml
+      revision: local-working-tree-2026-07-23
+    - repository: local/hakoniwa-mujoco-robots
+      path: examples/actuators/shadow_hand/shadow-hand-actuator-map.cpp
+      revision: local-working-tree-2026-07-23
+    - repository: local/hakoniwa-mujoco-robots
+      path: examples/actuators/shadow_hand/shadow-hand-hakoniwa-asset.cpp
+      revision: local-working-tree-2026-07-23
+    - repository: local/hakoniwa-mujoco-robots
+      path: examples/actuators/shadow_hand/send_shadow_hand_targets.py
+      revision: local-working-tree-2026-07-23
+    - repository: local/hakoniwa-business-pack
+      path: recipes/examples/shadow-hand-menagerie-mjcf-to-hakoniwa.yaml
+      revision: local-working-tree-2026-07-23
+  runtime_evidence:
+    - description: >
+        shadow-hand-actuator-map --check printed nu=20, njnt=25, ntendon=4,
+        enumerated the four fixed tendon actuators, and completed with check ok.
+    - description: >
+        Hakoniwa plant/sender smoke sent actuator_position_targets
+        Float64MultiArray[20]. Sender JointState readback included
+        rh_FFJ2=0.802 and rh_FFJ1=0.922 when FFJ0 target reached 1.750.
+  expert_input:
+    - source: user
+      statement: >
+        Shadow Hand の難しさは MuJoCo で動かすことではなく、箱庭の
+        外部指令インタフェースとして何を 1 自由度として見せるかを
+        正しく決めること。command space と observation space を分けるべき。
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - Reuse this pattern on another tendon-driven or non-joint-transmission model before promoting it as a broad component guide rule.
+    - Decide whether future PDU contracts should remain Float64MultiArray plus documented order or move to a named actuator command message.
+  notes:
+    - Verified for Shadow Hand bounded open-close motion through MuJoCo-only and Hakoniwa PDU smoke.
+    - This does not validate natural grasping, contact-rich manipulation, or closed-loop dexterous hand control.
+
+promotion_targets:
+  catalog:
+    - hakoniwa-mujoco-robots
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: true
+  recipes:
+    - shadow-hand-menagerie-mjcf-to-hakoniwa
+
+promotion_rationale:
+  - This is a reusable interface-contract rule for MuJoCo robot assets, especially hand, tendon, cable, or other transmission-driven models.
+  - It belongs near component/asset guidance and actuator examples rather than generic runtime lifecycle documentation.
+
+resolution:
+  promoted_to: []
+  notes:
+    - Candidate created after Shadow Hand Menagerie MJCF reached Hakoniwa PDU bounded open-close validation.

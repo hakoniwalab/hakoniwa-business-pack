@@ -16,7 +16,8 @@ summary: >
 
 observation:
   context: >
-    Preparing the Unitree Go1 Menagerie MJCF Recipe for Hakoniwa MuJoCo.
+    Preparing the Unitree Go1 and Shadow Hand Menagerie MJCF Recipes for
+    Hakoniwa MuJoCo.
   details:
     - MuJoCo Menagerie documents that individual model directories have their own licenses.
     - The Unitree Go1 model directory contains a BSD-3-Clause LICENSE file.
@@ -26,6 +27,10 @@ observation:
     - The local import used upstream commit 71f066ad0be9cd271f7ed58c030243ef157af9f4.
     - The vendored Hakoniwa path is thirdparty/mujoco_menagerie/unitree_go1 in hakoniwa-mujoco-robots.
     - After vendoring, the local scene.xml was load-tested with MuJoCo before any Hakoniwa adapter or PDU work.
+    - The same rule was later applied to Shadow Hand by copying the model-local Apache-2.0 LICENSE with scene_right.xml, right_hand.xml, and mesh assets.
+    - Shadow Hand README states that the original URDF and assets were provided by Shadow Robot Company under Apache-2.0.
+    - The vendored Hakoniwa path is thirdparty/mujoco_menagerie/shadow_hand in hakoniwa-mujoco-robots.
+    - After vendoring, scene_right.xml was load-tested and then used for MuJoCo-only and Hakoniwa PDU smoke tests.
 
 sources:
   repositories:
@@ -47,6 +52,18 @@ sources:
     - repository: local/hakoniwa-business-pack
       path: recipes/examples/unitree-go1-menagerie-mjcf-to-hakoniwa.yaml
       revision: local-working-tree-2026-07-22
+    - repository: google-deepmind/mujoco_menagerie
+      path: shadow_hand/LICENSE
+      revision: 71f066ad0be9cd271f7ed58c030243ef157af9f4
+    - repository: google-deepmind/mujoco_menagerie
+      path: shadow_hand/README.md
+      revision: 71f066ad0be9cd271f7ed58c030243ef157af9f4
+    - repository: local/hakoniwa-mujoco-robots
+      path: thirdparty/mujoco_menagerie/shadow_hand/LICENSE
+      revision: local-working-tree-2026-07-23
+    - repository: local/hakoniwa-business-pack
+      path: recipes/examples/shadow-hand-menagerie-mjcf-to-hakoniwa.yaml
+      revision: local-working-tree-2026-07-23
   expert_input:
     - source: user
       statement: >
@@ -58,13 +75,14 @@ confidence: high
 contradictions: []
 
 validation:
-  status: partially_verified
+  status: verified
   required:
     - Confirm repository policy for whether large mesh assets should be vendored directly or fetched by a pinned helper script.
     - Re-run license/source checks if the imported upstream revision changes.
   notes:
     - This rule was applied to Unitree Go1 by copying the model-local LICENSE with the MJCF and mesh assets.
-    - The rule should be promoted after one more third-party model recipe follows the same pattern.
+    - This rule was applied again to Shadow Hand by copying the model-local Apache-2.0 LICENSE with the MJCF and mesh assets before runtime work.
+    - The repeated application is verified, but promotion can still wait for a repository-level policy decision on vendoring versus pinned import scripts.
 
 promotion_targets:
   catalog:
@@ -74,6 +92,7 @@ promotion_targets:
   component_asset_guide: true
   recipes:
     - unitree-go1-menagerie-mjcf-to-hakoniwa
+    - shadow-hand-menagerie-mjcf-to-hakoniwa
 
 promotion_rationale:
   - This is a reusable asset governance rule for MJCF-first Recipes that consume third-party model assets.
@@ -83,3 +102,4 @@ resolution:
   promoted_to: []
   notes:
     - Candidate created while preparing the Unitree Go1 Menagerie MJCF Recipe.
+    - Candidate updated after Shadow Hand Menagerie MJCF followed the same license-first vendoring path.

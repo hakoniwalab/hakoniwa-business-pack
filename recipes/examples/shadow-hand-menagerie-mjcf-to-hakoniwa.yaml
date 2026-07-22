@@ -17,11 +17,22 @@ feasibility:
     - Menagerie provides right- and left-hand Shadow Hand E3M5 MJCF assets.
     - The upstream README states that the original URDF and assets were provided by Shadow Robot Company under Apache-2.0.
     - right_hand.xml already defines named position actuators for wrist, thumb, and fingers.
-    - hakoniwa-mujoco-robots and the PDU stack provide credible runtime patterns, but no Shadow Hand-specific plant has been executed yet.
+    - hakoniwa-mujoco-robots and the PDU stack provide credible runtime patterns, and a no-viewer Shadow Hand plant/sender smoke has executed successfully.
 
 validation:
-  status: not_tested
-  summary: Upstream model, actuator, scene, and license structure were inspected; local runtime execution remains untested.
+  status: verified
+  summary: >
+    The upstream model-local Apache-2.0 license was checked, the Shadow Hand
+    subtree was vendored with LICENSE retained, and local MuJoCo loading of
+    scene_right.xml succeeded. A Shadow Hand actuator-map sample now enumerates
+    20 named position actuators, 25 scene joints, and 4 fixed tendons; the hand
+    observation contract should exclude the unnamed freejoint from the scene
+    object, leaving 24 named hand joints. A bounded open-close MuJoCo-only smoke
+    completed with finite qpos/qvel and visible distal-finger response. A
+    Hakoniwa no-viewer PDU smoke then registered the Shadow Hand plant and Python
+    sender, started via hako-cmd after both reached WAIT START, sent 20-element
+    Float64MultiArray actuator targets, and observed tendon-coupled finger joints
+    moving through JointState readback/logged plant state.
   steps:
     - id: inspect_shadow_hand_license
       status: verified
@@ -32,33 +43,76 @@ validation:
         - repository: google-deepmind/mujoco_menagerie
           path: shadow_hand/LICENSE
           revision: main
+        - repository: local/hakoniwa-mujoco-robots
+          path: thirdparty/mujoco_menagerie/shadow_hand/LICENSE
+          revision: local-working-tree-2026-07-23
       notes:
         - Preserve required license and attribution notices when redistributing copied model artifacts.
+        - The model-local README says the original URDF and assets were provided by Shadow Robot Company under Apache-2.0.
     - id: inspect_shadow_hand_scene
       status: verified
       evidence:
         - repository: google-deepmind/mujoco_menagerie
           path: shadow_hand/scene_right.xml
           revision: main
+        - repository: local/hakoniwa-mujoco-robots
+          path: thirdparty/mujoco_menagerie/shadow_hand/scene_right.xml
+          revision: local-working-tree-2026-07-23
       notes:
         - The scene includes right_hand.xml, a floor, lights, and a free object for later grasping experiments.
+        - The scene loaded locally through MuJoCo with nq=31, nv=30, nu=20, njnt=25, ntendon=4, nbody=27, and ngeom=64.
     - id: inspect_shadow_hand_actuators
       status: verified
       evidence:
         - repository: google-deepmind/mujoco_menagerie
           path: shadow_hand/right_hand.xml
           revision: main
+        - repository: local/hakoniwa-mujoco-robots
+          path: examples/actuators/shadow_hand/shadow-hand-actuator-map.cpp
+          revision: local-working-tree-2026-07-23
       notes:
         - Existing position actuators should be reused rather than regenerated.
         - Tendon-coupled distal joints must not be treated as independent actuators.
+        - The command space has 20 named position actuators.
+        - Four actuator commands target fixed tendons: rh_A_FFJ0, rh_A_MFJ0, rh_A_RFJ0, and rh_A_LFJ0.
+        - The tendon couplings are rh_FFJ0=(rh_FFJ2,rh_FFJ1), rh_MFJ0=(rh_MFJ2,rh_MFJ1), rh_RFJ0=(rh_RFJ2,rh_RFJ1), and rh_LFJ0=(rh_LFJ2,rh_LFJ1), all with coefficient 1.
     - id: mujoco_only_joint_smoke
-      status: not_tested
+      status: verified
+      evidence:
+        - repository: local/hakoniwa-mujoco-robots
+          path: examples/actuators/shadow_hand/shadow-hand-actuator-map.cpp
+          revision: local-working-tree-2026-07-23
+        - repository: local/hakoniwa-mujoco-robots
+          path: examples/actuators/shadow_hand/README.md
+          revision: local-working-tree-2026-07-23
       notes:
-        - Load scene_right.xml and execute bounded open-close targets before Hakoniwa PDU integration.
+        - Built target shadow-hand-actuator-map.
+        - Running shadow-hand-actuator-map --check loaded scene_right.xml, printed license preflight, enumerated actuator/joint/tendon tables, and completed with check ok.
+        - Representative close state at t=1.000 included FFJ2=0.857, FFJ1=0.865, MFJ2=0.857, MFJ1=0.865, THJ2=0.386, THJ1=0.860.
+        - This validates bounded MuJoCo-only actuator command readiness but does not claim grasping.
     - id: hakoniwa_joint_pdu_runtime
-      status: not_tested
+      status: verified
+      evidence:
+        - repository: local/hakoniwa-mujoco-robots
+          path: examples/actuators/shadow_hand/shadow-hand-hakoniwa-asset.cpp
+          revision: local-working-tree-2026-07-23
+        - repository: local/hakoniwa-mujoco-robots
+          path: examples/actuators/shadow_hand/send_shadow_hand_targets.py
+          revision: local-working-tree-2026-07-23
+        - repository: local/hakoniwa-mujoco-robots
+          path: config/shadow-hand-pdutypes.json
+          revision: local-working-tree-2026-07-23
+        - repository: local/hakoniwa-mujoco-robots
+          path: config/sensors/joint_state/shadow-hand-joint-states.json
+          revision: local-working-tree-2026-07-23
       notes:
-        - Implement the plant, command/state PDU, Endpoint config, and scripted sender.
+        - Built target shadow-hand-hakoniwa-asset.
+        - Plant direct execution reached WAIT START when run outside the Codex sandbox shared-memory restrictions.
+        - Sender registered with /Users/tmori/.pyenv/shims/python3.12 and reached WAIT START.
+        - hako-cmd start created PDU data after both assets registered.
+        - Sender sent actuator_position_targets with 20 elements in stable actuator-name order.
+        - Representative plant output showed FFJ0_target=1.739 with FFJ2=0.804 and FFJ1=0.901 at t=2.002, confirming tendon-coupled response through MuJoCo.
+        - This validates bounded open-close PDU control, not natural grasping or closed-loop dexterous control.
 
 agency_boundary:
   agent_actions:
@@ -176,27 +230,27 @@ connections:
     to: hakoniwa-pdu-endpoint
     interface: pdu
     data:
-      - joint-position command
+      - actuator-position command
     contract:
-      status: not_tested
+      status: verified
       requires:
         - Stable actuator ordering.
         - Matching generated Python PDU type.
       validation_notes:
-        - Exact command contract remains to be implemented.
+        - The command contract is std_msgs/Float64MultiArray[20] ordered by named MuJoCo actuators.
   - from: hakoniwa-pdu-endpoint
     to: hakoniwa-mujoco-robots
     interface: pdu
     data:
-      - joint-position command
+      - actuator-position command
       - JointState-compatible state
     contract:
-      status: not_tested
+      status: verified
       requires:
         - Shadow Hand plant asset.
         - Explicit actuator-name mapping.
       validation_notes:
-        - Upstream actuator names are known, but the Hakoniwa mapping is untested.
+        - The plant binds commands by actuator name with NamedActuatorImpl, including tendon actuator targets.
   - from: hakoniwa-mujoco-robots
     to: hakoniwa-core-pro
     interface: api
@@ -204,11 +258,11 @@ connections:
       - asset lifecycle
       - simulation time
     contract:
-      status: not_tested
+      status: verified
       requires:
         - Plant registration and runtime ownership consistent with existing patterns.
       validation_notes:
-        - Validate MuJoCo-only motion first.
+        - The plant starts the conductor, registers as HAKO_ASSET_MODEL_PLANT, and waits for hako-cmd start.
 
 data_flow:
   summary: >
@@ -265,16 +319,21 @@ artifact_sets:
       - MuJoCo viewer of scene_right.xml
   pdu_artifacts:
     description: Joint command/state definitions and Endpoint configuration.
-    status: not_tested
+    status: verified
     artifacts:
-      - Shadow Hand joint-position command PDU
-      - JointState-compatible state PDU
-      - Endpoint configuration
+      - config/shadow-hand-pdutypes.json
+      - config/shadow-hand-pdudef-compact.json
+      - config/endpoint/shadow_hand_endpoint.json
+      - config/endpoint/comm/shm_shadow_hand_comm.json
+      - config/sensors/joint_state/shadow-hand-joint-states.json
   runtime_artifacts:
     description: Plant asset, actuator mapping, and scripted sender.
-    status: not_tested
+    status: verified
     artifacts:
-      - Shadow Hand plant asset
+      - NamedActuatorImpl
+      - shadow-hand-actuator-map
+      - shadow-hand-hakoniwa-asset
+      - send_shadow_hand_targets.py
       - actuator-name mapping
       - Python open-close sender
 
@@ -298,22 +357,20 @@ artifacts:
       - hakoniwa-pdu-python
       - hakoniwa-pdu-endpoint
       - hakoniwa-mujoco-robots
-    path: TBD
+    path: config/shadow-hand-pdutypes.json
   - name: Shadow Hand JointState-compatible PDU
     kind: pdu-definition
     producer: hakoniwa-pdu-registry
     consumer:
       - hakoniwa-pdu-endpoint
       - hakoniwa-mujoco-robots
-    path: TBD
+    path: config/shadow-hand-pdutypes.json
 
 missing_pieces:
   - Pin an upstream Menagerie revision for reproducibility.
-  - Decide whether to reference Menagerie in-place or copy the Shadow Hand subtree with notices.
-  - Implement MuJoCo-only named-actuator open-close smoke.
-  - Define a stable actuator command ordering that respects tendon coupling.
-  - Define or reuse a JointState-compatible PDU and generated bindings.
-  - Implement and run the Hakoniwa plant and Python sender.
+  - Decide whether to keep the copied Shadow Hand subtree as the long-term distribution shape or replace it with a reproducible import script.
+  - Add an automated noninteractive Hakoniwa smoke if the local environment can provide shared-memory access without manual process orchestration.
+  - Optionally add a MuJoCo viewer demo and tune camera/pose for presentation.
 
 demo:
   objective: Prove MJCF-first Shadow Hand control through Hakoniwa without claiming grasping.
