@@ -236,6 +236,21 @@ demo_candidates:
         path: README.md
         revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
 
+runtime_checks:
+  - id: build-readiness
+    kind: doctor
+    platforms:
+      - macos
+      - linux
+    command:
+      - bash
+      - doctor.bash
+    working_directory: repository
+    output: text
+    notes:
+      - Component-owned preflight for CMake, Git, Python/Hakoniwa modules, MuJoCo metadata, installed Core/Endpoint packages, and GLFW availability.
+      - Exit status 0 means the environment passed the declared preflight; this is not behavioral verification of a complete Recipe.
+
 operations:
   build:
     commands:
@@ -276,6 +291,10 @@ source_refs:
     path: docs/guide/forklift-context-rd.md
     revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
     description: Forklift context and RD-light handoff notes.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: doctor.bash
+    revision: main
+    description: Component-owned build/runtime prerequisite doctor invoked by Catalog Runtime Verification.
 
 tags:
   - hakoniwa

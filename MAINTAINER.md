@@ -127,6 +127,52 @@ User demand
   -> better future Recipe analysis
 ```
 
+## Executable Knowledge Reflection
+
+Documentation is not always the final promotion target for validated knowledge.
+
+When a Knowledge Candidate contains a reusable `runtime_rule`, `known_pitfall`, or `validation_rule`, ask whether the condition can be detected reproducibly by software.
+
+Prefer this maturity path when the answer is yes:
+
+```text
+Observation
+  -> Knowledge Candidate
+  -> verified knowledge
+  -> Catalog / Primer / Recipe clarification
+  -> executable guardrail
+       - doctor.bash / doctor.ps1
+       - validator
+       - test
+       - CI check
+  -> Catalog runtime_checks declaration
+  -> Business Pack runtime verification
+```
+
+The preferred first guardrail is **detect before auto-fix**.
+
+A diagnostic PR should normally:
+
+- detect the learned failure condition deterministically;
+- explain the failed prerequisite or contract;
+- provide a remediation hint when the correct action is known;
+- return a useful non-zero status for failure;
+- avoid silently installing software, downloading third-party assets, changing licensing choices, or changing runtime architecture.
+
+An AI maintainer agent may propose or create a Draft PR for the owning component repository when all of the following are true:
+
+- the Knowledge Candidate is sufficiently validated;
+- the guardrail is software-only and low risk;
+- the owning repository and appropriate doctor/test/validator location are clear;
+- repository modification permission is available;
+- no licensing, credentials, external cost, physical action, deployment approval, or consequential design decision must be crossed automatically.
+
+When a human judgement is required, preserve it as an explicit gate. For example, an agent may add a check that reports a missing third-party asset and suggests a fetch command, but it should not silently decide that redistribution or automatic download is acceptable.
+
+After the component PR is merged, add or update the component Catalog `runtime_checks` declaration so `tools/catalog_doctor.rb` can invoke the guardrail. See `docs/catalog-runtime-verification.md`.
+
+The strongest mature state for a machine-detectable lesson is therefore not merely **documented**, but **guarded**: a future user or agent can be warned before rediscovering the same failure manually.
+
 ## Maintainer Review Checklist
 
 During a periodic review:
@@ -139,7 +185,9 @@ During a periodic review:
 6. Record missing, undocumented, or unresolved areas explicitly.
 7. Promote only sufficiently generic and useful patterns into canonical Use Cases.
 8. Feed technical discoveries into the existing Knowledge Refinement Loop.
-9. Keep Recipes concrete; keep Use Cases implementation-independent.
+9. For validated runtime/validation knowledge, decide whether it can become an executable guardrail.
+10. When appropriate, create or request the smallest component-owned doctor/test/validator PR and then expose it through Catalog `runtime_checks`.
+11. Keep Recipes concrete; keep Use Cases implementation-independent.
 
 The goal is not to maximize the number of Use Cases.
-The goal is to let real user demand gradually reveal the reusable value patterns of the Hakoniwa ecosystem.
+The goal is to let real user demand gradually reveal the reusable value patterns of the Hakoniwa ecosystem while turning reusable runtime lessons into durable, executable protections when possible.

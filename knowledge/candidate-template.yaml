@@ -47,12 +47,23 @@ promotion_targets:
   component_asset_guide: false
   recipes:
     - optional-recipe-or-pattern-id
+  executable_guardrails:
+    - repository: hakoniwalab/component
+      kind: doctor | validator | test | ci
+      path: optional/target/path
+      mode: detect-only | detect-and-suggest-remediation
+      notes:
+        - Use when the validated knowledge can be checked reproducibly by software.
+        - Prefer detection and explanation before automatic repair.
 
 promotion_rationale:
   - Why the selected knowledge layer is appropriate.
+  - Explain why an executable guardrail is or is not appropriate when the candidate contains a reusable runtime or validation rule.
 
 resolution:
   promoted_to:
     - Optional path or Catalog entry after promotion.
+  executable_guardrails:
+    - Optional repository/path or PR after a machine-detectable rule is guarded.
   notes:
     - Final decision, rejection reason, or follow-up.
