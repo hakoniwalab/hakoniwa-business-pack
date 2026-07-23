@@ -335,9 +335,8 @@ components:
   - foxglove
   - integration
   - bridge
-  - commercial
   maturity: experimental
-  distribution: commercial
+  distribution: oss
   summary: Output-only Foxglove adapter for hakoniwa-pdu-endpoint that publishes caller-provided
     complete CDR payloads through the official Foxglove SDK WebSocket server. The
     current repository also contains a verified Shadow Hand JointState integration
@@ -361,6 +360,8 @@ components:
   - joint-state
   - shadow-hand
   - urdf
+  - oss
+  - mit
   catalog_path: components/hakoniwa-pdu-foxglove.yaml
 - id: hakoniwa-pdu-javascript
   name: Hakoniwa PDU JavaScript

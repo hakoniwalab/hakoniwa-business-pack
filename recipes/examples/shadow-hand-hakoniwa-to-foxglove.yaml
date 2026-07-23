@@ -1,6 +1,6 @@
 id: shadow-hand-hakoniwa-to-foxglove
 title: Shadow Hand Hakoniwa JointState to Foxglove 3D
-recipe_version: 0.2
+recipe_version: 0.3
 
 goal:
   user_request: 箱庭で動かしている Shadow Hand の関節状態を、Mac 上の Foxglove でリアルタイムに観測・3D 可視化したい。
@@ -24,6 +24,8 @@ feasibility:
     - Foxglove 3D was manually verified on macOS arm64 using the upstream Shadow Robot E3M5 xacro/DAE visualization model.
     - Foxglove URDF Joint states mode drives the model directly from JointState; no /tf publisher is required.
     - ROS 2 message definitions are reused for the JointState schema, but a ROS 2 runtime is not required for this verified path.
+    - hakoniwa-pdu-foxglove is now public OSS under the MIT license, so no commercial component access gate is required.
+    - The full Shadow Hand end-to-end workflow is currently verified only on macOS arm64.
 
 validation:
   status: verified
@@ -50,10 +52,10 @@ validation:
       evidence:
         - repository: hakoniwalab/hakoniwa-pdu-foxglove
           path: config/shadow_hand_bridge/README.md
-          revision: ccbfd765b921307ea4f4ceb48dc2b0043767ac88
+          revision: c45ba4e76788258907777e82649edaecc7fe7bc8
         - repository: hakoniwalab/hakoniwa-pdu-foxglove
           path: launch/shadow-hand-foxglove-smoke.launch.json
-          revision: ccbfd765b921307ea4f4ceb48dc2b0043767ac88
+          revision: c45ba4e76788258907777e82649edaecc7fe7bc8
       notes:
         - ShadowHandAsset owns the conductor and starts first.
         - bridge-core participates in the Hakoniwa callback/SHM lifecycle and forwards native PDU bytes over TCP.
@@ -63,24 +65,34 @@ validation:
       evidence:
         - repository: hakoniwalab/hakoniwa-pdu-foxglove
           path: examples/shadow-hand-jointstate-to-foxglove/shadow_hand_jointstate_to_foxglove.py
-          revision: ccbfd765b921307ea4f4ceb48dc2b0043767ac88
+          revision: c45ba4e76788258907777e82649edaecc7fe7bc8
         - repository: hakoniwalab/hakoniwa-pdu-foxglove
           path: examples/cdr-stdin-publisher/README.md
-          revision: ccbfd765b921307ea4f4ceb48dc2b0043767ac88
+          revision: c45ba4e76788258907777e82649edaecc7fe7bc8
       notes:
         - The Python converter owns the type-specific native-PDU-to-JointState-to-CDR conversion.
         - cdr_stdin_publisher owns the generic complete-CDR-to-Foxglove transport boundary.
         - The default stdin framing is little-endian u32 payload length followed by the complete CDR payload.
+    - id: shadow_hand_jointstate_schema_stage
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-pdu-foxglove
+          path: README.md
+          revision: c45ba4e76788258907777e82649edaecc7fe7bc8
+      notes:
+        - The JointState ros2msg bundle is prepared using the ROS 2 Jazzy Docker environment provided by hakoniwa-pdu-registry.
+        - The resulting sensor_msgs/msg/JointState.bundle.msg is copied into work/schemas/ros2_jazzy/sensor_msgs/msg/JointState.bundle.msg.
+        - work/ is a local staging area and the schema copy is intentionally not committed to hakoniwa-pdu-foxglove.
     - id: shadow_hand_foxglove_websocket
       status: verified
       evidence:
         - repository: hakoniwalab/hakoniwa-pdu-foxglove
           path: config/shadow_hand/comm_foxglove_jointstate.json
-          revision: ccbfd765b921307ea4f4ceb48dc2b0043767ac88
+          revision: c45ba4e76788258907777e82649edaecc7fe7bc8
       notes:
         - WebSocket address is ws://127.0.0.1:8766.
         - Topic is /hakoniwa/ShadowHandAsset/joint_states.
-        - Schema is sensor_msgs/msg/JointState with ros2msg encoding and a bundled schema file.
+        - Schema is sensor_msgs/msg/JointState with ros2msg encoding and a bundled schema file staged under work/schemas/ros2_jazzy.
     - id: shadow_hand_foxglove_raw_messages
       status: verified
       evidence:
@@ -105,7 +117,7 @@ validation:
       evidence:
         - repository: hakoniwalab/hakoniwa-pdu-foxglove
           path: README.md
-          revision: ccbfd765b921307ea4f4ceb48dc2b0043767ac88
+          revision: c45ba4e76788258907777e82649edaecc7fe7bc8
       notes:
         - tools/prepare_urdf.py rewrites package://sr_description/... to viewer-friendly relative paths.
         - The verified visualization root correction is rh_world_joint rpy = -1.5707963267948966 0 -1.5707963267948966.
@@ -116,7 +128,7 @@ validation:
           date: "2026-07-23"
         - repository: hakoniwalab/hakoniwa-pdu-foxglove
           path: README.md
-          revision: ccbfd765b921307ea4f4ceb48dc2b0043767ac88
+          revision: c45ba4e76788258907777e82649edaecc7fe7bc8
       notes:
         - Foxglove 3D URDF layer was set to Joint states control mode.
         - Ignore COLLADA <up_axis> must be enabled for the Shadow Robot DAE meshes.
@@ -130,22 +142,22 @@ agency_boundary:
       autonomous: true
       preconditions:
         - user_requested_execution
-        - foxglove_component_access
     - id: generate_foxglove_runtime_config
       description: Configure the SHM-to-TCP bridge, native JointState-to-CDR converter, cdr_stdin_publisher, and Foxglove endpoint.
       autonomous: true
       preconditions:
         - user_requested_execution
-        - foxglove_component_access
+    - id: prepare_jointstate_schema
+      description: Use the hakoniwa-pdu-registry ROS 2 Jazzy Docker environment to prepare the JointState ros2msg bundle and stage it under hakoniwa-pdu-foxglove/work/schemas/ros2_jazzy.
+      autonomous: true
+      preconditions:
+        - user_requested_execution
   human_actions:
     - id: connect_foxglove_app
       description: Connect Foxglove App to the local WebSocket server and configure the 3D URDF layer.
       status: required
       confirmation_required: true
   required_permissions:
-    - id: foxglove_component_access
-      description: Confirm access and entitlement to the private commercial hakoniwa-pdu-foxglove component.
-      status: required
     - id: upstream_license_review
       description: Preserve applicable MuJoCo Menagerie and Shadow Robot upstream notices when redistributing source-derived artifacts.
       status: required
@@ -153,7 +165,6 @@ agency_boundary:
 constraints:
   - depends-on-shadow-hand-base-recipe
   - license-check-first
-  - commercial-component-access-required
   - output-only-foxglove
   - native-pdu-to-cdr-conversion-explicit
   - no-native-pdu-as-cdr-assumption
@@ -163,6 +174,7 @@ constraints:
   - foxglove-3d-uses-upstream-shadow-robot-urdf-as-visualization-model
   - mujoco-menagerie-remains-physics-source-of-truth
   - foxglove-urdf-assets-served-over-local-http-with-cors
+  - jointstate-schema-staged-from-pdu-registry-jazzy-docker
   - ignore-collada-up-axis-required-for-shadow-robot-dae
   - no-tf-required-for-urdf-jointstate-control
   - verified-single-pc-macos-arm64
@@ -189,7 +201,7 @@ target_environment:
     - name: ROS 2 runtime
       required: false
       version: not-required
-      notes: sensor_msgs/JointState schema/type conventions are reused without running ROS 2.
+      notes: sensor_msgs/JointState schema/type conventions are reused without running ROS 2; the schema bundle is prepared separately using the hakoniwa-pdu-registry Jazzy Docker environment.
   hakoniwa:
     install_prefix: /usr/local/hakoniwa
     components_built:
@@ -220,6 +232,8 @@ execution_environment:
     work_area: hakoniwa-pdu-foxglove/work
     notes:
       - Upstream Shadow Robot source and generated visualization artifacts are kept as local work inputs/outputs.
+      - The JointState ros2msg bundle is copied from the hakoniwa-pdu-registry ROS 2 Jazzy Docker preparation flow into work/schemas/ros2_jazzy/sensor_msgs/msg/JointState.bundle.msg.
+      - work/ remains local and is intentionally excluded from the public repository and Docker build context.
 
 components:
   - id: hakoniwa-mujoco-robots
@@ -242,7 +256,7 @@ components:
       - registry
       - data_model
       - code_generator
-    purpose: Provide native JointState PDU conversion and complete CDR conversion artifacts.
+    purpose: Provide native JointState PDU conversion, complete CDR conversion artifacts, and the reproducible ROS 2 Jazzy Docker environment used to prepare Foxglove ros2msg schema bundles.
   - id: hakoniwa-pdu-bridge-core
     roles:
       - bridge
@@ -253,7 +267,7 @@ components:
       - visualizer
       - bridge
       - integration_boundary
-    purpose: Publish complete CDR through Foxglove WebSocket and host the Shadow Hand integration helpers/configuration.
+    purpose: Publish complete CDR through Foxglove WebSocket and host the Shadow Hand integration helpers/configuration as a public MIT-licensed OSS component.
   - id: hakoniwa-mbody-registry
     roles:
       - asset_generator
@@ -285,6 +299,18 @@ connections:
         - sensor_msgs/JointState generated Python conversion artifacts.
       validation_notes:
         - Type-specific conversion is performed before FoxgloveComm.
+  - from: hakoniwa-pdu-registry
+    to: hakoniwa-pdu-foxglove
+    interface: ROS 2 Jazzy schema preparation / local staging
+    data:
+      - sensor_msgs/msg/JointState.bundle.msg
+    contract:
+      status: verified
+      requires:
+        - Use the registry Docker environment for the ROS 2 Jazzy schema preparation boundary.
+        - Copy the resulting bundle into work/schemas/ros2_jazzy/sensor_msgs/msg/JointState.bundle.msg.
+      validation_notes:
+        - The staged schema is a local work artifact and is not committed to hakoniwa-pdu-foxglove.
   - from: hakoniwa-pdu-endpoint
     to: hakoniwa-pdu-foxglove
     interface: Endpoint::set_comm / FoxgloveComm
@@ -312,13 +338,16 @@ connections:
 
 data_flow:
   summary: >
-    Physics/state and visualization assets follow separate paths. MuJoCo is the
-    physics source of truth and Hakoniwa publishes JointState-compatible state.
-    Native PDU bytes are bridged to TCP, decoded to a typed JointState, encoded
-    to complete CDR, and published through FoxgloveComm. Separately, the
-    upstream Shadow Robot xacro is expanded without ROS and prepared as a
-    Foxglove visualization URDF. Foxglove joins the two paths by applying the
-    live JointState values to matching URDF joint names.
+    Physics/state, schema preparation, and visualization assets follow explicit
+    paths. MuJoCo is the physics source of truth and Hakoniwa publishes
+    JointState-compatible state. Native PDU bytes are bridged to TCP, decoded to
+    a typed JointState, encoded to complete CDR, and published through
+    FoxgloveComm. The JointState ros2msg bundle is prepared separately using the
+    hakoniwa-pdu-registry ROS 2 Jazzy Docker environment and staged under the
+    Foxglove work directory. Separately, the upstream Shadow Robot xacro is
+    expanded without ROS and prepared as a Foxglove visualization URDF.
+    Foxglove joins the paths by decoding the CDR with the staged schema and
+    applying the live JointState values to matching URDF joint names.
   state_path:
     - Shadow Hand MuJoCo plant
     - Hakoniwa sensor_msgs/JointState native PDU
@@ -331,6 +360,11 @@ data_flow:
     - FoxgloveComm
     - Foxglove WebSocket
     - /hakoniwa/ShadowHandAsset/joint_states
+  schema_path:
+    - hakoniwa-pdu-registry ROS 2 Jazzy Docker environment
+    - sensor_msgs/msg/JointState ros2msg schema preparation
+    - copy to hakoniwa-pdu-foxglove/work/schemas/ros2_jazzy/sensor_msgs/msg/JointState.bundle.msg
+    - Foxglove RawChannel schema configuration
   visualization_path:
     - shadow-robot/sr_common sr_hand.urdf.xacro
     - hakoniwa-mbody-registry xacro2urdf.py with --package sr_description=PATH
@@ -361,12 +395,12 @@ artifact_sets:
       - shadow_hand/right_hand.xml
       - Shadow Hand Hakoniwa actuator/state configuration
   pdu_artifacts:
-    description: JointState native PDU and CDR conversion artifacts.
+    description: JointState native PDU, CDR conversion artifacts, and locally staged ros2msg schema.
     status: verified
     artifacts:
       - sensor_msgs/JointState native PDU converter
       - sensor_msgs/JointState CDR converter
-      - sensor_msgs/msg/JointState bundled ros2msg schema
+      - work/schemas/ros2_jazzy/sensor_msgs/msg/JointState.bundle.msg
   runtime_artifacts:
     description: Verified SHM-to-TCP-to-CDR-to-Foxglove runtime chain.
     status: verified
@@ -393,6 +427,12 @@ artifacts:
       - hakoniwa-pdu-bridge-core
       - hakoniwa-pdu-registry
     path: ShadowHandAsset/joint_states
+  - name: JointState Foxglove schema bundle
+    kind: generated-local-artifact
+    producer: hakoniwa-pdu-registry
+    consumer:
+      - hakoniwa-pdu-foxglove
+    path: hakoniwa-pdu-foxglove/work/schemas/ros2_jazzy/sensor_msgs/msg/JointState.bundle.msg
   - name: Shadow Hand SHM-to-TCP bridge config
     kind: config
     producer: hakoniwa-pdu-foxglove
@@ -438,46 +478,51 @@ demo:
     ROS 2 runtime.
   steps:
     - order: 1
+      id: prepare_jointstate_schema
+      component: hakoniwa-pdu-registry
+      action: Prepare the sensor_msgs/msg/JointState ros2msg bundle in the registry ROS 2 Jazzy Docker environment and copy it to hakoniwa-pdu-foxglove/work/schemas/ros2_jazzy/sensor_msgs/msg/JointState.bundle.msg.
+      agency: agent_action
+    - order: 2
       id: run_shadow_hand_base
       component: hakoniwa-mujoco-robots
       action: Start the verified Shadow Hand plant and bounded finger-motion sender.
       agency: agent_action
-    - order: 2
+    - order: 3
       id: start_shm_to_tcp_bridge
       component: hakoniwa-pdu-bridge-core
       action: Bridge ShadowHandAsset/joint_states from callback SHM to TCP using config/shadow_hand_bridge.
       agency: agent_action
-    - order: 3
+    - order: 4
       id: convert_native_jointstate_to_cdr
       component: hakoniwa-pdu-registry
       action: Decode the native JointState PDU and encode complete JointState CDR in the Python converter.
       agency: agent_action
-    - order: 4
+    - order: 5
       id: publish_cdr_to_foxglove
       component: hakoniwa-pdu-foxglove
       action: Write length-prefixed CDR to cdr_stdin_publisher and publish it through FoxgloveComm at ws://127.0.0.1:8766.
       agency: agent_action
-    - order: 5
+    - order: 6
       id: fetch_shadow_robot_visualization
       component: hakoniwa-mbody-registry
       action: Clone shadow-robot/sr_common noetic-devel under work/shadow_hand_source_urdf.
       agency: agent_action
-    - order: 6
+    - order: 7
       id: expand_shadow_robot_xacro
       component: hakoniwa-mbody-registry
       action: Expand sr_hand.urdf.xacro with explicit --package sr_description=PATH and E3M5/right/all/pst arguments.
       agency: agent_action
-    - order: 7
+    - order: 8
       id: prepare_foxglove_urdf
       component: hakoniwa-pdu-foxglove
       action: Rewrite package://sr_description mesh URIs and set rh_world_joint root rpy to -1.5707963267948966 0 -1.5707963267948966.
       agency: agent_action
-    - order: 8
+    - order: 9
       id: serve_urdf
       component: hakoniwa-pdu-foxglove
       action: Serve work/urdf/shadow_hand with CORS on http://127.0.0.1:8767.
       agency: agent_action
-    - order: 9
+    - order: 10
       id: configure_foxglove_3d
       component: hakoniwa-pdu-foxglove
       action: Connect Foxglove, load shadow_hand_right.urdf, select Joint states mode and /hakoniwa/ShadowHandAsset/joint_states, and enable Ignore COLLADA <up_axis>.
@@ -491,6 +536,7 @@ demo:
       - Finger motion in Foxglove follows the MuJoCo simulation.
       - No /tf topic is required for the URDF Joint states control path.
     failure_signals:
+      - JointState.bundle.msg is missing from work/schemas/ros2_jazzy/sensor_msgs/msg.
       - Native Hakoniwa PDU bytes are sent directly as if they were CDR.
       - Foxglove cannot resolve the bundled JointState schema.
       - DAE mesh segments appear disconnected because Ignore COLLADA <up_axis> is disabled.
@@ -501,9 +547,9 @@ expected_result: >
   On macOS arm64, the MuJoCo Menagerie Shadow Hand runs as a Hakoniwa asset and
   publishes sensor_msgs/JointState-compatible state. The verified bridge and
   conversion path publishes complete CDR through a local Foxglove WebSocket
-  server. Foxglove decodes the JointState topic and animates the upstream Shadow
-  Robot URDF in 3D from the same joint positions, without running ROS 2 and
-  without requiring /tf.
+  server. Foxglove decodes the JointState topic with the locally staged ros2msg
+  schema and animates the upstream Shadow Robot URDF in 3D from the same joint
+  positions, without running ROS 2 and without requiring /tf.
 
 source_catalogs:
   - component_id: hakoniwa-mujoco-robots
@@ -528,23 +574,23 @@ source_artifacts:
     description: Verified Shadow Hand command/state base recipe.
   - repository: hakoniwalab/hakoniwa-pdu-foxglove
     path: README.md
-    revision: ccbfd765b921307ea4f4ceb48dc2b0043767ac88
-    description: Verified Shadow Hand JointState and Foxglove 3D workflow.
+    revision: c45ba4e76788258907777e82649edaecc7fe7bc8
+    description: Public OSS adapter architecture, verified macOS Shadow Hand JointState/Foxglove 3D workflow, and local schema staging boundary.
   - repository: hakoniwalab/hakoniwa-pdu-foxglove
     path: config/shadow_hand_bridge/README.md
-    revision: ccbfd765b921307ea4f4ceb48dc2b0043767ac88
+    revision: c45ba4e76788258907777e82649edaecc7fe7bc8
     description: SHM-to-TCP process boundary, rationale, and future single-process option.
   - repository: hakoniwalab/hakoniwa-pdu-foxglove
     path: examples/cdr-stdin-publisher/README.md
-    revision: ccbfd765b921307ea4f4ceb48dc2b0043767ac88
+    revision: c45ba4e76788258907777e82649edaecc7fe7bc8
     description: Generic complete-CDR stdin publication boundary.
   - repository: hakoniwalab/hakoniwa-pdu-foxglove
     path: config/shadow_hand/comm_foxglove_jointstate.json
-    revision: ccbfd765b921307ea4f4ceb48dc2b0043767ac88
+    revision: c45ba4e76788258907777e82649edaecc7fe7bc8
     description: Verified JointState topic, WebSocket server, and bundled ros2msg schema configuration.
   - repository: hakoniwalab/hakoniwa-pdu-foxglove
     path: launch/shadow-hand-foxglove-browser.launch.json
-    revision: ccbfd765b921307ea4f4ceb48dc2b0043767ac88
+    revision: c45ba4e76788258907777e82649edaecc7fe7bc8
     description: Long-running Shadow Hand plus URDF HTTP server plus Foxglove publication launch configuration.
   - repository: hakoniwalab/hakoniwa-mbody-registry
     path: docs/xacro-package-mapping.md
@@ -570,3 +616,4 @@ tags:
   - urdf
   - macos
   - ros-free
+  - oss
