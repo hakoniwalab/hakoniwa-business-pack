@@ -5,6 +5,7 @@ require "set"
 require "yaml"
 require "date"
 
+
 def load_yaml_file(path)
   YAML.load_file(path, permitted_classes: [Date])
 rescue ArgumentError
@@ -36,6 +37,16 @@ REQUIRED_FIELDS = %w[
   demo_candidates
   source_refs
 ].freeze
+
+RUNTIME_CHECK_REQUIRED_FIELDS = %w[
+  id
+  kind
+  platforms
+  command
+  working_directory
+  output
+].freeze
+
 
 def error(errors, path, message)
   errors << "#{path}: #{message}"
@@ -138,6 +149,61 @@ entries.each do |path, data|
       error(errors, label, "invalid recipe_roles.role: #{value.inspect}")
     end
   end
+
+  runtime_checks = Array(data["runtime_checks"])
+  check_ids = runtime_checks.map { |check| check["id"] }.compact
+  duplicate_check_ids = check_ids.group_by(&:itself).select { |_id, values| values.length > 1 }.keys
+  duplicate_check_ids.each do |id|
+    error(errors, label, "duplicate runtime_checks.id: #{id.inspect}")
+  end
+
+  runtime_checks.each_with_index do |check, index|
+    check_label = "runtime_checks[#{index}]"
+    unless check.is_a?(Hash)
+      error(errors, label, "#{check_label} must be a mapping")
+      next
+    end
+
+    missing_check_fields = RUNTIME_CHECK_REQUIRED_FIELDS.select { |key| !check.key?(key) }
+    unless missing_check_fields.empty?
+      error(errors, label, "#{check_label} missing required fields: #{missing_check_fields.join(', ')}")
+      next
+    end
+
+    unless check["id"].is_a?(String) && !check["id"].empty?
+      error(errors, label, "#{check_label}.id must be a non-empty string")
+    end
+
+    kind = check["kind"]
+    unless schema.fetch("runtime_checks.kind").fetch("values").include?(kind)
+      error(errors, label, "invalid #{check_label}.kind: #{kind.inspect}")
+    end
+
+    platforms = check["platforms"]
+    unless platforms.is_a?(Array) && !platforms.empty?
+      error(errors, label, "#{check_label}.platforms must be a non-empty list")
+    end
+    Array(platforms).each do |platform|
+      unless schema.fetch("runtime_checks.platforms").fetch("values").include?(platform)
+        error(errors, label, "invalid #{check_label}.platforms value: #{platform.inspect}")
+      end
+    end
+
+    command = check["command"]
+    unless command.is_a?(Array) && !command.empty? && command.all? { |item| item.is_a?(String) && !item.empty? }
+      error(errors, label, "#{check_label}.command must be a non-empty list of strings")
+    end
+
+    working_directory = check["working_directory"]
+    unless schema.fetch("runtime_checks.working_directory").fetch("values").include?(working_directory)
+      error(errors, label, "invalid #{check_label}.working_directory: #{working_directory.inspect}")
+    end
+
+    output = check["output"]
+    unless schema.fetch("runtime_checks.output").fetch("values").include?(output)
+      error(errors, label, "invalid #{check_label}.output: #{output.inspect}")
+    end
+  end
 end
 
 warnings.each { |message| warn "warning: #{message}" }
@@ -148,4 +214,3 @@ unless errors.empty?
 end
 
 puts "catalog valid: components=#{entries.length}, warnings=#{warnings.length}"
-
