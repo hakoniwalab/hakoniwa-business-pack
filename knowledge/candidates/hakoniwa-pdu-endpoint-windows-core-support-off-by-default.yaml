@@ -33,12 +33,15 @@ observation:
       <hakoniwa-core-pro install-win>` -- the resulting build compiles comm_shm.cpp,
       comm_shm_poll.cpp, comm_shm_callback.cpp, hakoniwa_time_source*.cpp (absent from the
       first build's compiler output), and the rebuilt DLL works."
-    - "This gap would silently bite anyone following hakoniwa-mujoco-robots' own README
-      Windows section literally -- it shows the plain build-win.ps1 invocation without
-      -EnableHakoniwaCore for the STANDALONE hakoniwa-pdu-endpoint build, and only
-      mentions the flag in the context of the PYTHON binding build
-      (build-python-win.ps1 -EnableHakoniwaCore), which could easily be missed for the
-      native C++ dependency build."
+    - "This gap can silently bite anyone following hakoniwa-mujoco-robots' own README
+      Windows section: it correctly says hakoniwa-pdu-endpoint must already be built and
+      installed, but it never states that installing a STANDALONE hakoniwa-pdu-endpoint on
+      Windows for SHM/Hakoniwa-core use requires -EnableHakoniwaCore -HakoniwaCoreRoot at
+      that repo's own build-win.ps1 step -- -EnableHakoniwaCore is only ever mentioned in
+      the README in the context of the PYTHON binding build
+      (build-python-win.ps1 -EnableHakoniwaCore), so the requirement for the native C++
+      dependency build is an implicit prerequisite left undocumented rather than a wrong
+      command shown in the README."
 
 sources:
   repositories:
@@ -82,7 +85,7 @@ promotion_targets:
     - mujoco-turtlebot3-mbody
 
 promotion_rationale:
-  - This is a reusable cross-repo (hakoniwa-pdu-endpoint x hakoniwa-mujoco-robots) Windows build gap, relevant to any future consumer of hakoniwa-pdu-endpoint on Windows.
+  - This is a reusable cross-repo (hakoniwa-pdu-endpoint x hakoniwa-mujoco-robots) Windows build gap, relevant to any Windows consumer of hakoniwa-pdu-endpoint that needs Hakoniwa core/SHM support specifically (non-SHM transports are unaffected).
 
 resolution:
   promoted_to: []
