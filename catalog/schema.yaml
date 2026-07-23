@@ -1,4 +1,4 @@
-schema_version: 0.1
+schema_version: 0.2
 description: Controlled vocabulary for Hakoniwa component catalog entries.
 
 controlled_fields:
@@ -130,6 +130,28 @@ controlled_fields:
       - time_sync
       - visualization_asset_source
       - visualizer
+  runtime_checks.kind:
+    description: Type of executable guardrail owned by the component repository.
+    values:
+      - doctor
+      - validator
+      - smoke-test
+      - test
+  runtime_checks.platforms:
+    description: Platforms on which the declared runtime check is intended to run.
+    values:
+      - macos
+      - linux
+      - windows
+  runtime_checks.working_directory:
+    description: Directory context used when invoking the runtime check.
+    values:
+      - repository
+  runtime_checks.output:
+    description: Output contract produced by the component-owned runtime check.
+    values:
+      - text
+      - json
 
 authoring_rules:
   - Add new controlled values to this file before using them in component entries.
@@ -143,3 +165,6 @@ authoring_rules:
   - Do not create separate catalog components solely to represent different licenses for the same codebase; represent those variants in the component's license metadata instead.
   - Mark private Hakoniwa business/product repositories as `distribution.channel: commercial` only when they represent a distinct technical component, not merely a commercial distribution of an existing component.
   - Treat `connects_to` as component-level planning knowledge. Put recipe-specific connection contracts, required adapters, and validation status in recipe `connections[].contract`.
+  - Keep `runtime_checks` optional. Absence means runtime readiness is unknown, not that the component failed.
+  - Runtime checks must be owned by the component repository; do not duplicate component-specific diagnostic logic in Business Pack.
+  - Prefer non-destructive detection and remediation guidance over automatic installation, download, or repair in doctor-style checks.
