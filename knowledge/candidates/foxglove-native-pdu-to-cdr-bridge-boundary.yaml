@@ -1,0 +1,88 @@
+id: foxglove-native-pdu-to-cdr-bridge-boundary
+title: Foxglove publication requires an explicit native-PDU to CDR bridge boundary
+status: candidate
+
+knowledge_type:
+  - integration_pattern
+  - validation_rule
+  - runtime_lifecycle
+
+summary: >
+  hakoniwa-pdu-foxglove publishes caller-provided CDR payloads. When the source
+  is Hakoniwa native PDU bytes, use an explicit bridge/application layer that
+  receives the native PDU, decodes it with a registry-generated native
+  converter, encodes it with a registry-generated CDR converter, and only then
+  forwards it to FoxgloveComm.
+
+observation:
+  context: >
+    Validating the Shadow Hand Hakoniwa JointState to Foxglove recipe on
+    2026-07-23.
+  details:
+    - The Shadow Hand plant publishes native Hakoniwa sensor_msgs/JointState PDU bytes.
+    - hakoniwa-pdu-bridge-core can move those native bytes from callback SHM to TCP when launched as a Hakoniwa asset.
+    - The Foxglove side should be a downstream TCP reader, not a callback SHM reader, so the Foxglove publisher process does not need to join the Hakoniwa asset lifecycle.
+    - The Python bridge decoded native JointState bytes with the generated native converter, encoded complete CDR with the generated CDR converter, and passed length-prefixed frames to cdr_stdin_publisher.
+    - Smoke logs showed `sent JointState CDR samples=160 joints=24 bytes=908 ...` and `published CDR frame samples=160 bytes=908`.
+    - Foxglove Web UI decoded /hakoniwa/ShadowHandAsset/joint_states as sensor_msgs/msg/JointState and displayed header, 24 joint names, position, velocity, and effort arrays.
+    - `WARNING: No subscribers found ...` from cdr_stdin_publisher is expected when the Foxglove UI is not connected.
+    - Python Endpoint FFI runtime variables must be scoped per asset in Launcher configs; relative native-library paths in defaults.env can break other Python assets whose cwd differs.
+    - Processes that do not register as Hakoniwa assets can often be placed in
+      a Launcher's `after_start` timing phase to avoid blocking asset
+      registration before `hako-cmd start`.
+    - This Shadow Hand smoke did not use `after_start`; it launched the
+      downstream Foxglove TCP-to-CDR publisher before `hako-cmd start` so the
+      TCP server endpoint was already available when the SHM-to-TCP bridge
+      asset started.
+    - Recipe authors should explicitly distinguish Hakoniwa asset processes
+      from non-registering helper processes and choose `before_start` or
+      `after_start` timing intentionally.
+
+sources:
+  repositories:
+    - repository: local/hakoniwa-pdu-foxglove
+      path: examples/shadow-hand-jointstate-to-foxglove/shadow_hand_jointstate_to_foxglove.py
+      revision: local-working-tree-2026-07-23
+    - repository: local/hakoniwa-pdu-foxglove
+      path: examples/cdr-stdin-publisher/main.cpp
+      revision: local-working-tree-2026-07-23
+    - repository: local/hakoniwa-pdu-foxglove
+      path: launch/shadow-hand-foxglove-smoke.launch.json
+      revision: local-working-tree-2026-07-23
+    - repository: local/hakoniwa-pdu-foxglove
+      path: config/shadow_hand_bridge
+      revision: local-working-tree-2026-07-23
+  runtime_evidence:
+    - description: >
+        Hakoniwa Launcher started ShadowHandAsset, the TCP-to-CDR Foxglove
+        publisher, the SHM-to-TCP bridge asset, and the Shadow Hand sender.
+    - description: >
+        hako-cmd start returned 0, Shadow Hand joint values changed, and the
+        Foxglove publisher logged repeated CDR conversion and publication
+        samples.
+
+confidence: medium
+
+validation:
+  status: verified
+  notes:
+    - Native PDU receive, generated CDR conversion, and FoxgloveComm publication were verified locally.
+    - Manual Foxglove UI connection and Raw Messages decoding were confirmed by user observation.
+    - Plot and URDF-backed 3D visualization are separate viewer-level checks.
+
+promotion_targets:
+  catalog:
+    - hakoniwa-pdu-foxglove
+    - hakoniwa-pdu-bridge-core
+    - hakoniwa-pdu-registry
+  runtime_primer: true
+  component_asset_guide: true
+  recipes:
+    - shadow-hand-hakoniwa-to-foxglove
+
+promotion_rationale:
+  - This pattern applies to any Hakoniwa native PDU that must be visualized in Foxglove as CDR.
+  - It prevents the common mistake of treating Hakoniwa native PDU bytes as CDR.
+  - It documents why Foxglove-specific bridge configs belong with the Foxglove recipe, while the reusable bridge-core repo stays scenario-neutral.
+  - It captures the Launcher timing distinction between registering Hakoniwa
+    assets and non-registering helper processes.

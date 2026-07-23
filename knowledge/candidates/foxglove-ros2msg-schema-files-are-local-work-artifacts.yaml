@@ -1,0 +1,95 @@
+id: foxglove-ros2msg-schema-files-are-local-work-artifacts
+title: Foxglove ros2msg schema files should be copied from ROS 2 Jazzy Docker into a gitignored component work directory
+status: candidate
+
+knowledge_type:
+  - usage_pattern
+  - validation_rule
+  - governance_rule
+  - known_pitfall
+
+summary: >
+  When hakoniwa-pdu-foxglove publishes ROS-compatible CDR with schema.encoding
+  set to ros2msg, the schema file should be a ROS 2 Jazzy native .msg definition
+  copied from the same Docker-based environment used by hakoniwa-pdu-registry.
+  These schema files are operational inputs for the local Foxglove run, not
+  Business Pack source artifacts, so place them under hakoniwa-pdu-foxglove/work
+  and keep that directory gitignored.
+
+observation:
+  context: >
+    Refining the Shadow Hand to Foxglove Recipe after confirming that
+    hakoniwa-pdu-foxglove expects complete CDR payloads and explicit schema
+    configuration.
+  details:
+    - hakoniwa-pdu-foxglove v0.1 accepts caller-provided complete CDR and does not convert Hakoniwa native PDU bytes to CDR.
+    - The Foxglove comm config requires an explicit schema name, encoding, and file.
+    - For ros2msg schema encoding, the schema source should be ROS 2 Jazzy native .msg files.
+    - The local registry Docker image toppersjp/hakoniwa-pdu-registry-dev:v1.0.0 has ROS_DISTRO=jazzy.
+    - sensor_msgs/msg/JointState.msg is available at /opt/ros/jazzy/share/sensor_msgs/msg/JointState.msg in that container.
+    - JointState depends on std_msgs/Header, and Header depends on builtin_interfaces/Time.
+    - These files were copied into hakoniwa-pdu-foxglove/work/schemas/ros2_jazzy/... as local temporary artifacts.
+    - Foxglove Web reported `Expected 1 top level type definition for 'std_msgs/Header' but found 0` when dependency definitions were not included.
+    - A bundled ros2msg schema file containing sensor_msgs/JointState, std_msgs/Header, and builtin_interfaces/Time resolved the schema dependency error.
+    - The hakoniwa-pdu-foxglove repository should ignore work/ so copied schema files do not become committed project state.
+
+sources:
+  repositories:
+    - repository: local/hakoniwa-pdu-foxglove
+      path: .gitignore
+      revision: local-working-tree-2026-07-23
+    - repository: local/hakoniwa-pdu-foxglove
+      path: work/schemas/ros2_jazzy/sensor_msgs/msg/JointState.msg
+      revision: local-temporary-untracked-2026-07-23
+    - repository: local/hakoniwa-pdu-foxglove
+      path: work/schemas/ros2_jazzy/std_msgs/msg/Header.msg
+      revision: local-temporary-untracked-2026-07-23
+    - repository: local/hakoniwa-pdu-foxglove
+      path: work/schemas/ros2_jazzy/builtin_interfaces/msg/Time.msg
+      revision: local-temporary-untracked-2026-07-23
+    - repository: local/hakoniwa-pdu-foxglove
+      path: work/schemas/ros2_jazzy/sensor_msgs/msg/JointState.bundle.msg
+      revision: local-temporary-untracked-2026-07-23
+    - repository: local/hakoniwa-business-pack
+      path: recipes/examples/shadow-hand-hakoniwa-to-foxglove.yaml
+      revision: local-working-tree-2026-07-23
+  runtime_evidence:
+    - description: >
+        docker run against toppersjp/hakoniwa-pdu-registry-dev:v1.0.0 printed
+        ROS_DISTRO=jazzy and copied JointState.msg, Header.msg, and Time.msg
+        from /opt/ros/jazzy/share into hakoniwa-pdu-foxglove/work.
+  expert_input:
+    - source: user
+      statement: >
+        ros は jazzy 前提。ros native な msg ファイルは Docker 環境を使って
+        参照している。配置場所は foxglove 側の work ディレクトリにし、
+        一時ファイルとして使うため git 管理しない。
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required: []
+  notes:
+    - The Docker/Jazzy source, local temporary placement, bundled dependency schema, and Foxglove Raw Messages decoding are verified.
+
+promotion_targets:
+  catalog:
+    - hakoniwa-pdu-foxglove
+    - hakoniwa-pdu-registry
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: true
+  recipes:
+    - shadow-hand-hakoniwa-to-foxglove
+
+promotion_rationale:
+  - This is a reusable operational pattern for Foxglove CDR recipes that need ROS-native schema files without committing temporary copied artifacts.
+  - It belongs near Foxglove component usage and recipe guidance rather than generic Hakoniwa runtime startup rules.
+
+resolution:
+  promoted_to: []
+  notes:
+    - Candidate created while refining the Shadow Hand to Foxglove Recipe.

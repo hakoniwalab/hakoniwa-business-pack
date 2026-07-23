@@ -1,0 +1,112 @@
+id: foxglove-3d-urdf-is-a-jointstate-visualization-contract
+title: Foxglove 3D URDF should be treated as a JointState visualization contract, not a physics source
+status: candidate
+
+knowledge_type:
+  - integration_pattern
+  - validation_rule
+  - known_pitfall
+
+summary: >
+  When Hakoniwa publishes sensor_msgs/JointState to Foxglove, Raw Messages and
+  Plot can work without URDF. Foxglove 3D additionally needs a robot description
+  whose joint names match JointState.name[]. For MJCF-first robots such as
+  Shadow Hand, treat URDF as a local visualization artifact and keep MuJoCo as
+  the source of physics, actuators, tendons, and dynamics. If an original
+  GPL-derived URDF/xacro is used for better visual fidelity, keep it and all
+  generated outputs under a gitignored component work directory.
+
+observation:
+  context: >
+    Completing the Shadow Hand Hakoniwa-to-Foxglove Recipe after live
+    JointState decoding worked in Foxglove Web.
+  details:
+    - The Shadow Hand plant publishes 24 observed hand joints in sensor_msgs/JointState.
+    - The command contract has 20 named actuators because Menagerie uses fixed tendons for distal finger coupling; this command space should not be forced into the URDF visualization contract.
+    - Foxglove 3D should bind the URDF by joint names through JointState, not by MuJoCo actuator indices or ctrl[] order.
+    - The generated URDF is a browser visualization artifact under hakoniwa-pdu-foxglove/work/urdf/shadow_hand and should remain gitignored.
+    - Browser-based Foxglove may need the URDF and mesh files served over local HTTP with permissive CORS headers.
+    - Meshes copied from Menagerie remain subject to the model-local license gate already handled by the base Shadow Hand recipe.
+    - MJCF-to-URDF reverse generation can be used as a license-clean fallback experiment, but Shadow Hand visual fidelity was not sufficient in Foxglove because body/joint/mesh frames did not match reliably.
+    - Original Shadow Hand URDF/xacro inputs may be GPL-derived. Use them only as local operator-provided work/ inputs and do not commit those files or derived generated URDF/mesh artifacts.
+    - For Shadow Hand, the practical Foxglove route is to prepare a work-only URDF from the local sr_description/mujoco_models/urdfs/shadowhand_motor.urdf source, then rewrite package:// mesh URLs to a local CORS HTTP server.
+
+sources:
+  repositories:
+    - repository: local/hakoniwa-pdu-foxglove
+      path: tools/mjcf_shadow_hand_to_urdf.py
+      revision: local-working-tree-2026-07-23
+    - repository: local/hakoniwa-pdu-foxglove
+      path: tools/serve_static_cors.py
+      revision: local-working-tree-2026-07-23
+    - repository: local/hakoniwa-pdu-foxglove
+      path: tools/prepare_shadow_hand_original_urdf.py
+      revision: local-working-tree-2026-07-23
+    - repository: local/hakoniwa-pdu-foxglove
+      path: work/urdf/shadow_hand/shadow_hand_original.urdf
+      revision: gitignored-local-work-artifact-2026-07-23
+    - repository: local/hakoniwa-pdu-foxglove
+      path: work/urdf/shadow_hand/shadow_hand_right.urdf
+      revision: gitignored-local-work-artifact-2026-07-23
+    - repository: local/hakoniwa-business-pack
+      path: recipes/examples/shadow-hand-hakoniwa-to-foxglove.yaml
+      revision: local-working-tree-2026-07-23
+  runtime_evidence:
+    - description: >
+        The MJCF-to-URDF generator produced a Shadow Hand URDF with 26 links,
+        24 revolute joints, and 24 mesh visuals. It verified that the expected
+        24 JointState names are present.
+    - description: >
+        HTTP HEAD checks for /shadow_hand_right.urdf and /assets/palm.obj
+        returned 200 OK with Access-Control-Allow-Origin: * from the local
+        static server.
+    - description: >
+        Foxglove 3D manual checks showed the MJCF-derived jointed URDF still had
+        visible part orientation/frame mismatches, so it was not accepted as the
+        final visualization route.
+    - description: >
+        The original-URDF preparation script produced shadow_hand_original.urdf
+        with all 24 observed JointState names present, no remaining package://
+        references, and 28 HTTP STL mesh references that resolve to existing
+        gitignored work/ files.
+  expert_input:
+    - source: user
+      statement: >
+        Foxgloveで値が見えることを先に確認し、その後URDFを使ってrviz風の
+        3D表示へ進める。
+    - source: user
+      statement: >
+        元のURDFはGPLなので公開repoには入れず、workで管理してコミットしない
+        ローカル可視化補助にする。
+
+confidence: medium
+
+validation:
+  status: partially_verified
+  notes:
+    - JointState decoding and HTTP/CORS serving were verified locally.
+    - MJCF-derived URDF generation was verified mechanically, but human-visible Foxglove 3D rendering showed visual mismatch.
+    - The accepted policy is to keep higher-fidelity original-URDF visualization inputs and their derived outputs under work/ only.
+    - Original-URDF preparation is mechanically verified; final visual correctness still requires Foxglove 3D panel review.
+
+promotion_targets:
+  catalog:
+    - hakoniwa-pdu-foxglove
+  runtime_primer: false
+  component_asset_guide: true
+  recipes:
+    - shadow-hand-hakoniwa-to-foxglove
+
+promotion_rationale:
+  - This pattern applies to MJCF-first robots that need Foxglove 3D visibility.
+  - It prevents confusing the observation joint space, command actuator space,
+    and viewer-only URDF contract.
+  - It documents why local viewer artifacts belong under a gitignored component
+    work directory.
+  - It documents how to use GPL-derived original URDF inputs locally without
+    adding them or their generated derivatives to the repository.
+
+resolution:
+  promoted_to: []
+  notes:
+    - Candidate created after Shadow Hand JointState was visible in Foxglove Raw Messages and the local URDF/CORS path was generated.
