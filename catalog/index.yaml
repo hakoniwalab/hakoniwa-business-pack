@@ -622,3 +622,4 @@ components:
   - multi-drone
   - 100-drones
   catalog_path: components/hakoniwa-threejs-drone.yaml
+
