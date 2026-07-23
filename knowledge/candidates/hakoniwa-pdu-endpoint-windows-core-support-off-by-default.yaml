@@ -1,0 +1,95 @@
+id: hakoniwa-pdu-endpoint-windows-core-support-off-by-default
+title: hakoniwa-pdu-endpoint's Windows build has Hakoniwa core (SHM) support OFF by default
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - runtime_rule
+  - validation_rule
+
+summary: >
+  hakoniwa-pdu-endpoint's CMake option HAKO_PDU_ENDPOINT_ENABLE_HAKONIWA_CORE defaults to
+  OFF on Windows (it defaults ON on macOS/Linux). A plain `build-win.ps1` run therefore
+  produces a hakoniwa_pdu_endpoint.dll that cannot open an "shm" protocol endpoint at
+  runtime; the fix is to explicitly pass -EnableHakoniwaCore -HakoniwaCoreRoot
+  <hakoniwa-core-pro install prefix> and rebuild.
+
+observation:
+  context: >
+    Building hakoniwa-mujoco-robots' native Windows TurtleBot3 simulator, which links
+    against hakoniwa-pdu-endpoint for its Hakoniwa asset lifecycle (register/conductor)
+    and PDU I/O, on Windows 11 x86_64 (native build, no WSL/Docker).
+  details:
+    - "First build-win.ps1 run (no -EnableHakoniwaCore flag) completed with 0 CMake
+      errors and produced a working-looking hakoniwa_pdu_endpoint.dll."
+    - "At runtime, tb3_sim_burger.exe got past manifest loading, MuJoCo model loading, and
+      PDU definition loading, then failed at endpoint.open() with:
+      'PduComm Factory Error: protocol shm requested but Hakoniwa core support is
+      disabled.' / 'Failed to create PDU Comm module.'"
+    - "hakoniwa-pdu-endpoint's own CMakeLists.txt: `if(WIN32) option(...ENABLE_HAKONIWA_CORE
+      ... OFF) else() option(...ENABLE_HAKONIWA_CORE ... ON) endif()` -- confirmed by
+      reading the actual CMakeLists.txt, not guessed from a comment."
+    - "Fix: rebuild with `-EnableHakoniwaCore -HakoniwaCoreRoot
+      <hakoniwa-core-pro install-win>` -- the resulting build compiles comm_shm.cpp,
+      comm_shm_poll.cpp, comm_shm_callback.cpp, hakoniwa_time_source*.cpp (absent from the
+      first build's compiler output), and the rebuilt DLL works."
+    - "This gap can silently bite anyone following hakoniwa-mujoco-robots' own README
+      Windows section: it correctly says hakoniwa-pdu-endpoint must already be built and
+      installed, but it never states that installing a STANDALONE hakoniwa-pdu-endpoint on
+      Windows for SHM/Hakoniwa-core use requires -EnableHakoniwaCore -HakoniwaCoreRoot at
+      that repo's own build-win.ps1 step -- -EnableHakoniwaCore is only ever mentioned in
+      the README in the context of the PYTHON binding build
+      (build-python-win.ps1 -EnableHakoniwaCore), so the requirement for the native C++
+      dependency build is an implicit prerequisite left undocumented rather than a wrong
+      command shown in the README."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      path: CMakeLists.txt
+      revision: main
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      path: build-win.ps1
+      revision: main
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      path: README.md
+      revision: main
+  runtime_evidence:
+    - description: >-
+        Reproduced on an external contributor's Windows 11 x86_64 workspace (native build,
+        no WSL/Docker), 2026-07-23: the exact "protocol 'shm' requested but Hakoniwa core
+        support is disabled" failure with the first build, then a successful run after
+        rebuilding with -EnableHakoniwaCore -HakoniwaCoreRoot.
+  expert_input: []
+
+confidence: high
+
+contradictions:
+  - target: "Reading hakoniwa-mujoco-robots' Windows README section alone"
+    existing_claim: "The documented build-win.ps1 invocation for hakoniwa-pdu-endpoint is sufficient for the Windows TB3 build."
+    new_evidence: "That exact invocation produces a DLL that fails at runtime for any SHM-based (Hakoniwa asset) use case; -EnableHakoniwaCore -HakoniwaCoreRoot must be added."
+
+validation:
+  status: verified
+  required: []
+  notes:
+    - Verified by an actual runtime failure, then an actual runtime success after the fix.
+
+promotion_targets:
+  catalog:
+    - hakoniwa-pdu-endpoint
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - mujoco-turtlebot3-mbody
+
+promotion_rationale:
+  - This is a reusable cross-repo (hakoniwa-pdu-endpoint x hakoniwa-mujoco-robots) Windows build gap, relevant to any Windows consumer of hakoniwa-pdu-endpoint that needs Hakoniwa core/SHM support specifically (non-SHM transports are unaffected).
+
+resolution:
+  promoted_to: []
+  notes:
+    - Candidate only.
+    - "Filed as an actionable follow-up (documentation gap, not a business-pack knowledge
+      change): hakoniwalab/hakoniwa-pdu-endpoint#37."

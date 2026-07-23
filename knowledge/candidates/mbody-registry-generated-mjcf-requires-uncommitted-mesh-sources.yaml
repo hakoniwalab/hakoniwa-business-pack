@@ -1,0 +1,89 @@
+id: mbody-registry-generated-mjcf-requires-uncommitted-mesh-sources
+title: hakoniwa-mbody-registry generated MJCF references mesh source files that are not committed to the repo
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - runtime_rule
+  - validation_rule
+
+summary: >
+  hakoniwa-mbody-registry ships pre-generated MJCF (e.g. turtlebot3_burger.minimal_world.xml)
+  that references mesh STL files under bodies/<model>/source/<pkg>/meshes/, but that
+  source/ tree is not committed to the repo. Loading the model fails until the meshes are
+  provided separately (normally via tools/forge.sh cloning the upstream ROS description
+  package; a lighter-weight fix is to clone just the upstream mesh directory and copy it
+  into place, since the MJCF generation step itself does not need to be re-run if
+  .minimal_world.xml already exists).
+
+observation:
+  context: >
+    Reproducing hakoniwa-business-pack's macOS-verified "MuJoCo TurtleBot3 from MBody
+    Registry" recipe on Windows 11 x86_64 (native build, no WSL/Docker). tb3_sim_burger.exe
+    printing "[INFO] TB3 model loaded successfully" was expected but instead failed with
+    "[ERROR] Failed to load TB3 model: Model loading failed / Please check if the model
+    file exists at: ... turtlebot3_burger.minimal_world.xml" even though that exact file
+    path DID exist.
+  details:
+    - "The .minimal_world.xml itself was present and readable; the actual missing files
+      were its <mesh file=\"../source/turtlebot3_description/meshes/...\"/> references."
+    - "sources/turtlebot3_burger.yaml (hakoniwa-mbody-registry) declares the upstream repo:
+      https://github.com/ROBOTIS-GIT/turtlebot3, branch humble, files: [turtlebot3_description/]."
+    - "Fix used: `git clone --depth 1 --branch humble https://github.com/ROBOTIS-GIT/turtlebot3.git`
+      into a scratch dir, then copy only turtlebot3_description/meshes/ into
+      bodies/turtlebot3_burger/source/turtlebot3_description/meshes/. This was sufficient
+      -- the full tools/forge.sh xacro/URDF-to-MJCF pipeline was NOT needed since the
+      generated MJCF already existed."
+    - "ROBOTIS-GIT/turtlebot3 is Apache-2.0 licensed, so this copy is license-compatible."
+    - "The same gap likely applies to turtlebot3_waffle and turtlebot3_waffle_pi (their
+      source/ trees were not populated in this verification; only Burger was verified end
+      to end)."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-mbody-registry
+      path: sources/turtlebot3_burger.yaml
+      revision: main
+    - repository: hakoniwalab/hakoniwa-mbody-registry
+      path: bodies/turtlebot3_burger/generated/turtlebot3_burger.minimal_world.xml
+      revision: main
+  runtime_evidence:
+    - description: >-
+        Reproduced on an external contributor's Windows 11 x86_64 workspace, 2026-07-23:
+        the exact failure message, and after copying just the mesh directory from
+        ROBOTIS-GIT/turtlebot3, a subsequent successful
+        "[INFO] TB3 model loaded successfully from: ...".
+  expert_input: []
+
+confidence: high
+
+contradictions:
+  - target: "Assumption that a pre-generated .minimal_world.xml is immediately runnable"
+    existing_claim: "If generated/ has the MJCF, no further asset preparation is needed."
+    new_evidence: "Generated MJCF can still reference un-vendored mesh source files; existence of the .xml alone does not guarantee it will load."
+
+validation:
+  status: verified
+  required:
+    - Confirm the same fix (or the full forge.sh pipeline) for Waffle/Waffle Pi.
+  notes:
+    - Verified for turtlebot3_burger only, on Windows.
+
+promotion_targets:
+  catalog:
+    - hakoniwa-mbody-registry
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - mujoco-turtlebot3-mbody
+
+promotion_rationale:
+  - This is a reusable cross-repo (hakoniwa-mbody-registry x hakoniwa-mujoco-robots) integration gap, not specific to any one downstream workspace.
+
+resolution:
+  promoted_to: []
+  notes:
+    - Candidate only.
+    - "Filed as an actionable follow-up (documentation gap / misleading error message, not
+      a business-pack knowledge change): hakoniwalab/hakoniwa-mbody-registry#12."
