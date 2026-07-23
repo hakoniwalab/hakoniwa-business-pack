@@ -13,7 +13,7 @@ verification:
   verified_at: 2026-07-23
   source_revision: ccbfd765b921307ea4f4ceb48dc2b0043767ac88
   source_ref: main
-summary: >
+summary: >-
   Output-only Foxglove adapter for hakoniwa-pdu-endpoint that publishes
   caller-provided complete CDR payloads through the official Foxglove SDK
   WebSocket server. The current repository also contains a verified Shadow Hand
