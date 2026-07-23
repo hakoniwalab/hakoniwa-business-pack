@@ -1,5 +1,5 @@
 index_version: 0.1
-generated_at: '2026-07-22'
+generated_at: '2026-07-23'
 generated_by: catalog/tools/generate_index.rb
 description: Lightweight search index for Hakoniwa component catalogs.
 components:
@@ -338,8 +338,12 @@ components:
   - commercial
   maturity: experimental
   distribution: commercial
-  summary: Output-only Foxglove adapter for hakoniwa-pdu-endpoint that publishes caller-provided
-    Foxglove-compatible CDR payloads through the Foxglove SDK WebSocket server.
+  summary: 'Output-only Foxglove adapter for hakoniwa-pdu-endpoint that publishes
+    caller-provided complete CDR payloads through the official Foxglove SDK WebSocket
+    server. The current repository also contains a verified Shadow Hand JointState
+    integration path and a generic stdin-to-CDR publication boundary.
+
+'
   recipe_roles:
   - visualizer
   - bridge
@@ -348,6 +352,7 @@ components:
   - hakoniwa-pdu-endpoint
   - hakoniwa-pdu-registry
   - hakoniwa-pdu-bridge-core
+  - hakoniwa-mbody-registry
   tags:
   - hakoniwa
   - foxglove
@@ -355,7 +360,9 @@ components:
   - endpoint
   - cdr
   - websocket
-  - schema
+  - joint-state
+  - shadow-hand
+  - urdf
   catalog_path: components/hakoniwa-pdu-foxglove.yaml
 - id: hakoniwa-pdu-javascript
   name: Hakoniwa PDU JavaScript
