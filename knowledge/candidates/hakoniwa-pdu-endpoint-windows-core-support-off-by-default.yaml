@@ -91,3 +91,5 @@ resolution:
   promoted_to: []
   notes:
     - Candidate only.
+    - "Filed as an actionable follow-up (documentation gap, not a business-pack knowledge
+      change): hakoniwalab/hakoniwa-pdu-endpoint#37."

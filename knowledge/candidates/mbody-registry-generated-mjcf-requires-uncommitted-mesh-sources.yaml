@@ -85,3 +85,5 @@ resolution:
   promoted_to: []
   notes:
     - Candidate only.
+    - "Filed as an actionable follow-up (documentation gap / misleading error message, not
+      a business-pack knowledge change): hakoniwalab/hakoniwa-mbody-registry#12."
