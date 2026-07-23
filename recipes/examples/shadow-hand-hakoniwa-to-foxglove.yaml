@@ -562,7 +562,7 @@ source_catalogs:
     catalog_path: ../catalog/components/hakoniwa-pdu-registry.yaml
   - component_id: hakoniwa-pdu-bridge-core
     catalog_path: ../catalog/components/hakoniwa-pdu-bridge-core.yaml
-  - component_id: hakoniwalab/hakoniwa-pdu-foxglove
+  - component_id: hakoniwa-pdu-foxglove
     catalog_path: ../catalog/components/hakoniwa-pdu-foxglove.yaml
   - component_id: hakoniwa-mbody-registry
     catalog_path: ../catalog/components/hakoniwa-mbody-registry.yaml
