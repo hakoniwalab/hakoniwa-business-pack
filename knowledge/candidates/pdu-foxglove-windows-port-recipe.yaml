@@ -189,6 +189,14 @@ validation:
   notes:
     - Verified end-to-end via a real screenshot-confirmed connection from the official Foxglove Windows desktop app, not just log inspection or a synthetic client.
 
+tracking:
+  implementation_status: open
+  issues:
+    - repository: hakoniwalab/hakoniwa-pdu-foxglove
+      number: 5
+      relation: fix
+      status: open
+
 promotion_targets:
   catalog: []
   runtime_primer: false
@@ -200,6 +208,10 @@ promotion_rationale:
   - Directly reusable for any future Windows work involving the Foxglove SDK (C++ or otherwise) or any fresh Windows binary that opens its first listening socket in a non-interactive/headless environment.
 
 resolution:
+  status: pending
+  fixed_by: []
+  verified: false
   promoted_to: []
   notes:
     - Candidate only. Corresponding fork branch: ykikuchii/hakoniwa-pdu-foxglove@win-foxglove-sdk-support (commit 3cc7b29), not yet proposed upstream as a PR.
+    - Implementation follow-up is tracked in hakoniwalab/hakoniwa-pdu-foxglove#5.
