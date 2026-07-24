@@ -27,6 +27,13 @@ tracked = 0
 
 candidate_paths.each do |path|
   label = File.basename(path)
+  raw = File.read(path)
+
+  # Lifecycle validation is opt-in for backward compatibility. Older candidate
+  # records are left untouched until they adopt the top-level `tracking:` block.
+  next unless raw.match?(/^tracking:\s*$/)
+
+  tracked += 1
 
   begin
     data = load_yaml_file(path)
@@ -40,12 +47,7 @@ candidate_paths.each do |path|
     next
   end
 
-  # Lifecycle tracking is intentionally opt-in so older candidates remain valid.
-  # Once a candidate adopts `tracking`, validate the complete tracking/resolution shape.
   tracking = data["tracking"]
-  next if tracking.nil?
-
-  tracked += 1
   unless tracking.is_a?(Hash)
     errors << "#{label}: tracking must be a mapping"
     next
