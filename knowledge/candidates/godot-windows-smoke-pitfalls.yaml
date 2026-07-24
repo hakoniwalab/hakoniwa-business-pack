@@ -1,0 +1,142 @@
+id: godot-windows-smoke-pitfalls
+title: hakoniwa-godot Windows smoke tests -- three environment pitfalls unrelated to the code itself
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - runtime_rule
+  - validation_rule
+
+summary: >
+  Unlike hakoniwa-pdu-foxglove, hakoniwa-godot already ships first-class
+  Windows support (windows-* CMake presets, tools/build_all_codecs.ps1,
+  tools/run_core_pro_smoke.ps1) and its native build succeeded on the first
+  try. Three environment-level pitfalls still blocked both of its documented
+  smoke tests, none of which are bugs in the repository's own Windows code:
+  a git symlink that Windows silently corrupts into a plain text file, a
+  stale global HAKO_CONFIG_PATH left over from an unrelated prior project on
+  this machine, and a --quit CLI flag that races the smoke script's own
+  asynchronous completion signal.
+
+observation:
+  context: >
+    Cloning hakoniwalab/hakoniwa-godot (recursive, with godot-cpp /
+    hakoniwa-core-pro / hakoniwa-pdu-endpoint submodules) and running its
+    two documented Windows smoke tests: `tests/smoke/basic_subscriber`
+    (codec smoke, no conductor) and `tests/smoke/core_pro_smoke`
+    (core-pro smoke, needs a running conductor process), using an existing
+    Godot 4.6.1 mono Windows binary that exactly matched the repo's
+    "Verified Environment" section.
+  details:
+    - "Pitfall 1 (git symlink -> plain text file on Windows): the repo's own
+      per-project addons/ entries (e.g.
+      tests/smoke/basic_subscriber/addons, tests/smoke/core_pro_smoke/addons,
+      tests/integration/core_pro_two_asset/addons) are POSIX symlinks in git
+      (`git ls-tree` shows mode 120000) pointing at the repo-root addons/
+      directory. With Windows' default `core.symlinks=false`, `git clone`
+      silently checks these out as ordinary 15-byte text files containing
+      the literal target path string (`../../../addons`), NOT as a
+      directory or a working symlink. Godot then fails with
+      `SCRIPT ERROR: Parse Error: Preload file \"res://addons/...\" does not
+      exist` because it sees an empty/nonexistent directory where the addon
+      should be. Per this workspace's own AGENTS.md rule (never use symlinks
+      on Windows), the fix was to delete each of the 3 broken 'symlink'
+      files and replace them with a real recursive copy of the repo-root
+      addons/ directory -- exactly the same remediation
+      tools/run_core_pro_smoke.ps1's own `-SyncAddons` switch performs
+      automatically (it checks `Get-Item ... | LinkType -eq
+      'SymbolicLink'` and only copies if that check is false, i.e. it
+      already anticipates this exact Windows failure mode)."
+    - "Pitfall 2 (stale unrelated HAKO_CONFIG_PATH from a different, older
+      project on the same machine): tools/run_core_pro_smoke.ps1 and
+      tools/run_core_pro_conductor.sh do not set HAKO_CONFIG_PATH themselves
+      -- they rely on whatever is already in the caller's environment. This
+      machine's persistent environment variable HAKO_CONFIG_PATH pointed to
+      %APPDATA%\\hakocore-win\\config\\cpp_core_config.json (left over from
+      an unrelated Godot drone project under Documents\\Godot), whose
+      `core_mmap_path` was `Z:\\mmap` -- a drive letter that does not exist
+      on this machine. This produced `HAKO_CORE_SMOKE_INITIALIZE_FAILED` /
+      `initialize failed: initialize_asset failed:
+      hakoniwa_simevent_init error=-1` immediately after
+      HAKO_CORE_SMOKE_BOOT, with no indication in the error message that the
+      cause was a bad mmap path from an unrelated config file. Fix:
+      explicitly set `$env:HAKO_CONFIG_PATH` to this workspace's own
+      `external/hakoniwa-core-pro/install-win/etc/cpp_core_config.json`
+      (already known-good from this workspace's own T22/Foxglove/TB3
+      sessions) before invoking run_core_pro_smoke.ps1. Any Windows machine
+      that has previously done unrelated Hakoniwa/Godot work under a
+      DIFFERENT config path is at risk of this exact silent cross-project
+      contamination via a persistent environment variable."
+    - "Pitfall 3 (the -QuitAfterRun / --quit CLI flag races the smoke
+      script's own multi-frame completion signal): tests/smoke/
+      core_pro_smoke/main.gd runs an asynchronous start/stop/reset/restart
+      lifecycle against the conductor across MULTIPLE Godot frames/ticks
+      before finally printing HAKO_CORE_SMOKE_OK and calling
+      get_tree().quit(0) itself (confirmed by grep: quit(2) appears at
+      multiple early failure branches, quit(0) only appears once, right
+      after the `print(\"HAKO_CORE_SMOKE_OK\")` line). Passing
+      run_core_pro_smoke.ps1's own `-QuitAfterRun` switch adds Godot's
+      built-in `--quit` engine flag, which force-exits after essentially one
+      frame -- the process was observed to exit partway through the
+      lifecycle (stuck right after HAKO_CORE_SMOKE_START_FEEDBACK_OK,
+      never reaching STOP/RESET/RESTART/STEP or HAKO_CORE_SMOKE_OK) even
+      though every step up to that point logged cleanly with no errors.
+      Omitting `-QuitAfterRun` (letting the GDScript's own
+      `get_tree().quit(0)` after the full lifecycle be the only exit path)
+      let the same run complete
+      START/STOP/RESET/RESTART/STEP:1/STEP:2/STEP:3/HAKO_CORE_SMOKE_OK and
+      exit 0 cleanly. In contrast, tests/smoke/basic_subscriber's own
+      codec-only smoke test (no conductor, no multi-frame lifecycle)
+      succeeded fine WITH the `--quit` flag, which is presumably why the
+      generic `-QuitAfterRun` switch exists in the shared script at all --
+      it is only unsafe for smoke tests with a real conductor-driven
+      asynchronous lifecycle."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-godot
+      path: tests/smoke/core_pro_smoke/main.gd
+      revision: main
+    - repository: hakoniwalab/hakoniwa-godot
+      path: tools/run_core_pro_smoke.ps1
+      revision: main
+    - repository: hakoniwalab/hakoniwa-godot
+      path: README.md
+      revision: main
+  runtime_evidence:
+    - description: >-
+        Reproduced on an external contributor's Windows 11 x86_64 workspace (native build,
+        no WSL/Docker), 2026-07-24: the exact SCRIPT ERROR (broken symlink),
+        then hakoniwa_simevent_init error=-1 (stale HAKO_CONFIG_PATH), then a
+        run truncated right after HAKO_CORE_SMOKE_START_FEEDBACK_OK
+        (--quit race) were each reproduced, diagnosed, and fixed in
+        sequence, ending in a clean HAKO_CORE_SMOKE_OK / exit 0 /
+        "[run-core-pro-smoke.ps1] passed" run showing the full
+        start/stop/reset/restart lifecycle plus 3 time-synced simulation
+        steps (simtime=20000/40000/60000 matching world time exactly).
+  expert_input: []
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required: []
+  notes:
+    - Verified via a full clean passing run of tools/run_core_pro_smoke.ps1 after all three fixes, immediately following a separate clean passing run of the codec-only smoke test (tests/smoke/basic_subscriber, HAKONIWA_CODEC_SMOKE_OK).
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+
+promotion_rationale:
+  - Directly reusable for anyone on a multi-project Windows dev machine bringing up hakoniwa-godot, and the symlink/CLI-flag pitfalls generalize to any git repo that vendors POSIX symlinks or mixes an engine-level --quit flag with a script's own asynchronous completion signal.
+
+resolution:
+  promoted_to: []
+  notes:
+    - Candidate only.

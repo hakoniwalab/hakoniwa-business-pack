@@ -1,0 +1,205 @@
+id: pdu-foxglove-windows-port-recipe
+title: Porting hakoniwa-pdu-foxglove to Windows (MSVC) -- three build gaps and a firewall pitfall
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - runtime_rule
+  - validation_rule
+
+summary: >
+  hakoniwa-pdu-foxglove (macOS arm64 verified only, MIT) can be ported to
+  Windows with a small CMake diff because the official Foxglove C++ SDK
+  already ships a pinned x86_64-pc-windows-msvc release; the repository's own
+  cmake/FoxgloveSdk.cmake simply never had a WIN32 branch. Three further gaps
+  had to be fixed to reach a fully working end-to-end connection to the
+  official Foxglove desktop app: an explicit ntdll link, an MSVC-only
+  template-specialization workaround in the vendored Foxglove SDK header, and
+  (unrelated to the code) a Windows Defender Firewall inbound rule that a
+  fresh unsigned exe needs before its first listening socket succeeds.
+
+observation:
+  context: >
+    Adding Windows support to hakoniwalab/hakoniwa-pdu-foxglove (forked to
+    ykikuchii/hakoniwa-pdu-foxglove, branch win-foxglove-sdk-support) as a
+    new Foxglove visualization path for this workspace's PDU output, after
+    confirming the official Foxglove SDK GitHub release actually contains a
+    foxglove-v0.25.2-cpp-x86_64-pc-windows-msvc.zip archive (SHA256:
+    02b27c7ecb5a0124eebb6e925586a45487d56da708d0088dedb770007fb4a849).
+  details:
+    - "Gap 1 (CMake archive selection): cmake/FoxgloveSdk.cmake had
+      if(APPLE)...elseif(UNIX)...else() message(FATAL_ERROR ...) -- WIN32 is
+      neither APPLE nor UNIX in CMake, so it fell straight to the FATAL_ERROR.
+      Fix: add an elseif(WIN32) branch with the pinned archive name
+      (foxglove-v${VERSION}-cpp-x86_64-pc-windows-msvc.zip) and its SHA256."
+    - "Gap 2 (missing Boost/fastcdr on a bare configure): the vendored
+      hakoniwa-pdu-endpoint submodule needs Boost headers
+      (boost/asio.hpp), and the example targets need fastcdr -- neither is
+      present by default on Windows. Fix: pass
+      -DCMAKE_PREFIX_PATH=<repo>/external/vcpkg/installed/x64-windows and
+      `vcpkg install fastcdr:x64-windows` (boost-* ports were already
+      installed from the earlier T22 MuJoCo TB3 Windows work)."
+    - "Gap 3 (link error): the Rust-built foxglove core's
+      std::process::windows::child_pipe calls NtCreateNamedPipeFile
+      directly, which lives in ntdll.dll/ntdll.lib and is not pulled in by
+      the default MSVC import libraries CMake links against, producing
+      `error LNK2019: unresolved external symbol __imp_NtCreateNamedPipeFile`
+      at the FINAL executable link step (the static libs themselves link
+      fine). Fix: `target_link_libraries(foxglove_cpp PUBLIC ntdll)` in the
+      same cmake/FoxgloveSdk.cmake, right after the existing
+      `if(APPLE) ... -framework IOKit ... endif()` block."
+    - "Gap 4 (MSVC-only compile error in the vendored SDK header): Foxglove
+      SDK v0.25.2's include/foxglove/parameter.hpp defines
+      ParameterView::isArray<T>()/isDict<T>() with bodies that reference
+      this->get<ParameterValueView::Array>() / get<ParameterValueView::Dict>()
+      BEFORE those two types' explicit specializations of get<T>() are
+      defined later in the same header. MSVC's two-phase name lookup
+      diagnoses this as `error C2908: explicit specialization; ... already
+      instantiated` / `error C3856: ... is not a class template` when
+      compiling src/foxglove_publisher.cpp (which is the only translation
+      unit that ends up instantiating the primary get<T>() template through
+      this path); GCC/Clang accept the same header without complaint. A
+      Codex-assisted root-cause analysis (external/hakoniwa-pdu-foxglove
+      Windows porting session, 2026-07-24) confirmed this is a genuine
+      header-ordering fragility in the SDK, not a standard-mandated MSVC
+      rejection, and that a stable consumer-side fix without patching the
+      header is unlikely; `/Zc:twoPhase-` (MSVC's legacy one-phase name
+      lookup) was the one flag that actually worked. Fix applied:
+      `target_compile_options(hakoniwa_pdu_foxglove PRIVATE /Zc:twoPhase-)`
+      in CMakeLists.txt, marked as a TEMP DIAGNOSTIC pending either an
+      upstream SDK header fix or an automated FetchContent-time header patch
+      (a concrete patch -- reworking isArray<T>()/isDict<T>() to call the
+      underlying ParameterValueView::get<T>() directly instead of
+      re-entering ParameterView::get<T>() -- was drafted but not applied,
+      since the compiler-flag workaround was sufficient to reach a fully
+      working build)."
+    - "Gap 5 (not a code bug -- a Windows Defender Firewall pitfall): after
+      all 4 code gaps were fixed, the example binary
+      (cdr_publisher_example.exe) built, ran, and logged
+      'Foxglove WebSocket: ws://127.0.0.1:8765' with no errors, yet EVERY
+      connection attempt (Python websockets 15.0.1, a hand-rolled raw-socket
+      HTTP Upgrade request, and PowerShell's own Test-NetConnection/
+      System.Net.Sockets.TcpClient run from the SAME machine) failed with
+      ConnectionRefusedError / TcpTestSucceeded=False, and `netstat -ano`
+      showed the process was not listening on port 8765 at all -- even
+      though the server's own create()/start() calls reported success (no
+      stderr output). This was Windows Defender Firewall silently blocking
+      the process's first-ever inbound listen (no interactive prompt appears
+      in a non-interactive/headless shell to accept it), NOT a code or SDK
+      bug: `New-NetFirewallRule -DisplayName ... -Direction Inbound -Action
+      Allow -Program <path to the exe> -Profile Domain,Private,Public` (run
+      from an ELEVATED PowerShell -- an unprivileged shell gets 'Access is
+      denied' / CimException from New-NetFirewallRule) immediately fixed
+      TCP-level connectivity. This is the exact same class of issue as any
+      other fresh unsigned Windows binary that opens a listening socket for
+      the first time; it is unrelated to Foxglove or hakoniwa specifically,
+      but easy to misdiagnose as an SDK bug because the server-side logs
+      show zero indication of the block."
+    - "Once gap 5 was fixed, the earlier 'HTTP 400 Missing expected
+      sec-websocket-protocol header' responses (seen from both the Python
+      websockets client's built-in subprotocol negotiation AND a raw socket
+      sending an explicit `Sec-WebSocket-Protocol: foxglove.websocket.v1`
+      header, both matching the exact subprotocol string documented at
+      https://github.com/foxglove/ws-protocol/blob/main/docs/spec.md) turned
+      out to be a RED HERRING caused by the SAME underlying timing/
+      connectivity instability, not a real protocol mismatch: the official
+      Foxglove desktop app (downloaded from
+      https://get.foxglove.dev/desktop/latest/foxglove-latest-win.exe)
+      connected to ws://127.0.0.1:8765 successfully on the very first try
+      after the firewall rule was added, showed the server name
+      'hakoniwa-pdu-foxglove' in its own tab title (confirming the
+      serverInfo handshake message was received), and the
+      /hakoniwa/FoxgloveDemo/sim_time topic (hako_msgs/msg/SimTime,
+      .time_usec field) appeared in the Topics panel with its value visibly
+      advancing in real time. Do not chase a 'protocol negotiation bug' once
+      a raw TCP connection intermittently succeeds/fails on the same
+      machine/process -- suspect the firewall (or another connectivity
+      instability) first."
+    - "Unrelated but easy to misread: cdr_publisher_example's second CLI
+      argument (documented in the README as `./build/cdr_publisher_example
+      config/sample/endpoint_foxglove.json 3` for 'a short smoke') is NOT a
+      duration in seconds -- main.cpp parses it as max_samples (a sample
+      COUNT), and each sample is spaced 100ms apart. Passing 600 expecting
+      '600 seconds' actually produces exactly 60 seconds of output
+      (600 samples x 100ms) before the process exits on its own. Omitting
+      the argument entirely (argc <= 2) makes max_samples default to 0,
+      which the while-loop condition treats as 'run forever until
+      Ctrl-C/SIGINT' -- use that form for any interactive/long-running
+      verification session instead of guessing a large sample count."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu-foxglove
+      path: cmake/FoxgloveSdk.cmake
+      revision: main
+    - repository: hakoniwalab/hakoniwa-pdu-foxglove
+      path: CMakeLists.txt
+      revision: main
+    - repository: hakoniwalab/hakoniwa-pdu-foxglove
+      path: examples/cdr-publisher/main.cpp
+      revision: main
+    - repository: ykikuchii/hakoniwa-pdu-foxglove
+      path: (branch win-foxglove-sdk-support, commit 3cc7b29)
+      revision: win-foxglove-sdk-support
+    - repository: foxglove/foxglove-sdk
+      path: "releases/download/sdk/v0.25.2 (asset listing via GitHub API)"
+      revision: "sdk/v0.25.2"
+    - repository: foxglove/ws-protocol
+      path: docs/spec.md
+      revision: main
+  runtime_evidence:
+    - description: >-
+        Reproduced on an external contributor's Windows 11 x86_64 workspace (native build,
+        no WSL/Docker), 2026-07-24: full build log sequence for all 4 code
+        gaps (Boost not found -> fastcdr not found -> C2908/C3856 -> ntdll
+        unresolved -> clean build of hakoniwa_pdu_foxglove.lib,
+        cdr_publisher_example.exe, cdr_stdin_publisher.exe, and
+        hakoniwa_pdu_foxglove_tests.exe, the latter passing all 18 tests);
+        then the firewall diagnosis (netstat showing no listener despite
+        clean server logs, New-NetFirewallRule requiring elevation, TCP
+        connectivity succeeding immediately after the rule was added); then
+        a live screenshot-confirmed connection from the official Foxglove
+        Windows desktop app showing the server name in its tab title and the
+        /hakoniwa/FoxgloveDemo/sim_time topic's .time_usec value advancing in
+        real time.
+  expert_input:
+    - description: >-
+        An AI coding assistant's (GPT-5.6-class) root-cause analysis of the C2908/C3856
+        MSVC template error, run as an independent second opinion: confidence "high" that the root cause is parameter.hpp's
+        isArray<T>()/isDict<T>() bodies referencing get<Array>()/get<Dict>()
+        before their explicit specializations are defined later in the same
+        header, and confidence "medium-high" that this is a genuine SDK
+        header-ordering fragility rather than a standard-mandated MSVC
+        rejection. Also proposed the /Zc:twoPhase- workaround (confirmed
+        working) and a concrete header-patch alternative (not applied, since
+        the flag was sufficient).
+
+confidence: high
+
+contradictions:
+  - target: "Initial hypothesis: 'HTTP 400 Missing expected sec-websocket-protocol header' meant the Windows Foxglove SDK build had a real WebSocket subprotocol negotiation bug"
+    existing_claim: "Multiple independent WebSocket clients (Python websockets library with and without explicit subprotocol headers, a hand-rolled raw-socket HTTP Upgrade request) all failed with the same HTTP 400 body, suggesting a server-side protocol handling defect specific to the Windows build."
+    new_evidence: "The official Foxglove desktop app connected successfully on the first attempt once the firewall rule was in place, with the exact same server binary and config, proving the WebSocket/subprotocol implementation itself was correct all along; the HTTP 400 responses were symptoms of the same underlying connectivity instability the firewall rule fixed (exact mechanism not fully isolated, but the causal link to the firewall state is well supported by the before/after evidence)."
+
+validation:
+  status: verified
+  required:
+    - "ARM64 Windows SHA256 in cmake/FoxgloveSdk.cmake is an unverified TODO placeholder (no ARM64 Windows machine available) -- must be filled in and build-tested before claiming ARM64 Windows support."
+    - "The /Zc:twoPhase- workaround is a temporary diagnostic per its own code comment; an upstream SDK header fix or an automated FetchContent-time patch (both discussed with Codex) would be the more durable fix if this SDK version's header ships unchanged in future consumers."
+  notes:
+    - Verified end-to-end via a real screenshot-confirmed connection from the official Foxglove Windows desktop app, not just log inspection or a synthetic client.
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+
+promotion_rationale:
+  - Directly reusable for any future Windows work involving the Foxglove SDK (C++ or otherwise) or any fresh Windows binary that opens its first listening socket in a non-interactive/headless environment.
+
+resolution:
+  promoted_to: []
+  notes:
+    - Candidate only. Corresponding fork branch: ykikuchii/hakoniwa-pdu-foxglove@win-foxglove-sdk-support (commit 3cc7b29), not yet proposed upstream as a PR.
