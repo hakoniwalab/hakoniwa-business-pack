@@ -40,72 +40,68 @@ candidate_paths.each do |path|
     next
   end
 
-  id = data["id"]
-  errors << "#{label}: missing id" if id.nil? || id.to_s.empty?
-  errors << "#{label}: file name must match id" if id && File.basename(path, ".yaml") != id
-
+  # Lifecycle tracking is intentionally opt-in so older candidates remain valid.
+  # Once a candidate adopts `tracking`, validate the complete tracking/resolution shape.
   tracking = data["tracking"]
-  if tracking
-    tracked += 1
-    unless tracking.is_a?(Hash)
-      errors << "#{label}: tracking must be a mapping"
+  next if tracking.nil?
+
+  tracked += 1
+  unless tracking.is_a?(Hash)
+    errors << "#{label}: tracking must be a mapping"
+    next
+  end
+
+  implementation_status = tracking["implementation_status"]
+  unless ALLOWED_IMPLEMENTATION_STATUSES.include?(implementation_status)
+    errors << "#{label}: invalid tracking.implementation_status #{implementation_status.inspect}"
+  end
+
+  issues = tracking["issues"]
+  unless issues.is_a?(Array)
+    errors << "#{label}: tracking.issues must be an array"
+    issues = []
+  end
+
+  issues.each_with_index do |issue, index|
+    prefix = "#{label}: tracking.issues[#{index}]"
+    unless issue.is_a?(Hash)
+      errors << "#{prefix} must be a mapping"
       next
     end
 
-    implementation_status = tracking["implementation_status"]
-    unless ALLOWED_IMPLEMENTATION_STATUSES.include?(implementation_status)
-      errors << "#{label}: invalid tracking.implementation_status #{implementation_status.inspect}"
-    end
+    repository = issue["repository"]
+    number = issue["number"]
+    relation = issue["relation"]
+    status = issue["status"]
 
-    issues = tracking["issues"]
-    unless issues.is_a?(Array)
-      errors << "#{label}: tracking.issues must be an array"
-      issues = []
-    end
-
-    issues.each_with_index do |issue, index|
-      prefix = "#{label}: tracking.issues[#{index}]"
-      unless issue.is_a?(Hash)
-        errors << "#{prefix} must be a mapping"
-        next
-      end
-
-      repository = issue["repository"]
-      number = issue["number"]
-      relation = issue["relation"]
-      status = issue["status"]
-
-      errors << "#{prefix}.repository is required" if repository.nil? || repository.to_s.empty?
-      errors << "#{prefix}.number must be a positive integer" unless number.is_a?(Integer) && number.positive?
-      errors << "#{prefix}.relation is invalid: #{relation.inspect}" unless ALLOWED_ISSUE_RELATIONS.include?(relation)
-      errors << "#{prefix}.status is invalid: #{status.inspect}" unless ALLOWED_ISSUE_STATUSES.include?(status)
-    end
+    errors << "#{prefix}.repository is required" if repository.nil? || repository.to_s.empty?
+    errors << "#{prefix}.number must be a positive integer" unless number.is_a?(Integer) && number.positive?
+    errors << "#{prefix}.relation is invalid: #{relation.inspect}" unless ALLOWED_ISSUE_RELATIONS.include?(relation)
+    errors << "#{prefix}.status is invalid: #{status.inspect}" unless ALLOWED_ISSUE_STATUSES.include?(status)
   end
 
   resolution = data["resolution"]
-  next unless resolution
-
   unless resolution.is_a?(Hash)
-    errors << "#{label}: resolution must be a mapping"
+    errors << "#{label}: tracked candidate requires resolution mapping"
     next
   end
 
   resolution_status = resolution["status"]
-  if resolution_status && !ALLOWED_RESOLUTION_STATUSES.include?(resolution_status)
+  unless ALLOWED_RESOLUTION_STATUSES.include?(resolution_status)
     errors << "#{label}: invalid resolution.status #{resolution_status.inspect}"
   end
 
-  if resolution.key?("verified") && ![true, false].include?(resolution["verified"])
+  unless resolution.key?("verified") && [true, false].include?(resolution["verified"])
     errors << "#{label}: resolution.verified must be true or false"
   end
 
   fixed_by = resolution["fixed_by"]
-  if fixed_by && !fixed_by.is_a?(Array)
+  unless fixed_by.is_a?(Array)
     errors << "#{label}: resolution.fixed_by must be an array"
     fixed_by = []
   end
 
-  Array(fixed_by).each_with_index do |fix, index|
+  fixed_by.each_with_index do |fix, index|
     prefix = "#{label}: resolution.fixed_by[#{index}]"
     unless fix.is_a?(Hash)
       errors << "#{prefix} must be a mapping"
