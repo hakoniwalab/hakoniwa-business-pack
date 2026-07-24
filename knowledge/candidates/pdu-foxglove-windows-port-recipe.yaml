@@ -22,7 +22,7 @@ observation:
   context: >
     Adding Windows support to hakoniwalab/hakoniwa-pdu-foxglove (forked to
     ykikuchii/hakoniwa-pdu-foxglove, branch win-foxglove-sdk-support) as a
-    new Foxglove visualization path for this workspace's PDU output, after
+    new Foxglove visualization path for a Hakoniwa deployment's PDU output, after
     confirming the official Foxglove SDK GitHub release actually contains a
     foxglove-v0.25.2-cpp-x86_64-pc-windows-msvc.zip archive (SHA256:
     02b27c7ecb5a0124eebb6e925586a45487d56da708d0088dedb770007fb4a849).

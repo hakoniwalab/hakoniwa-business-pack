@@ -39,8 +39,8 @@ observation:
       directory or a working symlink. Godot then fails with
       `SCRIPT ERROR: Parse Error: Preload file \"res://addons/...\" does not
       exist` because it sees an empty/nonexistent directory where the addon
-      should be. Per this workspace's own AGENTS.md rule (never use symlinks
-      on Windows), the fix was to delete each of the 3 broken 'symlink'
+      should be. Per a common Windows-safety practice of avoiding symlinks
+      entirely, the fix was to delete each of the 3 broken 'symlink'
       files and replace them with a real recursive copy of the repo-root
       addons/ directory -- exactly the same remediation
       tools/run_core_pro_smoke.ps1's own `-SyncAddons` switch performs
@@ -53,17 +53,17 @@ observation:
       -- they rely on whatever is already in the caller's environment. This
       machine's persistent environment variable HAKO_CONFIG_PATH pointed to
       %APPDATA%\\hakocore-win\\config\\cpp_core_config.json (left over from
-      an unrelated Godot drone project under Documents\\Godot), whose
+      an unrelated, older Godot drone project on the same machine), whose
       `core_mmap_path` was `Z:\\mmap` -- a drive letter that does not exist
       on this machine. This produced `HAKO_CORE_SMOKE_INITIALIZE_FAILED` /
       `initialize failed: initialize_asset failed:
       hakoniwa_simevent_init error=-1` immediately after
       HAKO_CORE_SMOKE_BOOT, with no indication in the error message that the
       cause was a bad mmap path from an unrelated config file. Fix:
-      explicitly set `$env:HAKO_CONFIG_PATH` to this workspace's own
+      explicitly set `$env:HAKO_CONFIG_PATH` to the target workspace's own
       `external/hakoniwa-core-pro/install-win/etc/cpp_core_config.json`
-      (already known-good from this workspace's own T22/Foxglove/TB3
-      sessions) before invoking run_core_pro_smoke.ps1. Any Windows machine
+      (already confirmed good from an earlier hakoniwa-core-pro/Foxglove/TB3
+      build on the same machine) before invoking run_core_pro_smoke.ps1. Any Windows machine
       that has previously done unrelated Hakoniwa/Godot work under a
       DIFFERENT config path is at risk of this exact silent cross-project
       contamination via a persistent environment variable."

@@ -65,7 +65,7 @@ validation:
   status: verified
   required: []
   notes:
-    - Verified by an actual model-load failure, then an actual successful run after fetching the missing assets, in this session.
+    - Verified by an actual model-load failure, then an actual successful run after fetching the missing assets.
 
 promotion_targets:
   catalog:
