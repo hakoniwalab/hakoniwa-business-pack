@@ -1,0 +1,84 @@
+id: mujoco-menagerie-shadow-hand-assets-not-vendored
+title: hakoniwa-mujoco-robots' vendored shadow_hand MJCF is missing its assets/ mesh directory
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - validation_rule
+
+summary: >
+  thirdparty/mujoco_menagerie is not a git submodule in hakoniwa-mujoco-robots; each robot
+  directory is hand-vendored. The unitree_go1 directory includes its assets/ mesh
+  subdirectory, but the shadow_hand directory does not -- right_hand.xml declares
+  `<compiler meshdir="assets" .../>` and the directory is simply absent. The Shadow Hand
+  Hakoniwa asset binary therefore fails at MuJoCo model load with a generic
+  "[ERROR] Failed to initialize Shadow Hand model: Model loading failed" and never reaches
+  asset registration.
+
+observation:
+  context: >
+    Running the Hakoniwa PDU Smoke section of examples/actuators/shadow_hand/README.md
+    (shadow-hand-hakoniwa-asset.exe --no-viewer) on Windows, after the unitree_go1 sibling
+    sample worked correctly with the same launch pattern (WorkingDirectory =
+    hakoniwa-mujoco-robots repo root, --no-viewer, no config path argument).
+  details:
+    - "`find thirdparty/mujoco_menagerie/unitree_go1 -maxdepth 1 -type d` shows an assets/
+      subdirectory; the identical find for shadow_hand shows none -- only 10 top-level
+      files (CHANGELOG.md, keyframes.xml, left_hand.xml, LICENSE, README.md, right_hand.xml,
+      scene_left.xml, scene_right.xml, scene_right.xml, shadow_hand.png)."
+    - "right_hand.xml line 2: `<compiler angle=\"radian\" meshdir=\"assets\"
+      autolimits=\"true\"/>` -- confirms the model depends on a local assets/ dir for its
+      14 .obj meshes, not on any absolute or repo-wide mesh path."
+    - "Fix: fetch the 14 missing .obj files directly from
+      raw.githubusercontent.com/google-deepmind/mujoco_menagerie/main/shadow_hand/assets/
+      (or an equivalent full clone) into thirdparty/mujoco_menagerie/shadow_hand/assets/.
+      After doing so, shadow-hand-hakoniwa-asset.exe --no-viewer loads correctly and
+      reaches 'Shadow Hand Hakoniwa asset started.' / WAIT START."
+    - "This is a vendoring gap in hakoniwa-mujoco-robots itself, not a Hakoniwa or MuJoCo
+      bug -- worth checking any other individually-vendored mujoco_menagerie robot
+      directory for the same kind of partial copy before assuming 'Model loading failed'
+      means a config or API problem."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      path: thirdparty/mujoco_menagerie/shadow_hand/
+      revision: main
+    - repository: google-deepmind/mujoco_menagerie
+      path: shadow_hand/assets/
+      revision: main
+  runtime_evidence:
+    - description: >-
+        Reproduced on an external contributor's Windows 11 x86_64 workspace (native build,
+        no WSL/Docker), 2026-07-24: the plant asset's stderr log showed
+        "[ERROR] Failed to initialize Shadow Hand model: Model loading failed" before the
+        assets/ directory was fetched, and a full successful run (WAIT START through
+        WAIT STOP/WAIT RESET, tendon-coupled joint readback matching the README's expected
+        signals) after fetching it.
+  expert_input: []
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required: []
+  notes:
+    - Verified by an actual model-load failure, then an actual successful run after fetching the missing assets.
+
+promotion_targets:
+  catalog:
+    - hakoniwa-mujoco-robots
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+
+promotion_rationale:
+  - Directly reusable for anyone bringing up shadow_hand (or auditing other individually-vendored mujoco_menagerie robots) with hakoniwa-mujoco-robots.
+
+resolution:
+  promoted_to: []
+  notes:
+    - Candidate only.
