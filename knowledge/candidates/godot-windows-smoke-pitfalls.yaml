@@ -126,6 +126,14 @@ validation:
   notes:
     - Verified via a full clean passing run of tools/run_core_pro_smoke.ps1 after all three fixes, immediately following a separate clean passing run of the codec-only smoke test (tests/smoke/basic_subscriber, HAKONIWA_CODEC_SMOKE_OK).
 
+tracking:
+  implementation_status: open
+  issues:
+    - repository: hakoniwalab/hakoniwa-godot
+      number: 5
+      relation: fix
+      status: open
+
 promotion_targets:
   catalog: []
   runtime_primer: false
@@ -137,6 +145,9 @@ promotion_rationale:
   - Directly reusable for anyone on a multi-project Windows dev machine bringing up hakoniwa-godot, and the symlink/CLI-flag pitfalls generalize to any git repo that vendors POSIX symlinks or mixes an engine-level --quit flag with a script's own asynchronous completion signal.
 
 resolution:
+  status: pending
+  fixed_by: []
+  verified: false
   promoted_to: []
   notes:
-    - Candidate only.
+    - Candidate only. Implementation follow-up is tracked in hakoniwalab/hakoniwa-godot#5.
