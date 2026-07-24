@@ -28,3 +28,6 @@ jobs:
 
       - name: Validate usecases
         run: ruby usecases/tools/validate_usecases.rb
+
+      - name: Validate knowledge candidates
+        run: ruby knowledge/tools/validate_candidates.rb
