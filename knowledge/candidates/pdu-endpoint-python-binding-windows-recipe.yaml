@@ -111,6 +111,14 @@ validation:
   notes:
     - Verified end-to-end via two independent working smoke runs (Go1 and Shadow Hand) using the resulting binding.
 
+tracking:
+  implementation_status: open
+  issues:
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      number: 39
+      relation: fix
+      status: open
+
 promotion_targets:
   catalog:
     - hakoniwa-pdu-endpoint
@@ -123,6 +131,9 @@ promotion_rationale:
   - Directly reusable for any future Windows work that needs hakoniwa-pdu-endpoint's Python cffi binding (any hakoniwa-mujoco-robots actuator sample beyond TB3).
 
 resolution:
+  status: pending
+  fixed_by: []
+  verified: false
   promoted_to: []
   notes:
-    - Candidate only.
+    - Candidate only. Implementation follow-up is tracked in hakoniwalab/hakoniwa-pdu-endpoint#39.

@@ -173,6 +173,46 @@ After the component PR is merged, add or update the component Catalog `runtime_c
 
 The strongest mature state for a machine-detectable lesson is therefore not merely **documented**, but **guarded**: a future user or agent can be warned before rediscovering the same failure manually.
 
+## Implementation Tracking And Resolution
+
+A Knowledge Candidate may identify a real defect or documentation gap before the owning repository has been fixed. Do not lose that relationship in comments or conversation history.
+
+When concrete follow-up work is needed, create or identify the smallest appropriate issue in the owning repository and link it from the candidate's `tracking.issues` metadata. The implementation issue should also link back to the merged Knowledge Candidate so the relationship is navigable in both directions.
+
+Use this lifecycle:
+
+```text
+Observation
+  -> Knowledge Candidate
+  -> implementation issue
+  -> fix PR / documentation change
+  -> merge
+  -> re-verification
+  -> Knowledge Candidate resolution update
+  -> optional promotion
+```
+
+Keep **knowledge maturity** and **implementation progress** separate:
+
+- top-level `status` describes whether the knowledge itself is a candidate, being validated, promoted, or rejected;
+- `tracking.implementation_status` describes whether implementation work exists and whether it is still active;
+- `resolution.status` describes the outcome of the implementation/documentation response;
+- `resolution.verified` records whether the post-fix state has actually been checked against the original observation.
+
+Recommended `tracking.implementation_status` values are:
+
+- `none`: no implementation work is currently required or tracked;
+- `open`: at least one follow-up issue exists and work has not been confirmed complete;
+- `in_progress`: implementation work is actively underway;
+- `resolved`: the tracked implementation work has landed;
+- `wont_fix`: the implementation side was intentionally declined.
+
+Closing an issue is not sufficient evidence for `resolution.verified: true`. When a fix lands, record the owning repository, issue, PR, and revision under `resolution.fixed_by`, then reproduce the relevant validation when practical. Preserve the original observation and workaround as historical evidence even after the defect is fixed.
+
+A candidate may reference more than one repository or issue. Do not collapse multiple implementation responsibilities into one synthetic status when separate ownership is useful. The aggregate `implementation_status` should reflect the maintainer's best current summary, while each issue keeps its own `status` snapshot.
+
+Run `ruby knowledge/tools/validate_candidates.rb` after editing candidate lifecycle metadata.
+
 ## Maintainer Review Checklist
 
 During a periodic review:
@@ -187,7 +227,9 @@ During a periodic review:
 8. Feed technical discoveries into the existing Knowledge Refinement Loop.
 9. For validated runtime/validation knowledge, decide whether it can become an executable guardrail.
 10. When appropriate, create or request the smallest component-owned doctor/test/validator PR and then expose it through Catalog `runtime_checks`.
-11. Keep Recipes concrete; keep Use Cases implementation-independent.
+11. For candidates with implementation work, keep `tracking` and `resolution` synchronized with the owning repository issues and fix PRs.
+12. Re-verify a resolved implementation before marking `resolution.verified: true` or promoting the knowledge.
+13. Keep Recipes concrete; keep Use Cases implementation-independent.
 
 The goal is not to maximize the number of Use Cases.
 The goal is to let real user demand gradually reveal the reusable value patterns of the Hakoniwa ecosystem while turning reusable runtime lessons into durable, executable protections when possible.

@@ -39,6 +39,14 @@ validation:
   notes:
     - Validation findings or remaining uncertainty.
 
+tracking:
+  implementation_status: none | open | in_progress | resolved | wont_fix
+  issues:
+    - repository: hakoniwalab/component
+      number: 123
+      relation: fix | documentation | validation | follow_up
+      status: open | closed | unknown
+
 promotion_targets:
   catalog:
     - component-id
@@ -61,9 +69,16 @@ promotion_rationale:
   - Explain why an executable guardrail is or is not appropriate when the candidate contains a reusable runtime or validation rule.
 
 resolution:
+  status: pending | fixed | documented | superseded | wont_fix
+  fixed_by:
+    - repository: hakoniwalab/component
+      issue: 123
+      pull_request: null
+      revision: null
+  verified: false
   promoted_to:
     - Optional path or Catalog entry after promotion.
   executable_guardrails:
     - Optional repository/path or PR after a machine-detectable rule is guarded.
   notes:
-    - Final decision, rejection reason, or follow-up.
+    - Final decision, rejection reason, implementation result, or follow-up.
