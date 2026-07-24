@@ -67,6 +67,14 @@ validation:
   notes:
     - Verified by an actual model-load failure, then an actual successful run after fetching the missing assets.
 
+tracking:
+  implementation_status: open
+  issues:
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      number: 37
+      relation: fix
+      status: open
+
 promotion_targets:
   catalog:
     - hakoniwa-mujoco-robots
@@ -79,6 +87,9 @@ promotion_rationale:
   - Directly reusable for anyone bringing up shadow_hand (or auditing other individually-vendored mujoco_menagerie robots) with hakoniwa-mujoco-robots.
 
 resolution:
+  status: pending
+  fixed_by: []
+  verified: false
   promoted_to: []
   notes:
-    - Candidate only.
+    - Candidate only. Implementation follow-up is tracked in hakoniwalab/hakoniwa-mujoco-robots#37.
