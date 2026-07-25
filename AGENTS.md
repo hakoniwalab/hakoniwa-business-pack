@@ -1,73 +1,107 @@
-# Hakoniwa Business Pack Agent Guide
+# Hakoniwa Business Pack Agent Router
 
-This repository is a structured knowledge base for translating user requirements
-into defensible Hakoniwa Recipes.
+This repository is structured system knowledge for translating user requirements into defensible Hakoniwa system compositions and for improving that knowledge from real usage.
 
-The primary output is a Recipe that explains a credible system composition,
-its feasibility, assumptions, evidence, and gaps. A Demo is optional downstream
-validation of a Recipe, not the primary goal.
+Do not treat this repository as a normal source-code project first.
 
-Do not treat this repository as a normal source-code project first. Treat it as
-structured system knowledge.
+`AGENTS.md` is the stable entry point for AI agents. It routes the agent to one of two primary roles:
+
+- **User / Solution Agent**: understand a user goal and produce a defensible Hakoniwa Recipe, with execution or validation only when requested.
+- **Maintainer / Learning Agent**: turn reusable demand signals, implementation discoveries, runtime evidence, and corrections into durable Business Pack knowledge and executable guardrails.
+
+## Choose The Active Role
+
+### User / Solution Agent
+
+Read [`AGENTS-USER.md`](AGENTS-USER.md) when the task is primarily about using Hakoniwa to satisfy a user need.
+
+Typical triggers:
+
+- "Can Hakoniwa do X?"
+- "How should I build X with Hakoniwa?"
+- selecting components for a requirement
+- designing or updating a Recipe
+- evaluating feasibility or validation status
+- creating or running a simulation-only Demo
+- implementing an already-defined Recipe
+
+The normal flow is:
 
 ```text
-User requirement
+User Requirement
   -> Use Case interpretation
-  -> required Capabilities
-  -> docs/hakoniwa-base-ecosystem-ja.md
-  -> docs/hakoniwa-component-asset-guide-ja.md
-  -> catalog/index.yaml
-  -> catalog/components/*.yaml
-  -> docs/hakoniwa-runtime-primer.md
-  -> recipes/examples/*.yaml
-  -> feasibility and gap assessment
-  -> proposed Recipe
-  -> optional Demo / Validation plan
-  -> docs/hakoniwa-agent-human-boundary.md
-  -> Agency Boundary check
-  -> Execution when requested
-
-Source / Runtime / Expert correction
-  -> Observation
-  -> Knowledge Candidate
-  -> Validation / Review
-  -> Promotion to the appropriate knowledge layer
+  -> Required Capabilities
+  -> Catalog Components
+  -> Recipe
+  -> Feasibility / Validation / Agency Boundary
+  -> Optional Execution
 ```
 
-The documents have different responsibilities:
+The Recipe is the primary system-composition output. A Demo is optional downstream validation, not the primary goal.
 
-- `docs/hakoniwa-base-ecosystem-ja.md`
-  - Explains the common Hakoniwa foundations and their relationships.
-  - Use it to understand PDU, PDU Registry, MBody Registry, Endpoint, Bridge,
-    RPC, Core, Conductor, and declarative JSON configuration.
-- `docs/hakoniwa-component-asset-guide-ja.md`
-  - Explains where major simulation, SDK, integration, visualization, and
-    interaction components fit in the ecosystem.
-  - Use it before choosing concrete Catalog entries.
-- `catalog/index.yaml` and `catalog/components/*.yaml`
-  - Describe component facts, capabilities, interfaces, dependencies, and gaps.
-- `docs/hakoniwa-runtime-primer.md`
-  - Explains runtime rules required to make a concrete composition executable.
-- `docs/hakoniwa-agent-human-boundary.md`
-  - Defines where an agent may proceed autonomously and where a human decision,
-    physical action, permission, credential, license entitlement, or explicit
-    approval is required.
-- `docs/hakoniwa-knowledge-refinement-loop.md`
-  - Defines how newly discovered implementation facts, runtime rules, design
-    intent, architectural principles, usage patterns, and pitfalls become durable
-    Business Pack knowledge.
-- `knowledge/`
-  - Stores observations and Knowledge Candidates before they are promoted into
-    Catalog, ecosystem guides, Runtime Primer, Component / Asset Guide, or Recipes.
-- `recipes/`
-  - Describes concrete or planned system compositions.
-- `MAINTAINER.md`
-  - Defines maintainer-side reflection for use-case fragments, recurring demand,
-    Catalog gaps, and promotion into reusable knowledge.
+### Maintainer / Learning Agent
 
-## First Files To Read
+Read [`AGENTS-MAINTAINER.md`](AGENTS-MAINTAINER.md) when the task is primarily about improving Hakoniwa Business Pack or the ecosystem knowledge it represents.
 
-Read these files in order:
+Typical triggers:
+
+- reusable knowledge was discovered during source inspection or runtime execution
+- a recurring user need should be preserved or generalized
+- a Recipe exposed a repeated Catalog or capability gap
+- a Knowledge Candidate needs validation, implementation tracking, resolution, or promotion
+- an owning component repository should gain a doctor, validator, test, or CI guardrail
+- a merged fix needs post-fix re-verification
+- the user explicitly asks for reflection, curation, maintenance, or repository-level learning
+
+The normal flow is:
+
+```text
+Observation / Demand Signal
+  -> Knowledge Candidate or Use Case Fragment
+  -> Validation / Reflection
+  -> Implementation Issue when needed
+  -> Fix / Re-verification
+  -> Promotion or Executable Guardrail
+```
+
+## Role Handoff
+
+A single task may cross the boundary between the two roles.
+
+The most common direction is:
+
+```text
+User / Solution Agent
+  -> Recipe analysis or execution
+  -> reusable discovery or recurring demand signal
+  -> Maintainer / Learning Agent
+```
+
+Do not lose a reusable discovery in a one-off answer merely because the task began as a user-facing Recipe task.
+
+When a discovery is reusable:
+
+1. finish or clearly preserve the user's immediate task state;
+2. identify the reusable observation, gap, or demand signal;
+3. switch to or hand off to the Maintainer / Learning Agent guidance;
+4. preserve evidence and uncertainty before promotion.
+
+The reverse handoff is also valid. A maintainer may improve Catalog knowledge or guardrails and then return to the User / Solution Agent to re-run or reassess the original Recipe.
+
+## Repository Bootstrap
+
+When asked only to "understand this repository" or equivalent:
+
+1. read this router;
+2. read the overview and workflow sections of both `AGENTS-USER.md` and `AGENTS-MAINTAINER.md` so both roles are discoverable;
+3. use the User / Solution Agent as the default active role unless the requested work is clearly maintenance-oriented;
+4. continue with the common knowledge documents below.
+
+This prevents repository understanding from stopping at the user-facing Recipe loop while still keeping normal tasks focused.
+
+## Common Knowledge Documents
+
+Both roles share the same underlying system knowledge. Read the relevant documents before making claims or executing changes:
 
 1. `README.md`
 2. `docs/hakoniwa-base-ecosystem-ja.md`
@@ -75,114 +109,19 @@ Read these files in order:
 4. `catalog/index.yaml`
 5. `catalog/schema.yaml`
 6. `docs/hakoniwa-runtime-primer.md`
-7. Relevant `catalog/components/*.yaml`
+7. relevant `catalog/components/*.yaml`
 8. `recipes/README.md`
-9. Relevant `recipes/examples/*.yaml`
-10. `docs/hakoniwa-agent-human-boundary.md` before execution or when a Recipe
-    includes human involvement, real hardware, external permissions, or
-    consequential decisions.
-11. `docs/hakoniwa-knowledge-refinement-loop.md` when source inspection, runtime
-    validation, or expert conversation reveals reusable knowledge that may need
-    to update the Business Pack knowledge base.
-12. `MAINTAINER.md` only when curating recurring use-case fragments or performing
-    repository-level reflection and promotion.
+9. relevant `recipes/examples/*.yaml`
 
-Do not answer only from the README or from a repository-name search.
+Read these additional documents when the task requires them:
 
-## How To Answer User Goals
+- `docs/hakoniwa-agent-human-boundary.md` before execution or when human judgement, physical action, permission, credentials, licensing, real hardware, or consequential decisions are involved.
+- `docs/hakoniwa-knowledge-refinement-loop.md` and `knowledge/` when reusable system knowledge is discovered or curated.
+- `MAINTAINER.md` when performing repository-level reflection, demand clustering, implementation tracking, promotion, or executable-knowledge maintenance.
 
-For a user asking "Can Hakoniwa do X?" or "How should I build X?":
+## Shared Invariants
 
-1. Normalize the user goal and constraints.
-2. Interpret the goal as a Use Case: what the user wants to achieve independent
-   of one specific Hakoniwa implementation.
-3. Identify the Capabilities required to satisfy that Use Case.
-4. Use the Base Ecosystem Guide to identify relevant foundation capabilities.
-5. Use the Component / Asset Guide to identify likely system roles.
-6. Use `catalog/index.yaml` to shortlist components.
-7. Read the detailed YAML for shortlisted components.
-8. Follow `connects_to` edges only when interface and direction make sense.
-9. Read the Runtime Primer before proposing runtime topology or executable commands.
-10. Search `recipes/examples/*.yaml` for an existing Recipe and read it when found.
-11. Decide feasibility and classify unresolved gaps.
-12. State validation separately from feasibility.
-13. Evaluate the Agency Boundary before execution.
-14. Produce a Recipe-shaped answer as the primary result.
-15. Propose a Demo or other validation strategy only when it helps verify the Recipe.
-16. When investigation or execution reveals reusable system knowledge, capture it as a
-    Knowledge Candidate instead of leaving it only in the conversation or silently
-    rewriting high-level documentation.
-17. When the user's goal appears potentially reusable as a demand signal, note it as
-    a Use Case Fragment candidate for later maintainer reflection. Do not interrupt
-    the user interaction by forcing it into a canonical Use Case immediately.
-
-A useful Recipe-shaped answer should cover:
-
-- Goal
-- Use Case interpretation
-- Required Capabilities
-- Feasibility
-- Validation
-- Agency Boundary
-- Target Environment and Execution Environment when relevant
-- Components and roles
-- Connections and contracts
-- Data Flow
-- Time Model
-- Required Artifacts
-- Missing Pieces and Gap Classification
-- Validation Strategy
-- Optional Minimal Demo when useful
-- Expected Result
-
-Do not output only a repository list. Explain how the selected components work
-together as a Hakoniwa system.
-
-## User Requirement, Use Case, Capability, Catalog, And Recipe
-
-Keep these layers distinct:
-
-- **User Requirement**: what the user actually asks for, including concrete constraints.
-- **Use Case**: the underlying user goal expressed independently from one specific
-  Hakoniwa implementation.
-- **Capability**: an ability required to satisfy the Use Case or provided by a component.
-- **Catalog Component**: a concrete Hakoniwa component or asset that provides relevant
-  capabilities, interfaces, artifacts, or runtime roles.
-- **Recipe**: a concrete system composition that explains how selected components can
-  satisfy the requirement.
-
-Use this conceptual flow:
-
-```text
-User Requirement
-  -> Use Case
-  -> Required Capabilities
-  -> Catalog Components
-  -> Recipe
-```
-
-Do not require every user request to match a pre-existing canonical Use Case.
-The agent may derive a provisional Use Case during the conversation.
-
-Multiple Recipes may satisfy the same Use Case. One reusable Recipe may also support
-multiple related Use Cases.
-
-The purpose of the Use Case layer is not to create a large manually curated list before
-users arrive. It is to preserve the meaning of what the user is trying to achieve so
-that component selection is driven by required capabilities rather than repository-name
-matching.
-
-## Capability, Feasibility, Validation, And Agency Boundary
-
-Keep these four questions separate:
-
-- **Capability**: what an individual component can do.
-- **Feasibility**: whether current components and artifacts form a credible system.
-- **Validation**: what has actually been executed or verified.
-- **Agency Boundary**: which steps an agent may execute and where human or external
-  involvement is required.
-
-The key rules are:
+Keep these distinctions explicit regardless of active role:
 
 ```text
 feasible != verified
@@ -190,351 +129,40 @@ feasible != agent_can_execute
 verified != safe_to_execute_without_human
 ```
 
-Before every non-trivial execution step, determine whether it is:
+Do not invent missing capabilities, runnable-looking placeholder commands, verification evidence, or permissions.
 
-1. `agent_action`: simulation-only or controlled software work that the user has
-   already asked to execute;
-2. `human_decision`: a judgement depending on intent, domain validity, acceptance,
-   cost, licensing choice, or business responsibility;
-3. `human_action`: a physical or externally situated action that a person must
-   perform;
-4. `required_permission`: an external permission, credential, entitlement, cost
-   approval, deployment approval, or explicit real-world actuation approval.
+Do not silently cross from simulation to real-world actuation.
 
-If a human decision, human action, or permission is required, create an explicit
-gate. Do not continue as though the Recipe were fully autonomous.
+Repository visibility, component identity, distribution channel, and license rights are separate facts.
 
-### Autonomous agent actions
+## Understanding Report
 
-Examples include:
-
-- reading ecosystem, Catalog, Runtime Primer, and Recipe knowledge;
-- interpreting user goals as provisional Use Cases and required Capabilities;
-- selecting components and proposing topology;
-- generating Recipe YAML, PDU definitions, declarative JSON, source code, launchers,
-  adapters, and tests;
-- building or running simulation-only compositions after the user requested execution;
-- inspecting logs, PDU values, generated artifacts, screenshots, and test results;
-- retrying simulation-only configuration within the agreed scope;
-- stopping processes and cleaning up known simulation resources.
-
-### Human decision gates
-
-Examples include:
-
-- accepting model fidelity or physical validity for the intended use;
-- defining experiment conditions or evaluation metrics when legitimate alternatives exist;
-- deciding whether a failure, sensor, disturbance, or environmental model is
-  representative enough;
-- choosing license or commercial/private dependency paths;
-- accepting partially verified work for production or customer delivery;
-- approving changes to scope, cost, schedule, or deliverables.
-
-### Human action gates
-
-Examples include:
-
-- connecting, wiring, powering, moving, or inspecting physical devices;
-- placing real fixtures, obstacles, markers, or targets;
-- physical sensor calibration or real-world measurement;
-- pressing a hardware safety control;
-- performing an onsite procedure.
-
-### Permission and approval gates
-
-Examples include:
-
-- private-repository access;
-- commercial license entitlement;
-- API keys, VPN, cloud credentials, or organization authentication;
-- software-install permission on managed machines;
-- permission to modify, publish, deploy, purchase, or incur cost;
-- explicit approval before simulation output is connected to a real actuator,
-  robot, drone, vehicle, industrial device, operational network, or production system.
-
-Never silently cross from simulation to real-world actuation.
-
-For detailed rules and the recommended Recipe representation, read
-`docs/hakoniwa-agent-human-boundary.md`.
-
-## Important Component Distinctions
-
-Do not collapse components that solve similar-looking problems at different layers.
-
-- `hakoniwa-pdu-endpoint`
-  - Communication endpoint infrastructure.
-  - Treat ROS 2 / Zenoh support here as an Endpoint-layer transport/integration path.
-- `hakoniwa-pdu-ros`
-  - Lightweight Python bridge that inspects PDU and ROS 2 message types at runtime,
-    converts fields, and transfers data bidirectionally.
-  - Prefer it when the goal is simply to connect existing ROS 2 nodes and PDU
-    without requiring Zenoh as part of the architecture.
-- `hakoniwa-pdu-python`
-  - Do not describe it only as a Python language binding.
-  - It includes PDU conversion, WebSocket topics, WebSocket RPC, SHM backend support,
-    and launcher/runtime utilities. Select the needed capability explicitly.
-- `hakoniwa-mbody-registry`
-  - Treat it as a body-model conversion and asset-generation hub.
-  - Artifacts consumed by MuJoCo and Godot are runtime-specific.
-- `hakoniwa-envsim`
-  - Treat it broadly as environment modeling, world generation, visualization,
-    querying, and external-data conversion, including PLATEAU-oriented flows.
-- `hakoniwa-godot`
-  - Do not reduce it to a passive viewer; it can participate in PDU exchange,
-    interaction, control, and optional time synchronization.
-- `hakoniwa-mujoco-robots`
-  - Treat it as Hakoniwa robot simulation assets and integration around MuJoCo,
-    not merely the MuJoCo engine itself.
-
-Athrill-related components may exist in the Catalog, but the current Japanese
-Component / Asset Guide intentionally does not position them yet.
-
-## Ambiguous Requests
-
-Ask for clarification only when missing information changes the architecture,
-execution commands, feasibility, or Agency Boundary. Otherwise state reasonable
-assumptions and present alternatives with trade-offs.
-
-## Feasibility vs Validation
-
-Do not confuse design feasibility with runtime verification.
-
-- `feasible`: catalog and known artifacts support a credible implementation path.
-- `partially_feasible`: the main architecture exists, but gaps remain.
-- `not_feasible`: the current Catalog has no credible path.
-- `unknown`: evidence is insufficient.
-- `verified`: actual execution evidence exists for the intended Recipe or Demo behavior.
-
-A Recipe may still be useful when it is `partially_feasible`, `not_feasible`, or
-`unknown`, provided the answer clearly explains what is missing and why.
-Failure to produce a runnable Demo does not make the analysis a failure.
-
-Never claim a Recipe is verified from source-code text matches, process startup,
-or component capability alone.
-
-For every important `connections[]` entry, state:
-
-- what interface or artifact crosses the boundary;
-- what contract must hold;
-- whether the connection is verified, partially verified, blocked, not tested,
-  or inferred from catalog evidence.
-
-## Gap Classification
-
-When a complete Recipe cannot be established, do not stop at "not feasible" or
-"unknown". Explain the reason using the most useful gap category.
-
-Use these categories when applicable:
-
-- `missing_capability`: no known Catalog component currently provides a required ability.
-- `missing_catalog_entry`: a relevant implementation or asset may exist, but it is not
-  represented in the Catalog.
-- `undocumented_capability`: a Catalog component may support the requirement, but the
-  capability is not stated clearly enough in current Business Pack knowledge.
-- `unresolved_connection`: the needed components exist, but their interface, direction,
-  artifact exchange, or runtime contract is not sufficiently known.
-
-A gap is useful output. It tells the user what must be added, documented, inspected,
-or verified before a stronger Recipe can be produced.
-
-Do not invent a capability to make the composition look complete.
-If source inspection or runtime validation resolves a gap, feed the discovered fact into
-the Knowledge Refinement Loop.
-
-## Evidence And Unknown Runtime Paths
-
-Before presenting a runnable Recipe, confirm:
-
-- every `components[].id` exists in `catalog/components/*.yaml`;
-- component roles use `catalog/schema.yaml`;
-- simulator and runtime entrypoints are identified;
-- launcher assets use real commands, not placeholders;
-- required PDU, service, Endpoint, Bridge, RPC, and sync configs are identified;
-- `pdutypes.json` is not confused with `pdudef.json` / `pdu_def.json`;
-- new PDU channels identify type, schema or size, producer, consumer, generated
-  bindings or offsets, and runtime assignment;
-- generated binding claims separate type generation, fixed-offset conversion,
-  CDR conversion, size registries, and interop tests;
-- commercial/private dependencies are explicit;
-- validation status matches evidence;
-- Agency Boundary gates are explicit when needed.
-
-If a required runtime path is unknown, record it in `missing_pieces` and do not
-write runnable-looking placeholder commands.
-
-## Executable Demo And Runbook Requirements
-
-A Demo is optional validation downstream from a Recipe. Do not make Demo generation
-a prerequisite for answering the user's requirement.
-
-Before executable steps, collect target-environment details when they change
-commands, feasibility, or Agency Boundary: OS, architecture, execution mode, GUI,
-SHM access, runtime versions, Python environment, Hakoniwa install prefix, build
-status, physical devices, and commercial/private availability.
-
-Before local execution of SHM/PDU Recipes, run or ask the user to run:
-
-```bash
-bash tools/doctor.bash
-```
-
-A passing doctor check is environment evidence, not behavior verification.
-
-Treat fetching, building, launching, opening GUI/browser processes, modifying
-adjacent repositories, deploying, connecting hardware, and incurring cost as
-side-effecting actions. Confirm the requested execution scope and Agency Boundary
-before proceeding. Track cleanup for long-running processes.
-
-Avoid broad cleanup such as killing every Python process. Stop known launcher
-sessions and recorded PIDs only.
-
-## Demo Observability Requirements
-
-When a runnable Demo is used to validate a Recipe, it must make intended behavior
-observable. State success signals, failure signals, required fixtures, automatic
-controllers or scripted inputs, and the evidence used to distinguish process
-lifecycle from actual behavior.
-
-Launcher termination or startup alone is not proof that the composition worked.
-
-## Multi-Process Mirror Demos
-
-For multi-robot Hakoniwa demos, check `recipes/README.md` for the Multi-Process
-Mirror Pattern. Make Conductor ownership, viewer ownership, real versus mirrored
-robots, pose PDU publications/subscriptions, and controller targets explicit.
-Only one simulator process should own Conductor startup.
-
-## Recipe Principles
-
-A Hakoniwa Recipe is the primary system-composition answer to a concrete user
-requirement. It should explain how the selected architecture can satisfy the interpreted
-Use Case and required Capabilities, while making assumptions, evidence, gaps, and
-validation status explicit.
-
-It should explain assets, runtime ownership, PDU exchange, Endpoint/Bridge connections,
-time model, Registry-generated artifacts, validation, observability when needed, and
-Agency Boundary.
-
-Separate artifact sets by consumer intent:
-
-- `physics_artifacts`
-- `visualization_artifacts`
-- `pdu_artifacts`
-- `runtime_artifacts`
-
-State validation separately for each artifact set.
-
-If the user asks for implementation, create or update a Recipe first unless an
-appropriate Recipe already exists.
-
-A Recipe can be valuable before execution. Do not require a runnable Demo when the
-user primarily needs architecture, feasibility, missing pieces, or a credible path to
-implementation.
-
-## Use Case Fragments
-
-During normal user interaction, do not try to maintain a complete use-case taxonomy.
-However, recognize when a user's request may represent a reusable demand pattern.
-
-A promising request can be treated as a Use Case Fragment candidate even when it is
-incomplete, customer-specific, or not yet feasible.
-
-The agent's responsibility is limited to preserving the signal conceptually:
-
-- what the user is trying to achieve;
-- why it may be reusable;
-- which required Capabilities appear relevant;
-- which gaps were exposed by Recipe analysis.
-
-Do not promote fragments into canonical Use Cases during ordinary conversation unless
-the user explicitly asks for repository curation.
-Periodic clustering, generalization, and promotion are maintainer responsibilities.
-See `MAINTAINER.md`.
-
-## Knowledge Refinement Loop
-
-Do not let reusable knowledge discovered during source inspection, runtime
-validation, Recipe work, or expert conversation disappear into a one-off answer.
-
-Use this flow:
+After a bootstrap-style repository understanding task, report at least:
 
 ```text
-Source code / Docs / Runtime evidence / Expert correction
-  -> Observation
-  -> Knowledge Candidate
-  -> Validation / Review
-  -> Promotion
+I have read:
+- AGENTS.md router: yes/no
+- AGENTS-USER.md: yes/no
+- AGENTS-MAINTAINER.md: yes/no
+- docs/hakoniwa-base-ecosystem-ja.md: yes/no
+- docs/hakoniwa-component-asset-guide-ja.md: yes/no
+- catalog/index.yaml: yes/no
+- catalog/schema.yaml: yes/no
+- docs/hakoniwa-runtime-primer.md: yes/no
+- relevant component catalogs: <names or none>
+- relevant recipes: <names or none>
+
+Active role:
+- user-solution | maintainer-learning
+
+Current understanding:
+- what this repository is
+- how the Hakoniwa ecosystem is structured
+- where the relevant components fit
+- what Hakoniwa runtime assumptions matter
+- what can be proposed from Catalog and Recipe evidence
+- what is feasible, verified, unknown, or blocked
+- how reusable discoveries and demand signals feed back into Business Pack knowledge
 ```
 
-When a discovery is potentially reusable, decide whether it is:
-
-- `implementation_fact`
-- `runtime_rule`
-- `design_intent`
-- `architectural_principle`
-- `usage_pattern`
-- `known_pitfall`
-
-Create or update a Knowledge Candidate under `knowledge/` with source evidence,
-confidence, validation status, contradictions, and likely promotion targets.
-
-Do not directly rewrite high-level guides from a weak inference or a single code
-search hit. Promote knowledge only to the layer that owns the concept:
-
-- **Catalog**: component-specific facts, capabilities, interfaces, constraints.
-- **Runtime Primer**: runtime contracts, startup/order rules, execution behavior.
-- **Base Ecosystem Guide**: common architecture, cross-cutting design principles.
-- **Component / Asset Guide**: ecosystem positioning and component role distinctions.
-- **Recipe / Pattern**: reusable compositions, connection contracts, proven workflows.
-
-Developer or domain-expert corrections are important evidence, especially for
-`design_intent` and `architectural_principle`. Preserve the reasoning behind why a
-component or architecture exists, not only what the current code happens to do.
-
-When promoted knowledge changes an existing document, update the source Knowledge
-Candidate with the promotion target and revision so provenance remains traceable.
-
-For the full process and candidate format, read:
-
-- `docs/hakoniwa-knowledge-refinement-loop.md`
-- `knowledge/README.md`
-- `knowledge/candidate-template.yaml`
-
-## Licensing, Distribution, And Private Repositories
-
-Repository visibility, component identity, and distribution/license rights are
-separate facts. Mention commercial, non-commercial, or dual-license dependencies
-when relevant. Do not treat a public repository as OSS unless its license supports
-that claim, and do not claim private/commercial source distribution is public.
-
-License choice and entitlement may be an Agency Boundary gate.
-
-## Validation Commands
-
-Run after changing catalog entries:
-
-```bash
-ruby catalog/tools/validate_catalog.rb
-ruby catalog/tools/generate_index.rb
-```
-
-Run after changing recipes:
-
-```bash
-ruby recipes/tools/validate_recipes.rb
-```
-
-The index is generated from detailed component YAML files. Do not hand-edit
-`catalog/index.yaml` except to debug the generator.
-
-## Authoring Rules
-
-- Keep facts grounded in source repositories.
-- Preserve `verification.source_revision` for Catalog entries.
-- Put uncertainty in `known_gaps` or `missing_pieces`.
-- Use controlled vocabulary from `catalog/schema.yaml`.
-- Keep `connects_to.direction` precise:
-  - `uses`: current component depends on or consumes the target.
-  - `used_by`: target commonly consumes or builds on the current component.
-  - `bidirectional`: both sides coordinate as peers.
-  - `related`: useful for planning, but not a direct dependency.
+The purpose of the router is not to create two isolated agents. It is to make the active responsibility explicit while allowing a controlled handoff between **using Hakoniwa** and **improving Hakoniwa's reusable knowledge**.
