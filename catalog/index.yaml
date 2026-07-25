@@ -204,28 +204,35 @@ components:
   - visualization-assets
   maturity: active
   distribution: oss
-  summary: ROS-independent robot body registry that converts upstream robot descriptions
-    into committed URDF, MJCF, GLB, PDU, and Godot-ready artifacts.
+  summary: 'ROS-independent robot-body preparation and registry layer that materializes
+    upstream robot descriptions, normalizes them into stable body artifacts, and can
+    generate target-specific artifacts for MuJoCo, PDU, and Godot consumers without
+    taking ownership of downstream runtime behavior.
+
+    '
   recipe_roles:
   - registry
   - data_model
   - asset_generator
   - visualization_asset_source
   connects_to:
-  - hakoniwa-pdu-registry
-  - hakoniwa-godot
   - hakoniwa-mujoco-robots
+  - hakoniwa-godot
+  - hakoniwa-pdu-registry
   - hakoniwa-pdu-endpoint
   tags:
   - hakoniwa
-  - mbody
   - robot-body
+  - registry
   - urdf
+  - xacro
   - mjcf
+  - mujoco
   - glb
   - godot
-  - mujoco
-  - registry
+  - pdu
+  - asset-generation
+  - source-materialization
   catalog_path: components/hakoniwa-mbody-registry.yaml
 - id: hakoniwa-mujoco-robots
   name: Hakoniwa MuJoCo Robots
@@ -621,4 +628,3 @@ components:
   - multi-drone
   - 100-drones
   catalog_path: components/hakoniwa-threejs-drone.yaml
-
