@@ -72,6 +72,13 @@ sources:
         ROS 2 rmw_zenoh_cpp libzenohc.so were encountered. The reporter isolated the Zenoh
         runtime collision by changing LD_LIBRARY_PATH ordering; PR #41 replaces that
         workaround with component-owned static zenoh-c linkage and explicit preflight.
+    - description: >-
+        PR #41 CI run 30146408019 passed on revision
+        78c93c2939daf2ac5fd8823d2ef091b3e271311c. The run includes the existing Linux native,
+        Linux Python, macOS Python, Windows Python, and three-OS build-manifest jobs plus a
+        dedicated linux-zenoh-shared job. That job builds BUILD_SHARED_LIBS=ON with Zenoh
+        enabled and verifies with readelf that libhakoniwa_pdu_endpoint.so does not declare
+        libzenohc.so as a dynamic NEEDED dependency.
   expert_input: []
 
 confidence: high
@@ -93,7 +100,7 @@ validation:
   notes:
     - The original Windows problem and the manifest-driven PR #40 response are verified by external reproduction plus cross-platform CI.
     - The ARM64/ROS 2/Zenoh failure modes are based on a concrete third-party Raspberry Pi reproduction in issue #36 and source-level dependency analysis.
-    - PR #41 adds executable CI coverage for shared pdu-endpoint + Zenoh and asserts that the resulting ELF does not declare libzenohc.so as a dynamic dependency.
+    - PR #41 CI verifies shared pdu-endpoint + Zenoh builds successfully and that the resulting ELF does not declare libzenohc.so as a dynamic dependency.
     - Post-fix verification on the reporter's Raspberry Pi / ROS 2 Jazzy environment is still required before resolution.verified can become true.
 
 tracking:
