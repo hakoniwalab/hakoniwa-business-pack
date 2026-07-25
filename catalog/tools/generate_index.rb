@@ -39,7 +39,6 @@ components = Dir[File.join(COMPONENTS_DIR, "*.yaml")]
 
 index = {
   "index_version" => 0.1,
-  "generated_at" => Date.today.iso8601,
   "generated_by" => "catalog/tools/generate_index.rb",
   "description" => "Lightweight search index for Hakoniwa component catalogs.",
   "components" => components
@@ -47,4 +46,3 @@ index = {
 
 File.write(INDEX_PATH, "#{index.to_yaml.sub(/^---\n/, "")}\n")
 puts "generated #{INDEX_PATH} (components=#{components.length})"
-
