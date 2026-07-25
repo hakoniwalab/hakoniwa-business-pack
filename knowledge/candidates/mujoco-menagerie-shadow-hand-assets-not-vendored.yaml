@@ -1,5 +1,5 @@
 id: mujoco-menagerie-shadow-hand-assets-not-vendored
-title: hakoniwa-mujoco-robots' vendored shadow_hand MJCF is missing its assets/ mesh directory
+title: Shadow Hand mesh assets must be reproducibly materialized instead of hand-vendored
 status: candidate
 
 knowledge_type:
@@ -7,13 +7,14 @@ knowledge_type:
   - validation_rule
 
 summary: >
-  thirdparty/mujoco_menagerie is not a git submodule in hakoniwa-mujoco-robots; each robot
-  directory is hand-vendored. The unitree_go1 directory includes its assets/ mesh
-  subdirectory, but the shadow_hand directory does not -- right_hand.xml declares
-  `<compiler meshdir="assets" .../>` and the directory is simply absent. The Shadow Hand
-  Hakoniwa asset binary therefore fails at MuJoCo model load with a generic
-  "[ERROR] Failed to initialize Shadow Hand model: Model loading failed" and never reaches
-  asset registration.
+  The original hakoniwa-mujoco-robots Shadow Hand sample hand-vendored only part of the
+  MuJoCo Menagerie shadow_hand tree, so right_hand.xml referenced an assets/ directory
+  whose OBJ meshes were absent. The durable fix is not to commit the upstream mesh files
+  directly into hakoniwa-mujoco-robots. Instead, hakoniwa-mbody-registry owns a pinned
+  MuJoCo Menagerie source definition and forge.mode=mjcf_passthrough materialization flow,
+  while hakoniwa-mujoco-robots consumes that materialized model through its mbody-registry
+  submodule. Missing-model failures should therefore be addressed by reproducing the
+  pinned materialization flow, not by manually copying individual OBJ/STL/DAE assets.
 
 observation:
   context: >
@@ -22,31 +23,36 @@ observation:
     sample worked correctly with the same launch pattern (WorkingDirectory =
     hakoniwa-mujoco-robots repo root, --no-viewer, no config path argument).
   details:
-    - "`find thirdparty/mujoco_menagerie/unitree_go1 -maxdepth 1 -type d` shows an assets/
-      subdirectory; the identical find for shadow_hand shows none -- only 10 top-level
-      files (CHANGELOG.md, keyframes.xml, left_hand.xml, LICENSE, README.md, right_hand.xml,
-      scene_left.xml, scene_right.xml, scene_right.xml, shadow_hand.png)."
-    - "right_hand.xml line 2: `<compiler angle=\"radian\" meshdir=\"assets\"
-      autolimits=\"true\"/>` -- confirms the model depends on a local assets/ dir for its
-      14 .obj meshes, not on any absolute or repo-wide mesh path."
-    - "Fix: fetch the 14 missing .obj files directly from
-      raw.githubusercontent.com/google-deepmind/mujoco_menagerie/main/shadow_hand/assets/
-      (or an equivalent full clone) into thirdparty/mujoco_menagerie/shadow_hand/assets/.
-      After doing so, shadow-hand-hakoniwa-asset.exe --no-viewer loads correctly and
-      reaches 'Shadow Hand Hakoniwa asset started.' / WAIT START."
-    - "This is a vendoring gap in hakoniwa-mujoco-robots itself, not a Hakoniwa or MuJoCo
-      bug -- worth checking any other individually-vendored mujoco_menagerie robot
-      directory for the same kind of partial copy before assuming 'Model loading failed'
-      means a config or API problem."
+    - "Before the durable fix, `find thirdparty/mujoco_menagerie/unitree_go1 -maxdepth 1 -type d`
+      showed an assets/ subdirectory while the identical find for shadow_hand did not."
+    - "right_hand.xml declares `<compiler angle=\"radian\" meshdir=\"assets\" autolimits=\"true\"/>`,
+      so the model depends on local mesh files under assets/."
+    - "The external contributor verified the immediate workaround by fetching the missing OBJ
+      meshes from upstream MuJoCo Menagerie; after doing so, shadow-hand-hakoniwa-asset.exe
+      loaded correctly and reached `Shadow Hand Hakoniwa asset started.` / WAIT START."
+    - "The durable fix moved source ownership to hakoniwa-mbody-registry: the Menagerie revision,
+      selected shadow_hand/ tree, and MJCF passthrough behavior are versioned, while the external
+      mesh assets are materialized locally and remain outside Git history."
+    - "hakoniwa-mujoco-robots now updates the mbody-registry submodule and documents a
+      prepare-model.bash flow instead of relying on the incomplete hand-vendored Menagerie copy."
 
 sources:
   repositories:
     - repository: hakoniwalab/hakoniwa-mujoco-robots
       path: thirdparty/mujoco_menagerie/shadow_hand/
-      revision: main
+      revision: 1aca84b3070e4538b389a70565e24f978a3798e9
     - repository: google-deepmind/mujoco_menagerie
-      path: shadow_hand/assets/
-      revision: main
+      path: shadow_hand/
+      revision: 71f066ad0be9cd271f7ed58c030243ef157af9f4
+    - repository: hakoniwalab/hakoniwa-mbody-registry
+      path: sources/shadow_hand.yaml
+      revision: 8b14d5366e156f3147a69c37cf953f7f8a1ab9fb
+    - repository: hakoniwalab/hakoniwa-mbody-registry
+      path: tools/forge.sh
+      revision: 8b14d5366e156f3147a69c37cf953f7f8a1ab9fb
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      path: examples/actuators/shadow_hand/prepare-model.bash
+      revision: 1abffe415e15635503a46de2d2c50b246ca52545
   runtime_evidence:
     - description: >-
         Reproduced on an external contributor's Windows 11 x86_64 workspace (native build,
@@ -55,6 +61,11 @@ sources:
         assets/ directory was fetched, and a full successful run (WAIT START through
         WAIT STOP/WAIT RESET, tendon-coupled joint readback matching the README's expected
         signals) after fetching it.
+    - description: >-
+        The durable materialization path was CI-validated in hakoniwa-mbody-registry#16 and
+        hakoniwa-mujoco-robots#38, including a real sparse fetch of the pinned Menagerie
+        revision, recursive MJCF include/mesh validation, submodule initialization, and
+        creation of the materialized scene_right.xml.
   expert_input: []
 
 confidence: high
@@ -66,30 +77,48 @@ validation:
   required: []
   notes:
     - Verified by an actual model-load failure, then an actual successful run after fetching the missing assets.
+    - The replacement materialization mechanism is CI-verified, but the merged fix still needs an explicit Hakoniwa runtime re-verification before resolution.verified can become true.
 
 tracking:
-  implementation_status: open
+  implementation_status: resolved
   issues:
     - repository: hakoniwalab/hakoniwa-mujoco-robots
       number: 37
       relation: fix
-      status: open
+      status: closed
+    - repository: hakoniwalab/hakoniwa-mbody-registry
+      number: 14
+      relation: fix
+      status: closed
 
 promotion_targets:
   catalog:
     - hakoniwa-mujoco-robots
+    - hakoniwa-mbody-registry
   runtime_primer: false
   base_ecosystem_guide: false
   component_asset_guide: false
   recipes: []
 
 promotion_rationale:
-  - Directly reusable for anyone bringing up shadow_hand (or auditing other individually-vendored mujoco_menagerie robots) with hakoniwa-mujoco-robots.
+  - Directly reusable for external robot models whose MJCF/URDF depends on mesh assets that should not be hand-vendored into runtime repositories.
+  - Establishes the responsibility boundary: mbody-registry owns reproducible body-model acquisition/materialization; mujoco-robots owns Hakoniwa/MuJoCo runtime integration.
 
 resolution:
-  status: pending
-  fixed_by: []
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-mbody-registry
+      issue: 14
+      pull_request: 16
+      revision: 8b14d5366e156f3147a69c37cf953f7f8a1ab9fb
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      issue: 37
+      pull_request: 38
+      revision: 1abffe415e15635503a46de2d2c50b246ca52545
   verified: false
   promoted_to: []
+  executable_guardrails: []
   notes:
-    - Candidate only. Implementation follow-up is tracked in hakoniwalab/hakoniwa-mujoco-robots#37.
+    - The implementation issue chain is resolved and both fixing PRs are merged.
+    - The new forge/materialization flow has passed CI in both repositories.
+    - Keep verified=false until the merged mujoco-robots revision is run through the Hakoniwa Shadow Hand runtime and reaches the expected runtime state using the materialized model.
