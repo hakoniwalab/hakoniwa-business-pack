@@ -5,15 +5,24 @@ repository:
   name: hakoniwa-mbody-registry
   url: https://github.com/hakoniwalab/hakoniwa-mbody-registry
   visibility: public
+
 distribution:
   channel: oss
   notes:
     - Public OSS Hakoniwa component.
+    - Upstream robot descriptions and meshes retain their upstream licenses when materialized locally.
+
 verification:
-  verified_at: 2026-07-19
-  source_revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
+  verified_at: 2026-07-25
+  source_revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
   source_ref: main
-summary: ROS-independent robot body registry that converts upstream robot descriptions into committed URDF, MJCF, GLB, PDU, and Godot-ready artifacts.
+
+summary: >
+  ROS-independent robot-body preparation and registry layer that materializes upstream
+  robot descriptions, normalizes them into stable body artifacts, and can generate
+  target-specific artifacts for MuJoCo, PDU, and Godot consumers without taking
+  ownership of downstream runtime behavior.
+
 category:
   primary: data-model
   secondary:
@@ -26,309 +35,290 @@ status:
   maturity: active
   catalog_confidence: high
   notes:
-    - Cataloged from README and documented toolchain.
-    - This is the physical-body counterpart to hakoniwa-pdu-registry.
+    - Current responsibility boundary was re-reviewed after TurtleBot3, AgileX Tracer, and Shadow Hand cross-repository validation.
+    - Artifact preparation/export belongs here; runtime lifecycle, control, transport, and synchronization behavior belong downstream.
 
 capabilities:
-  - name: Robot body artifact registry
-    description: Stores source snapshots, conversion tools, and committed generated robot body outputs under predictable paths.
+  - name: Reproducible robot source materialization
+    description: >
+      Uses declarative sources/*.yaml entries, optionally pinned to an upstream revision,
+      to materialize the robot-description inputs needed for conversion or direct use.
     evidence:
       - repository: hakoniwalab/hakoniwa-mbody-registry
-        path: README.md
-        revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
-  - name: ROS-free conversion pipeline
-    description: Converts xacro or xacro-enabled URDF into plain URDF, MuJoCo XML, and GLB using bundled Python tools without requiring a full ROS install.
+        path: docs/local-source-materialization.md
+        revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: tools/fetch.py
+        revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+
+  - name: ROS-free Xacro and URDF normalization
+    description: >
+      Converts Xacro or Xacro-enabled URDF to plain URDF without a ROS runtime and can
+      resolve ROS-style $(find PACKAGE) expressions from explicit --package NAME=PATH mappings.
     evidence:
       - repository: hakoniwalab/hakoniwa-mbody-registry
-        path: README.md
-        revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
-  - name: MuJoCo-ready assets
-    description: Generates canonical MJCF and actuated MuJoCo XML for downstream robot simulation.
+        path: tools/xacro2urdf.py
+        revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: docs/xacro-package-mapping.md
+        revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+
+  - name: Structural MJCF generation
+    description: Converts normalized URDF into canonical MuJoCo XML for downstream preparation and runtime consumption.
     evidence:
       - repository: hakoniwalab/hakoniwa-mbody-registry
-        path: README.md
-        revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
-  - name: MuJoCo minimal-world composition
-    description: Can compose generated robot MJCF into a minimal MuJoCo world from bodies/{name}/config/mujoco_world.yaml, preserving generated robot XML as tool output instead of requiring hand-maintained MJCF forks.
+        path: tools/urdf2mjcf.py
+        revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+
+  - name: Direct authoritative MJCF materialization
+    description: >
+      Supports forge.mode mjcf_passthrough for upstream projects that already provide
+      authoritative MJCF, preserving the source tree and validating include/mesh closure
+      instead of forcing a URDF conversion path.
     evidence:
       - repository: hakoniwalab/hakoniwa-mbody-registry
-        path: tools/mjcf_compose_world.py
-        revision: local-validation-2026-07-22
+        path: docs/mjcf-passthrough.md
+        revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
       - repository: hakoniwalab/hakoniwa-mbody-registry
-        path: bodies/agilex_tracer/config/mujoco_world.yaml
-        revision: local-validation-2026-07-22
-  - name: MuJoCo collision overlay
-    description: Can layer primitive collision geoms and contact excludes onto generated MJCF from config inputs when source mesh contacts are unsuitable for stable actuation.
-    evidence:
+        path: tools/validate_mjcf_assets.py
+        revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
       - repository: hakoniwalab/hakoniwa-mbody-registry
-        path: tools/mjcf_apply_collision_primitives.py
-        revision: local-validation-2026-07-22
-      - repository: hakoniwalab/hakoniwa-mbody-registry
-        path: tools/mjcf_add_contact_excludes.py
-        revision: local-validation-2026-07-22
-      - repository: hakoniwalab/hakoniwa-mbody-registry
-        path: bodies/agilex_tracer/config/collision_primitives.yaml
-        revision: local-validation-2026-07-22
-  - name: DAE mesh preprocessing for MuJoCo conversion
-    description: Can preprocess URDF-referenced COLLADA DAE meshes into OBJ and feed the rewritten URDF into MuJoCo conversion for models whose DAE meshes are not accepted by the installed MuJoCo decoder.
+        path: sources/shadow_hand.yaml
+        revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+
+  - name: Mesh preprocessing for MuJoCo conversion
+    description: >
+      Can preprocess URDF-referenced COLLADA DAE meshes into OBJ and rewrite the URDF
+      before MuJoCo compilation when the installed MuJoCo decoder cannot consume the source meshes.
     evidence:
       - repository: hakoniwalab/hakoniwa-mbody-registry
         path: tools/urdf_dae2obj.py
-        revision: 862bb8d137d0f82b40adf4e7ed499399d14de54c
+        revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
       - repository: hakoniwalab/hakoniwa-mbody-registry
-        path: tools/forge.sh
-        revision: local-validation-2026-07-22
-      - repository: hakoniwalab/hakoniwa-mbody-registry
-        path: bodies/agilex_tracer/generated/tracer_v1.xml
-        revision: local-validation-2026-07-22
-  - name: Godot-ready assets and sync configs
-    description: Generates Godot scenes, endpoint configs, and robot_sync.profile.json consumed by hakoniwa-godot.
+        path: sources/agilex_tracer.yaml
+        revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+
+  - name: MuJoCo target artifact preparation
+    description: >
+      Can add actuator definitions, collision primitives, contact excludes, and compose a
+      minimal MuJoCo world from declarative robot-specific inputs while leaving runtime
+      controller semantics and simulation lifecycle downstream.
     evidence:
       - repository: hakoniwalab/hakoniwa-mbody-registry
-        path: README.md
-        revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
-  - name: PDU manifest conversion
-    description: Converts pdu-manifest.yaml into canonical pdutypes.json and compact pdu_def.json.
+        path: tools/mjcf_add_actuators.py
+        revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: tools/mjcf_apply_collision_primitives.py
+        revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: tools/mjcf_add_contact_excludes.py
+        revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: tools/mjcf_compose_world.py
+        revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+
+  - name: GLB and runtime-neutral view-model generation
+    description: >
+      Produces single or split GLB visual assets and a view-only model derived from
+      structural body information for downstream visual runtimes.
     evidence:
       - repository: hakoniwalab/hakoniwa-mbody-registry
-        path: README.md
-        revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
+        path: tools/mjcf2glb.py
+        revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: docs/view-model.md
+        revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+
+  - name: Declarative PDU artifact generation
+    description: Converts pdu-manifest.yaml into canonical pdutypes.json and compact pdu_def.json for downstream wiring.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: tools/pdu_manifest2types.py
+        revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: tools/pdu_manifest2def.py
+        revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+
+  - name: Godot target artifact generation
+    description: >
+      Generates robot-specific Godot scenes, endpoint config, and robot_sync.profile.json
+      while hakoniwa-godot remains responsible for addon, endpoint, scene, and sync runtime behavior.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: tools/hako_godot_scene_gen.py
+        revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: tools/godot_sync2endpoint.py
+        revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: tools/godot_sync2profile.py
+        revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
 
 limitations:
-  - Not a runtime simulator.
-  - Runtime wiring is owned by downstream projects such as hakoniwa-godot and MuJoCo-side Hakoniwa runners.
-  - Sensor runtime config is described as downstream-owned, not generated by the core toolchain here.
-  - Fetched upstream source snapshots under bodies/{name}/source are local inputs and are not committed.
+  - Not a runtime simulator and does not own simulation stepping or runtime lifecycle.
+  - Runtime actuator/control semantics belong to downstream MuJoCo-side runners such as hakoniwa-mujoco-robots.
+  - PDU transport and endpoint runtime behavior are downstream responsibilities.
+  - Godot addon, scene execution, endpoint integration, and synchronization behavior belong to hakoniwa-godot.
+  - Successful artifact generation is not proof that a downstream runtime composition is behaviorally verified.
+  - Third-party source material under bodies/{name}/source may need local materialization and is intentionally not committed.
+  - tools/mjcf2pdu.py is a legacy body-list helper; new definitions should use pdu-manifest.yaml conversion tools.
 
 interfaces:
   inputs:
-    - name: Source fetch definition
+    - name: Source definition
       kind: config
-      description: sources/*.yaml declares upstream repository, branch, and files to sparse-fetch.
+      description: sources/*.yaml declares upstream repository, revision, selected paths, and optional forge behavior.
     - name: Xacro or URDF source
       kind: file
-      description: Robot source description fetched under bodies/{name}/source.
-    - name: Source adapter
-      kind: command
-      description: Optional robot-specific source normalization step used when upstream ROS-origin xacro includes, Gazebo-only tags, or mesh URI conventions are not directly accepted by the ROS-free conversion tools.
-    - name: Actuator config
+      description: ROS-origin robot description used by the normal conversion flow.
+    - name: Authoritative MJCF source
+      kind: file
+      description: Upstream MJCF tree used by forge.mode mjcf_passthrough.
+    - name: Robot preparation configs
       kind: config
-      description: bodies/{name}/config/actuators.yaml used to add actuators to MJCF.
-    - name: MuJoCo world config
-      kind: config
-      description: bodies/{name}/config/mujoco_world.yaml used to compose a generated robot MJCF into a minimal MuJoCo world.
-    - name: Collision primitive config
-      kind: config
-      description: Optional bodies/{name}/config/collision_primitives.yaml used to add simple collision geoms without hand-editing generated MJCF.
-    - name: Contact exclude config
-      kind: config
-      description: Optional bodies/{name}/config/contact_excludes.yaml used to suppress internal body contacts in generated MJCF.
-    - name: PDU manifest
-      kind: config
-      description: pdu-manifest.yaml used to produce pdutypes.json and pdu_def.json.
-    - name: Godot sync config
-      kind: config
-      description: godot_sync.yaml used to generate endpoint and sync profile artifacts.
+      description: Optional actuator, collision, contact, world, PDU, viewer, and Godot export inputs.
   outputs:
-    - name: URDF
+    - name: Normalized URDF
       kind: file
-      description: Plain URDF under bodies/{name}/generated.
-    - name: MJCF
+      description: Plain URDF produced by the ROS-free normalization path.
+    - name: Structural or prepared MJCF
       kind: file
-      description: Canonical and actuated MuJoCo XML under bodies/{name}/generated.
-    - name: Minimal MuJoCo world
+      description: Canonical MJCF and optional target-prepared variants such as actuated/collision/world artifacts.
+    - name: Visual assets
       kind: file
-      description: Optional bodies/{name}/generated/{entry}.minimal_world.xml composed from generated robot MJCF and mujoco_world.yaml.
-    - name: Collision-overlaid MJCF
-      kind: file
-      description: Optional generated MJCF with primitive collision geoms and contact excludes applied before world composition.
-    - name: OBJ-rewritten URDF
-      kind: file
-      description: Optional intermediate URDF with DAE mesh references rewritten to OBJ before MuJoCo compilation.
-    - name: GLB
-      kind: file
-      description: Single or split GLB visual assets.
-    - name: PDU configs
+      description: Single or split GLB artifacts and runtime-neutral view-model files.
+    - name: PDU definitions
       kind: config
-      description: pdutypes.json and pdu_def.json for Hakoniwa PDU wiring.
-    - name: Godot scene and sync profile
+      description: Generated pdutypes.json and pdu_def.json from a declarative PDU manifest.
+    - name: Godot export artifacts
       kind: file
-      description: Generated .tscn scenes, endpoint_shm_with_pdu.json, and robot_sync.profile.json.
+      description: Generated .tscn scenes, endpoint config, and robot_sync.profile.json.
   protocols: []
   configuration:
-    - path: sources/tb3.yaml
-      description: TurtleBot3 fetch definition.
-    - path: bodies/turtlebot3/config
-      description: Robot-specific actuator, PDU, viewer, and Godot sync configs.
-    - path: requirements.txt
-      description: Python dependencies.
+    - path: sources/*.yaml
+      description: Reproducible upstream source/materialization definitions.
+    - path: bodies/<name>/config
+      description: Robot-specific preparation and target-exporter inputs.
 
 dependencies:
   required:
     - name: Python 3
       type: runtime
-      notes: Required for all conversion tools.
+      notes: Used by the conversion, normalization, exporter, and validation tools.
     - name: requirements.txt packages
       type: package
-      notes: Install with python3 -m pip install -r requirements.txt.
+      notes: Install into a repository-local virtual environment for the normal toolchain.
   optional:
     - name: Git
       type: tool
-      notes: Required by fetch.py to sparse-fetch upstream robot source files.
-    - name: Godot
-      type: runtime
-      notes: Required only when consuming generated scenes in a Godot project.
+      notes: Required when fetch.py materializes upstream repositories.
     - name: MuJoCo
       type: runtime
-      notes: Required only when consuming generated MJCF in MuJoCo runtime.
-
-platforms:
-  supported:
-    - macOS
-    - Linux
-  notes:
-    - Toolchain is Python-based; exact Windows support is not stated in README.
+      notes: Required for URDF-to-MJCF compilation and for validating generated MuJoCo artifacts.
+    - name: Godot
+      type: runtime
+      notes: Required only for downstream consumption/validation of generated Godot artifacts.
 
 connects_to:
-  - component_id: hakoniwa-pdu-registry
-    direction: related
-    interface: registry pattern / PDU config outputs
-    notes: MBody registry mirrors the registry philosophy and produces PDU config artifacts for body-related sync.
-  - component_id: hakoniwa-godot
-    direction: used_by
-    interface: generated scene / endpoint config / robot_sync.profile.json
-    notes: Godot consumes generated scene and sync artifacts at runtime.
   - component_id: hakoniwa-mujoco-robots
     direction: used_by
-    interface: generated MJCF / actuated XML / GLB / PDU configs
-    notes: MuJoCo-side robot runtimes can consume generated physical model artifacts.
+    interface: generated MJCF / prepared MuJoCo artifacts
+    notes: MBody prepares artifacts; hakoniwa-mujoco-robots owns downstream simulation/control behavior.
+  - component_id: hakoniwa-godot
+    direction: used_by
+    interface: GLB / view-model / scene / endpoint / sync-profile artifacts
+    notes: MBody generates robot-specific artifacts; hakoniwa-godot owns runtime visualization and sync behavior.
+  - component_id: hakoniwa-pdu-registry
+    direction: related
+    interface: registry pattern / PDU type conventions
+    notes: MBody mirrors the reproducible-registry philosophy and can generate body-related PDU configuration artifacts.
   - component_id: hakoniwa-pdu-endpoint
     direction: related
-    interface: generated endpoint_shm_with_pdu.json / pdu_def.json
-    notes: Generated endpoint configs are consumed by downstream endpoint-based runtimes.
-
-data_contracts:
-  - name: Mold-body pipeline
-    description: Robot body source is treated as a mold that can be cast into URDF, MJCF, GLB, PDU config, and Godot profile artifacts.
-    source:
-      - repository: hakoniwalab/hakoniwa-mbody-registry
-        path: README.md
-        revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
-  - name: Committed generated body artifacts
-    description: bodies/{name}/generated outputs are committed so downstream users can consume stable artifacts without running the full conversion pipeline.
-    source:
-      - repository: hakoniwalab/hakoniwa-mbody-registry
-        path: README.md
-        revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
-  - name: Godot runtime split
-    description: MBody registry owns user-facing robot inputs and generated profile/config outputs; hakoniwa-godot owns runtime addon and endpoint integration.
-    source:
-      - repository: hakoniwalab/hakoniwa-mbody-registry
-        path: README.md
-        revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
+    interface: generated endpoint and PDU definition artifacts
+    notes: Endpoint runtime transport remains outside MBody.
 
 recipe_roles:
   - role: registry
-    description: Supplies stable robot body artifacts to simulators and visualizers.
+    description: Supplies reproducibly materialized robot-body sources and generated artifacts.
   - role: data_model
-    description: Defines the physical body side of a simulation product.
+    description: Defines the physical robot-body side of a simulation composition.
   - role: asset_generator
-    description: Converts upstream robot descriptions into runtime-consumable artifacts.
+    description: Normalizes and exports robot-specific artifacts for downstream consumers.
   - role: visualization_asset_source
-    description: Provides GLB and Godot scene artifacts for visual runtimes.
+    description: Provides GLB, view-model, and Godot-ready artifacts without owning the visual runtime.
 
 typical_usecases:
-  - Prepare a TurtleBot3 or other robot body for MuJoCo simulation.
-  - Generate GLB assets for visualization without manually rebuilding geometry.
-  - Install generated robot scenes and sync profiles into a Godot Hakoniwa project.
-  - Keep robot body conversions reproducible and reviewable through committed generated outputs.
+  - Materialize a pinned upstream robot description and keep the preparation path reproducible.
+  - Convert ROS-origin Xacro/URDF into structural MJCF and GLB without requiring a ROS runtime.
+  - Consume an upstream authoritative MJCF model directly when URDF conversion is inappropriate.
+  - Prepare MuJoCo-specific actuator/collision/world artifacts before handing them to a runtime runner.
+  - Generate robot-specific PDU or Godot artifacts while keeping runtime behavior in downstream components.
 
 anti_usecases:
-  - Runtime physics simulation.
-  - PDU binary type generation from ROS messages.
-  - Environment field modeling such as wind, temperature, or radio conditions.
+  - Owning simulator lifecycle, stepping, or controller behavior.
+  - Owning PDU transport, Endpoint runtime behavior, or time synchronization.
+  - Treating successful conversion as proof of a verified runtime composition.
+  - Using the legacy mjcf2pdu.py helper for new canonical PDU definitions when pdu-manifest.yaml is available.
 
 demo_candidates:
-  - name: TurtleBot3 full forge pipeline
-    description: Run forge.sh for TurtleBot3 Burger and inspect generated URDF, MJCF, actuated XML, GLB, pdutypes, and pdu_def outputs.
+  - name: TurtleBot3 forge and visual export
+    description: Materialize TurtleBot3, generate structural MJCF and GLB/view-model artifacts, then hand target artifacts to downstream visual/runtime components.
     required_components:
       - hakoniwa-mbody-registry
     source_examples:
       - repository: hakoniwalab/hakoniwa-mbody-registry
-        path: sources/tb3.yaml
-        revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
-  - name: AgileX Tracer source-adapted forge pipeline
-    description: Fetch AgileX tracer_ros at a pinned revision, adapt ROS-style xacro includes and package mesh paths, run forge.sh with DAE-to-OBJ preprocessing, and confirm the generated tracer_v1.xml loads in MuJoCo.
+        path: sources/turtlebot3_burger.yaml
+        revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+  - name: AgileX Tracer prepared MuJoCo handoff
+    description: Use the pinned Tracer source with source adaptation and DAE-to-OBJ preprocessing, generate structural/target-prepared MJCF, and hand it to hakoniwa-mujoco-robots for runtime validation.
     required_components:
       - hakoniwa-mbody-registry
+      - hakoniwa-mujoco-robots
     source_examples:
       - repository: hakoniwalab/hakoniwa-mbody-registry
         path: sources/agilex_tracer.yaml
-        revision: local-validation-2026-07-22
-      - repository: hakoniwalab/hakoniwa-mbody-registry
-        path: tools/adapt_agilex_tracer_source.py
-        revision: local-validation-2026-07-22
-  - name: Godot robot sync artifact generation
-    description: Generate endpoint_shm_with_pdu.json and robot_sync.profile.json from godot_sync.yaml for use by hakoniwa-godot.
+        revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+  - name: Shadow Hand direct MJCF materialization
+    description: Materialize the pinned MuJoCo Menagerie Shadow Hand tree, validate include/mesh closure, and consume it downstream without committing third-party mesh assets.
     required_components:
       - hakoniwa-mbody-registry
-      - hakoniwa-godot
-      - hakoniwa-pdu-endpoint
     source_examples:
       - repository: hakoniwalab/hakoniwa-mbody-registry
-        path: tools/godot_sync2endpoint.py
-        revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
-      - repository: hakoniwalab/hakoniwa-mbody-registry
-        path: tools/godot_sync2profile.py
-        revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
-
-operations:
-  build:
-    commands:
-      - python3 -m pip install -r requirements.txt
-    notes:
-      - This repository is primarily a Python toolchain and committed artifact registry.
-  test:
-    commands: []
-    notes: Add exact test commands after cataloging docs and tools.
-  run:
-    commands:
-      - ./tools/forge.sh sources/tb3.yaml turtlebot3_description/urdf/turtlebot3_burger.urdf
-    notes:
-      - Typical outputs appear under bodies/turtlebot3/generated.
-
-known_gaps:
-  - Catalog does not yet enumerate all supported robot bodies under bodies/.
-  - Need to catalog exact schemas under schemas/ for tool inputs.
-  - Need to verify which generated artifacts are committed for each robot body.
-  - Need to connect generated artifacts to concrete MuJoCo and Godot demos.
-  - Source-adapted external robots should record whether their generated artifacts are committed registry outputs or validation-only artifacts.
+        path: sources/shadow_hand.yaml
+        revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
 
 source_refs:
   - repository: hakoniwalab/hakoniwa-mbody-registry
-    path: README.md
-    revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
-    description: Main overview, registry pattern, ecosystem flow, and toolchain.
+    path: docs/responsibility-boundary.md
+    revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+    description: Current artifact-preparation versus runtime-ownership boundary.
   - repository: hakoniwalab/hakoniwa-mbody-registry
-    path: tools
-    revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
-    description: Conversion tools.
+    path: docs/stale-audit-2026-07.md
+    revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+    description: July 2026 stale-document/tool audit after cross-repository validation.
   - repository: hakoniwalab/hakoniwa-mbody-registry
-    path: schemas
-    revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
-    description: Tool input schemas.
+    path: tools/forge.sh
+    revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+    description: Current normal URDF/Xacro flow and direct-MJCF materialization orchestration.
   - repository: hakoniwalab/hakoniwa-mbody-registry
-    path: bodies
-    revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
-    description: Managed robot body sources, configs, and generated outputs.
+    path: docs/xacro-package-mapping.md
+    revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+    description: Explicit ROS-free $(find PACKAGE) mapping behavior.
+  - repository: hakoniwalab/hakoniwa-mbody-registry
+    path: docs/mjcf-passthrough.md
+    revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+    description: Direct authoritative MJCF materialization and asset-closure validation.
 
 tags:
   - hakoniwa
-  - mbody
   - robot-body
+  - registry
   - urdf
+  - xacro
   - mjcf
+  - mujoco
   - glb
   - godot
-  - mujoco
-  - registry
+  - pdu
+  - asset-generation
+  - source-materialization
