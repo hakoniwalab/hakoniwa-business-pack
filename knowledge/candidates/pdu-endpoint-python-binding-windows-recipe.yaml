@@ -1,123 +1,92 @@
 id: pdu-endpoint-python-binding-windows-recipe
-title: Building and importing hakoniwa-pdu-endpoint's Python cffi binding on Windows needs a VS dev environment plus manual DLL search paths
+title: hakoniwa-pdu-endpoint Python/cffi build should be manifest-driven and independent from optional native capabilities
 status: candidate
 
 knowledge_type:
   - known_pitfall
   - runtime_rule
   - validation_rule
+  - architecture_rule
 
 summary: >
-  hakoniwa-pdu-endpoint/build-python-win.ps1 exists and works, but two Windows-specific
-  gaps are not obvious from the script or its README: (1) the -BuildFfi step invokes
-  cffi's ffi.compile(), which shells out to cl.exe via setuptools/distutils -- this fails
-  with "Unable to find a compatible Visual Studio installation" unless the process has
-  vswhere.exe on PATH and has been launched through vcvarsall.bat (a plain PowerShell/Git
-  Bash session does not have this by default); (2) at import time, `hakoniwa_pdu_endpoint
-  .c_endpoint`'s own `_candidate_native_lib_dirs()` only auto-covers the package directory
-  and $env:HAKO_PDU_ENDPOINT_LIB_DIR -- it does NOT know about hakoniwa-core-pro's
-  install-win/bin or vcpkg's installed/x64-windows/bin, which the native
-  hakoniwa_pdu_endpoint.dll depends on, so those two extra directories must be added via
-  `os.add_dll_directory()` (PATH alone does not work: Windows Python 3.8+ ignores PATH for
-  extension-module DLL dependencies).
+  The Windows reproduction originally exposed two hidden requirements around the
+  hakoniwa-pdu-endpoint Python cffi binding: Visual Studio/setuptools discovery and
+  dependent-DLL search paths. The durable fix generalized this beyond Windows into a
+  manifest-driven cross-platform build architecture. Python/cffi is now treated as a
+  language-binding axis, independent from Hakoniwa Core, Zenoh, and MQTT. Users declare
+  intent in hakoniwa-build.yaml and use tools/hako.py doctor/configure/build/test; the
+  configurator resolves shared-library requirements, optional native capabilities,
+  toolchain discovery, and runtime library paths per platform. Hakoniwa Core remains
+  optional and is needed only for SHM/Hakoniwa-time integration, not for TCP/UDP/
+  WebSocket/Storage or Zenoh/MQTT by themselves.
 
 observation:
   context: >
     Building the Python binding needed by the Go1 and Shadow Hand joint-actuator sample
-    senders (send_go1_joint_targets.py / send_shadow_hand_targets.py in
-    hakoniwa-mujoco-robots), which import `from hakoniwa_pdu_endpoint.c_endpoint import
-    Endpoint, PduKey`.
+    senders on an external native Windows 11 x86_64 workspace.
   details:
-    - "The native shared lib (hakoniwa_pdu_endpoint.dll) was already built with
-      HAKO_PDU_ENDPOINT_ENABLE_HAKONIWA_CORE=ON at build-win/CMakeCache.txt, at
-      build-win/src/Release/hakoniwa_pdu_endpoint.dll -- so only the -BuildFfi (cffi
-      module) step was needed, not a full native rebuild."
-    - "First attempt: `build-python-win.ps1 -BuildFfi -PythonCommand <venv python>` failed
-      with `ModuleNotFoundError: No module named 'cffi'`, then after installing cffi with
-      `ModuleNotFoundError: No module named 'setuptools'` (Python 3.12's cffi shim needs
-      setuptools explicitly), then after installing setuptools with
-      `distutils.errors.DistutilsPlatformError: Unable to find a compatible Visual Studio
-      installation` even though Visual Studio 2022 is installed and `cl.exe` is reachable
-      after `vcvarsall.bat x64`."
-    - "Root cause of the VS detection failure: vswhere.exe (at
-      'C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe') was not
-      on PATH inside the vcvarsall.bat-initialized cmd session, and setuptools'
-      _distutils/compilers/C/msvc.py shells out to vswhere.exe itself to locate VS -- it
-      does not just rely on the environment variables vcvarsall.bat already set
-      (VCToolsInstallDir, VSINSTALLDIR, etc. were all present and correct)."
-    - "Fix: prepend vswhere's directory to PATH *before* calling vcvarsall.bat, in a batch
-      script: `set PATH=...\\Installer;%PATH%` then
-      `call vcvarsall.bat x64` then run the venv python invoking
-      build_c_endpoint_ffi.py directly (bypassing build-python-win.ps1's own python
-      launcher resolution isn't necessary -- the .ps1 script itself can be used once the
-      surrounding shell already has cl.exe + vswhere.exe on PATH)."
-    - "After a successful -BuildFfi run, the compiled module lands at
-      external/hakoniwa-pdu-endpoint/build/python/hakoniwa_pdu_endpoint/
-      _c_endpoint_ffi.cp312-win_amd64.pyd -- not inside the source python/
-      hakoniwa_pdu_endpoint/ package directory. This is intentional:
-      c_endpoint.py's `_candidate_python_build_roots()` already scans
-      ('build-zenoh-shared', 'build-zenoh', 'build-shared', 'build', 'build-win',
-      'build-win2') sibling dirs and inserts them into sys.path, so a plain
-      `sys.path.insert(0, '.../hakoniwa-pdu-endpoint/python')` plus that auto-discovery is
-      enough to find the compiled module -- no manual copy into the source tree needed."
-    - "Import-time DLL resolution still failed after the module was found:
-      `ImportError: DLL load failed while importing _c_endpoint_ffi: <module not found>`.
-      Root cause: c_endpoint.py's `_add_runtime_search_dirs()` (Windows-only) calls
-      os.add_dll_directory() only for `_candidate_native_lib_dirs()`, which is the package
-      dir plus $env:HAKO_PDU_ENDPOINT_LIB_DIR -- neither of which is
-      hakoniwa-core-pro/install-win/bin (shakoc.dll etc.) or
-      vcpkg/installed/x64-windows/bin (boost etc.), both of which
-      hakoniwa_pdu_endpoint.dll transitively depends on. Setting PATH to include all three
-      directories was NOT sufficient (Windows Python 3.8+'s secure DLL search ignores PATH
-      for extension modules); only explicit `os.add_dll_directory()` calls for all three
-      directories (build-win/src/Release, hakoniwa-core-pro install-win/bin, vcpkg
-      installed/x64-windows/bin) made the import succeed."
-    - "Because the vendored sender scripts should not need editing, the three
-      add_dll_directory() calls plus the python/ sys.path insert were put in a
-      standalone launcher script that runpy.run_path()s the target sender script --
-      this is a reusable pattern for launching any hakoniwa-pdu-endpoint Python
-      consumer on Windows without touching the vendored repo's own code."
+    - "The original native DLL was already buildable on Windows; the failure was not a missing Windows port. The problematic path was clean-environment Python/cffi build and import reproducibility."
+    - "The external reproduction first hit missing cffi, then missing setuptools, then Visual Studio detection failure even with Visual Studio 2022 installed. setuptools' MSVC discovery needed vswhere.exe to be discoverable."
+    - "After the cffi extension built, importing _c_endpoint_ffi still failed because transitive DLL locations such as Hakoniwa Core install-win/bin and vcpkg installed/x64-windows/bin were not registered with Python's Windows DLL search path."
+    - "The immediate workaround used explicit os.add_dll_directory() calls plus a prepared Visual Studio environment. That workaround verified the root causes but was not the desired maintainer-level solution."
+    - "The resulting architecture separates user intent from CMake/PowerShell/bash details. bindings.python controls cffi/shared-library behavior; features.hakoniwa_core, features.zenoh, and features.mqtt are independent optional native capability axes."
+    - "The default manifest enables Python/cffi while keeping Hakoniwa Core, Zenoh, and MQTT disabled. This makes Python support a normal build result without coupling it to CORE PRO."
+    - "tools/hako.py provides the same doctor/configure/build/test entry points on Windows, macOS, and Linux and writes .hako/resolved-build.yaml plus .hako/cmake-args.txt so issue reports can include the actual resolved configuration."
+    - "On Windows, the configurator preflights cffi/setuptools, detects vswhere/MSVC, resolves optional vcpkg, derives native/Core/vcpkg runtime DLL directories, and exports HAKO_PDU_ENDPOINT_RUNTIME_DIRS. The Python package registers configured runtime directories before importing the cffi extension."
+    - "The legacy build scripts and direct CMake path remain available for compatibility/advanced use; the manifest flow is the recommended user/developer entry point."
 
 sources:
   repositories:
     - repository: hakoniwalab/hakoniwa-pdu-endpoint
-      path: build-python-win.ps1
-      revision: main
+      path: hakoniwa-build.yaml
+      revision: e06c24c5f02064eda384ae3cd3a18e3b500f1468
     - repository: hakoniwalab/hakoniwa-pdu-endpoint
-      path: python/hakoniwa_pdu_endpoint/c_endpoint.py
-      revision: main
+      path: tools/hako.py
+      revision: e06c24c5f02064eda384ae3cd3a18e3b500f1468
     - repository: hakoniwalab/hakoniwa-pdu-endpoint
-      path: python/hakoniwa_pdu_endpoint/build_c_endpoint_ffi.py
-      revision: main
+      path: docs/build-architecture.md
+      revision: e06c24c5f02064eda384ae3cd3a18e3b500f1468
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      path: python/hakoniwa_pdu_endpoint/__init__.py
+      revision: e06c24c5f02064eda384ae3cd3a18e3b500f1468
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      path: .github/workflows/ci.yml
+      revision: e06c24c5f02064eda384ae3cd3a18e3b500f1468
   runtime_evidence:
     - description: >-
-        Reproduced on an external contributor's Windows 11 x86_64 workspace (native build,
-        no WSL/Docker), 2026-07-24: the exact error sequence (cffi missing -> setuptools
-        missing -> VS-not-found -> vswhere-on-PATH fix -> DLL-load-failed ->
-        add_dll_directory fix) was reproduced step by step, ending in a successful
-        combined `import hakopy; import hakoniwa_pdu; from hakoniwa_pdu_endpoint
-        .c_endpoint import Endpoint, PduKey` and then full Go1 + Shadow Hand
-        three-terminal (plant / sender / hako-cmd start-stop) smoke runs reaching each
-        README's documented expected signals.
+        External Windows 11 x86_64 reproduction on 2026-07-24 reproduced the original
+        error sequence from missing Python build packages through MSVC/vswhere discovery
+        and dependent-DLL import failure. The manual workaround ended in successful
+        imports and complete Go1 and Shadow Hand actuator smoke runs.
+    - description: >-
+        Upstream PR #40 final CI run 30142195858 completed successfully. Existing Linux
+        native, Linux Python, macOS Python, and Windows Python jobs all passed, and the new
+        build-manifest matrix resolved and tested the same manifest/configurator model on
+        Ubuntu, macOS, and Windows.
   expert_input: []
 
 confidence: high
 
-contradictions: []
+contradictions:
+  - target: "Initial mental model: Python/cffi and Hakoniwa Core are effectively one build option"
+    existing_claim: "The Windows actuator samples happened to use a pdu-endpoint DLL built with Hakoniwa Core enabled, making the two requirements appear coupled."
+    new_evidence: "The build architecture and CMake feature model show they are independent axes: Python/cffi requires a shared native library, while Hakoniwa Core is only required for SHM/Hakoniwa-time capabilities. TCP/UDP/WebSocket/Storage and Zenoh/MQTT do not inherently require Core."
 
 validation:
   status: verified
   required: []
   notes:
-    - Verified end-to-end via two independent working smoke runs (Go1 and Shadow Hand) using the resulting binding.
+    - The original Windows problem and manual workaround were verified end-to-end with Go1 and Shadow Hand.
+    - The durable upstream implementation is CI-verified on Linux, macOS, and Windows, including the existing Windows Python smoke job and the new three-OS manifest resolver tests.
+    - Independent post-merge native-Windows reproduction by an external contributor remains the preferred evidence before setting resolution.verified=true.
 
 tracking:
-  implementation_status: open
+  implementation_status: resolved
   issues:
     - repository: hakoniwalab/hakoniwa-pdu-endpoint
       number: 39
       relation: fix
-      status: open
+      status: closed
 
 promotion_targets:
   catalog:
@@ -128,12 +97,23 @@ promotion_targets:
   recipes: []
 
 promotion_rationale:
-  - Directly reusable for any future Windows work that needs hakoniwa-pdu-endpoint's Python cffi binding (any hakoniwa-mujoco-robots actuator sample beyond TB3).
+  - The Python/Core/Zenoh/MQTT independence and manifest-driven build model are reusable component-level architecture knowledge.
+  - The new doctor/configure flow is an executable guardrail that prevents future users from rediscovering the same toolchain and runtime-path assumptions manually.
 
 resolution:
-  status: pending
-  fixed_by: []
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      issue: 39
+      pull_request: 40
+      revision: e06c24c5f02064eda384ae3cd3a18e3b500f1468
   verified: false
   promoted_to: []
+  executable_guardrails:
+    - hakoniwalab/hakoniwa-pdu-endpoint:tools/hako.py
+    - hakoniwalab/hakoniwa-pdu-endpoint:.github/workflows/ci.yml
+    - hakoniwalab/hakoniwa-pdu-endpoint:hakoniwa-build.yaml
   notes:
-    - Candidate only. Implementation follow-up is tracked in hakoniwalab/hakoniwa-pdu-endpoint#39.
+    - Issue #39 is closed by merged PR #40.
+    - The maintainer-side durable fix is not a Windows-only launcher workaround; it is a cross-platform build configuration layer with platform-specific discovery below the resolver.
+    - Keep resolution.verified=false until the merged upstream revision is independently reproduced on a native Windows contributor environment. A new failure from that re-verification should become a new Knowledge Candidate rather than reopening the old manual-workaround model.
