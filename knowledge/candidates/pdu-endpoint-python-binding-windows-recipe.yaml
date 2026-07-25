@@ -1,5 +1,5 @@
 id: pdu-endpoint-python-binding-windows-recipe
-title: hakoniwa-pdu-endpoint Python/cffi build should be manifest-driven and independent from optional native capabilities
+title: hakoniwa-pdu-endpoint builds should remain manifest-driven across platforms and optional transport dependencies
 status: candidate
 
 knowledge_type:
@@ -9,31 +9,33 @@ knowledge_type:
   - architecture_rule
 
 summary: >
-  The Windows reproduction originally exposed two hidden requirements around the
-  hakoniwa-pdu-endpoint Python cffi binding: Visual Studio/setuptools discovery and
-  dependent-DLL search paths. The durable fix generalized this beyond Windows into a
-  manifest-driven cross-platform build architecture. Python/cffi is now treated as a
-  language-binding axis, independent from Hakoniwa Core, Zenoh, and MQTT. Users declare
-  intent in hakoniwa-build.yaml and use tools/hako.py doctor/configure/build/test; the
-  configurator resolves shared-library requirements, optional native capabilities,
-  toolchain discovery, and runtime library paths per platform. Hakoniwa Core remains
-  optional and is needed only for SHM/Hakoniwa-time integration, not for TCP/UDP/
-  WebSocket/Storage or Zenoh/MQTT by themselves.
+  The original Windows Python/cffi failure led to a manifest-driven cross-platform build
+  architecture in PR #40. A later Raspberry Pi / Ubuntu 24.04 / ROS 2 Jazzy report showed
+  that the same architectural rule must extend to CPU architecture and optional transport
+  dependencies rather than spawning platform-specific setup recipes. Python/cffi,
+  Hakoniwa Core, Zenoh, and MQTT remain independent capability axes. ARM64 uses the same
+  manifest flow, unsupported prebuilt artifacts must fail explicitly instead of silently
+  assuming x86_64, and optional native dependencies should be resolved so that one
+  ecosystem runtime does not accidentally load another runtime's ABI-incompatible shared
+  library. Reproducible failure conditions should be promoted into doctor checks, tests,
+  or CI rather than preserved only as troubleshooting prose.
 
 observation:
   context: >
-    Building the Python binding needed by the Go1 and Shadow Hand joint-actuator sample
-    senders on an external native Windows 11 x86_64 workspace.
+    The build architecture was first generalized from a native Windows Python/cffi
+    reproduction. Issue #36 then reported real Raspberry Pi aarch64 integration findings
+    while using Ubuntu 24.04, Python 3.12, ROS 2 Jazzy, and rmw_zenoh_cpp.
   details:
-    - "The original native DLL was already buildable on Windows; the failure was not a missing Windows port. The problematic path was clean-environment Python/cffi build and import reproducibility."
-    - "The external reproduction first hit missing cffi, then missing setuptools, then Visual Studio detection failure even with Visual Studio 2022 installed. setuptools' MSVC discovery needed vswhere.exe to be discoverable."
-    - "After the cffi extension built, importing _c_endpoint_ffi still failed because transitive DLL locations such as Hakoniwa Core install-win/bin and vcpkg installed/x64-windows/bin were not registered with Python's Windows DLL search path."
-    - "The immediate workaround used explicit os.add_dll_directory() calls plus a prepared Visual Studio environment. That workaround verified the root causes but was not the desired maintainer-level solution."
-    - "The resulting architecture separates user intent from CMake/PowerShell/bash details. bindings.python controls cffi/shared-library behavior; features.hakoniwa_core, features.zenoh, and features.mqtt are independent optional native capability axes."
-    - "The default manifest enables Python/cffi while keeping Hakoniwa Core, Zenoh, and MQTT disabled. This makes Python support a normal build result without coupling it to CORE PRO."
-    - "tools/hako.py provides the same doctor/configure/build/test entry points on Windows, macOS, and Linux and writes .hako/resolved-build.yaml plus .hako/cmake-args.txt so issue reports can include the actual resolved configuration."
-    - "On Windows, the configurator preflights cffi/setuptools, detects vswhere/MSVC, resolves optional vcpkg, derives native/Core/vcpkg runtime DLL directories, and exports HAKO_PDU_ENDPOINT_RUNTIME_DIRS. The Python package registers configured runtime directories before importing the cffi extension."
-    - "The legacy build scripts and direct CMake path remain available for compatibility/advanced use; the manifest flow is the recommended user/developer entry point."
+    - "The original Windows reproduction exposed hidden cffi/setuptools, Visual Studio/vswhere, and dependent-DLL search requirements. PR #40 converted those findings into the common hakoniwa-build.yaml + tools/hako.py doctor/configure/build/test flow."
+    - "Python/cffi is a language-binding axis. Hakoniwa Core is independent and is required only for SHM or Hakoniwa time-source integration; TCP/UDP/WebSocket/Storage and Zenoh do not inherently require Core."
+    - "Issue #36 showed that install-python.bash still assumed the Linux release artifact was x86_64. On aarch64 that should not degrade into downloading an incompatible bundle; it should select the same source-build manifest path and explain the missing prebuilt artifact."
+    - "The manifest resolver already normalizes aarch64/arm64 as arm64, so Raspberry Pi should be treated as another host architecture under the same build model rather than as a separate build system."
+    - "Issue #36 also showed that Zenoh source builds require cargo and rustc. When features.zenoh=true, that prerequisite is machine-detectable and belongs in doctor/configure preflight rather than only in a Raspberry Pi README."
+    - "With BUILD_SHARED_LIBS=ON for Python/cffi, linking zenohc::lib can select shared zenoh-c. In a ROS 2 Jazzy process, another libzenohc.so from rmw_zenoh_cpp can then satisfy the loader dependency, creating an ABI collision that the reporter observed as stack smashing / segmentation fault."
+    - "PR #41 therefore treats vendored zenoh-c as an implementation dependency and prefers zenohc::static. The intended invariant is that libhakoniwa_pdu_endpoint.so does not declare libzenohc.so as a dynamic NEEDED dependency."
+    - "The previous hard-coded /usr/lib/x86_64-linux-gnu fallback is another architecture leak; platform-specific library discovery should use the resolved CMake library architecture rather than encode x86_64 in the common component logic."
+    - "ROS 2 venv, rclpy, and colcon setup remains a hakoniwa-pdu-ros integration concern. pdu-endpoint owns its native/Python build and transport-runtime boundary and should not absorb higher-level ROS 2 workspace setup."
+    - "The maintainer lesson is broader than Raspberry Pi: platform-specific observations should first be tested against the common manifest/capability model, and reusable failure conditions should become executable guardrails at the owning component boundary."
 
 sources:
   repositories:
@@ -42,27 +44,41 @@ sources:
       revision: e06c24c5f02064eda384ae3cd3a18e3b500f1468
     - repository: hakoniwalab/hakoniwa-pdu-endpoint
       path: tools/hako.py
-      revision: e06c24c5f02064eda384ae3cd3a18e3b500f1468
+      revision: 78c93c2939daf2ac5fd8823d2ef091b3e271311c
     - repository: hakoniwalab/hakoniwa-pdu-endpoint
       path: docs/build-architecture.md
-      revision: e06c24c5f02064eda384ae3cd3a18e3b500f1468
+      revision: 78c93c2939daf2ac5fd8823d2ef091b3e271311c
     - repository: hakoniwalab/hakoniwa-pdu-endpoint
-      path: python/hakoniwa_pdu_endpoint/__init__.py
-      revision: e06c24c5f02064eda384ae3cd3a18e3b500f1468
+      path: src/CMakeLists.txt
+      revision: 78c93c2939daf2ac5fd8823d2ef091b3e271311c
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      path: install-python.bash
+      revision: 78c93c2939daf2ac5fd8823d2ef091b3e271311c
     - repository: hakoniwalab/hakoniwa-pdu-endpoint
       path: .github/workflows/ci.yml
-      revision: e06c24c5f02064eda384ae3cd3a18e3b500f1468
+      revision: 78c93c2939daf2ac5fd8823d2ef091b3e271311c
   runtime_evidence:
     - description: >-
         External Windows 11 x86_64 reproduction on 2026-07-24 reproduced the original
-        error sequence from missing Python build packages through MSVC/vswhere discovery
-        and dependent-DLL import failure. The manual workaround ended in successful
-        imports and complete Go1 and Shadow Hand actuator smoke runs.
+        Python/cffi toolchain and dependent-DLL failures and ended in successful Go1 and
+        Shadow Hand actuator smoke runs after the manual workaround.
     - description: >-
-        Upstream PR #40 final CI run 30142195858 completed successfully. Existing Linux
-        native, Linux Python, macOS Python, and Windows Python jobs all passed, and the new
-        build-manifest matrix resolved and tested the same manifest/configurator model on
-        Ubuntu, macOS, and Windows.
+        Upstream PR #40 CI passed Linux native, Linux Python, macOS Python, Windows Python,
+        and the build-manifest resolver matrix on Ubuntu, macOS, and Windows, establishing
+        the common manifest architecture before the ARM64 follow-up.
+    - description: >-
+        Issue #36 reports a Raspberry Pi aarch64 / Ubuntu 24.04 / ROS 2 Jazzy reproduction
+        where Linux x86_64 release assumptions, missing Rust prerequisites, and a competing
+        ROS 2 rmw_zenoh_cpp libzenohc.so were encountered. The reporter isolated the Zenoh
+        runtime collision by changing LD_LIBRARY_PATH ordering; PR #41 replaces that
+        workaround with component-owned static zenoh-c linkage and explicit preflight.
+    - description: >-
+        PR #41 CI run 30146408019 passed on revision
+        78c93c2939daf2ac5fd8823d2ef091b3e271311c. The run includes the existing Linux native,
+        Linux Python, macOS Python, Windows Python, and three-OS build-manifest jobs plus a
+        dedicated linux-zenoh-shared job. That job builds BUILD_SHARED_LIBS=ON with Zenoh
+        enabled and verifies with readelf that libhakoniwa_pdu_endpoint.so does not declare
+        libzenohc.so as a dynamic NEEDED dependency.
   expert_input: []
 
 confidence: high
@@ -70,23 +86,34 @@ confidence: high
 contradictions:
   - target: "Initial mental model: Python/cffi and Hakoniwa Core are effectively one build option"
     existing_claim: "The Windows actuator samples happened to use a pdu-endpoint DLL built with Hakoniwa Core enabled, making the two requirements appear coupled."
-    new_evidence: "The build architecture and CMake feature model show they are independent axes: Python/cffi requires a shared native library, while Hakoniwa Core is only required for SHM/Hakoniwa-time capabilities. TCP/UDP/WebSocket/Storage and Zenoh/MQTT do not inherently require Core."
+    new_evidence: "The manifest and CMake feature model show they are independent axes: Python/cffi requires a shared native library, while Hakoniwa Core is only required for SHM/Hakoniwa-time capabilities."
+  - target: "Raspberry Pi requires a separate manual CMake recipe"
+    existing_claim: "The original ARM64 report documented a long Raspberry Pi-specific sequence because the common build path did not yet encode all prerequisites and architecture assumptions."
+    new_evidence: "The manifest resolver already models host architecture and independent features; the reusable fix is to harden that common flow and make unsupported prebuilt artifacts/preconditions explicit."
+  - target: "ROS 2 + pdu-endpoint Zenoh should be fixed by LD_LIBRARY_PATH ordering"
+    existing_claim: "The reporter could avoid the crash by placing pdu-endpoint's zenoh-c library before ROS 2's vendor library in LD_LIBRARY_PATH."
+    new_evidence: "The stronger ownership boundary is to avoid a pdu-endpoint runtime dependency on libzenohc.so when using vendored zenoh-c, so loader search order is not part of the normal integration contract."
 
 validation:
   status: verified
   required: []
   notes:
-    - The original Windows problem and manual workaround were verified end-to-end with Go1 and Shadow Hand.
-    - The durable upstream implementation is CI-verified on Linux, macOS, and Windows, including the existing Windows Python smoke job and the new three-OS manifest resolver tests.
-    - Independent post-merge native-Windows reproduction by an external contributor remains the preferred evidence before setting resolution.verified=true.
+    - The original Windows problem and the manifest-driven PR #40 response are verified by external reproduction plus cross-platform CI.
+    - The ARM64/ROS 2/Zenoh failure modes are based on a concrete third-party Raspberry Pi reproduction in issue #36 and source-level dependency analysis.
+    - PR #41 CI verifies shared pdu-endpoint + Zenoh builds successfully and that the resulting ELF does not declare libzenohc.so as a dynamic dependency.
+    - Post-fix verification on the reporter's Raspberry Pi / ROS 2 Jazzy environment is still required before resolution.verified can become true.
 
 tracking:
-  implementation_status: resolved
+  implementation_status: in_progress
   issues:
     - repository: hakoniwalab/hakoniwa-pdu-endpoint
       number: 39
       relation: fix
       status: closed
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      number: 36
+      relation: fix
+      status: open
 
 promotion_targets:
   catalog:
@@ -95,13 +122,29 @@ promotion_targets:
   base_ecosystem_guide: false
   component_asset_guide: false
   recipes: []
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      kind: doctor
+      path: tools/hako.py
+      mode: detect-and-suggest-remediation
+      notes:
+        - Detect Python/cffi and optional Zenoh build prerequisites before build execution.
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      kind: ci
+      path: .github/workflows/ci.yml
+      mode: detect-only
+      notes:
+        - Validate the shared endpoint + Zenoh combination and reject a dynamic libzenohc.so dependency.
 
 promotion_rationale:
   - The Python/Core/Zenoh/MQTT independence and manifest-driven build model are reusable component-level architecture knowledge.
-  - The new doctor/configure flow is an executable guardrail that prevents future users from rediscovering the same toolchain and runtime-path assumptions manually.
+  - CPU architecture belongs below the same resolver; Raspberry Pi should not create a parallel user-facing build architecture.
+  - Optional transport prerequisites such as Rust are reproducibly detectable and should be executable guardrails.
+  - Runtime dependency ownership is part of the component contract: avoid relying on process-global loader ordering when another ecosystem may ship a library with the same soname.
+  - After Raspberry Pi re-verification, the pdu-endpoint Catalog should be refreshed so its operations/platform/dependency claims reflect the manifest flow rather than legacy raw-CMake defaults.
 
 resolution:
-  status: fixed
+  status: pending
   fixed_by:
     - repository: hakoniwalab/hakoniwa-pdu-endpoint
       issue: 39
@@ -114,6 +157,7 @@ resolution:
     - hakoniwalab/hakoniwa-pdu-endpoint:.github/workflows/ci.yml
     - hakoniwalab/hakoniwa-pdu-endpoint:hakoniwa-build.yaml
   notes:
-    - Issue #39 is closed by merged PR #40.
-    - The maintainer-side durable fix is not a Windows-only launcher workaround; it is a cross-platform build configuration layer with platform-specific discovery below the resolver.
-    - Keep resolution.verified=false until the merged upstream revision is independently reproduced on a native Windows contributor environment. A new failure from that re-verification should become a new Knowledge Candidate rather than reopening the old manual-workaround model.
+    - Issue #39 was resolved by merged PR #40 and established the common manifest-driven build architecture.
+    - Issue #36 is the next real-device refinement of that same knowledge lineage; PR #41 is the active implementation response.
+    - Keep resolution.verified=false until the merged #41 behavior is reproduced on Raspberry Pi / Ubuntu 24.04 / ROS 2 Jazzy, including the former stack-smashing / segmentation-fault case.
+    - When that re-verification succeeds, record PR #41 and its merge revision under fixed_by, mark issue #36 closed/resolved, and refresh the hakoniwa-pdu-endpoint Catalog from the merged source.
