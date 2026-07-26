@@ -146,10 +146,6 @@ connects_to:
     direction: related
     interface: Endpoint-style config and deterministic integration patterns
     notes: Both layers reuse endpoint topology, but bridge is data-flow transfer while rpc is request-response.
-  - component_id: hakoniwa-conductor-pro
-    direction: used_by
-    interface: installed Bridge CMake package / Bridge API
-    notes: Conductor Pro consumes the Bridge package while retaining its own polling/shakoc runtime dependency.
 
 data_contracts:
   - name: Bridge transfer policy
@@ -260,6 +256,3 @@ tags:
   - bridge
   - endpoint
   - monitor
-  - cross-platform
-  - cmake
-  - manifest
