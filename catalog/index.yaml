@@ -204,12 +204,10 @@ components:
   - visualization-assets
   maturity: active
   distribution: oss
-  summary: 'ROS-independent robot-body preparation and registry layer that materializes
+  summary: ROS-independent robot-body preparation and registry layer that materializes
     upstream robot descriptions, normalizes them into stable body artifacts, and can
     generate target-specific artifacts for MuJoCo, PDU, and Godot consumers without
     taking ownership of downstream runtime behavior.
-
-'
   recipe_roles:
   - registry
   - data_model

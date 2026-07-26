@@ -17,7 +17,7 @@ verification:
   source_revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
   source_ref: main
 
-summary: >
+summary: >-
   ROS-independent robot-body preparation and registry layer that materializes upstream
   robot descriptions, normalizes them into stable body artifacts, and can generate
   target-specific artifacts for MuJoCo, PDU, and Godot consumers without taking
