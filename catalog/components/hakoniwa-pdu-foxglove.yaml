@@ -10,8 +10,8 @@ distribution:
   notes:
     - Public OSS Hakoniwa component under the MIT license.
 verification:
-  verified_at: 2026-07-23
-  source_revision: c45ba4e76788258907777e82649edaecc7fe7bc8
+  verified_at: 2026-07-26
+  source_revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
   source_ref: main
 summary: >-
   Output-only Foxglove adapter for hakoniwa-pdu-endpoint that publishes
@@ -30,8 +30,11 @@ status:
   catalog_confidence: high
   notes:
     - Core adapter remains version 0.1 and deliberately output-only.
-    - Shadow Hand JointState publication and URDF-backed Foxglove 3D visualization were manually validated on macOS arm64 on 2026-07-23.
-    - The full Shadow Hand end-to-end workflow is currently verified only on macOS arm64; Ubuntu 24.04 Docker verification covers the core CDR publisher build/test smoke, not the complete Shadow Hand workflow.
+    - Foxglove itself consumes the Core-free installed Endpoint package target; Hakoniwa Core responsibility stays outside the Foxglove adapter.
+    - Cross-platform package/integration build contract is verified on Ubuntu x64, native Linux ARM64, macOS arm64, and Windows x64 as of 2026-07-26.
+    - The repository-level Shadow Hand integration directly uses hakoniwa-pdu-bridge-core with Endpoint core_callback on the Hakoniwa side.
+    - Shadow Hand JointState publication and URDF-backed Foxglove 3D visualization remain runtime-verified on macOS arm64; cross-platform CI does not claim full Shadow Hand runtime E2E portability.
+    - A separate Windows x64 CI performs build, CTest, and publisher smoke validation.
 
 capabilities:
   - name: Foxglove live output
@@ -39,52 +42,73 @@ capabilities:
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-foxglove
         path: README.md
-        revision: c45ba4e76788258907777e82649edaecc7fe7bc8
+        revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
+  - name: Installed Endpoint package consumer
+    description: Prefers the installed hakoniwa_pdu_endpoint::hakoniwa_pdu_endpoint CMake target while retaining the bundled Endpoint checkout as a development and compatibility fallback.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-foxglove
+        path: CMakeLists.txt
+        revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
+      - repository: hakoniwalab/hakoniwa-pdu-foxglove
+        path: README.md
+        revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
   - name: Endpoint PduComm adapter
     description: Implements FoxgloveComm as a PduComm adapter usable with Endpoint::set_comm().
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-foxglove
         path: README.md
-        revision: c45ba4e76788258907777e82649edaecc7fe7bc8
+        revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
   - name: Raw CDR byte preservation
     description: Forwards caller-provided CDR bytes without deserialization, reserialization, or guessing Hakoniwa native PDU representation.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-foxglove
         path: README.md
-        revision: c45ba4e76788258907777e82649edaecc7fe7bc8
+        revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
   - name: Explicit schema configuration
     description: Configures topic, schema name, schema encoding, and schema file for each Foxglove channel.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-foxglove
         path: config/shadow_hand/comm_foxglove_jointstate.json
-        revision: c45ba4e76788258907777e82649edaecc7fe7bc8
+        revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
   - name: Generic stdin CDR publisher boundary
     description: cdr_stdin_publisher accepts complete length-prefixed CDR frames from a type-specific producer and publishes them through a FoxgloveComm-backed Endpoint.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-foxglove
         path: examples/cdr-stdin-publisher/README.md
-        revision: c45ba4e76788258907777e82649edaecc7fe7bc8
+        revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
+  - name: Cross-platform Endpoint and Bridge package contract
+    description: CI validates the Core-free installed Endpoint consumer path for Foxglove and, in the same platform matrix, builds Hakoniwa Core Pro, Core-enabled Endpoint variants, and the hakoniwa-pdu-web-bridge used by the repository integration.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-foxglove
+        path: .github/workflows/endpoint-package-contract.yml
+        revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
+  - name: Windows publisher smoke
+    description: Native Windows x64 CI builds examples and tests and executes the Foxglove publisher smoke path separately from the package-contract matrix.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-foxglove
+        path: .github/workflows/windows-x64.yml
+        revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
   - name: Verified Shadow Hand JointState live path
     description: Bridges ShadowHandAsset/joint_states from callback SHM through TCP, converts native JointState PDU to CDR, and publishes it to Foxglove at ws://127.0.0.1:8766.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-foxglove
         path: config/shadow_hand_bridge/README.md
-        revision: c45ba4e76788258907777e82649edaecc7fe7bc8
+        revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
       - repository: hakoniwalab/hakoniwa-pdu-foxglove
         path: launch/shadow-hand-foxglove-smoke.launch.json
-        revision: c45ba4e76788258907777e82649edaecc7fe7bc8
+        revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
   - name: Verified URDF plus JointState 3D workflow
     description: Supports a documented Shadow Hand 3D workflow in which Foxglove loads a prepared URDF and animates it directly from Hakoniwa JointState without a /tf publisher.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-foxglove
-        path: README.md
-        revision: c45ba4e76788258907777e82649edaecc7fe7bc8
+        path: docs/shadow-hand-3d.md
+        revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
   - name: ROS 2 schema staging without ROS 2 runtime
     description: Documents a reproducible boundary where ROS 2 Jazzy schema artifacts are prepared using the hakoniwa-pdu-registry Docker environment and copied into the local work/schemas staging area for Foxglove.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-foxglove
         path: README.md
-        revision: c45ba4e76788258907777e82649edaecc7fe7bc8
+        revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
 
 limitations:
   - Output-only; recv and recv_next are unsupported.
@@ -92,6 +116,7 @@ limitations:
   - Current version does not provide Foxglove-to-Hakoniwa publishing, services, parameters, MCAP recording, or dynamic channel creation.
   - Current Foxglove log timestamps use wall-clock time; Hakoniwa simulation-time broadcasting is not implemented.
   - The Shadow Hand SHM-to-TCP bridge process is a validated implementation choice, not a fundamental requirement; a future single-process implementation could use separate threads and an internal queue.
+  - Cross-platform CI validates build/package integration, not the complete Shadow Hand runtime E2E or Foxglove 3D UI workflow on every platform.
 
 interfaces:
   inputs:
@@ -141,17 +166,20 @@ dependencies:
       notes: Required build system.
     - name: hakoniwa-pdu-endpoint
       type: repository
-      notes: Provides Endpoint and PduComm abstraction.
+      notes: Provides Endpoint and PduComm abstraction. New consumers should use the installed Core-free package target; the source-tree fallback remains available for compatibility and development.
     - name: hakoniwa-pdu-registry
       type: repository
-      notes: Provides PDU types and generated native/CDR converters.
+      notes: Provides PDU types and generated native/CDR converters for examples and typed integration flows.
     - name: Foxglove C++ SDK
       type: library
       notes: Official SDK pinned by the repository CMake integration.
   optional:
     - name: hakoniwa-pdu-bridge-core
       type: repository
-      notes: Used by the verified Shadow Hand recipe to isolate callback SHM from the downstream WebSocket publisher process.
+      notes: Not required by the Foxglove adapter itself, but required by the repository's verified Shadow Hand integration path to isolate callback SHM from the downstream Foxglove process.
+    - name: hakoniwa-core-pro
+      type: repository
+      notes: Required together with Endpoint core_callback for the Hakoniwa side of the Shadow Hand Bridge integration; not required by the Foxglove adapter itself.
     - name: hakoniwa-mbody-registry
       type: repository
       notes: Used by the verified Shadow Hand 3D recipe to expand ROS-origin xacro without requiring ROS.
@@ -163,23 +191,25 @@ platforms:
   supported:
     - macOS
     - Linux
+    - Windows
   notes:
-    - The complete Shadow Hand JointState plus Foxglove 3D workflow is currently verified only on macOS arm64.
-    - Ubuntu 24.04 Docker verification covers the core CDR publisher build/test smoke and does not yet establish full Shadow Hand reproducibility on Linux.
+    - Package/integration build contract is verified on Ubuntu x64, native Linux ARM64, macOS arm64, and Windows x64.
+    - Windows x64 additionally has automated publisher smoke coverage.
+    - The complete Shadow Hand JointState plus Foxglove 3D runtime workflow remains verified on macOS arm64; build-contract success on other platforms must not be interpreted as full runtime E2E verification.
 
 connects_to:
   - component_id: hakoniwa-pdu-endpoint
     direction: uses
-    interface: PduComm adapter / Endpoint::set_comm
-    notes: FoxgloveComm adapts Endpoint send lifecycle to Foxglove publication.
+    interface: installed Core-free PduComm package / Endpoint::set_comm
+    notes: FoxgloveComm consumes the base Endpoint capability and keeps Hakoniwa Core outside the Foxglove adapter.
   - component_id: hakoniwa-pdu-registry
     direction: uses
     interface: native PDU converters / CDR converters / schema assets
     notes: Type-specific conversion stays outside FoxgloveComm.
   - component_id: hakoniwa-pdu-bridge-core
-    direction: related
+    direction: uses
     interface: callback SHM to TCP process boundary
-    notes: The verified Shadow Hand path uses bridge-core to isolate Hakoniwa callback/SHM execution from the downstream Foxglove WebSocket publisher.
+    notes: The repository-level Shadow Hand integration directly launches hakoniwa-pdu-web-bridge; Bridge is optional for the core Foxglove adapter but part of this verified integration composition.
   - component_id: hakoniwa-mbody-registry
     direction: related
     interface: ROS-free xacro expansion for visualization assets
@@ -191,25 +221,34 @@ data_contracts:
     source:
       - repository: hakoniwalab/hakoniwa-pdu-foxglove
         path: README.md
-        revision: c45ba4e76788258907777e82649edaecc7fe7bc8
+        revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
+  - name: Installed Endpoint package boundary
+    description: Foxglove consumes hakoniwa_pdu_endpoint::hakoniwa_pdu_endpoint as a Core-free installed CMake package target; Hakoniwa callback/Core responsibilities are composed separately through Bridge when needed.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-foxglove
+        path: CMakeLists.txt
+        revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
+      - repository: hakoniwalab/hakoniwa-pdu-foxglove
+        path: .github/workflows/endpoint-package-contract.yml
+        revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
   - name: cdr_stdin_publisher input
     description: The default stdin frame is a little-endian u32 payload length followed by one complete CDR payload.
     source:
       - repository: hakoniwalab/hakoniwa-pdu-foxglove
         path: examples/cdr-stdin-publisher/README.md
-        revision: c45ba4e76788258907777e82649edaecc7fe7bc8
+        revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
   - name: Shadow Hand Foxglove 3D control
     description: Foxglove URDF Joint states mode can animate the prepared Shadow Robot URDF directly from /hakoniwa/ShadowHandAsset/joint_states; /tf is not required for this path.
     source:
       - repository: hakoniwalab/hakoniwa-pdu-foxglove
-        path: README.md
-        revision: c45ba4e76788258907777e82649edaecc7fe7bc8
+        path: docs/shadow-hand-3d.md
+        revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
   - name: JointState schema staging
     description: The Shadow Hand example stages sensor_msgs/msg/JointState.bundle.msg under work/schemas/ros2_jazzy after preparing it from the hakoniwa-pdu-registry ROS 2 Jazzy Docker environment; the work directory is local and not committed.
     source:
       - repository: hakoniwalab/hakoniwa-pdu-foxglove
         path: README.md
-        revision: c45ba4e76788258907777e82649edaecc7fe7bc8
+        revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
 
 recipe_roles:
   - role: visualizer
@@ -224,12 +263,14 @@ typical_usecases:
   - Inspect Hakoniwa JointState data in Foxglove Raw Messages and Plot.
   - Animate a Foxglove URDF model directly from Hakoniwa JointState.
   - Keep native-PDU decoding and CDR conversion explicit while reusing a generic Foxglove transport.
+  - Compose Hakoniwa callback SHM through Bridge while keeping Foxglove itself Core-free.
 
 anti_usecases:
   - Bidirectional Foxglove control.
   - Automatic Hakoniwa-native-binary to CDR conversion inside FoxgloveComm.
   - General-purpose transport between Hakoniwa assets.
   - Treating the Foxglove visualization URDF as the physics source of truth.
+  - Treating four-platform build-contract validation as evidence that the complete Shadow Hand runtime E2E has been exercised on every platform.
 
 demo_candidates:
   - name: CDR publisher live smoke
@@ -241,7 +282,7 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-pdu-foxglove
         path: examples/cdr-publisher
-        revision: c45ba4e76788258907777e82649edaecc7fe7bc8
+        revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
   - name: Shadow Hand JointState and 3D visualization
     description: Run the Shadow Hand Hakoniwa asset, bridge JointState to Foxglove, serve the prepared Shadow Robot URDF, and confirm matching motion in MuJoCo and Foxglove 3D.
     required_components:
@@ -249,12 +290,13 @@ demo_candidates:
       - hakoniwa-pdu-endpoint
       - hakoniwa-pdu-registry
       - hakoniwa-pdu-bridge-core
+      - hakoniwa-core-pro
       - hakoniwa-mujoco-robots
       - hakoniwa-mbody-registry
     source_examples:
       - repository: hakoniwalab/hakoniwa-pdu-foxglove
         path: launch/shadow-hand-foxglove-browser.launch.json
-        revision: c45ba4e76788258907777e82649edaecc7fe7bc8
+        revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
 
 operations:
   build:
@@ -262,41 +304,56 @@ operations:
       - git submodule update --init --recursive
       - ./build.bash
     notes:
-      - Builds hakoniwa_pdu_foxglove, cdr_publisher_example, cdr_stdin_publisher, and tests when examples/tests are enabled.
+      - Default local build may use the bundled Endpoint checkout as a compatibility/development fallback.
+      - Cross-platform CI explicitly installs a Core-free Endpoint package first and configures Foxglove with HAKO_PDU_FOXGLOVE_USE_BUNDLED_ENDPOINT=OFF to validate the downstream consumer contract.
   test:
     commands:
       - ./test.bash
     notes:
       - Unit tests do not require Foxglove App.
+      - Windows x64 CI additionally runs the publisher smoke script.
   run:
     commands:
       - ./build/cdr_publisher_example config/sample/endpoint_foxglove.json
       - PYTHONPATH=../hakoniwa-mujoco-robots/thirdparty/hakoniwa-core-pro/launcher python3.12 -m hako_launch.hako_launcher launch/shadow-hand-foxglove-smoke.launch.json
     notes:
       - Shadow Hand WebSocket defaults to ws://127.0.0.1:8766.
+      - The current Shadow Hand launcher contains platform-specific paths and is runtime-verified on macOS arm64; it is not the cross-platform CI contract.
 
 known_gaps:
   - Hakoniwa simulation-time broadcasting to Foxglove is not implemented in version 0.1.
   - A direct single-process SHM-to-Foxglove implementation is not provided; the verified Shadow Hand path intentionally uses bridge-core plus TCP process isolation.
   - Bidirectional Foxglove command publication remains outside the current scope.
-  - The complete Shadow Hand end-to-end workflow has not yet been validated on Linux.
+  - The complete Shadow Hand runtime E2E and 3D visualization remain unverified on Linux and Windows even though their package/integration build contracts are verified.
 
 source_refs:
   - repository: hakoniwalab/hakoniwa-pdu-foxglove
     path: README.md
-    revision: c45ba4e76788258907777e82649edaecc7fe7bc8
-    description: Current architecture, public OSS status, Shadow Hand smoke, verified macOS 3D workflow, schema staging boundary, build/test, and Docker notes.
+    revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
+    description: Current architecture, installed Endpoint consumer contract, cross-platform verification matrix, public OSS status, Shadow Hand runtime scope, build/test, and Docker notes.
+  - repository: hakoniwalab/hakoniwa-pdu-foxglove
+    path: .github/workflows/endpoint-package-contract.yml
+    revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
+    description: Four-platform package/integration build contract covering Foxglove Core-free Endpoint consumption and the Core plus callback Endpoint plus Bridge web-app composition.
+  - repository: hakoniwalab/hakoniwa-pdu-foxglove
+    path: .github/workflows/windows-x64.yml
+    revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
+    description: Native Windows x64 build, CTest, examples, and publisher smoke validation.
   - repository: hakoniwalab/hakoniwa-pdu-foxglove
     path: examples/cdr-stdin-publisher/README.md
-    revision: c45ba4e76788258907777e82649edaecc7fe7bc8
+    revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
     description: Generic stdin CDR process boundary and framing contract.
   - repository: hakoniwalab/hakoniwa-pdu-foxglove
     path: config/shadow_hand_bridge/README.md
-    revision: c45ba4e76788258907777e82649edaecc7fe7bc8
+    revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
     description: Verified SHM-to-TCP bridge responsibility and design rationale.
   - repository: hakoniwalab/hakoniwa-pdu-foxglove
+    path: docs/shadow-hand-3d.md
+    revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
+    description: Detailed macOS arm64 Shadow Hand URDF plus JointState 3D visualization procedure.
+  - repository: hakoniwalab/hakoniwa-pdu-foxglove
     path: config/shadow_hand/comm_foxglove_jointstate.json
-    revision: c45ba4e76788258907777e82649edaecc7fe7bc8
+    revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
     description: Verified JointState topic and bundled ros2msg schema configuration.
 
 tags:
