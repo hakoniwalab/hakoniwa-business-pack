@@ -11,7 +11,7 @@ distribution:
     - Public OSS Hakoniwa component.
 verification:
   verified_at: 2026-07-26
-  source_revision: 9ec705542bf740dcf2170be5091fd10ccf9ee6fd
+  source_revision: e2454b15c22466336df565af09db9f43d2066da7
   source_ref: main
 summary: Logical PDU transfer layer that controls when data flows between endpoints while delegating transport I/O to hakoniwa-pdu-endpoint.
 category:
@@ -25,9 +25,10 @@ status:
   maturity: active
   catalog_confidence: high
   notes:
-    - Cataloged from README, build architecture, manifest flow, CI workflows, and tutorial entry points.
+    - Cataloged from README, build architecture, manifest flow, package-contract CI, and tutorial entry points.
     - The component is a timing and routing layer, not a transport implementation.
     - Core-free Bridge library, standalone daemon, and monitor builds are separated from the optional Hakoniwa-integrated application path.
+    - Installed-package composability is validated with external CMake consumers rather than inferred from in-repository builds.
 
 capabilities:
   - name: Logical PDU flow declaration
@@ -35,34 +36,52 @@ capabilities:
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-bridge-core
         path: README.md
-        revision: ee725a01b0f1c66f68a5c7809137d4d308cd5a8a
+        revision: e2454b15c22466336df565af09db9f43d2066da7
   - name: Transfer policy control
     description: Supports immediate, throttle, and ticker policies for deciding when transfers occur.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-bridge-core
         path: README.md
-        revision: ee725a01b0f1c66f68a5c7809137d4d308cd5a8a
+        revision: e2454b15c22466336df565af09db9f43d2066da7
   - name: Endpoint-backed transport reuse
     description: Uses EndpointContainer from hakoniwa-pdu-endpoint so bridge logic stays independent from TCP, UDP, SHM, WebSocket, and other transports.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-bridge-core
         path: README.md
-        revision: ee725a01b0f1c66f68a5c7809137d4d308cd5a8a
+        revision: e2454b15c22466336df565af09db9f43d2066da7
   - name: Runtime introspection
     description: Provides monitor commands for health, connections, PDU listing, and tailing runtime PDU flow.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-bridge-core
         path: README.md
-        revision: ee725a01b0f1c66f68a5c7809137d4d308cd5a8a
+        revision: e2454b15c22466336df565af09db9f43d2066da7
   - name: Manifest-driven cross-platform build
     description: Separates user-facing component intent from OS-specific dependency and CMake resolution, with Core-free manifest builds validated on Ubuntu, macOS, and Windows.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-bridge-core
         path: hakoniwa-build.yaml
-        revision: 9ec705542bf740dcf2170be5091fd10ccf9ee6fd
+        revision: e2454b15c22466336df565af09db9f43d2066da7
       - repository: hakoniwalab/hakoniwa-pdu-bridge-core
         path: docs/build-architecture.md
-        revision: 9ec705542bf740dcf2170be5091fd10ccf9ee6fd
+        revision: e2454b15c22466336df565af09db9f43d2066da7
+  - name: Installed CMake package contract
+    description: Exports hakoniwa_pdu_bridge::bridge for new consumers while preserving hakoniwa_pdu_bridge::hakoniwa_pdu_bridge_lib as a compatibility target; external consumers are built in CI.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-bridge-core
+        path: cmake/hakoniwa_pdu_bridgeConfig.cmake.in
+        revision: e2454b15c22466336df565af09db9f43d2066da7
+      - repository: hakoniwalab/hakoniwa-pdu-bridge-core
+        path: test/package_consumer
+        revision: e2454b15c22466336df565af09db9f43d2066da7
+  - name: Callback-isolated Hakoniwa integration
+    description: The Hakoniwa-integrated Web bridge uses an internal callback Bridge composition backed by hakoniwa_pdu_endpoint::core_callback rather than pulling polling/shakoc into the public Bridge package contract.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-bridge-core
+        path: CMakeLists.txt
+        revision: e2454b15c22466336df565af09db9f43d2066da7
+      - repository: hakoniwalab/hakoniwa-pdu-bridge-core
+        path: docs/build-architecture.md
+        revision: e2454b15c22466336df565af09db9f43d2066da7
 
 limitations:
   - Not a transport implementation.
@@ -113,7 +132,7 @@ dependencies:
       notes: Required build system.
     - name: hakoniwa-pdu-endpoint
       type: repository
-      notes: Required for endpoint API, endpoint container, and transport I/O.
+      notes: Required for endpoint API, endpoint container, transport I/O, and the installed Endpoint package contract.
   optional:
     - name: Hakoniwa Core Pro
       type: repository
@@ -126,18 +145,18 @@ platforms:
     - Windows
   notes:
     - Manifest CI validates Core-free Bridge builds on Ubuntu, macOS, and native Windows.
-    - Linux ARM64 package/integration validation is being added in the package-contract work and should be promoted to verified only after that workflow passes on main.
+    - Package-contract CI validates external Bridge consumers and Hakoniwa callback integration on Ubuntu x64, native Linux ARM64, macOS, and Windows x64.
     - Windows uses the Endpoint package and vcpkg-based Boost dependency path; Hakoniwa Core keeps its static-first Windows design.
 
 connects_to:
   - component_id: hakoniwa-pdu-endpoint
     direction: uses
     interface: EndpointContainer / Endpoint API
-    notes: Bridge uses endpoint for all communication I/O. Core-free Bridge components consume the base Endpoint capability.
+    notes: Core-free Bridge components consume the base Endpoint package target; Hakoniwa-integrated Web bridge uses the Endpoint core_callback variant.
   - component_id: hakoniwa-core-pro
     direction: uses
     interface: Hakoniwa core callback asset runtime
-    notes: Optional for the Bridge library itself; required by the Hakoniwa-integrated Web bridge application.
+    notes: Optional for the Bridge library itself; required by the Hakoniwa-integrated Web bridge application through the callback path.
   - component_id: hakoniwa-pdu-javascript
     direction: used_by
     interface: WebSocket bridge
@@ -153,13 +172,19 @@ data_contracts:
     source:
       - repository: hakoniwalab/hakoniwa-pdu-bridge-core
         path: README.md
-        revision: ee725a01b0f1c66f68a5c7809137d4d308cd5a8a
+        revision: e2454b15c22466336df565af09db9f43d2066da7
   - name: Node-selected endpoint container
     description: A shared endpoint container config can contain multiple nodes; each daemon selects its node by node_name.
     source:
       - repository: hakoniwalab/hakoniwa-pdu-bridge-core
         path: README.md
-        revision: ee725a01b0f1c66f68a5c7809137d4d308cd5a8a
+        revision: e2454b15c22466336df565af09db9f43d2066da7
+  - name: Installed Bridge CMake targets
+    description: New consumers link hakoniwa_pdu_bridge::bridge; existing consumers may continue using hakoniwa_pdu_bridge::hakoniwa_pdu_bridge_lib.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-bridge-core
+        path: cmake/hakoniwa_pdu_bridgeConfig.cmake.in
+        revision: e2454b15c22466336df565af09db9f43d2066da7
 
 recipe_roles:
   - role: bridge
@@ -174,6 +199,7 @@ typical_usecases:
   - Replace hard-coded transport wiring with bridge JSON and endpoint container JSON.
   - Expose simulation PDU streams to browser tools through the Web bridge daemon.
   - Build Core-free standalone or monitoring tools on Linux, macOS, or Windows while enabling Hakoniwa Core only for integrated asset applications.
+  - Consume Bridge from another CMake project through its installed package target.
   - Add runtime monitoring to PDU transfer paths.
 
 anti_usecases:
@@ -190,7 +216,7 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-pdu-bridge-core
         path: config/tutorials/bridge-immediate.json
-        revision: ee725a01b0f1c66f68a5c7809137d4d308cd5a8a
+        revision: e2454b15c22466336df565af09db9f43d2066da7
   - name: Two-node TCP bridge
     description: Run node1 and node2 daemons using shared TCP test configs and node selection.
     required_components:
@@ -199,7 +225,7 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-pdu-bridge-core
         path: test/config/tcp
-        revision: ee725a01b0f1c66f68a5c7809137d4d308cd5a8a
+        revision: e2454b15c22466336df565af09db9f43d2066da7
 
 operations:
   build:
@@ -212,10 +238,11 @@ operations:
       - hakoniwa-build.yaml is the recommended user-facing build intent.
       - Direct CMake remains available for compatibility and advanced usage.
       - Core-free builds do not require Hakoniwa Core.
+      - Installed CMake consumers should use find_package(hakoniwa_pdu_bridge CONFIG REQUIRED) and link hakoniwa_pdu_bridge::bridge.
   test:
     commands:
       - python3 tools/hako.py test
-    notes: Manifest CI exercises normal build/test paths across Ubuntu, macOS, and Windows.
+    notes: Manifest CI exercises normal build/test paths across Ubuntu, macOS, and Windows; package-contract CI separately validates installed consumers and Core callback integration.
   run:
     commands:
       - ./build/hakoniwa-pdu-bridge config/tutorials/bridge-immediate.json 1000 config/tutorials/endpoint_container.json node1
@@ -225,29 +252,33 @@ operations:
 
 known_gaps:
   - Catalog does not yet enumerate every bridge JSON schema field.
-  - Package-contract CI for installed Bridge consumers, Linux ARM64, and Hakoniwa callback integration is pending completion in Bridge PR #24 and should be reflected after merge.
   - Monitor command details should be expanded from docs/tutorials/monitor.md.
+  - Full hakoniwa-conductor-pro runtime regression is separate from Bridge package-consumer compatibility validation.
 
 source_refs:
   - repository: hakoniwalab/hakoniwa-pdu-bridge-core
     path: README.md
-    revision: 9ec705542bf740dcf2170be5091fd10ccf9ee6fd
-    description: Main overview, architecture, build, and run documentation.
+    revision: e2454b15c22466336df565af09db9f43d2066da7
+    description: Main overview, package targets, architecture, platform support, build, and run documentation.
   - repository: hakoniwalab/hakoniwa-pdu-bridge-core
     path: hakoniwa-build.yaml
-    revision: 9ec705542bf740dcf2170be5091fd10ccf9ee6fd
+    revision: e2454b15c22466336df565af09db9f43d2066da7
     description: User-facing build intent and component selection.
   - repository: hakoniwalab/hakoniwa-pdu-bridge-core
     path: docs/build-architecture.md
-    revision: 9ec705542bf740dcf2170be5091fd10ccf9ee6fd
-    description: Manifest resolution and cross-platform build architecture.
+    revision: e2454b15c22466336df565af09db9f43d2066da7
+    description: Implemented package boundary, callback integration, manifest resolution, and cross-platform build architecture.
+  - repository: hakoniwalab/hakoniwa-pdu-bridge-core
+    path: .github/workflows/package-contract.yml
+    revision: e2454b15c22466336df565af09db9f43d2066da7
+    description: External installed-package consumer and Hakoniwa callback integration validation across four platform/architecture combinations.
   - repository: hakoniwalab/hakoniwa-pdu-bridge-core
     path: docs/tutorials/monitor.md
-    revision: ee725a01b0f1c66f68a5c7809137d4d308cd5a8a
+    revision: e2454b15c22466336df565af09db9f43d2066da7
     description: Monitor CLI tutorial.
   - repository: hakoniwalab/hakoniwa-pdu-bridge-core
     path: docs/tutorials
-    revision: ee725a01b0f1c66f68a5c7809137d4d308cd5a8a
+    revision: e2454b15c22466336df565af09db9f43d2066da7
     description: Policy tutorials for immediate, throttle, and ticker modes.
 
 tags:
