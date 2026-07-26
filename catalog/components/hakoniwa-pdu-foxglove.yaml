@@ -210,10 +210,6 @@ connects_to:
     direction: uses
     interface: callback SHM to TCP process boundary
     notes: The repository-level Shadow Hand integration directly launches hakoniwa-pdu-web-bridge; Bridge is optional for the core Foxglove adapter but part of this verified integration composition.
-  - component_id: hakoniwa-core-pro
-    direction: related
-    interface: callback asset runtime through Endpoint core_callback
-    notes: Core Pro belongs to the Hakoniwa/Bridge side of the integration and is deliberately not a dependency of FoxgloveComm itself.
   - component_id: hakoniwa-mbody-registry
     direction: related
     interface: ROS-free xacro expansion for visualization assets
