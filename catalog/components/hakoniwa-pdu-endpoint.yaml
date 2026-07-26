@@ -10,8 +10,8 @@ distribution:
   notes:
     - Public OSS Hakoniwa component.
 verification:
-  verified_at: 2026-07-19
-  source_revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+  verified_at: 2026-07-26
+  source_revision: 5c2b815ae661f6063a91840c356717558dab9ab3
   source_ref: main
 summary: Config-driven PDU endpoint layer that makes cache lifetime, communication transport, and PDU meaning explicit for distributed Hakoniwa simulations.
 category:
@@ -25,8 +25,10 @@ status:
   maturity: active
   catalog_confidence: high
   notes:
-    - Cataloged from README, design philosophy, tutorial, config samples, examples, and benchmark docs.
+    - Cataloged from README, design philosophy, tutorial, config samples, examples, benchmark docs, build architecture, and Core variant package CI.
     - This component is intentionally stricter and heavier than a minimal messaging library.
+    - Core-aware consumers can choose explicit callback or polling package targets without changing the manifest schema.
+    - Installed-package composability is verified with external CMake consumers on x64 and ARM64 platforms.
 
 capabilities:
   - name: Explicit endpoint composition
@@ -77,12 +79,30 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-pdu-endpoint
         path: csharp/README.md
         revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+  - name: Explicit Hakoniwa Core frontend variants
+    description: When Hakoniwa Core is enabled, new consumers can link callback/assets or polling/shakoc variants explicitly while the legacy all-in target remains available for compatibility.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: README.md
+        revision: 5c2b815ae661f6063a91840c356717558dab9ab3
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: src/core_variants/CMakeLists.txt
+        revision: 5c2b815ae661f6063a91840c356717558dab9ab3
+  - name: Installed CMake package consumer contract
+    description: Exports base, core_callback, and core_polling CMake targets and validates downstream find_package/link behavior with a separate external consumer project.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: README.md
+        revision: 5c2b815ae661f6063a91840c356717558dab9ab3
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: test/package_consumer
+        revision: 5c2b815ae661f6063a91840c356717558dab9ab3
 
 limitations:
   - Not a general-purpose messaging library.
   - Not optimized for the shortest possible Hello World path.
   - Requires explicit JSON configuration; implicit defaults are intentionally avoided.
-  - SHM communication and Hakoniwa time source features require Hakoniwa core libraries.
+  - SHM communication and Hakoniwa time source features require Hakoniwa Core, and new Core-aware consumers should choose either callback or polling package variants explicitly.
   - Python package depends on the native shared library and CFFI extension; it is not pip-only in the endpoint repository.
   - Transport-level reliability, persistence, and delivery semantics depend on the selected comm backend.
 
@@ -122,7 +142,7 @@ interfaces:
       notes: Connectionless communication for local or network PDU delivery.
     - name: Shared Memory
       role: local
-      notes: High-performance local IPC with Hakoniwa core integration.
+      notes: High-performance local IPC with Hakoniwa Core integration; callback and polling are explicit consumer variants for new integrations.
     - name: WebSocket
       role: client | server
       notes: Stream-based communication suitable for browser-facing or network tool integration.
@@ -170,7 +190,7 @@ dependencies:
   optional:
     - name: Hakoniwa Core Library
       type: repository
-      notes: Required for SHM communication and Hakoniwa time source integration.
+      notes: Required for SHM communication and Hakoniwa time source integration; exported package variants resolve the relevant Core frontend transitively.
     - name: Python 3 and cffi
       type: package
       notes: Required for Python FFI bindings.
@@ -193,15 +213,16 @@ platforms:
     - Linux
     - Windows
   notes:
-    - README describes macOS, Ubuntu or WSL2, and native Windows benchmark coverage.
-    - On Windows, Boost through vcpkg is recommended.
-    - Hakoniwa core integration defaults differ by platform; core support is on by default for macOS/Linux and off by default for Windows.
+    - Normal CI covers manifest-driven builds and transport combinations.
+    - Core-variant package CI verifies external consumers on Ubuntu x64, native Linux ARM64, macOS, and Windows x64.
+    - On Windows, Boost through vcpkg is recommended and Hakoniwa Core keeps its static-first library design.
+    - The manifest's hakoniwa_core flag controls whether Core-aware artifacts are built; callback versus polling is selected by the downstream CMake target, not by the manifest.
 
 connects_to:
   - component_id: hakoniwa-core-pro
     direction: uses
     interface: SHM / time source / core libraries
-    notes: Needed for shared memory communication and Hakoniwa time integration.
+    notes: Needed for shared memory communication and Hakoniwa time integration; new consumers select assets through core_callback or shakoc through core_polling.
   - component_id: hakoniwa-pdu-registry
     direction: uses
     interface: PDU definition / type layout / generated codecs
@@ -209,7 +230,7 @@ connects_to:
   - component_id: hakoniwa-pdu-bridge-core
     direction: used_by
     interface: Endpoint API
-    notes: Bridge delegates actual I/O to endpoint while controlling transfer timing.
+    notes: Core-free Bridge uses the base Endpoint package target, while Hakoniwa-integrated Bridge uses core_callback.
   - component_id: hakoniwa-pdu-rpc
     direction: used_by
     interface: Endpoint transport / PDU request-response channels
@@ -256,6 +277,12 @@ data_contracts:
       - repository: hakoniwalab/hakoniwa-pdu-endpoint
         path: config/schema/pdu_def_schema.json
         revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
+  - name: Installed Endpoint CMake targets
+    description: Core-free consumers use hakoniwa_pdu_endpoint::hakoniwa_pdu_endpoint; new Core-aware consumers prefer hakoniwa_pdu_endpoint::core_callback or hakoniwa_pdu_endpoint::core_polling.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: README.md
+        revision: 5c2b815ae661f6063a91840c356717558dab9ab3
 
 recipe_roles:
   - role: bridge
@@ -273,6 +300,7 @@ typical_usecases:
   - Local high-performance Hakoniwa asset communication through shared memory.
   - Persisting PDU traffic for replay, audit, debugging, or offline analysis.
   - Building higher-level bridge, RPC, visualization, or engine-integration components on a common PDU endpoint abstraction.
+  - Integrating Endpoint as an installed CMake package without reconstructing include paths or Core library names manually.
 
 anti_usecases:
   - A quick prototype that only needs a few implicit pub/sub messages.
@@ -304,32 +332,36 @@ demo_candidates:
         path: examples/endpoint_storage_queue.cpp
         revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
   - name: Hakoniwa bridge transport backend
-    description: Use endpoint as the I/O layer under a PDU bridge recipe where bridge-core controls transfer timing.
+    description: Use endpoint as the I/O layer under a PDU bridge recipe where bridge-core controls transfer timing; use core_callback for the Hakoniwa callback Web bridge path.
     required_components:
       - hakoniwa-pdu-endpoint
       - hakoniwa-pdu-bridge-core
     source_examples:
       - repository: hakoniwalab/hakoniwa-pdu-bridge-core
         path: README.md
-        revision: main
+        revision: e2454b15c22466336df565af09db9f43d2066da7
 
 operations:
   build:
     commands:
-      - bash build.bash
-      - cmake -S . -B build
-      - cmake --build build
+      - python tools/hako.py doctor
+      - python tools/hako.py configure --dry-run
+      - python tools/hako.py build
+      - python tools/hako.py test
     notes:
-      - build.bash builds the C++ shared library and Python FFI extension.
-      - Manual CMake build is available for advanced options.
+      - hakoniwa-build.yaml is the recommended user-facing source of build intent across Windows, macOS, and Linux.
+      - Direct CMake remains available for advanced or compatibility workflows.
+      - features.hakoniwa_core controls whether Core-aware artifacts exist; consumers choose callback or polling by linking the corresponding exported target.
   test:
     commands:
+      - python tools/hako.py test
       - ctest --test-dir build --output-on-failure
       - bash test-python.bash
       - bash test-csharp.bash
     notes:
       - C++ tests use GoogleTest.
       - Python and C# smoke tests are provided by helper scripts.
+      - core-variants CI builds a separate external CMake consumer to validate the installed package contract.
   run:
     commands:
       - build/examples/endpoint_minimal config/tutorial/endpoint_tcp_server.json recv 10
@@ -341,14 +373,22 @@ operations:
 known_gaps:
   - Catalog does not yet include exact schema field-level details for every comm backend.
   - Catalog does not yet distinguish stable release tags from main-branch-only features.
-  - Runtime compatibility with each downstream component should be verified recipe by recipe.
+  - Full downstream runtime compatibility still needs recipe-level validation even though the installed package/link contract is CI-verified.
   - Performance characteristics should be selected from benchmark reports when a recipe has latency or throughput requirements.
 
 source_refs:
   - repository: hakoniwalab/hakoniwa-pdu-endpoint
     path: README.md
-    revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
-    description: Main overview, capabilities, requirements, and quick starts.
+    revision: 5c2b815ae661f6063a91840c356717558dab9ab3
+    description: Main overview, manifest flow, Core variants, installed package targets, supported platforms, and consumer guidance.
+  - repository: hakoniwalab/hakoniwa-pdu-endpoint
+    path: docs/build-architecture.md
+    revision: 5c2b815ae661f6063a91840c356717558dab9ab3
+    description: Manifest resolution and cross-platform build architecture.
+  - repository: hakoniwalab/hakoniwa-pdu-endpoint
+    path: .github/workflows/core-variants.yml
+    revision: 5c2b815ae661f6063a91840c356717558dab9ab3
+    description: Core package, explicit frontend variants, and external consumer validation across x64 and ARM64 platforms.
   - repository: hakoniwalab/hakoniwa-pdu-endpoint
     path: docs/design_philosophy.md
     revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
