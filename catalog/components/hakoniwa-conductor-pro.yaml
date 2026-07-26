@@ -30,6 +30,7 @@ status:
     - Cataloged from README and docs/design.md.
     - README states RD feature development is currently frozen while documentation and non-RD development are prioritized.
     - Treat RD recipes as advanced or experimental until validated with combined-test.md.
+    - Conductor consumes the Bridge package compatibility target while retaining its own independent polling/shakoc dependency; the Bridge callback integration path does not replace Conductor's polling responsibility.
 
 capabilities:
   - name: Server/client conductor processes
@@ -100,7 +101,7 @@ interfaces:
       notes: Used by generated endpoint configs and runtime context mux.
     - name: SHM poll
       role: local
-      notes: Used for RuntimeStatus in RD ExMonitor behavior.
+      notes: Used for RuntimeStatus in RD ExMonitor behavior; Conductor's polling/shakoc linkage remains independent from Bridge's callback-oriented Hakoniwa application path.
   configuration:
     - path: config/schema/server-config.schema.json
       description: Server config schema.
@@ -123,13 +124,13 @@ dependencies:
       notes: Required build system.
     - name: hakoniwa-pdu-endpoint
       type: repository
-      notes: Endpoint configs and transport wiring are central to server/client communication.
+      notes: Endpoint configs and transport wiring are central to server/client communication; polling/shakoc semantics remain a Conductor-owned runtime dependency where required.
     - name: hakoniwa-pdu-bridge-core
       type: repository
-      notes: Bridge configs are part of conductor server/client topology.
+      notes: Conductor resolves the installed Bridge package through the historical hakoniwa_pdu_bridge::hakoniwa_pdu_bridge_lib compatibility target, which Bridge preserves alongside the preferred ::bridge target.
     - name: hakoniwa-core-pro
       type: repository
-      notes: Provides core Hakoniwa runtime concepts and installed libraries.
+      notes: Provides core Hakoniwa runtime concepts and installed libraries, including polling/shakoc usage owned by Conductor itself.
   optional:
     - name: Docker
       type: runtime
@@ -150,15 +151,15 @@ connects_to:
   - component_id: hakoniwa-core-pro
     direction: uses
     interface: core runtime / install layout
-    notes: Conductor-pro builds and installs into the Hakoniwa runtime ecosystem.
+    notes: Conductor-pro builds and installs into the Hakoniwa runtime ecosystem and retains its own polling/shakoc dependency where required.
   - component_id: hakoniwa-pdu-bridge-core
     direction: uses
-    interface: bridge config / monitor runtime
-    notes: Data/control plane paths are configured through bridge JSON.
+    interface: installed Bridge package / bridge config / monitor runtime
+    notes: Conductor uses the Bridge compatibility package target for bridge functionality. This does not transfer Conductor's polling/shakoc responsibility into Bridge.
   - component_id: hakoniwa-pdu-endpoint
     direction: uses
     interface: endpoint config / TCP and SHM comm
-    notes: Endpoints define server-client communication paths.
+    notes: Endpoints define server-client communication paths; Conductor-specific SHM polling remains separate from the Bridge callback application path.
   - component_id: hakoniwa-conductor-light
     direction: related
     interface: conductor role
@@ -183,6 +184,15 @@ data_contracts:
       - repository: hakoniwalab/hakoniwa-conductor-pro
         path: README.md
         revision: 8a0463561da34b713f7c2fabced27cc3bca320cf
+  - name: Bridge package compatibility target
+    description: Conductor probes hakoniwa_pdu_bridge::hakoniwa_pdu_bridge_lib; Bridge keeps that target as a compatibility contract while recommending hakoniwa_pdu_bridge::bridge for new consumers.
+    source:
+      - repository: hakoniwalab/hakoniwa-conductor-pro
+        path: CMakeLists.txt
+        revision: 8a0463561da34b713f7c2fabced27cc3bca320cf
+      - repository: hakoniwalab/hakoniwa-pdu-bridge-core
+        path: cmake/hakoniwa_pdu_bridgeConfig.cmake.in
+        revision: e2454b15c22466336df565af09db9f43d2066da7
 
 recipe_roles:
   - role: simulation_core
@@ -234,6 +244,7 @@ operations:
       - sudo ./install.bash
     notes:
       - install is optional and places binaries under /usr/local/hakoniwa.
+      - Bridge package compatibility is currently resolved through hakoniwa_pdu_bridge::hakoniwa_pdu_bridge_lib; new Bridge consumers should prefer hakoniwa_pdu_bridge::bridge.
   test:
     commands:
       - ctest --test-dir build-local -R '(client_config_test|server_config_test|client_args_test|server_args_test)'
@@ -257,12 +268,17 @@ known_gaps:
   - Need to read docs/design/* and combined-test.md before producing production-grade RD recipes.
   - Need to separate non-RD conductor capabilities from RD-specific capabilities more finely.
   - License/build requirements for RD paths should be cataloged from source docs.
+  - Bridge package target-name compatibility is protected by Bridge's external consumer contract, but a full Conductor PRO runtime regression against the newly merged Bridge package contract remains a separate validation task.
 
 source_refs:
   - repository: hakoniwalab/hakoniwa-conductor-pro
     path: README.md
     revision: 8a0463561da34b713f7c2fabced27cc3bca320cf
     description: Quick start, RD notes, Docker workflow, config requirements, and process topology.
+  - repository: hakoniwalab/hakoniwa-conductor-pro
+    path: CMakeLists.txt
+    revision: 8a0463561da34b713f7c2fabced27cc3bca320cf
+    description: Bridge package compatibility-target probing and Conductor-owned shakoc linkage.
   - repository: hakoniwalab/hakoniwa-conductor-pro
     path: docs/design.md
     revision: 8a0463561da34b713f7c2fabced27cc3bca320cf
@@ -275,6 +291,10 @@ source_refs:
     path: eu-config
     revision: 8a0463561da34b713f7c2fabced27cc3bca320cf
     description: Execution-unit config generator inputs and outputs.
+  - repository: hakoniwalab/hakoniwa-pdu-bridge-core
+    path: cmake/hakoniwa_pdu_bridgeConfig.cmake.in
+    revision: e2454b15c22466336df565af09db9f43d2066da7
+    description: Bridge preferred and compatibility installed package target contract.
 
 tags:
   - hakoniwa
