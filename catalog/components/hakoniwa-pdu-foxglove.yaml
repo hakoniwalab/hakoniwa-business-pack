@@ -315,9 +315,13 @@ operations:
   run:
     commands:
       - ./build/cdr_publisher_example config/sample/endpoint_foxglove.json
-      - PYTHONPATH=../hakoniwa-mujoco-robots/thirdparty/hakoniwa-core-pro/launcher python3.12 -m hako_launch.hako_launcher launch/shadow-hand-foxglove-smoke.launch.json
+      - bash tools/launch.bash launch/shadow-hand-foxglove-browser.launch.json
     notes:
       - Shadow Hand WebSocket defaults to ws://127.0.0.1:8766.
+      - Open https://app.foxglove.dev and connect it to ws://localhost:8766.
+      - The launch command must be run from the hakoniwa-pdu-foxglove repository root after the local JointState schema and visualization URDF have been prepared.
+      - tools/launch.bash follows the common Hakoniwa Python 3.12 runtime contract, validates the selected interpreter and launcher import before asset startup, and then invokes the launcher provided by the installed hakoniwa-pdu Python package.
+      - Endpoint `No subscribers found` messages can occur because the current converter polls with recv_by_name() without registering a receive callback; they are not Foxglove WebSocket connection-status signals.
       - The current Shadow Hand launcher contains platform-specific paths and is runtime-verified on macOS arm64; it is not the cross-platform CI contract.
 
 known_gaps:

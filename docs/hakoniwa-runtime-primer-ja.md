@@ -39,7 +39,7 @@ Recipeでは、どのプロセスが箱庭アセットで、どのプロセス�
 `hakoniwa-pdu-python` はPythonパッケージ `hakoniwa-pdu` としてインストールされます。Python向けPDUユーティリティと、箱庭Launcherのエントリポイントを提供します。
 
 ```bash
-python -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json
+python3.12 -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json
 ```
 
 ユーザー向けRecipeでは、次のように扱ってください。
@@ -85,6 +85,13 @@ Linux/macOSでは、一般的なインストール先は `/usr/local/hakoniwa` �
 python3.12 -c "import hakopy; import hakoniwa_pdu"
 python3.12 -m pip show hakoniwa-pdu
 ```
+
+Python 3.12は、個々のRecipeで毎回発見し直す条件ではなく、箱庭Python
+ワークフローに共通するランタイム契約です。コンポーネントが所有する起動
+wrapperはPython 3.12を明示的に選択し、`HAKO_PYTHON`や`PYTHON_CMD`などの
+文書化されたinterpreter上書きを受け付け、選択されたinterpreterがPython
+3.12でない場合や必要な箱庭packageをimportできない場合は、assetを起動する
+前に失敗させるべきです。
 
 ## アセット
 
@@ -326,7 +333,7 @@ APIによっては `conductor_start()` / `conductor_stop()` のような明示�
 一般的に使用される箱庭Launcherは、`hakoniwa-pdu-python` リポジトリ由来の `hakoniwa-pdu` Pythonパッケージによって提供されます。次のように起動します。
 
 ```bash
-python -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json
+python3.12 -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json
 ```
 
 `hakoniwa-pdu` Launcherのモデルでは、次の要素を使用します。

@@ -29,12 +29,6 @@ candidate_paths.each do |path|
   label = File.basename(path)
   raw = File.read(path)
 
-  # Lifecycle validation is opt-in for backward compatibility. Older candidate
-  # records are left untouched until they adopt the top-level `tracking:` block.
-  next unless raw.match?(/^tracking:\s*$/)
-
-  tracked += 1
-
   begin
     data = load_yaml_file(path)
   rescue StandardError => e
@@ -46,6 +40,12 @@ candidate_paths.each do |path|
     errors << "#{label}: top-level YAML value must be a mapping"
     next
   end
+
+  # Every candidate must be valid YAML. Lifecycle field validation remains
+  # opt-in for backward compatibility until an older record adopts `tracking:`.
+  next unless raw.match?(/^tracking:\s*$/)
+
+  tracked += 1
 
   tracking = data["tracking"]
   unless tracking.is_a?(Hash)

@@ -1,6 +1,6 @@
 id: shadow-hand-hakoniwa-to-foxglove
 title: Shadow Hand Hakoniwa JointState to Foxglove 3D
-recipe_version: 0.3
+recipe_version: 0.4
 
 goal:
   user_request: 箱庭で動かしている Shadow Hand の関節状態を、Mac 上の Foxglove でリアルタイムに観測・3D 可視化したい。
@@ -38,6 +38,8 @@ validation:
     cdr_stdin_publisher forwarded that CDR through FoxgloveComm to a local
     Foxglove WebSocket server. Foxglove decoded the JointState topic and the 3D
     panel animated a prepared Shadow Robot URDF from the same JointState values.
+    The current component-owned browser launch entrypoint, live 3D motion, and
+    launcher-managed cleanup were re-verified on 2026-07-26.
   steps:
     - id: shadow_hand_base_plant
       status: verified
@@ -134,6 +136,46 @@ validation:
         - Ignore COLLADA <up_axis> must be enabled for the Shadow Robot DAE meshes.
         - The prepared URDF moved consistently with the MuJoCo simulation through JointState.position[].
         - No /tf publisher is required for this path.
+    - id: shadow_hand_current_browser_launch
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-pdu-foxglove
+          path: tools/launch.bash
+          revision: 6fcbce5
+        - repository: hakoniwalab/hakoniwa-pdu-foxglove
+          path: launch/shadow-hand-foxglove-browser.launch.json
+          revision: 6fcbce5
+        - source: user-observed-foxglove-3d
+          date: "2026-07-26"
+      notes:
+        - The launcher reached hako-cmd start exited with 0.
+        - The Shadow Hand plant, bridge, and sender reached WAIT RUNNING.
+        - JointState conversion published 24-joint, 908-byte CDR frames.
+        - The prepared URDF returned HTTP 200 with permissive CORS headers.
+        - A browser connection was established on port 8766 and the user confirmed visible finger motion in Foxglove 3D.
+        - SIGINT terminated the launcher-managed assets and closed listeners on ports 8766 and 8767.
+        - Python 3.12 selection is governed by the common Hakoniwa Runtime Primer contract rather than this component-specific validation.
+    - id: shadow_hand_local_build_contract
+      status: verified
+      evidence:
+        - repository: local/hakoniwa-pdu-foxglove
+          path: README.md
+          revision: local-working-tree-2026-07-26
+        - repository: local/hakoniwa-pdu-foxglove
+          path: tools/launch.bash
+          revision: local-working-tree-2026-07-26
+        - repository: local/hakoniwa-pdu-foxglove
+          path: config/manifests
+          revision: local-working-tree-2026-07-26
+      notes:
+        - Demo application binaries are built locally: the Foxglove publisher uses the Core-free base Endpoint target, while the Bridge and Python sender use the explicit core_callback variant.
+        - Endpoint and Bridge are resolved through integration-owned hakoniwa-build manifests and tools/hako.py; raw CMake is not their cross-platform user-facing build contract.
+        - Manifest doctor and configure --dry-run resolved macos-arm64 correctly, and clean manifest-owned build directories produced the Core-free package, Core-enabled callback package, Python 3.12 FFI, and Hakoniwa Bridge application.
+        - The Bridge manifest resolver propagates both the Endpoint and non-default Core install prefixes through CMAKE_PREFIX_PATH so Endpoint's find_dependency(hakoniwa-core) resolves the same Core selected by the manifest.
+        - Separate Core-free and Core-enabled Endpoint packages are isolated under hakoniwa-pdu-foxglove/work/install by default; Hakoniwa Core keeps its normal /usr/local/hakoniwa prefix unless HAKONIWA_CORE_ROOT is explicitly changed.
+        - Both Endpoint packages, Foxglove tests, Bridge, and the MuJoCo Shadow Hand target built successfully on macOS arm64; the manifest-built local Python FFI loaded the explicit core_callback dylib when both Core and Endpoint library directories were propagated.
+        - The final manifest-built composition was visually re-verified on 2026-07-26: all five launcher assets stabilized, hako-cmd start exited with 0, 24-joint 908-byte CDR frames were published, port 8766 had an established browser connection, and the user confirmed correct hand motion.
+        - The final local-Core verification used an isolated HAKO_CONFIG_PATH/mmap directory so shared-memory files created by an older Core build could not contaminate the run.
 
 agency_boundary:
   agent_actions:
@@ -177,6 +219,10 @@ constraints:
   - jointstate-schema-staged-from-pdu-registry-jazzy-docker
   - ignore-collada-up-axis-required-for-shadow-robot-dae
   - no-tf-required-for-urdf-jointstate-control
+  - launcher-uses-repository-local-demo-binaries
+  - endpoint-and-bridge-build-intent-is-manifest-driven
+  - endpoint-linkage-selected-by-runtime-role
+  - demo-endpoint-packages-use-separate-core-free-and-core-enabled-local-prefixes
   - verified-single-pc-macos-arm64
 
 target_environment:
@@ -231,6 +277,9 @@ execution_environment:
   filesystem:
     work_area: hakoniwa-pdu-foxglove/work
     notes:
+      - work/install/endpoint-core-free is the default local install prefix for the Core-free Endpoint package consumed by Foxglove.
+      - work/install/endpoint-core is the default local install prefix for the Core-enabled Endpoint package and its core_callback shared library.
+      - work/build/endpoint-core-free and work/build/endpoint-core are separate CMake build directories so cached library resolution cannot mix the variants.
       - Upstream Shadow Robot source and generated visualization artifacts are kept as local work inputs/outputs.
       - The JointState ros2msg bundle is copied from the hakoniwa-pdu-registry ROS 2 Jazzy Docker preparation flow into work/schemas/ros2_jazzy/sensor_msgs/msg/JointState.bundle.msg.
       - work/ remains local and is intentionally excluded from the public repository and Docker build context.
@@ -406,10 +455,16 @@ artifact_sets:
     status: verified
     artifacts:
       - hakoniwa-pdu-foxglove/config/shadow_hand_bridge
+      - hakoniwa-pdu-foxglove/config/manifests/endpoint-core-free.yaml
+      - hakoniwa-pdu-foxglove/config/manifests/endpoint-core-callback.yaml
+      - hakoniwa-pdu-foxglove/config/manifests/bridge-shadow-hand.yaml
       - hakoniwa-pdu-foxglove/config/shadow_hand/endpoint_foxglove_jointstate.json
       - hakoniwa-pdu-foxglove/examples/shadow-hand-jointstate-to-foxglove
       - hakoniwa-pdu-foxglove/examples/cdr-stdin-publisher
       - hakoniwa-pdu-foxglove/launch/shadow-hand-foxglove-smoke.launch.json
+      - hakoniwa-pdu-foxglove/tools/launch.bash
+      - hakoniwa-pdu-foxglove/launch/shadow-hand-foxglove-browser.launch.json
+      - hakoniwa-pdu-foxglove/work/install/endpoint-core/lib/libhakoniwa_pdu_endpoint_core_callback.dylib
   visualization_artifacts:
     description: Local Shadow Robot source plus generated Foxglove-ready URDF/mesh artifacts.
     status: verified
@@ -476,6 +531,15 @@ demo:
     Show the same simulated Shadow Hand motion in MuJoCo and Foxglove 3D on a
     Mac, using Hakoniwa JointState as the live contract and without requiring a
     ROS 2 runtime.
+  profiles:
+    - id: smoke
+      launcher: hakoniwa-pdu-foxglove/launch/shadow-hand-foxglove-smoke.launch.json
+      purpose: Bounded, headless transport and CDR publication validation.
+    - id: browser
+      launcher: hakoniwa-pdu-foxglove/launch/shadow-hand-foxglove-browser.launch.json
+      purpose: Interactive MuJoCo and Foxglove 3D end-to-end validation.
+      notes:
+        - The bounded hand-motion sender is configured for 120 seconds.
   steps:
     - order: 1
       id: prepare_jointstate_schema
@@ -483,49 +547,42 @@ demo:
       action: Prepare the sensor_msgs/msg/JointState ros2msg bundle in the registry ROS 2 Jazzy Docker environment and copy it to hakoniwa-pdu-foxglove/work/schemas/ros2_jazzy/sensor_msgs/msg/JointState.bundle.msg.
       agency: agent_action
     - order: 2
-      id: run_shadow_hand_base
-      component: hakoniwa-mujoco-robots
-      action: Start the verified Shadow Hand plant and bounded finger-motion sender.
-      agency: agent_action
-    - order: 3
-      id: start_shm_to_tcp_bridge
-      component: hakoniwa-pdu-bridge-core
-      action: Bridge ShadowHandAsset/joint_states from callback SHM to TCP using config/shadow_hand_bridge.
-      agency: agent_action
-    - order: 4
-      id: convert_native_jointstate_to_cdr
-      component: hakoniwa-pdu-registry
-      action: Decode the native JointState PDU and encode complete JointState CDR in the Python converter.
-      agency: agent_action
-    - order: 5
-      id: publish_cdr_to_foxglove
-      component: hakoniwa-pdu-foxglove
-      action: Write length-prefixed CDR to cdr_stdin_publisher and publish it through FoxgloveComm at ws://127.0.0.1:8766.
-      agency: agent_action
-    - order: 6
       id: fetch_shadow_robot_visualization
       component: hakoniwa-mbody-registry
       action: Clone shadow-robot/sr_common noetic-devel under work/shadow_hand_source_urdf.
       agency: agent_action
-    - order: 7
+    - order: 3
       id: expand_shadow_robot_xacro
       component: hakoniwa-mbody-registry
       action: Expand sr_hand.urdf.xacro with explicit --package sr_description=PATH and E3M5/right/all/pst arguments.
       agency: agent_action
-    - order: 8
+    - order: 4
       id: prepare_foxglove_urdf
       component: hakoniwa-pdu-foxglove
       action: Rewrite package://sr_description mesh URIs and set rh_world_joint root rpy to -1.5707963267948966 0 -1.5707963267948966.
       agency: agent_action
-    - order: 9
-      id: serve_urdf
+    - order: 5
+      id: build_local_shadow_hand_demo_binaries
       component: hakoniwa-pdu-foxglove
-      action: Serve work/urdf/shadow_hand with CORS on http://127.0.0.1:8767.
+      action: >
+        Follow the README manifest-first local-build procedure. Resolve and
+        build Endpoint from endpoint-core-free.yaml and
+        endpoint-core-callback.yaml, install the resulting packages under
+        separate work/install prefixes, and resolve/build Bridge from
+        bridge-shadow-hand.yaml. Build cdr_stdin_publisher against the
+        Core-free base target, the Bridge against core_callback, and the
+        sibling MuJoCo Shadow Hand asset locally. Keep Hakoniwa Core at
+        /usr/local/hakoniwa unless HAKONIWA_CORE_ROOT is explicitly set.
       agency: agent_action
-    - order: 10
+    - order: 6
+      id: launch_shadow_hand_foxglove_browser_composition
+      component: hakoniwa-pdu-foxglove
+      action: From the hakoniwa-pdu-foxglove repository root, run bash tools/launch.bash launch/shadow-hand-foxglove-browser.launch.json. The wrapper first verifies the repository-local MuJoCo, Bridge, Foxglove publisher, and core_callback Endpoint artifacts. The composition then starts the Shadow Hand plant, local URDF server, JointState-to-CDR publisher, SHM-to-TCP bridge, bounded hand-motion sender, and hako-cmd start.
+      agency: agent_action
+    - order: 7
       id: configure_foxglove_3d
       component: hakoniwa-pdu-foxglove
-      action: Connect Foxglove, load shadow_hand_right.urdf, select Joint states mode and /hakoniwa/ShadowHandAsset/joint_states, and enable Ignore COLLADA <up_axis>.
+      action: Open https://app.foxglove.dev, connect to ws://localhost:8766, load shadow_hand_right.urdf, select Joint states mode and /hakoniwa/ShadowHandAsset/joint_states, and enable Ignore COLLADA <up_axis>.
       agency: human_action
   observability:
     success_signals:
@@ -535,6 +592,9 @@ demo:
       - Foxglove 3D hand geometry is connected correctly after enabling Ignore COLLADA <up_axis>.
       - Finger motion in Foxglove follows the MuJoCo simulation.
       - No /tf topic is required for the URDF Joint states control path.
+    diagnostic_notes:
+      - Endpoint `No subscribers found` messages can continue because the converter polls with recv_by_name() without registering a receive callback.
+      - Treat those messages as callback-dispatch diagnostics, not as evidence that the Foxglove WebSocket is disconnected.
     failure_signals:
       - JointState.bundle.msg is missing from work/schemas/ros2_jazzy/sensor_msgs/msg.
       - Native Hakoniwa PDU bytes are sent directly as if they were CDR.
@@ -542,6 +602,17 @@ demo:
       - DAE mesh segments appear disconnected because Ignore COLLADA <up_axis> is disabled.
       - Whole-hand orientation differs because rh_world_joint preparation is missing.
       - URDF loads but does not move because Joint states mode/topic is not configured.
+  cleanup:
+    trigger: Send SIGINT to the foreground Hakoniwa launcher.
+    expected_behavior:
+      - The launcher terminates only the assets it manages.
+      - The Foxglove publisher listener on port 8766 closes.
+      - The local URDF server listener on port 8767 closes.
+    verification_checks:
+      - Confirm the launcher reports state -> TERMINATED.
+      - Confirm no process is listening on TCP ports 8766 or 8767.
+    cautions:
+      - Do not broadly terminate unrelated Python or browser processes.
 
 expected_result: >
   On macOS arm64, the MuJoCo Menagerie Shadow Hand runs as a Hakoniwa asset and

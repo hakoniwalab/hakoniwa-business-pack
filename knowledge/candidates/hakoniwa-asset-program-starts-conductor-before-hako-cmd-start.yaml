@@ -99,7 +99,8 @@ validation:
     - This candidate captures the runtime ordering and the local Tracer smoke.
     - The current rover sample is still a prototype path, not a fully generic rover asset.
     - The startup-order rule has been promoted to the Runtime Primer because it clarifies an existing Hakoniwa lifecycle invariant.
-    - Shadow Hand extended the rule from two manually launched programs to a
+    - >
+      Shadow Hand extended the rule from two manually launched programs to a
       multi-asset launcher scenario: conductor-owning plant asset first,
       callback-SHM bridge asset after registration, then hako-cmd start.
 

@@ -51,7 +51,7 @@ APIs, data receive events, and PDU-based services.
 provides Python PDU utilities and the Hakoniwa launcher entrypoint:
 
 ```bash
-python -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json
+python3.12 -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json
 ```
 
 In user-facing Recipes, treat them like this:
@@ -114,6 +114,13 @@ preflight is:
 python3.12 -c "import hakopy; import hakoniwa_pdu"
 python3.12 -m pip show hakoniwa-pdu
 ```
+
+Python 3.12 is a common Hakoniwa runtime contract, not a condition that should
+be rediscovered independently in each Recipe. Component-owned launch wrappers
+for Hakoniwa Python workflows should select Python 3.12 explicitly, honor a
+documented interpreter override such as `HAKO_PYTHON` or `PYTHON_CMD`, and fail
+before starting assets when the selected interpreter is not Python 3.12 or
+cannot import the required Hakoniwa packages.
 
 ## Assets
 
@@ -393,7 +400,7 @@ The commonly used Hakoniwa launcher is provided by the `hakoniwa-pdu` Python
 package, from the `hakoniwa-pdu-python` repository. It is invoked with:
 
 ```bash
-python -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json
+python3.12 -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json
 ```
 
 The `hakoniwa-pdu` launcher model uses:

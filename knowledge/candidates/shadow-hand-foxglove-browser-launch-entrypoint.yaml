@@ -1,0 +1,119 @@
+id: shadow-hand-foxglove-browser-launch-entrypoint
+title: Shadow Hand Foxglove browser demo uses the component launch wrapper and standard Foxglove Web entry point
+status: promoted
+
+knowledge_type:
+  - runtime_rule
+  - usage_pattern
+  - known_pitfall
+
+summary: >
+  The current Shadow Hand browser demo should be started from the
+  hakoniwa-pdu-foxglove repository root with tools/launch.bash and the
+  shadow-hand-foxglove-browser launch file. User-facing documentation should
+  direct operators to the standard https://app.foxglove.dev entry point and
+  then to ws://localhost:8766, rather than making an account- or
+  layout-specific Foxglove URL the canonical entry point.
+
+observation:
+  context: >
+    Refreshing the Shadow Hand hakoniwa-pdu-foxglove demo documentation while
+    the current browser workflow is being re-validated.
+  details:
+    - The current operator command is bash tools/launch.bash launch/shadow-hand-foxglove-browser.launch.json.
+    - tools/launch.bash resolves sibling repository paths, selects the Endpoint shared library for the host OS, and invokes hakoniwa_pdu.apps.launcher.hako_launcher.
+    - The browser launch file starts the Shadow Hand plant, URDF server, JointState-to-CDR publisher, SHM-to-TCP bridge, and bounded hand-motion sender.
+    - The standard browser entry point is https://app.foxglove.dev.
+    - Foxglove connects to the local publisher at ws://localhost:8766.
+    - A URL containing a saved layout ID may be convenient for a particular operator, but should not be treated as the portable canonical URL.
+    - The launch wrapper must follow the common Hakoniwa Python 3.12 runtime contract rather than inheriting an arbitrary `python3` from PATH.
+    - The wrapper now defaults to Python 3.12, accepts HAKO_PYTHON or PYTHON_CMD overrides, and fails before asset startup when the interpreter or launcher import is invalid.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu-foxglove
+      path: tools/launch.bash
+      revision: main
+    - repository: hakoniwalab/hakoniwa-pdu-foxglove
+      path: launch/shadow-hand-foxglove-browser.launch.json
+      revision: main
+  runtime_evidence:
+    - description: >
+        On 2026-07-26, the browser launch reached `hako-cmd start exited with
+        0`; the Shadow Hand plant, bridge, and sender reached WAIT RUNNING;
+        24-joint, 908-byte CDR frames were published; and the URDF server
+        returned HTTP 200 with permissive CORS headers.
+    - description: >
+        Port 8766 had an established browser connection and the user confirmed
+        that the Foxglove 3D Shadow Hand was visible and its fingers moved with
+        the MuJoCo simulation.
+    - description: >
+        Sending SIGINT to the launcher terminated its managed assets and closed
+        the listeners on ports 8766 and 8767.
+  expert_input:
+    - source: user
+      statement: >
+        The current Shadow Hand command is bash tools/launch.bash
+        launch/shadow-hand-foxglove-browser.launch.json, and the normal
+        Foxglove URL should be https://app.foxglove.dev.
+
+confidence: high
+
+contradictions:
+  - target: hakoniwa-pdu-foxglove/docs/shadow-hand-3d.md
+    existing_claim: The guide invokes the older hako_launch.hako_launcher module directly.
+    new_evidence: The component-owned tools/launch.bash invokes the launcher from the installed hakoniwa-pdu package and prepares the required repository paths and shared-library environment.
+  - target: catalog/components/hakoniwa-pdu-foxglove.yaml
+    existing_claim: The run command uses the older smoke launch and hako_launch module.
+    new_evidence: The current browser demo uses the component launch wrapper and browser launch file.
+
+validation:
+  status: verified
+  required: []
+  notes:
+    - The launch wrapper and process composition are directly supported by the current source files.
+    - The operator procedure is confirmed by expert input.
+    - The current browser composition and human-visible 3D motion were re-verified on 2026-07-26.
+    - Python 3.12 is promoted as a common Runtime Primer contract; it is not a Shadow Hand-specific Recipe constraint.
+
+tracking:
+  implementation_status: resolved
+  issues: []
+
+promotion_targets:
+  catalog:
+    - hakoniwa-pdu-foxglove
+  runtime_primer: true
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - shadow-hand-hakoniwa-to-foxglove
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-pdu-foxglove
+      kind: validator
+      path: tools/launch.bash
+      mode: detect-only
+      notes:
+        - The wrapper checks Python 3.12 and the hakoniwa-pdu launcher import before starting assets.
+
+promotion_rationale:
+  - The component README and detailed guide own the concrete operator entry point.
+  - The Catalog should expose the current component command.
+  - The Recipe should preserve the current multi-component launch sequence and human browser step.
+  - The component launch wrapper should fail before asset startup when the common Python 3.12 runtime contract is not satisfied.
+
+resolution:
+  status: documented
+  fixed_by: []
+  verified: true
+  promoted_to:
+    - hakoniwa-pdu-foxglove/README.md
+    - hakoniwa-pdu-foxglove/docs/shadow-hand-3d.md
+    - catalog/components/hakoniwa-pdu-foxglove.yaml
+    - recipes/examples/shadow-hand-hakoniwa-to-foxglove.yaml
+  executable_guardrails:
+    - hakoniwa-pdu-foxglove/tools/launch.bash
+  notes:
+    - The current browser composition was re-verified on 2026-07-26 before the Python preflight change.
+    - The component-owned preflight was then verified separately to reject Python 3.14 before asset startup and accept the prepared Python 3.12 launcher environment.
+    - A full browser-demo rerun after the preflight-only wrapper change was not required because the successful launch path delegates to the same launcher command.

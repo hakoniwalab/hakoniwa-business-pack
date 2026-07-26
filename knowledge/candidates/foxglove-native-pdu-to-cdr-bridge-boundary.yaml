@@ -25,7 +25,12 @@ observation:
     - The Python bridge decoded native JointState bytes with the generated native converter, encoded complete CDR with the generated CDR converter, and passed length-prefixed frames to cdr_stdin_publisher.
     - Smoke logs showed `sent JointState CDR samples=160 joints=24 bytes=908 ...` and `published CDR frame samples=160 bytes=908`.
     - Foxglove Web UI decoded /hakoniwa/ShadowHandAsset/joint_states as sensor_msgs/msg/JointState and displayed header, 24 joint names, position, velocity, and effort arrays.
-    - `WARNING: No subscribers found ...` from cdr_stdin_publisher is expected when the Foxglove UI is not connected.
+    - >
+      `WARNING: No subscribers found ...` is emitted by the Endpoint receive
+      callback dispatcher when no callback is registered for the received PDU.
+      The current converter polls with `recv_by_name()`, so the warning can
+      continue while native PDU polling, CDR publication, the Foxglove
+      WebSocket connection, and 3D visualization are all working.
     - Python Endpoint FFI runtime variables must be scoped per asset in Launcher configs; relative native-library paths in defaults.env can break other Python assets whose cwd differs.
     - Processes that do not register as Hakoniwa assets can often be placed in
       a Launcher's `after_start` timing phase to avoid blocking asset
@@ -37,6 +42,44 @@ observation:
     - Recipe authors should explicitly distinguish Hakoniwa asset processes
       from non-registering helper processes and choose `before_start` or
       `after_start` timing intentionally.
+    - >
+      The demo must build and select Endpoint variants by runtime role.
+      Foxglove consumes a separately installed Core-free base package, while
+      the SHM-facing Bridge and Python sender consume the Core-enabled
+      core_callback package/shared library.
+    - >
+      Repository-local application binaries and separate Core-free/Core-enabled
+      Endpoint build directories prevent a stale system install or cached
+      find_library result from silently changing the composition under test.
+    - >
+      Endpoint and Bridge capability selection must be expressed through their
+      hakoniwa-build manifests. Direct CMake remains a maintainer/debugging
+      path, not the cross-platform user-facing build contract.
+    - >
+      Keep manifest-owned Endpoint build directories separate from legacy or
+      raw-CMake build directories. Reusing an old cache can retain a stale Core
+      prefix in macOS RPATH/install processing even when the manifest resolves
+      the new prefix correctly.
+    - >
+      A local manifest-built Python FFI still links the base Endpoint shared
+      library while the runtime explicitly preloads core_callback. Launcher
+      children therefore need both the Hakoniwa Core lib directory and the
+      local Endpoint package lib directory in their dynamic-library search
+      path.
+    - >
+      When Bridge consumes an installed Core-enabled Endpoint package,
+      HAKO_PDU_BRIDGE_HAKONIWA_CORE_ROOT alone does not control Endpoint's
+      find_dependency(hakoniwa-core). The manifest resolver must also place the
+      resolved Endpoint and Core prefixes in CMAKE_PREFIX_PATH.
+    - >
+      Launcher substitution uses ${VAR}. Writing ${ENV:VAR} in lib_path or PATH
+      entries passes a literal value and can leave @rpath dependencies
+      unresolved.
+    - >
+      When switching between locally built Core installations with the mmap
+      backend, use an isolated HAKO_CONFIG_PATH/core_mmap_path or deliberately
+      reinitialize the old mmap state. Reusing files created by a different
+      Core build can fail during hako_mmap_create before asset registration.
 
 sources:
   repositories:
@@ -52,6 +95,15 @@ sources:
     - repository: local/hakoniwa-pdu-foxglove
       path: config/shadow_hand_bridge
       revision: local-working-tree-2026-07-23
+    - repository: local/hakoniwa-pdu-foxglove
+      path: README.md
+      revision: local-working-tree-2026-07-26
+    - repository: local/hakoniwa-pdu-foxglove
+      path: tools/launch.bash
+      revision: local-working-tree-2026-07-26
+    - repository: local/hakoniwa-pdu-foxglove
+      path: config/manifests
+      revision: local-working-tree-2026-07-26
   runtime_evidence:
     - description: >
         Hakoniwa Launcher started ShadowHandAsset, the TCP-to-CDR Foxglove
@@ -60,15 +112,36 @@ sources:
         hako-cmd start returned 0, Shadow Hand joint values changed, and the
         Foxglove publisher logged repeated CDR conversion and publication
         samples.
+    - description: >
+        On 2026-07-26, the browser launch published 24-joint, 908-byte CDR
+        frames while port 8766 had an established browser connection and the
+        user confirmed visible Shadow Hand finger motion. The Endpoint
+        `No subscribers found` warning continued during that successful
+        visualization, proving that it is not a Foxglove connection-status
+        signal.
+    - description: >
+        On 2026-07-26, separate local Core-free and Core-enabled Endpoint
+        packages were built and installed, Foxglove tests passed against the
+        Core-free package, Bridge and the Python FFI loaded core_callback, and
+        the local MuJoCo Shadow Hand target linked successfully.
 
-confidence: medium
+confidence: high
 
 validation:
   status: verified
   notes:
     - Native PDU receive, generated CDR conversion, and FoxgloveComm publication were verified locally.
     - Manual Foxglove UI connection and Raw Messages decoding were confirmed by user observation.
-    - Plot and URDF-backed 3D visualization are separate viewer-level checks.
+    - URDF-backed 3D motion was re-verified by user observation on 2026-07-26.
+    - Endpoint callback warnings must not be used as a Foxglove WebSocket connection check.
+    - Separate local Endpoint package prefixes and explicit core_callback shared-library loading were verified on macOS arm64.
+    - Endpoint and Bridge manifest resolution is required before claiming the local build flow is cross-platform.
+    - Clean manifest-owned Endpoint builds, Python 3.12 FFI import, explicit core_callback loading, and the Bridge manifest build were verified on macOS arm64.
+    - The final manifest-built browser composition was visually re-verified by the user on 2026-07-26 with an established Foxglove connection and moving Shadow Hand.
+
+tracking:
+  implementation_status: resolved
+  issues: []
 
 promotion_targets:
   catalog:
@@ -86,3 +159,18 @@ promotion_rationale:
   - It documents why Foxglove-specific bridge configs belong with the Foxglove recipe, while the reusable bridge-core repo stays scenario-neutral.
   - It captures the Launcher timing distinction between registering Hakoniwa
     assets and non-registering helper processes.
+  - It preserves the local-build and Endpoint-variant selection contract needed
+    to ensure that a demo actually exercises the intended component revisions.
+
+resolution:
+  status: documented
+  fixed_by: []
+  verified: true
+  promoted_to:
+    - catalog/components/hakoniwa-pdu-foxglove.yaml
+    - recipes/examples/shadow-hand-hakoniwa-to-foxglove.yaml
+    - hakoniwa-pdu-foxglove/docs/shadow-hand-3d.md
+  executable_guardrails: []
+  notes:
+    - The warning semantics and successful polling/CDR/3D path were re-verified on 2026-07-26.
+    - The local binary and split Endpoint package build contract was documented and build-verified on 2026-07-26.
