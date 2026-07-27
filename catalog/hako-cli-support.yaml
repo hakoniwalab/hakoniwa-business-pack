@@ -1,0 +1,67 @@
+contract_version: "1.0"
+description: >-
+  Cross-component support matrix for the standard tools/hako.py operational interface.
+  Component catalog entries remain the source of detailed evidence; this file is a compact
+  discovery index for humans, recipes, and AI agents.
+
+components:
+  hakoniwa-conductor-light:
+    path: tools/hako.py
+    commands:
+      doctor:
+        supported: true
+      configure:
+        supported: true
+        options:
+          - --dry-run
+      build:
+        supported: true
+      test:
+        supported: true
+      smoke:
+        supported: true
+        modes:
+          - auto
+          - manual
+
+  hakoniwa-pdu-endpoint:
+    path: tools/hako.py
+    commands:
+      doctor:
+        supported: true
+      build:
+        supported: true
+
+  hakoniwa-pdu-bridge-core:
+    path: tools/hako.py
+    commands:
+      doctor:
+        supported: true
+      build:
+        supported: true
+
+  hakoniwa-pdu-rpc:
+    path: tools/hako.py
+    commands:
+      doctor:
+        supported: true
+      build:
+        supported: true
+
+  hakoniwa-mujoco-robots:
+    path: tools/hako.py
+    commands:
+      doctor:
+        supported: true
+      build:
+        supported: true
+
+  hakoniwa-core-pro:
+    path: tools/hako.py
+    commands:
+      doctor:
+        supported: true
+      build:
+        supported: true
+    notes:
+      - Requires the upstream hakoniwa-core-pro hako.py standard-entry-point change before this declaration is authoritative on main.
