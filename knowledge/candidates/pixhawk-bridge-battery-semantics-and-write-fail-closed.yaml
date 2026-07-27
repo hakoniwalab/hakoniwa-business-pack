@@ -1,0 +1,90 @@
+id: pixhawk-bridge-battery-semantics-and-write-fail-closed
+title: A MAVLink-to-PDU telemetry bridge must preserve battery semantics and fail closed on PDU write failure
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - interface_contract
+  - validation_rule
+  - agency_boundary
+
+summary: >
+  Building a read-only MAVLink-to-PDU telemetry bridge for a real Pixhawk
+  flight controller surfaced two reusable real-device integration pitfalls:
+  (1) MAVLink's SYS_STATUS.battery_remaining field is a state-of-charge (SoC)
+  percentage and must not be written directly into a PDU field that
+  represents state-of-health (SoH) -- the two are semantically different
+  quantities and collapsing an unknown/invalid SoC reading into a misleading
+  SoH value is worse than reporting it as unknown; (2) a PDU write's return
+  value must be checked, and repeated write failures must cause the bridge
+  to fail closed (stop and exit non-zero) rather than continue logging
+  success after a write silently failed.
+
+observation:
+  context: >
+    An adversarial review of a MAVLink-to-PDU telemetry bridge for a real
+    Pixhawk flight controller found a high-severity semantic mismatch and a
+    medium-severity write-failure-masking defect.
+  details:
+    - MAVLink SYS_STATUS.battery_remaining is a state-of-charge (SoC) percentage, not the same quantity as a battery state-of-health (SoH) field in a custom BatteryStatus-style PDU message.
+    - An unknown or invalid battery_remaining reading must not be collapsed into a misleading health value; it should be represented as unknown/absent rather than guessed.
+    - The bridge's PDU writes are now checked by return value, with a RuntimeError raised on failure rather than assuming success.
+    - Three consecutive PDU write failures cause the bridge to fail closed (stop and exit with a non-zero status) instead of continuing to run and log success.
+    - This recipe remains strictly read-only (telemetry ingestion only); any future actuation path (writing commands back to the flight controller) requires a separate, explicitly human-approved safety gate and must not be added to this read-only bridge without one.
+
+sources:
+  repositories: []
+  runtime_evidence:
+    - description: >-
+        External contributor's Windows 11 x86_64 native verification environment:
+        a positive telemetry path, a bad-serial-port path, and a
+        bad-PDU-write-size path were each re-verified after the semantic fix
+        (battery_remaining no longer written into a SoH-style field) and the
+        fail-closed write-checking behavior (three consecutive failures stop
+        the bridge with a non-zero exit) were both implemented.
+  expert_input:
+    - source: adversarial code review
+      statement: Identified the SoC-vs-SoH field mismatch and the unchecked PDU write result as the two defects to fix before this bridge could be considered safe to reuse.
+
+confidence: high
+
+contradictions:
+  - target: initial MAVLink-to-PDU battery field mapping
+    existing_claim: battery_remaining could be mapped directly into a PDU's health-percentage field, and PDU writes could log success unconditionally.
+    new_evidence: Review and re-verification showed both were incorrect; the health field is no longer sourced from MAVLink SoC, and write success is now explicitly checked with a fail-closed policy on repeated failure.
+
+validation:
+  status: verified
+  required:
+    - Any future actuation path (writing commands back to the flight controller) must start as a separate recipe with explicit human approval and its own safety fixtures; it must not be folded into this read-only telemetry bridge.
+  notes:
+    - This fact is especially important because the component touches a real hardware flight controller.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+
+promotion_rationale:
+  - Any real-device telemetry bridge recipe needs this semantic-mapping discipline (do not conflate different physical quantities that happen to share a similar name or scale) and fail-closed write validation, since silent success-logging on a write failure is a dangerous default for anything touching real hardware.
+
+resolution:
+  status: documented
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Candidate only. No upstream implementation issue has been filed; both the
+      SoC/SoH mismatch fix and the fail-closed write behavior were implemented
+      and re-verified only inside a private telemetry-bridge asset, not an
+      upstream hakoniwalab component, so there is no public repository or
+      issue to track this against. resolution.verified is left false because
+      that re-verification was of private asset code, not of an upstream
+      fix/PR/revision this candidate can point to.
