@@ -1,8 +1,8 @@
 contract_version: "1.0"
 description: >-
   Cross-component support matrix for the standard tools/hako.py operational interface.
-  Component catalog entries remain the source of detailed evidence; this file is a compact
-  discovery index for humans, recipes, and AI agents.
+  This matrix is derived from the actual command dispatch implemented by each repository;
+  component catalog entries and runtime_checks remain the source of detailed evidence.
 
 components:
   hakoniwa-conductor-light:
@@ -16,45 +16,114 @@ components:
           - --dry-run
       build:
         supported: true
+        options:
+          - --dry-run
       test:
         supported: true
+        options:
+          - --dry-run
       smoke:
         supported: true
         modes:
           - auto
           - manual
+    notes:
+      - "--dry-run is intentionally rejected for smoke."
+      - "smoke auto verifies dynamic attach and world-time progress; smoke manual also verifies start/stop/reset transitions."
 
   hakoniwa-pdu-endpoint:
     path: tools/hako.py
+    common_options:
+      - --config
     commands:
       doctor:
         supported: true
+      configure:
+        supported: true
+        options:
+          - --dry-run
       build:
         supported: true
+        options:
+          - --dry-run
+      test:
+        supported: true
+        options:
+          - --dry-run
+    notes:
+      - "configure/build/test are manifest-driven through hakoniwa-build.yaml or --config."
+      - "test behavior follows validation flags in the resolved build manifest, including optional CTest and Python import validation."
 
   hakoniwa-pdu-bridge-core:
     path: tools/hako.py
+    common_options:
+      - --config
     commands:
       doctor:
         supported: true
+      configure:
+        supported: true
+        options:
+          - --dry-run
       build:
         supported: true
+        options:
+          - --dry-run
+      test:
+        supported: true
+        options:
+          - --dry-run
+    notes:
+      - "configure/build/test are manifest-driven through hakoniwa-build.yaml or --config."
+      - "The validation.integration_tcp manifest flag is reserved; hako.py currently reports it as not implemented rather than claiming smoke coverage."
 
   hakoniwa-pdu-rpc:
     path: tools/hako.py
+    common_options:
+      - --build-dir
+      - --install-dir
+      - --build-type
+      - --endpoint-root
+      - --vcpkg-root
     commands:
       doctor:
         supported: true
+      configure:
+        supported: true
+        options:
+          - --dry-run
       build:
         supported: true
+      test:
+        supported: true
+      install:
+        supported: true
+    extensions:
+      - test-basic
+      - test-infinite-wait
+      - test-timeout-cancel
+      - test-cancel-race
+      - package-test
+    notes:
+      - "--dry-run is implemented for configure; it is not advertised for build/test/install."
+      - "Specialized test commands and package-test are stable repository-owned extensions, not common contract commands."
 
   hakoniwa-mujoco-robots:
     path: tools/hako.py
     commands:
       doctor:
         supported: true
+        options:
+          - --dry-run
       build:
         supported: true
+        options:
+          - --dry-run
+    capabilities:
+      - native-argument-passthrough
+    notes:
+      - "The wrapper delegates to doctor.bash/build.bash on POSIX and build-win.ps1 on Windows."
+      - "Arguments after -- are passed through to the platform-native script."
 
   hakoniwa-core-pro:
     path: tools/hako.py
@@ -63,5 +132,8 @@ components:
         supported: true
       build:
         supported: true
+    capabilities:
+      - native-argument-passthrough
     notes:
-      - Requires the upstream hakoniwa-core-pro hako.py standard-entry-point change before this declaration is authoritative on main.
+      - "build delegates to build.bash on POSIX and win-build.ps1 on Windows."
+      - "Arguments after -- are passed through to the platform-native build script."
