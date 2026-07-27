@@ -10,9 +10,9 @@ distribution:
   notes:
     - Private commercial Hakoniwa component.
 verification:
-  verified_at: 2026-07-19
-  source_revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
-  source_ref: main
+  verified_at: 2026-07-27
+  source_revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+  source_ref: fix/rpc-event-discovery-retry
 summary: Lightweight conductor for coordinating dynamically joining and leaving assets under a shared virtual time.
 category:
   primary: simulation-core
@@ -26,8 +26,9 @@ status:
   maturity: active
   catalog_confidence: high
   notes:
-    - Cataloged from README quick start and server/client config documentation.
+    - Cataloged from the product README, QuickStart, public API/design documentation, cross-platform tooling, tests, and CI evidence.
     - Designed as a lighter conductor than the pro/RD stack.
+    - Revision ce2635ec48634555f383eb5073806de2a2aacc6c passed the full four-platform cross-platform workflow before PR #5 merge.
 
 capabilities:
   - name: Shared virtual-time coordination
@@ -35,42 +36,52 @@ capabilities:
     evidence:
       - repository: hakoniwalab/hakoniwa-conductor-light
         path: README.md
-        revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
+        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
   - name: Dynamic client participation
     description: Clients generate their own endpoint and RPC configuration and do not need to be pre-registered in server config.
     evidence:
       - repository: hakoniwalab/hakoniwa-conductor-light
         path: README.md
-        revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
+        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
   - name: RPC facade for C++ clients
-    description: ConductorLightRpcClient wraps client config generation, endpoint container initialization, RPC calls, sleep, and notify behavior.
+    description: ConductorLightRpcClient wraps client config generation, endpoint container initialization, RPC calls, sleep, notify behavior, and event handling.
     evidence:
       - repository: hakoniwalab/hakoniwa-conductor-light
         path: README.md
-        revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
+        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
   - name: Manual simulation control
     description: Supports manual start, stop, reset, state, and time commands through hakoctl when configured for manual start.
     evidence:
       - repository: hakoniwalab/hakoniwa-conductor-light
         path: README.md
-        revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
+        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
   - name: Synchronization observability
     description: Can record asset synchronization delay to CSV and plot it with the included tool.
     evidence:
       - repository: hakoniwalab/hakoniwa-conductor-light
-        path: README.md
-        revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
+        path: docs/QuickStart.md
+        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+  - name: Cross-platform build, test, and smoke entry point
+    description: tools/hako.py provides the same doctor, build, test, smoke auto, and smoke manual workflow across Linux, macOS, and Windows.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-conductor-light
+        path: tools/hako.py
+        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+      - repository: hakoniwalab/hakoniwa-conductor-light
+        path: .github/workflows/cross-platform.yml
+        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
 
 limitations:
   - Does not aim to cover the full RD functionality of conductor-pro.
   - RPC examples require submodules hakoniwa-pdu-rpc and hakoniwa-pdu-endpoint.
   - Some client/server combinations are explicitly unsupported and rejected by config checks.
+  - RPC request timeout is not a peer-failure detector. After timeout, the caller explicitly cancels and waits for the in-flight RPC to resolve; loss of the Conductor Light server itself is treated as simulation failure rather than transparent recovery.
 
 interfaces:
   inputs:
     - name: Server config
       kind: config
-      description: JSON defining core tick, max delay, tick rate, RPC limits, TCP listen settings, and generated config paths.
+      description: JSON defining core tick, max delay, tick rate, RPC limits, TCP listen settings, feature switches, and generated config paths.
     - name: Client name and delta asset tick
       kind: command
       description: Client example arguments defining asset identity and per-cycle tick progress.
@@ -84,10 +95,13 @@ interfaces:
     - name: Synchronization CSV
       kind: file
       description: Long-form CSV containing world and asset timing offset samples.
+    - name: Smoke logs
+      kind: file
+      description: Component-owned smoke execution logs written under .hako for auto/manual validation and CI failure evidence.
   protocols:
     - name: TCP RPC
       role: client | server
-      notes: Example server/client coordination uses PDU-RPC over TCP endpoint.
+      notes: Server/client coordination uses PDU-RPC over TCP endpoint transport.
   configuration:
     - path: examples/config/server.json
       description: Auto-start server config.
@@ -100,41 +114,51 @@ dependencies:
   required:
     - name: C++20 compiler
       type: tool
-      notes: Required for build.
+      notes: Required for the RPC-enabled Light target and examples.
     - name: CMake
       type: tool
       notes: Required build system.
+    - name: Git
+      type: tool
+      notes: Required to initialize recursive submodules.
   optional:
     - name: hakoniwa-pdu-rpc
       type: repository
-      notes: Required for RPC examples and transport.
+      notes: Required for the standard RPC-enabled build and transport; omitted only in core-only builds.
     - name: hakoniwa-pdu-endpoint
       type: repository
-      notes: Required for TCP endpoint examples.
-    - name: Python 3
+      notes: Required for the standard TCP endpoint/RPC build; consumed as a build-tree dependency with Core integration disabled.
+    - name: Python 3.12
       type: runtime
-      notes: Required for sync log plotting.
+      notes: Used by the cross-platform tools/hako.py entry point and CI setup.
+    - name: vcpkg with Boost.Asio and Boost.Beast
+      type: package
+      notes: Windows dependency path used by tools/hako.py and CI when Boost is not otherwise discoverable.
 
 platforms:
   supported:
     - macOS
     - Linux
+    - Windows
   notes:
-    - Platform matrix is not explicitly documented in the README.
+    - Manual verification completed on macOS arm64 with build, 9 tests, smoke auto, and smoke manual.
+    - Manual verification completed on WSL2 Ubuntu x64 with build, 9 tests, smoke auto, and smoke manual.
+    - Manual verification completed on native Windows x64 with build, 9 tests, smoke auto, and smoke manual.
+    - Cross-platform workflow run 30247538916 passed Doctor, Build, Test, Smoke auto, and Smoke manual on Ubuntu x64, Ubuntu ARM64, macOS, and Windows x64 for revision ce2635ec48634555f383eb5073806de2a2aacc6c.
 
 connects_to:
   - component_id: hakoniwa-pdu-rpc
     direction: uses
     interface: RPC transport
-    notes: Used for conductor server/client RPC communication.
+    notes: Used for conductor server/client control-plane RPC; timeout/cancel lifecycle follows the Core-compatible PDU-RPC state machine.
   - component_id: hakoniwa-pdu-endpoint
     direction: uses
     interface: TCP endpoint / generated configs
-    notes: Provides endpoint transport for RPC examples.
+    notes: Provides endpoint transport for RPC and dynamic client connections.
   - component_id: hakoniwa-core-pro
     direction: related
-    interface: simulation control concepts
-    notes: Conductor-light provides lightweight virtual-time coordination without requiring the full core-pro conductor stack in the cataloged README path.
+    interface: simulation control and RPC state-machine concepts
+    notes: Conductor Light is a separate lightweight runtime, but its PDU-RPC timeout/cancel semantics intentionally follow the Core Pro RPC model.
   - component_id: hakoniwa-conductor-pro
     direction: related
     interface: conductor role
@@ -146,19 +170,28 @@ data_contracts:
     source:
       - repository: hakoniwalab/hakoniwa-conductor-light
         path: README.md
-        revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
+        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
   - name: Generated config naming
     description: Client-generated configs use stable names derived from client_name and reject duplicate same-name concurrent use in the same directory.
     source:
       - repository: hakoniwalab/hakoniwa-conductor-light
         path: README.md
-        revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
+        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+  - name: RPC timeout and cancellation lifecycle
+    description: Timeout is a transient event, not an implicit request termination. Conductor Light explicitly sends cancel, continues polling the in-flight RPC, accepts a normal response if it wins the race, and retries only after the endpoint reaches a reusable terminal state.
+    source:
+      - repository: hakoniwalab/hakoniwa-conductor-light
+        path: src/client/rpc_client_transport.cpp
+        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+      - repository: hakoniwalab/hakoniwa-conductor-light
+        path: test/rpc_integration_test.cpp
+        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
 
 recipe_roles:
   - role: simulation_core
     description: Coordinates simulation participants through shared virtual time.
   - role: control_plane
-    description: Provides start, stop, reset, attach, sleep, and state operations.
+    description: Provides start, stop, reset, attach, sleep, state, and event operations.
   - role: time_sync
     description: Tracks world and asset tick offsets for synchronized execution.
 
@@ -167,15 +200,17 @@ typical_usecases:
   - Teaching or testing virtual-time synchronization without full RD complexity.
   - C++ assets that need a simple conductor RPC facade.
   - Manual simulation start/stop/reset workflows.
+  - Cross-platform integration validation where the same doctor/build/test/smoke vocabulary should run on Linux, macOS, and Windows.
 
 anti_usecases:
   - Full RD handoff scenarios requiring conductor-pro/RD features.
   - General pub/sub data exchange without simulation time coordination.
   - Systems needing browser-facing visualization without a separate bridge/viewer.
+  - High-availability systems that require transparent recovery after the time-coordination server disappears.
 
 demo_candidates:
   - name: Two-client TCP RPC time sync
-    description: Start server-example, then RobotA and RobotB clients with different delta_asset_tick values and inspect CSV lag.
+    description: Start server-example, then RobotA and RobotB clients with different delta_asset_tick values and inspect synchronized progress or CSV lag.
     required_components:
       - hakoniwa-conductor-light
       - hakoniwa-pdu-rpc
@@ -183,7 +218,7 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-conductor-light
         path: examples/config/server.json
-        revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
+        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
   - name: Manual-start control loop
     description: Run manual server and manual clients, then control simulation through hakoctl commands.
     required_components:
@@ -191,47 +226,137 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-conductor-light
         path: examples/config/server-manual-start.json
-        revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
+        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
 
 operations:
   build:
     commands:
       - git submodule update --init --recursive
-      - cmake -S . -B build
-      - cmake --build build
-      - cmake -S . -B build-core -DHAKONIWA_CONDUCTOR_LIGHT_ENABLE_RPC=OFF -DHAKONIWA_CONDUCTOR_LIGHT_BUILD_EXAMPLES=OFF
+      - python tools/hako.py doctor
+      - python tools/hako.py configure --dry-run
+      - python tools/hako.py build
     notes:
-      - Default build enables RPC and TCP examples.
+      - tools/hako.py is the recommended cross-platform build entry point.
+      - The default managed build enables RPC, examples, and tests.
+      - Direct CMake remains available for development and compatibility workflows, including an RPC-disabled core-only build.
   test:
-    commands: []
-    notes: Add exact test command after reading docs/QuickStart.md or test layout.
+    commands:
+      - python tools/hako.py test
+      - python tools/hako.py smoke auto
+      - python tools/hako.py smoke manual
+    notes:
+      - The managed test command runs CTest; the RPC integration tests have a 30-second CTest safety timeout so a regression cannot hang CI indefinitely.
+      - Auto smoke verifies dynamic attach and world-time progress; manual smoke verifies Stopped/Running transitions plus start/stop/reset.
   run:
     commands:
+      - python tools/hako.py smoke auto
+      - python tools/hako.py smoke manual
       - ./build/server-example examples/config/server.json --csv logs/sync.csv
       - ./build/client-example RobotA 5000
       - ./build/client-example RobotB 10000
       - ./build/hakoctl start
     notes:
-      - hakoctl commands apply to manual-start workflows.
+      - hakoctl start/stop/reset applies to manual-start workflows.
+      - Use tools/hako.py smoke for the shortest reproducible behavioral validation path.
+
+runtime_checks:
+  - id: build-readiness
+    kind: doctor
+    platforms:
+      - macos
+      - linux
+      - windows
+    command:
+      - python
+      - tools/hako.py
+      - doctor
+    working_directory: repository
+    output: text
+    notes:
+      - Checks CMake/Git/compiler prerequisites, recursive submodule content, and Windows Visual Studio/vcpkg/Boost requirements.
+  - id: unit-integration-tests
+    kind: test
+    platforms:
+      - macos
+      - linux
+      - windows
+    command:
+      - python
+      - tools/hako.py
+      - test
+    working_directory: repository
+    output: text
+    notes:
+      - Requires the managed build to exist and runs the component CTest suite.
+  - id: smoke-auto
+    kind: smoke-test
+    platforms:
+      - macos
+      - linux
+      - windows
+    command:
+      - python
+      - tools/hako.py
+      - smoke
+      - auto
+    working_directory: repository
+    output: text
+    notes:
+      - Starts the server and two auto-start clients, verifies attach and world-time progress, then cleans up processes.
+  - id: smoke-manual
+    kind: smoke-test
+    platforms:
+      - macos
+      - linux
+      - windows
+    command:
+      - python
+      - tools/hako.py
+      - smoke
+      - manual
+    working_directory: repository
+    output: text
+    notes:
+      - Starts the manual-mode server/clients and verifies state, start, stop, reset, and time progress.
 
 known_gaps:
-  - Catalog does not yet summarize docs/QuickStart.md or lower-level design docs.
-  - Exact API surface of ConductorLightRpcClient should be cataloged from headers before generating SDK-level recipes.
-  - Platform support should be verified from CI or build docs.
+  - The exact full C++ API surface should still be read from public headers and docs/api-design.md before generating SDK-level code beyond the standard facade examples.
+  - Server disappearance is intentionally not implemented as transparent HA/recovery; a simulation that loses its shared-time conductor is considered failed.
+  - The catalog currently references the fully verified PR #5 revision; refresh source_ref/source_revision to the final main merge revision after that PR is merged.
 
 source_refs:
   - repository: hakoniwalab/hakoniwa-conductor-light
     path: README.md
-    revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
-    description: Main quick start and server/client behavior.
+    revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+    description: Product overview, standard tools/hako.py entry point, runtime modes, platform status section, dependencies, and public API entry points.
   - repository: hakoniwalab/hakoniwa-conductor-light
     path: docs/QuickStart.md
-    revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
-    description: Command-focused setup and integration-test steps.
+    revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+    description: Detailed build, test, smoke, manual-terminal, Windows dependency, and CSV workflows.
+  - repository: hakoniwalab/hakoniwa-conductor-light
+    path: docs/api-design.md
+    revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+    description: Public API and core/light layering.
+  - repository: hakoniwalab/hakoniwa-conductor-light
+    path: tools/hako.py
+    revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+    description: Cross-platform doctor/configure/build/test/smoke orchestration and remediation guidance.
+  - repository: hakoniwalab/hakoniwa-conductor-light
+    path: .github/workflows/cross-platform.yml
+    revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+    description: Ubuntu x64, Ubuntu ARM64, macOS, and Windows x64 CI matrix running doctor, build, tests, auto smoke, and manual smoke.
+  - repository: hakoniwalab/hakoniwa-conductor-light
+    path: src/client/rpc_client_transport.cpp
+    revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+    description: Core-compatible timeout/cancel resolution semantics used by synchronous RPC calls.
+  - repository: hakoniwalab/hakoniwa-conductor-light
+    path: test/rpc_integration_test.cpp
+    revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+    description: Integration coverage for timeout/cancel race recovery and server/client cleanup behavior.
   - repository: hakoniwalab/hakoniwa-conductor-light
     path: examples/config
-    revision: 0bfc54d43993ef9a6c3abcf18fc8a2f0be6e1e16
-    description: Server, client, PDU, and cache configs.
+    revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+    description: Auto/manual server, client, PDU, and cache configs.
 
 tags:
   - hakoniwa
