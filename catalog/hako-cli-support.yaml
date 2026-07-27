@@ -1,8 +1,10 @@
 contract_version: "1.0"
 description: >-
-  Cross-component support matrix for the standard tools/hako.py operational interface.
-  This matrix is derived from the actual command dispatch implemented by each repository;
-  component catalog entries and runtime_checks remain the source of detailed evidence.
+  Cross-component support matrix for the six standard tools/hako.py operations:
+  doctor, configure, build, test, install, and smoke. This matrix is derived from
+  the actual command dispatch implemented by each repository; component catalog
+  entries and runtime_checks remain the source of detailed evidence. Options and
+  extension commands are repository-owned and do not gain cross-repository semantics.
 
 components:
   hakoniwa-conductor-light:
@@ -28,7 +30,7 @@ components:
           - auto
           - manual
     notes:
-      - "--dry-run is intentionally rejected for smoke."
+      - "--dry-run is a repository-owned modifier and is intentionally rejected for smoke."
       - "smoke auto verifies dynamic attach and world-time progress; smoke manual also verifies start/stop/reset transitions."
 
   hakoniwa-pdu-endpoint:
@@ -52,6 +54,7 @@ components:
           - --dry-run
     notes:
       - "configure/build/test are manifest-driven through hakoniwa-build.yaml or --config."
+      - "--dry-run is implemented as a repository-owned modifier; its presence does not make dry-run a standard operation."
       - "test behavior follows validation flags in the resolved build manifest, including optional CTest and Python import validation."
 
   hakoniwa-pdu-bridge-core:
@@ -75,6 +78,7 @@ components:
           - --dry-run
     notes:
       - "configure/build/test are manifest-driven through hakoniwa-build.yaml or --config."
+      - "--dry-run is implemented as a repository-owned modifier; its presence does not make dry-run a standard operation."
       - "The validation.integration_tcp manifest flag is reserved; hako.py currently reports it as not implemented rather than claiming smoke coverage."
 
   hakoniwa-pdu-rpc:
@@ -106,7 +110,7 @@ components:
       - package-test
     notes:
       - "--dry-run is implemented for configure; it is not advertised for build/test/install."
-      - "Specialized test commands and package-test are stable repository-owned extensions, not common contract commands."
+      - "Specialized test commands and package-test are stable repository-owned extensions, not common contract operations."
 
   hakoniwa-mujoco-robots:
     path: tools/hako.py
@@ -123,6 +127,7 @@ components:
       - native-argument-passthrough
     notes:
       - "The wrapper delegates to doctor.bash/build.bash on POSIX and build-win.ps1 on Windows."
+      - "--dry-run is a wrapper-specific modifier rather than a standard operation."
       - "Arguments after -- are passed through to the platform-native script."
 
   hakoniwa-core-pro:
