@@ -1,0 +1,143 @@
+id: mujoco-robots-prepare-model-venv-layout-windows
+title: hakoniwa-mujoco-robots' prepare-model.bash only recognizes the POSIX venv layout (.venv/bin/python), not Windows' .venv/Scripts/python.exe
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - validation_rule
+
+summary: >
+  examples/actuators/shadow_hand/prepare-model.bash resolves its Python interpreter by
+  checking for a fixed POSIX venv path (.venv/bin/python) and does not check the
+  Windows venv layout (.venv/Scripts/python.exe). On a venv created by Windows Python
+  (`python -m venv .venv`), .venv/bin/ does not exist at all, so this check silently
+  fails to find the venv interpreter it was clearly written to prefer. This did not
+  block the 2026-07-26 re-verification outright (the script apparently falls through to
+  some other interpreter resolution rather than hard-erroring), but it meant the venv's
+  own installed dependencies (e.g. pyyaml) were not reliably picked up unless the venv's
+  Scripts/ directory was also placed on PATH ahead of other Python installations as a
+  workaround.
+
+observation:
+  context: >
+    Re-verifying the Shadow Hand forge flow on an external contributor's native Windows 11
+    x86_64 workspace (Git Bash, no WSL/Docker), 2026-07-26, at hakoniwa-mujoco-robots
+    revision 1abffe415e15635503a46de2d2c50b246ca52545, using the hakoniwa-mbody-registry
+    submodule's own venv at thirdparty/hakoniwa-mbody-registry/.venv, which on this
+    machine contains python.exe and pythonw.exe directly under
+    thirdparty/hakoniwa-mbody-registry/.venv/Scripts/ (the standard Windows venv layout)
+    and has no bin/ subdirectory at all.
+  details:
+    - "examples/actuators/shadow_hand/prepare-model.bash (per this workspace's reading of
+      the script, around line 18) checks for an interpreter at a hardcoded
+      `.venv/bin/python` relative path before falling back to some other resolution; this
+      check is POSIX-layout-specific (Python venvs on Linux/macOS place the interpreter
+      under bin/, while Python venvs created by a Windows Python install place it under
+      Scripts/ as python.exe, pythonw.exe -- there is no bin/ directory in a Windows venv
+      at all)."
+    - "Confirmed on this machine: `thirdparty/hakoniwa-mbody-registry/.venv` contains only
+      a Scripts/ subdirectory with python.exe and pythonw.exe (no python3, matching the
+      companion candidate's finding that no bare python3 executable exists in this venv
+      either) -- there is no bin/ directory for the .venv/bin/python check to find under
+      any circumstance on this machine, so that branch of prepare-model.bash's
+      interpreter resolution can never succeed here."
+    - "Practical effect observed this session: prepare-model.bash's own venv-python check
+      does not hard-fail the script outright (unlike the sibling forge.sh python3 stub
+      issue, which does produce a hard failure) -- the script proceeds to invoke
+      tools/forge.sh regardless. However, reaching a fully working forge run in this
+      session still required placing thirdparty/hakoniwa-mbody-registry/.venv/Scripts/ on
+      PATH explicitly (alongside the separate python3->python shim recorded in the
+      companion mbody-registry-forge-sh-python3-hardcoded-windows.yaml candidate), so that
+      whichever interpreter ended up being invoked actually had this venv's installed
+      packages (e.g. pyyaml, required by forge.sh's own inline python3 heredocs) available
+      -- without that, package-import failures inside forge.sh's heredocs would be the
+      next likely failure mode on a machine whose system/global Python lacks pyyaml."
+    - "This is a Windows-shell-layout gap in hakoniwa-mujoco-robots' own
+      prepare-model.bash wrapper script (not in hakoniwa-mbody-registry's forge.sh, which
+      is the subject of the separate companion candidate above), and is worth checking for
+      in any other *-model.bash / setup script in this repository that resolves a venv
+      interpreter by a hardcoded relative path."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      path: examples/actuators/shadow_hand/prepare-model.bash
+      revision: 1abffe415e15635503a46de2d2c50b246ca52545
+  runtime_evidence:
+    - description: >-
+        External contributor's Windows 11 x86_64 verification environment (native, Git
+        Bash, upstream sources unmodified), 2026-07-26: confirmed
+        thirdparty/hakoniwa-mbody-registry/.venv contains python.exe and pythonw.exe under
+        Scripts/ only (no bin/ directory, no bare python3). The full prepare-model.bash ->
+        forge.sh run only reached exit 0 once both the python3 shim (see companion
+        candidate) and this venv's Scripts/ directory were placed on PATH.
+  expert_input: []
+
+confidence: medium
+
+contradictions: []
+
+validation:
+  status: partially_verified
+  required:
+    - Directly re-read prepare-model.bash's exact interpreter-resolution logic (this
+      candidate's citation of a hardcoded .venv/bin/python check around line 18 is based
+      on this workspace's earlier reading of the script during the same 2026-07-26
+      session, not independently re-confirmed line-by-line in this exact recording pass)
+      to state precisely what the fallback path does when .venv/bin/python is absent,
+      rather than inferring it only from the observed practical effect (script did not
+      hard-fail, but still needed Scripts/ on PATH to behave correctly).
+    - Determine whether adding a Windows-layout check (.venv/Scripts/python.exe) alongside
+      the existing .venv/bin/python check in prepare-model.bash would be sufficient, or
+      whether the script's downstream calls to forge.sh/fetch.py also need an explicit
+      interpreter path passed through rather than relying on PATH order.
+  notes:
+    - "Confidence is medium rather than high because the precise mechanics of
+      prepare-model.bash's fallback (what interpreter it actually ends up invoking when
+      the .venv/bin/python check fails) were not independently re-traced in this pass --
+      only the net observable effect (needed Scripts/ on PATH to get a fully working run)
+      was confirmed by log evidence."
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      kind: doctor
+      path: examples/actuators/shadow_hand/prepare-model.bash
+      mode: detect-only
+      notes:
+        - No existing check in prepare-model.bash distinguishes a POSIX venv layout from
+          a Windows venv layout; a doctor-style check that tries both
+          .venv/bin/python and .venv/Scripts/python.exe (or uses a portable resolution
+          such as `python -c "import sys; print(sys.executable)"` run through whatever
+          activation mechanism is appropriate per OS) would make this gap detectable
+          without relying on PATH ordering as a workaround.
+
+promotion_rationale:
+  - This is a reusable, general Windows-vs-POSIX venv layout gap that likely applies to
+    any other *-model.bash-style setup script in hakoniwa-mujoco-robots that resolves a
+    venv interpreter by a hardcoded relative path, not just Shadow Hand's own script.
+  - Left as detect-only because no fix has been drafted or applied, and the exact
+    fallback behavior when the POSIX check fails was not fully traced in this session
+    (see validation.required above).
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Diagnosis and workaround only (PATH-ordering workaround, not a script fix); no
+      upstream issue filed, no PR exists yet. Recorded as candidate material for an
+      upstream issue against hakoniwa-mujoco-robots' prepare-model.bash (and any sibling
+      scripts sharing the same venv-resolution pattern, which were not individually
+      audited in this session).

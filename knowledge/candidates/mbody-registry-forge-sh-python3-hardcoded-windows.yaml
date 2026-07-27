@@ -1,0 +1,152 @@
+id: mbody-registry-forge-sh-python3-hardcoded-windows
+title: hakoniwa-mbody-registry's tools/forge.sh hardcodes python3, which resolves to a broken Windows App Execution Alias stub under Git Bash
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - validation_rule
+
+summary: >
+  hakoniwa-mbody-registry's tools/forge.sh invokes the interpreter as `python3` at every
+  call site, with no fallback to `python`. On a Windows workspace with no separately
+  installed python3.exe, `python3` on PATH resolves not to a real interpreter but to the
+  WindowsApps App Execution Alias stub (`python3.exe`), which prints a short message and
+  exits with code 49 instead of running the requested script. Because forge.sh is written
+  with `set -euo pipefail` and captures interpreter output via command substitution / `eval`,
+  the stub's non-Python output corrupts the expected variable assignment and the script
+  fails with an unrelated-looking "unbound variable" error rather than a clear
+  "python3 not found" message. Prepending a `python3` -> `python` shim to PATH (Git Bash
+  alone is not sufficient) resolves it without modifying the vendored script.
+
+observation:
+  context: >
+    Re-verifying the Shadow Hand forge flow (examples/actuators/shadow_hand/
+    prepare-model.bash -> hakoniwa-mbody-registry's tools/forge.sh) on an external
+    contributor's native Windows 11 x86_64 workspace (Git Bash, no WSL/Docker), 2026-07-26,
+    at hakoniwa-mujoco-robots revision 1abffe415e15635503a46de2d2c50b246ca52545 with the
+    hakoniwa-mbody-registry submodule pinned to
+    8b14d5366e156f3147a69c37cf953f7f8a1ab9fb.
+  details:
+    - "First attempt (no workaround): running prepare-model.bash (which itself resolves a
+      venv Python and then execs tools/forge.sh) failed with exit code 1 and the sole
+      error line 'forge.sh: line 45: FORGE_MODE: unbound variable'. This message names a
+      shell variable that forge.sh's own control flow assigns unconditionally near the top
+      of the script (based on argument count / whether forge.entry_urdf is set in the
+      robot's sources/*.yaml) -- an assignment failure serious enough to leave FORGE_MODE
+      completely unset under `set -u` is not something a plain missing-argument or
+      missing-YAML-key bug would normally produce, which is what made the true cause
+      (python3 resolving to a non-Python stub) non-obvious from the error text alone."
+    - "Root cause: this workspace's Windows PATH includes the WindowsApps directory (the
+      default location for App Execution Alias stubs for Python, used by
+      `Add or remove aliases for running applications` / Microsoft Store Python
+      redirection). With no real `python3.exe` installed anywhere else on PATH, invoking
+      `python3` resolves to that stub, which for a non-interactive/piped invocation prints
+      a short redirect/'app not installed' style message to stdout and exits with code 49,
+      instead of running the `-c`/heredoc script forge.sh passed it. forge.sh's own
+      pattern (per this workspace's reading of the script; forge.sh calls python3 both via
+      direct invocation for fetch.py/xacro2urdf.py/etc. and via inline heredocs for
+      resolving MODE/GENERATED_DIR/ENTRY_URDF_REL from the robot's YAML) means the stub's
+      unexpected output/exit code breaks the variable-capturing control flow rather than
+      failing at an obvious 'command not found' point."
+    - "Fix used (workspace-side, no vendored-script edit): create a small shim script named
+      `python3` (containing `#!/usr/bin/env bash` + `exec python \"$@\"`) and prepend its
+      directory to PATH ahead of the WindowsApps stub, in addition to putting the target
+      venv's Scripts/ directory on PATH so a real `python` resolves to the venv interpreter
+      with pyyaml etc. installed. With this shim in place, the identical unmodified
+      forge.sh invocation completed with exit 0 ('Forge complete.') -- see the companion
+      candidate mujoco-robots-prepare-model-venv-layout-windows.yaml for the sibling
+      venv-detection gap in prepare-model.bash that had to be worked around in the same
+      session."
+    - "Git Bash alone does not fix this: Git Bash provides a POSIX-like shell but does not
+      change what `python3` resolves to on PATH; the WindowsApps alias stub is a Windows
+      App Execution Alias, resolved by the OS's own PATH/App-Paths mechanism regardless of
+      which shell performs the lookup. This is specifically a Windows-Python-launcher
+      interaction, not a shell-compatibility gap that Git Bash can paper over on its own."
+    - "This is a hakoniwa-mbody-registry-side gap (not specific to shadow_hand's own YAML
+      or the mujoco-robots consumer), since every python3 call site in tools/forge.sh
+      would be affected identically for any robot forged through this script on a Windows
+      machine that has the WindowsApps python3 stub on PATH and no separately installed
+      python3.exe."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-mbody-registry
+      path: tools/forge.sh
+      revision: 8b14d5366e156f3147a69c37cf953f7f8a1ab9fb
+  runtime_evidence:
+    - description: >-
+        External contributor's Windows 11 x86_64 verification environment (native, Git
+        Bash, upstream sources unmodified), 2026-07-26: attempt 1 (no shim) failed with
+        exit 1 and the single line "forge.sh: line 45: FORGE_MODE: unbound variable";
+        attempt 2 (python3->python shim placed on PATH ahead of the WindowsApps stub,
+        plus the target venv's Scripts/ directory also on PATH) completed with exit 0 and
+        printed the full forge sequence (fetching robot source, forging robot in
+        mjcf_passthrough mode, "MJCF assets valid", "Forge complete."), with the shim
+        confirmed in use ("shim used: python3 -> exec python \"$@\"").
+  expert_input: []
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: partially_verified
+  required:
+    - Confirm whether hakoniwa-mbody-registry's own CI or documented setup instructions
+      already assume/require a Linux or macOS runner (where `python3` is normally a real
+      interpreter) and whether Windows is a documented supported platform for forge.sh at
+      all -- this candidate does not yet establish whether upstream considers Windows a
+      supported environment for this script.
+    - Test whether py.exe (the Python Launcher for Windows, py -3) or a plain
+      python-to-python3 PATH alias would be a more upstream-appropriate fix than a
+      per-workspace shim.
+  notes:
+    - Verified via one reproduced failure and one reproduced fix in the same session, on
+      one Windows machine's specific PATH configuration (WindowsApps stub present, no
+      separately installed python3.exe). Whether this reproduces identically on every
+      Windows machine (e.g. one where python3.exe genuinely does not exist anywhere on
+      PATH, producing a normal "command not found" instead of the App Execution Alias
+      stub's silent redirect) was not tested.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-mbody-registry
+      kind: doctor
+      path: tools/forge.sh
+      mode: detect-only
+      notes:
+        - No existing preflight check in forge.sh detects a non-functional python3
+          resolution before the script's own control flow depends on its output; a doctor-
+          style check ("does `python3 --version` produce real Python version output,
+          exit 0?") run before the MODE-resolution heredocs would surface this class of
+          failure with an actionable message instead of an unrelated-looking "unbound
+          variable" error.
+
+promotion_rationale:
+  - This is a reusable, cross-robot gap (affects every python3 call site in forge.sh, for
+    any robot forged on a Windows machine with the WindowsApps python3 stub on PATH), not
+    specific to Shadow Hand or this workspace's own configuration.
+  - Left as detect-only because no fix has been drafted or applied upstream; a
+    doctor-style preflight is a reasonable direction but was not implemented in this
+    session.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Diagnosis and workaround only; no upstream issue filed, no PR exists yet. Recorded
+      as candidate material for an upstream issue against hakoniwa-mbody-registry's
+      tools/forge.sh (and possibly its sibling scripts, which were not individually
+      checked for the same python3-only assumption in this session).

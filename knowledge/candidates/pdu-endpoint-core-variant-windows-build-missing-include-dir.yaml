@@ -1,0 +1,251 @@
+id: pdu-endpoint-core-variant-windows-build-missing-include-dir
+title: hakoniwa-pdu-endpoint's manifest-driven core-variant build fails on Windows with missing hako_asset.h / hakoniwa_asset_polling.h
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - validation_rule
+
+summary: >
+  Building hakoniwa-pdu-endpoint with features.hakoniwa_core: true through the manifest-
+  driven tools/hako.py flow fails on native Windows (MSVC) with C1083 "cannot open include
+  file" for hako_asset.h and hakoniwa_asset_polling.h, even though the same manifest's
+  default (core-disabled) build succeeds cleanly at the same revision. The proximate cause
+  is that src/core_variants/CMakeLists.txt's hako_configure_core_endpoint_variant() adds
+  only the endpoint's own include directory to each core-variant target, not the directory
+  that actually contains the Hakoniwa Core headers on an installed tree
+  (<install-prefix>/include/hakoniwa). A deeper, platform-independent cause was confirmed by
+  directly reading an installed hakoniwa-core-pro tree: its CMake package export
+  (hakoniwa-core-targets.cmake) and its pkg-config file (hakoniwa-core.pc)
+  disagree about where the public headers live -- the CMake imported targets only publish
+  ${prefix}/include, while the .pc file's Cflags explicitly adds ${includedir}/hakoniwa.
+  This is not an MSVC-only defect; it is an install-tree defect that other
+  platforms most likely mask through other include paths, not a proof that non-Windows
+  builds are unaffected.
+
+observation:
+  context: >
+    Re-verifying hakoniwa-pdu-endpoint's Windows build via its manifest-driven
+    tools/hako.py flow (2026-07-26, external contributor's native Windows 11 x86_64
+    workspace, upstream sources unmodified), at revision
+    5c2b815ae661f6063a91840c356717558dab9ab3, immediately after the default
+    (features.hakoniwa_core: false) manifest build had already succeeded cleanly in the
+    same session.
+  details:
+    - "Reproduction: `hako.py doctor` (features.hakoniwa_core: true) reported EXITCODE=0
+      and printed a resolved-build.yaml with `features.hakoniwa_core: true` and
+      `resolved_paths.hakoniwa_core_root` pointing at the workspace's installed
+      hakoniwa-core-pro package (install-win prefix). `hako.py configure` reported EXITCODE=0
+      and printed '-- Hakoniwa Core endpoint variants enabled: core_callback, core_polling'.
+      `hako.py build --config Release` then failed after 7 minutes 2 seconds with
+      EXITCODE=1. The legacy (non-variant) hakoniwa_pdu_endpoint target in the same build
+      compiled comm_shm.cpp, comm_shm_poll.cpp, comm_shm_callback.cpp,
+      hakoniwa_time_source*.cpp successfully; only the two core_variants sub-projects
+      failed."
+    - "Decisive compiler output (verbatim, Japanese MSVC locale):
+      'comm_shm_callback.cpp(2,10): error C1083: include ファイルを開けません。
+      'hako_asset.h':No such file or directory
+      [.../build-core/src/core_variants/hakoniwa_pdu_endpoint_core_callback.vcxproj]',
+      the same error for hakoniwa_time_source_callback.cpp(2,10) in the same project, and
+      'comm_shm_poll.cpp(2,10): error C1083: include ファイルを開けません。
+      'hakoniwa_asset_polling.h':No such file or directory
+      [.../build-core/src/core_variants/hakoniwa_pdu_endpoint_core_polling.vcxproj]'
+      plus the same for hakoniwa_time_source_poll.cpp(2,10) in the polling project."
+    - "Direct cause: src/core_variants/CMakeLists.txt's hako_configure_core_endpoint_variant()
+      (per this workspace's earlier reading of the revision 5c2b815 source tree, lines
+      89-94) adds only the endpoint repository's own include directory to each of the
+      core_callback and core_polling targets. It does not add
+      <hakoniwa-core-pro install prefix>/include/hakoniwa, which is where the actual
+      headers referenced by the unqualified #include \"hako_asset.h\" /
+      #include \"hakoniwa_asset_polling.h\" directives in comm_shm_callback.cpp,
+      hakoniwa_time_source_callback.cpp, comm_shm_poll.cpp, and
+      hakoniwa_time_source_poll.cpp physically live."
+    - "This workspace independently confirmed, by directly reading the installed
+      hakoniwa-core-pro tree's own package files (not merely inferring them), that the
+      Hakoniwa Core CMake export and its pkg-config file disagree about the public
+      include path: the install tree's lib/cmake/hakoniwa-core/
+      hakoniwa-core-targets.cmake sets
+      INTERFACE_INCLUDE_DIRECTORIES \"${_IMPORT_PREFIX}/include\" (no /hakoniwa suffix)
+      identically for all four imported targets (hakoniwa-core::hako,
+      hakoniwa-core::assets, hakoniwa-core::shakoc, hakoniwa-core::conductor; lines
+      61-63, 68-71, 76-78, 83-86), while the install tree's
+      lib/pkgconfig/hakoniwa-core.pc's Cflags line
+      reads `Cflags: -I${includedir}/hakoniwa` (line 11) -- i.e. the .pc file explicitly
+      adds the /hakoniwa subdirectory that the CMake export omits. The actual headers
+      (hako_asset.h, hakoniwa_asset_polling.h, and 10 others) are confirmed present only
+      under <install-prefix>/include/hakoniwa/, not directly under <install-prefix>/include/
+      (confirmed by directory listing in this session).
+      hakoniwa-core-pro revision at the time of this reading: 98a057ab91184921e283ab43279b8ed05cf25363."
+    - "Rejected hypothesis 1 -- missing find_package() COMPONENTS: not the cause.
+      hakoniwa-coreConfig.cmake includes the full targets file unconditionally and the
+      four imported targets (hakoniwa-core::hako/::assets/::shakoc/::conductor) are all
+      defined and pass the generated existence checks; core_variants successfully links
+      against hakoniwa-core::assets and hakoniwa-core::shakoc (the link step is never
+      reached because the compile step fails first), so no missing-component error
+      appears anywhere in the build log."
+    - "Rejected hypothesis 2 -- CMake variable-scope mistake in core_variants/CMakeLists.txt:
+      not the cause. The core_variants sub-project can and does reference the
+      already-resolved Boost, nlohmann/json, and Hakoniwa Core imported targets set up by
+      the parent CMakeLists.txt (the same targets the legacy, non-variant build links
+      against successfully in the same build run); the failure is specifically an include
+      path gap for two named headers, not a target-resolution failure."
+    - "Why this is unlikely to be MSVC-specific: comm_shm_callback.cpp and the other three
+      affected files use plain unqualified #include \"hako_asset.h\" /
+      #include \"hakoniwa_asset_polling.h\" (angle-bracket-free), which depends entirely on
+      the compiler's include search path list, not on any MSVC-specific preprocessor
+      behavior. A Linux or macOS build that also consumes a clean
+      find_package(hakoniwa-core CONFIG) install tree through only the CMake export
+      (no system-wide /usr/include/hakoniwa, no pkg-config Cflags, and no in-source-tree
+      fallback include path) would face the identical missing-include-directory gap,
+      because the CMake export itself (not a Windows-only branch) omits the /hakoniwa
+      suffix. This candidate therefore records the defect as an install-tree layout vs.
+      CMake-export mismatch discovered via a Windows build, not as a Windows-only defect;
+      whether other platforms currently avoid it (e.g. via a package-manager-provided
+      /usr/include/hakoniwa, or a pkg-config-based consumer, or the endpoint's own
+      in-source include fallback) has not been independently checked in this session."
+    - "Asymmetry with the legacy (non-variant) target: per this workspace's earlier reading
+      of src/CMakeLists.txt (lines 265-268 at revision 5c2b815), the legacy
+      hakoniwa_pdu_endpoint target adds both its own include directory AND the Core
+      install prefix's include/hakoniwa directory, which is why the same source files
+      compile successfully when built as part of the legacy target in the same build run
+      (see the build log: comm_shm.cpp, comm_shm_poll.cpp, comm_shm_callback.cpp, and the
+      hakoniwa_time_source*.cpp variants all compiled without error under the top-level
+      src/CMakeLists.txt, immediately before the two core_variants sub-projects failed on
+      the same headers). This asymmetry is the most direct evidence that the fix belongs
+      in core_variants/CMakeLists.txt (or, more durably, in the Core package export
+      itself) rather than in application code."
+    - "Fix directions (not yet applied, no PR filed): (a) primary/durable fix -- correct
+      hakoniwa-core-pro's own CMake package export so its imported targets'
+      INTERFACE_INCLUDE_DIRECTORIES include ${prefix}/include/hakoniwa (matching what the
+      .pc file already advertises and what a modern CMake package for a project that
+      installs headers under a namespaced subdirectory would be expected to publish);
+      linking hakoniwa-core::assets / hakoniwa-core::shakoc should be sufficient on its
+      own to resolve that Core API's public headers. (b) compatibility fix at the endpoint
+      repository -- until the Core export is corrected, add the same
+      ${HAKO_PDU_ENDPOINT_HAKONIWA_CORE_ROOT}/include/hakoniwa include directory to the
+      core_variants targets that the legacy target at src/CMakeLists.txt:265-268 already
+      adds, restoring symmetry between the two build paths. Neither fix has been drafted
+      or applied in this session; this candidate records the diagnosis only."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      path: src/core_variants/CMakeLists.txt
+      revision: 5c2b815ae661f6063a91840c356717558dab9ab3
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      path: src/CMakeLists.txt
+      revision: 5c2b815ae661f6063a91840c356717558dab9ab3
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      path: src/comm_shm_callback.cpp
+      revision: 5c2b815ae661f6063a91840c356717558dab9ab3
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      path: src/comm_shm_poll.cpp
+      revision: 5c2b815ae661f6063a91840c356717558dab9ab3
+    - repository: hakoniwalab/hakoniwa-core-pro
+      path: lib/cmake/hakoniwa-core/hakoniwa-core-targets.cmake (installed artifact)
+      revision: 98a057ab91184921e283ab43279b8ed05cf25363
+    - repository: hakoniwalab/hakoniwa-core-pro
+      path: lib/pkgconfig/hakoniwa-core.pc (installed artifact)
+      revision: 98a057ab91184921e283ab43279b8ed05cf25363
+  runtime_evidence:
+    - description: >-
+        External contributor's Windows 11 x86_64 verification environment (native,
+        upstream sources unmodified), 2026-07-26, revision
+        5c2b815ae661f6063a91840c356717558dab9ab3: `hako.py doctor` and `hako.py configure`
+        both EXITCODE=0 for the core-enabled manifest (`-- Hakoniwa Core endpoint variants
+        enabled: core_callback, core_polling` printed); `hako.py build --config Release`
+        EXITCODE=1 after 7m02s with the four C1083 errors quoted above, while the
+        default (core-disabled) manifest built cleanly in 2m31s in the same session.
+    - description: >-
+        Same verification environment and date: directly reading the installed
+        hakoniwa-core-pro package tree's lib/pkgconfig/hakoniwa-core.pc and
+        lib/cmake/hakoniwa-core/hakoniwa-core-targets.cmake (read-only, the workspace's own
+        installed hakoniwa-core-pro build artifacts, not edited) confirmed the
+        Cflags-vs-CMake-export include-path mismatch described above, and a directory
+        listing of the install tree's include/ directory (maxdepth 2) confirmed
+        hako_asset.h and hakoniwa_asset_polling.h exist only under
+        <install-prefix>/include/hakoniwa/, not directly under <install-prefix>/include/.
+  expert_input:
+    - source: an independent AI-assisted parallel second-opinion diagnosis, obtained per
+        this contributor's own build-failure escalation policy
+      statement: >-
+        Independently proposed the same direct cause (core_variants/CMakeLists.txt only
+        adding the endpoint's own include directory) and additionally flagged the
+        Cflags-vs-CMake-export mismatch in the installed hakoniwa-core-pro package as a
+        more fundamental, platform-independent defect, plus the framing that this is not
+        an MSVC-specific issue but an install-tree/export-metadata mismatch that other
+        platforms may currently avoid through different, unrelated include paths. This
+        workspace independently re-read the actual .pc and *-targets.cmake files (see
+        runtime_evidence above) before recording the Cflags-vs-CMake-export claim here;
+        it is not accepted on the parallel review's authority alone.
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: partially_verified
+  required:
+    - Independently re-read src/core_variants/CMakeLists.txt and src/CMakeLists.txt at
+      revision 5c2b815ae661f6063a91840c356717558dab9ab3 directly (this candidate's
+      citation of hako_configure_core_endpoint_variant() at lines 89-94 and the legacy
+      target's include additions at src/CMakeLists.txt:265-268 relies on this workspace's
+      earlier reading of that exact revision, which is no longer checked out locally for
+      independent re-confirmation in this pass; the compiler error pattern is fully
+      consistent with that account but the specific line numbers were not re-verified in
+      this session).
+    - Confirm on a non-Windows platform (Linux or macOS) whether a clean
+      find_package(hakoniwa-core CONFIG)-only consumption of a hakoniwa-core-pro install
+      tree (no system package /usr/include/hakoniwa, no pkg-config-based consumer)
+      reproduces the same missing-include-directory failure, to settle whether other
+      platforms are unaffected or merely masked.
+    - Apply and build-test either fix direction (Core package export correction, or
+      symmetric include addition in core_variants/CMakeLists.txt) before claiming
+      resolution.
+  notes:
+    - "The .pc-vs-CMake-export mismatch (Cflags: -I${includedir}/hakoniwa vs.
+      INTERFACE_INCLUDE_DIRECTORIES ${_IMPORT_PREFIX}/include) was independently
+      re-verified in this pass by reading the actual installed files, not taken on the
+      strength of the parallel review alone."
+    - No upstream issue has been filed for this defect yet.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      kind: ci
+      path: .github/workflows/ci.yml
+      mode: detect-only
+      notes:
+        - "No existing CI job currently builds the Windows core-enabled manifest
+          (features.hakoniwa_core=true); adding one would turn this candidate's
+          reproduction into a standing regression guardrail rather than a one-off
+          manual finding."
+
+promotion_rationale:
+  - This is a concrete, reproducible Windows build failure in the current manifest-driven
+    architecture with a plausible cross-platform root cause (a CMake-export/pkg-config
+    metadata mismatch in the owning Core package), making it good material for an
+    upstream issue in either or both of hakoniwa-pdu-endpoint and hakoniwa-core-pro.
+  - Kept as detect-only for the CI guardrail because no fix has been drafted or applied;
+    promoting further would overstate the current state of remediation.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Diagnosis only; no fix applied, no upstream issue filed, no PR exists yet. Recorded
+      here as candidate material for filing an upstream issue against
+      hakoniwa-pdu-endpoint (core_variants/CMakeLists.txt) and/or hakoniwa-core-pro (CMake
+      package export).
