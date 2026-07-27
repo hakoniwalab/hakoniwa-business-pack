@@ -20,14 +20,12 @@ category:
     - rpc
     - control-plane
     - integration
-
 status:
   maturity: active
   catalog_confidence: high
   notes:
     - Catalog refreshed after standalone CMake package modernization, four-platform CI, reviewed RPC contract tests, legacy-test retirement, and README convergence.
     - Scope is intentionally narrower than a general RPC framework.
-
 capabilities:
   - name: PDU-native request-response
     description: Provides RPC semantics aligned with Hakoniwa PDU channels, endpoint configuration, and generated service types.
@@ -80,7 +78,6 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: test/rpc_cancel_race_contract_test.cpp
         revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
-
 limitations:
   - Not a general-purpose RPC framework like gRPC.
   - Not a dynamic service mesh with discovery, auth, tracing, and streaming semantics.
@@ -88,7 +85,6 @@ limitations:
   - Requires endpoint and registry alignment; mismatched endpoint IDs, node names, PDU sizes, or channels fail at config/runtime boundaries.
   - Timeout does not mean the endpoint is immediately reusable. A caller that observes timeout must explicitly cancel or otherwise resolve the in-flight request before starting a new RPC.
   - The RPC state machine does not infer peer death from timeout alone; a higher layer owns policy for a permanently unavailable server.
-
 interfaces:
   inputs:
     - name: Service configuration
@@ -123,7 +119,6 @@ interfaces:
       description: Endpoint mapping for examples.
     - path: config/sample/minimal
       description: Compact minimal config set.
-
 dependencies:
   required:
     - name: C++20 compiler
@@ -145,7 +140,6 @@ dependencies:
     - name: GoogleTest
       type: library
       notes: Used for contract tests; CMake can fetch GoogleTest when no package target is already available.
-
 platforms:
   supported:
     - macOS
@@ -154,7 +148,6 @@ platforms:
   notes:
     - Standalone package/build/test workflows are exercised in CI on Ubuntu x64, Ubuntu ARM64, macOS, and Windows x64.
     - tools/hako.py normalizes the build and package-consumer workflow across platforms.
-
 connects_to:
   - component_id: hakoniwa-pdu-endpoint
     direction: uses
@@ -168,7 +161,10 @@ connects_to:
     direction: used_by
     interface: RPC client/server transport
     notes: Conductor Light uses PDU-RPC for server/client coordination and preserves the same explicit timeout/cancel lifecycle.
-
+  - component_id: hakoniwa-conductor-pro
+    direction: related
+    interface: control-plane RPC concept
+    notes: Both address control-plane coordination, with conductor-pro using broader distributed execution control.
 data_contracts:
   - name: RPC service config
     description: Explicit config contract for service names, clients, endpoints, channels, request IDs, and timeouts.
@@ -194,7 +190,6 @@ data_contracts:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: test/rpc_infinite_wait_contract_test.cpp
         revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
-
 recipe_roles:
   - role: control_plane
     description: Adds deterministic RPC calls for simulation control or service requests.
@@ -202,20 +197,17 @@ recipe_roles:
     description: Reuses endpoint transport while imposing request-response semantics.
   - role: integration_boundary
     description: Bridges service-style control code to PDU-native Hakoniwa topology.
-
 typical_usecases:
   - Hakoniwa-native C++ control-plane services.
   - Request/response operations that must follow endpoint topology and PDU binary contracts.
   - Deterministic or tick-driven integration loops where hidden scheduler behavior is undesirable.
   - Reusable installed CMake package consumption from other Hakoniwa components.
   - Control-plane clients that must distinguish timeout observation from explicit cancellation and preserve race-safe endpoint reuse.
-
 anti_usecases:
   - Public web APIs across many languages.
   - Streaming RPC workloads.
   - Dynamic service discovery, auth, tracing, or full service mesh requirements.
   - Callers that assume timeout automatically aborts an RPC and immediately resets the client to idle.
-
 demo_candidates:
   - name: AddTwoInts RPC pair
     description: Build examples, run server and client, then send two integers and receive their sum.
@@ -238,7 +230,6 @@ demo_candidates:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: docs/test-contract.md
         revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
-
 operations:
   build:
     commands:
@@ -264,7 +255,6 @@ operations:
       - build/examples/hakoniwa_pdu_rpc_client 1000000
     notes:
       - Server should start before client for the bundled interactive example.
-
 runtime_checks:
   - id: build-readiness
     kind: doctor
@@ -308,12 +298,10 @@ runtime_checks:
     output: text
     notes:
       - Verifies install/export/find_package consumption through the downstream package consumer.
-
 known_gaps:
   - Catalog does not list every schema field and validation rule.
   - Cross-language RPC support beyond C++ should not be assumed.
   - PDU-RPC deliberately does not define a general peer-failure/HA policy; higher layers decide what a permanently unavailable server means for their simulation.
-
 source_refs:
   - repository: hakoniwalab/hakoniwa-pdu-rpc
     path: README.md
@@ -347,7 +335,6 @@ source_refs:
     path: test/rpc_cancel_race_contract_test.cpp
     revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
     description: Normal response wins after explicit cancel and late cancel remains harmless.
-
 tags:
   - hakoniwa
   - pdu
