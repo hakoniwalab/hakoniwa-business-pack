@@ -41,9 +41,9 @@ Typical checks include toolchains, submodules, native dependencies, required fil
 
 Purpose: configure or generate the component build/runtime environment without completing the full build.
 
-This command is OPTIONAL. It is appropriate for repositories where configuration is a meaningful independently inspectable phase, such as CMake generation.
+This command is OPTIONAL. It is appropriate for repositories where configuration is a meaningful independently inspectable phase, such as CMake generation or manifest resolution.
 
-A `--dry-run` option MAY be provided when the component can safely show the resolved configuration command without applying it.
+A `--dry-run` option MAY be provided when the component can safely resolve or print the configuration without executing the native build/configure action. Catalog declarations MUST record `--dry-run` only for commands whose implementation actually honors it.
 
 ### `build`
 
@@ -60,7 +60,9 @@ Semantics:
 
 Purpose: run the component-owned automated test suite.
 
-This command is OPTIONAL. It may run unit, integration, contract, or other automated tests owned by the repository. The catalog SHOULD describe the actual validation scope instead of assuming that `test` means full runtime validation.
+This command is OPTIONAL. It may run unit, integration, contract, import, or other automated tests owned by the repository. The catalog SHOULD describe the actual validation scope instead of assuming that `test` means full runtime validation.
+
+Repositories MAY expose narrower test commands such as `test-basic` or `test-timeout-cancel`. These are extension commands unless separately promoted into the common contract.
 
 ### `smoke [mode]`
 
@@ -77,6 +79,19 @@ Semantics:
 
 Example: Hakoniwa Conductor Light supports `smoke auto` and `smoke manual`. `auto` verifies dynamic attach and world-time progress; `manual` additionally verifies explicit start/stop/reset state transitions.
 
+### `install`
+
+Purpose: install build artifacts into the component-defined prefix or requested installation prefix.
+
+This command is OPTIONAL.
+
+Semantics:
+
+- SHOULD reuse the repository's existing install/package contract.
+- MAY build first when required by the component implementation.
+- MUST return non-zero when installation fails.
+- Installation destinations and options remain component-specific and SHOULD be documented by the owning repository/catalog entry.
+
 ### `run [target/options]`
 
 Purpose: launch a component, example, demo, or other repository-owned runnable target.
@@ -85,9 +100,22 @@ This command is OPTIONAL. Because runtime targets vary substantially between rep
 
 ## Extension commands
 
-Repositories MAY expose commands beyond the standard vocabulary when the operation is component-specific, for example asset generation or registry generation. Such commands do not become part of the common contract merely by appearing in one repository.
+Repositories MAY expose commands beyond the standard vocabulary when the operation is component-specific, for example package-consumer verification, specialized test cases, asset generation, or registry generation. Such commands do not become part of the common contract merely by appearing in one repository.
 
 Business Pack tooling SHOULD prefer standard commands when equivalent behavior exists.
+
+A catalog/support declaration MAY list stable extension commands separately from standard `commands`. Extension names and semantics remain component-owned.
+
+## Options and modes
+
+Options are declared per command when their semantics are stable and operationally relevant. The catalog is not intended to mirror every argparse/help flag.
+
+In particular:
+
+- `--dry-run` MUST only be advertised for commands that actually suppress the command's native build/test/configure/runtime action.
+- configuration-selection options such as `--config` MAY be documented when they materially change which manifest or profile is resolved.
+- pass-through arguments to native scripts MAY be documented as a component-specific capability rather than enumerating every native option.
+- `smoke` positional modes such as `auto` and `manual` SHOULD use `modes`.
 
 ## Catalog declaration
 
@@ -115,6 +143,8 @@ hako_cli:
       modes:
         - auto
         - manual
+    install:
+      supported: false
     run:
       supported: false
 ```
@@ -126,6 +156,7 @@ Rules:
 - `supported: false` MAY be used when explicitly recording a known unsupported standard command is useful; otherwise omission is preferred.
 - `modes` records stable positional smoke modes such as `auto` and `manual`.
 - `options` records stable, operationally relevant options; it is not intended to mirror every argparse/help flag.
+- Stable repository-specific commands MAY be recorded separately as extensions, but their semantics are not standardized by this contract.
 - Catalog declarations describe repository-owned behavior. Business Pack MUST NOT duplicate the implementation of component-specific doctor/build/test/smoke logic.
 
 ## Relationship to `runtime_checks`
