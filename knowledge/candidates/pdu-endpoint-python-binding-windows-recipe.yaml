@@ -36,6 +36,7 @@ observation:
     - "The previous hard-coded /usr/lib/x86_64-linux-gnu fallback is another architecture leak; platform-specific library discovery should use the resolved CMake library architecture rather than encode x86_64 in the common component logic."
     - "ROS 2 venv, rclpy, and colcon setup remains a hakoniwa-pdu-ros integration concern. pdu-endpoint owns its native/Python build and transport-runtime boundary and should not absorb higher-level ROS 2 workspace setup."
     - "The maintainer lesson is broader than Raspberry Pi: platform-specific observations should first be tested against the common manifest/capability model, and reusable failure conditions should become executable guardrails at the owning component boundary."
+    - "A native Windows re-verification of the manifest-driven build (tools/hako.py doctor/configure/build/test) confirms the original cffi/setuptools/Visual-Studio-detection gap is durably resolved: create_context() locates vswhere.exe and prepends its parent directory to PATH before invoking cmake/cffi, so a plain PowerShell session with no manual vcvarsall.bat call builds and imports cleanly on the default (Hakoniwa Core disabled) manifest. A separate, still-open gap was found once Hakoniwa Core support is enabled (features.hakoniwa_core: true): tools/hako.py already computes the correct runtime library directories (hakoniwa-core-pro's install-win/bin and vcpkg's installed/x64-windows/bin) into an environment variable, but python/hakoniwa_pdu_endpoint/c_endpoint.py's own `_candidate_native_lib_dirs()` / `_add_runtime_search_dirs()` never read that variable, so the computed value is silently unused at import time and a DLL-load failure still occurs unless a caller manually calls os.add_dll_directory() for those two directories itself. Wiring c_endpoint.py's DLL-search helpers to read hako.py's own computed runtime-directories variable would close this gap without any manual launcher."
 
 sources:
   repositories:
@@ -79,6 +80,17 @@ sources:
         dedicated linux-zenoh-shared job. That job builds BUILD_SHARED_LIBS=ON with Zenoh
         enabled and verifies with readelf that libhakoniwa_pdu_endpoint.so does not declare
         libzenohc.so as a dynamic NEEDED dependency.
+    - description: >-
+        External contributor's native Windows 11 x86_64 re-verification of `hako.py
+        doctor/configure/build/test` on the default manifest: build and python-import
+        smoke both passed from a plain PowerShell session with no manual vcvarsall.bat
+        step, confirming the VS/vswhere detection gap is resolved. Rebuilding with
+        features.hakoniwa_core: true and then importing the module with PATH stripped of
+        hakoniwa-core-pro's install-win/bin and vcpkg's installed/x64-windows/bin
+        reproduced a DLL-load failure naming hakoniwa_pdu_endpoint.dll or one of its
+        dependencies; adding those two directories back via a small
+        os.add_dll_directory() launcher fixed it, confirming hako.py's own computed
+        runtime-directories variable is not read by c_endpoint.py's DLL-search helpers.
   expert_input: []
 
 confidence: high
@@ -113,7 +125,7 @@ tracking:
     - repository: hakoniwalab/hakoniwa-pdu-endpoint
       number: 36
       relation: fix
-      status: open
+      status: closed
 
 promotion_targets:
   catalog:
@@ -161,3 +173,5 @@ resolution:
     - Issue #36 is the next real-device refinement of that same knowledge lineage; PR #41 is the active implementation response.
     - Keep resolution.verified=false until the merged #41 behavior is reproduced on Raspberry Pi / Ubuntu 24.04 / ROS 2 Jazzy, including the former stack-smashing / segmentation-fault case.
     - When that re-verification succeeds, record PR #41 and its merge revision under fixed_by, mark issue #36 closed/resolved, and refresh the hakoniwa-pdu-endpoint Catalog from the merged source.
+    - "Correction: issue #36 ('python/README.ja.md のほかにRaspberry Pi (ARM64) / ROS2連携向けの文書を追加する（提案）') is a closed documentation-gap proposal, confirmed via the GitHub API; tracking.issues has been updated to status: closed accordingly. It is a documentation ask about missing ARM64/ROS2 guidance, not itself the Zenoh ABI defect -- PR #41's fix should still be re-verified against a live Raspberry Pi/ROS 2 Jazzy environment before resolution.verified is set true, independent of issue #36's own closed state."
+    - "Native Windows re-verification of the manifest-driven build (tools/hako.py) found the original Windows Python/cffi/Visual-Studio-detection gap durably resolved by create_context()'s own vswhere handling. A separate, still-open gap was found: once Hakoniwa Core support is enabled via the manifest, hako.py's own computed runtime-directories environment variable is not read by c_endpoint.py's DLL-search helpers, so a DLL-load failure still occurs at Python import time unless a caller manually adds the missing directories via os.add_dll_directory(). This is a distinct, narrower gap from the ARM64/Zenoh ABI work tracked above and has no issue filed against it yet."
