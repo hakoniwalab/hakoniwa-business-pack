@@ -1,6 +1,6 @@
 id: rpc-timeout-cancel-core-semantics
 title: Preserve Core-compatible timeout/cancel race semantics across PDU-RPC and Conductor Light
-status: validating
+status: promoted
 
 knowledge_type:
   - interface_contract
@@ -47,10 +47,10 @@ sources:
       revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
     - repository: hakoniwalab/hakoniwa-conductor-light
       path: src/client/rpc_client_transport.cpp
-      revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+      revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
     - repository: hakoniwalab/hakoniwa-conductor-light
       path: test/rpc_integration_test.cpp
-      revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+      revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
   runtime_evidence:
     - description: >-
         Local WSL2 Ubuntu x64 verification on 2026-07-27 completed all 9 Conductor Light
@@ -59,7 +59,9 @@ sources:
     - description: >-
         Conductor Light cross-platform workflow run 30247538916 on revision
         ce2635ec48634555f383eb5073806de2a2aacc6c passed Doctor, Build, Test, Smoke auto,
-        and Smoke manual on Ubuntu x64, Ubuntu ARM64, macOS, and Windows x64.
+        and Smoke manual on Ubuntu x64, Ubuntu ARM64, macOS, and Windows x64. That verified
+        tree was subsequently merged through PR #5 and PR #4 into main revision
+        d4d1543161f6e5e1cf07452fbb90aae03211c30b.
   expert_input:
     - source: Hakoniwa developer
       statement: >-
@@ -86,10 +88,11 @@ validation:
   required: []
   notes:
     - PDU-RPC PR #9 is merged on main at b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0.
-    - Conductor Light revision ce2635ec48634555f383eb5073806de2a2aacc6c is fully green in the four-platform CI matrix, but PR #5 is still open at the time this candidate was recorded.
+    - Conductor Light PR #5 merged into the CI branch at d44a15a9ffea7acb5f80926fd2eab2d5f73e18a3; PR #4 then merged the verified tree to main at d4d1543161f6e5e1cf07452fbb90aae03211c30b.
+    - The pre-merge Conductor Light revision ce2635ec48634555f383eb5073806de2a2aacc6c passed the complete four-platform doctor/build/test/smoke matrix before final main integration.
 
 tracking:
-  implementation_status: in_progress
+  implementation_status: resolved
   issues: []
 
 promotion_targets:
@@ -126,18 +129,29 @@ promotion_rationale:
   - The regression tests and cross-platform CI are the durable executable form of the discovered runtime rule.
 
 resolution:
-  status: pending
+  status: fixed
   fixed_by:
     - repository: hakoniwalab/hakoniwa-pdu-rpc
       issue: null
       pull_request: 9
       revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
-  verified: false
-  promoted_to: []
+    - repository: hakoniwalab/hakoniwa-conductor-light
+      issue: null
+      pull_request: 5
+      revision: d44a15a9ffea7acb5f80926fd2eab2d5f73e18a3
+    - repository: hakoniwalab/hakoniwa-conductor-light
+      issue: null
+      pull_request: 4
+      revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
+  verified: true
+  promoted_to:
+    - catalog/components/hakoniwa-pdu-rpc.yaml
+    - catalog/components/hakoniwa-conductor-light.yaml
   executable_guardrails:
     - hakoniwalab/hakoniwa-pdu-rpc:test/rpc_timeout_cancel_semantics_test.cpp
     - hakoniwalab/hakoniwa-conductor-light:test/rpc_integration_test.cpp
     - hakoniwalab/hakoniwa-conductor-light:.github/workflows/cross-platform.yml
   notes:
     - PDU-RPC implementation is fixed and merged.
-    - Conductor Light PR #5 is validated but not yet merged; update fixed_by, resolution.verified, and promotion state after the final Conductor Light merge revision is known.
+    - Conductor Light timeout/cancel handling, regression tests, hang-safe test bounds, and four-platform CI are merged to main.
+    - The component-specific facts are promoted into the PDU-RPC and Conductor Light Catalog entries; the executable guardrails remain owned by their component repositories.
