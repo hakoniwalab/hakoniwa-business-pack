@@ -1,0 +1,79 @@
+id: windows-wsl-exec-requires-e-flag-for-arg-boundaries
+title: PowerShell-to-WSL commands need wsl -e (not a bare --) to preserve argument boundaries
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - runtime_rule
+  - validation_rule
+
+summary: >
+  Invoking a WSL-side command from PowerShell as `wsl -d <distro> -- <command>`
+  can rejoin and reinterpret the argument list through the WSL-side default
+  login shell, losing or reinterpreting quotes, backslashes, and parentheses
+  in the process. Using `wsl -d <distro> -e <command> <args...>` instead
+  passes the arguments as an exec argument vector and avoids that
+  reinterpretation.
+
+observation:
+  context: >
+    Building a Windows-PowerShell-to-WSL bridge configuration that needed a
+    robust cross-OS process launch and cleanup for its WSL-side component.
+  details:
+    - Without -e, quotes, backslashes, and parentheses in an argument could be lost or reinterpreted by the WSL-side shell before the target command ever saw them.
+    - With -e, the same arguments are passed through as an exec argument vector, without an intervening shell reinterpreting them.
+    - The affected verify scripts also clean up the WSL-side process explicitly (using pkill/pgrep run from inside WSL) rather than relying only on the PowerShell-side process handle.
+
+sources:
+  repositories: []
+  runtime_evidence:
+    - description: >-
+        External contributor's Windows 11 x86_64 native verification environment:
+        a `wsl -d <distro> -- <command>` invocation reproduced argument
+        corruption (lost/reinterpreted quoting) for a command containing
+        quotes and parentheses; switching the same invocation to
+        `wsl -d <distro> -e <command> <args...>` preserved the arguments
+        correctly and the command ran as intended.
+  expert_input: []
+
+confidence: high
+
+contradictions:
+  - target: naive WSL invocation from PowerShell
+    existing_claim: "`wsl -d <distro> -- <command>` is safe for passing arbitrary arguments to a WSL-side command."
+    new_evidence: "That form can route the argument list through the WSL-side default shell's own reinterpretation; `-e` is required to pass arguments through as an exec argument vector instead."
+
+validation:
+  status: verified
+  required:
+    - Reconfirm if a future script targets a different WSL distribution, default shell, or command launcher.
+  notes:
+    - Verified in a Windows-to-WSL bridge configuration and reused in a related cross-OS performance-comparison configuration.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+
+promotion_rationale:
+  - This is a recipe/tooling pitfall specific to Windows-to-WSL orchestration and applies to any recipe that launches a WSL-side process from a PowerShell script with arguments containing quotes, backslashes, or parentheses.
+
+resolution:
+  status: documented
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Candidate only. No upstream implementation issue has been filed -- this
+      is a documented quoting/argument-passing quirk of Microsoft's wsl.exe
+      CLI itself, not of any hakoniwalab repository. It was observed and
+      worked around (using -e) only inside private Windows-to-WSL bridge
+      configurations. resolution.verified is left false because no upstream
+      fix/PR/revision exists to verify against.

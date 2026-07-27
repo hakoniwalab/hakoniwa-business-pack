@@ -1,0 +1,79 @@
+id: hakoniwa-external-pdu-write-requires-priming-read
+title: External write-only processes require a priming run_nowait call before first write
+status: candidate
+
+knowledge_type:
+  - runtime_rule
+  - known_pitfall
+  - interface_contract
+
+summary: >
+  With Hakoniwa core's FIX_PDU_CREATE_TIMING behavior, a write-only external
+  process (one that calls `init_for_external` and only ever writes PDU data,
+  never reads it) must call `PduManager.run_nowait()` once after
+  `start_service_nowait()` and before its first PDU write, otherwise the write
+  fails deterministically.
+
+observation:
+  context: >
+    Building a write-only external PDU injector process (attaches to a running
+    Hakoniwa simulation without registering as an asset, and only writes PDU
+    data, never reads it).
+  details:
+    - Repeated direct flush attempts failed deterministically before the fix.
+    - A single `run_nowait()` after `start_service_nowait()` made the next write succeed.
+    - Continuous external writers (e.g. a telemetry-to-PDU bridge that only ever writes) inherit this same requirement.
+
+sources:
+  repositories: []
+  runtime_evidence:
+    - description: >-
+        External contributor's Windows 11 x86_64 native verification environment
+        (build with FIX_PDU_CREATE_TIMING enabled): a write-only external PDU
+        client failed every write attempt until a single priming
+        `run_nowait()` call was added after `start_service_nowait()` and before
+        the first write; after that the write succeeded deterministically on
+        every subsequent attempt.
+  expert_input: []
+
+confidence: high
+
+contradictions:
+  - target: symmetric read/write assumption for external PDU access
+    existing_claim: External write should be symmetric with external read after initialization.
+    new_evidence: Write path does not load PDU data under FIX_PDU_CREATE_TIMING until a read path (run_nowait) primes it.
+
+validation:
+  status: partially_verified
+  required:
+    - Re-check if the core build flags change (this rule is tied to FIX_PDU_CREATE_TIMING behavior).
+    - Confirm whether this is specific to the Windows mmap/SHM backend or applies identically on other platforms.
+  notes:
+    - The rule is build-flag-sensitive but verified for a native Windows install.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: true
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+
+promotion_rationale:
+  - Any external (non-asset) writer needs this pre-write contract; without it, the first-write failure mode is silent and easy to misattribute to a channel/PDU-size mismatch instead of a missing priming call.
+
+resolution:
+  status: documented
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Candidate only. No upstream implementation issue has been filed; this is
+      an interface-usage contract of Hakoniwa core's FIX_PDU_CREATE_TIMING
+      behavior for external (non-asset) PDU clients, not a code defect to fix
+      upstream. resolution.verified is left false because no upstream
+      fix/PR/revision exists to verify against.

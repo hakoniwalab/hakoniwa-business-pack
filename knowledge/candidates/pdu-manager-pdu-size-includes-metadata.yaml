@@ -1,0 +1,79 @@
+id: pdu-manager-pdu-size-includes-metadata
+title: PduManager path uses pdu_size including 24-byte PDU metadata, not the raw ROS2 message size
+status: candidate
+
+knowledge_type:
+  - runtime_rule
+  - interface_contract
+  - known_pitfall
+
+summary: >
+  When a PDU channel is created and read through PduManager, the `pdu_size`
+  value in a PDU type configuration must be the real byte length including a
+  fixed 24-byte PDU metadata header, not the raw serialized size of the
+  underlying ROS2 message. Using the raw message size (or a size copied from
+  an unrelated example configuration) does not match the actual channel size
+  and causes reads to fail.
+
+observation:
+  context: >
+    Verifying pdu_size values across several custom PDU-based assets
+    (loopback, external tap, performance benchmark, and pose loopback
+    samples) to confirm the PduManager runtime byte length convention.
+  details:
+    - geometry_msgs/Twist has a raw serialized size of 48 bytes, but the actual byte length of a PduManager-managed channel carrying it is 72 bytes (48 + 24-byte metadata).
+    - A custom sensor-style message with a raw size of 28 bytes required pdu_size 52; a custom battery-style message with a raw size of 15 bytes required pdu_size 39; a nested Pose-style message also required pdu_size 72, consistent with the metadata-plus-payload rule.
+    - Copying a pdu_size value from an unrelated sample configuration (e.g. one using 80) does not match a locally created channel's actual size (e.g. 72) and causes read failures.
+
+sources:
+  repositories: []
+  runtime_evidence:
+    - description: >-
+        External contributor's Windows 11 x86_64 native verification environment:
+        multiple custom PDU-based assets (Twist loopback and tap, a
+        performance-benchmark PDU, and a nested Pose loopback) were verified
+        with pdu_size values equal to raw message size plus 24 bytes; a
+        negative test using a mismatched (too-large) pdu_size reproduced a
+        read failure.
+  expert_input: []
+
+confidence: high
+
+contradictions:
+  - target: assumption that pdu_size should equal the raw ROS2 message size
+    existing_claim: pdu_size in a PDU type configuration should match the serialized message size directly.
+    new_evidence: The actual PduManager-managed channel byte length is the raw message size plus a fixed 24-byte metadata header; using the raw size alone under-allocates the channel and using a size copied from an unrelated example over- or under-allocates it.
+
+validation:
+  status: verified
+  required:
+    - Keep checking generated converter byte lengths whenever a new PDU type is added.
+  notes:
+    - Verified by multiple local PDU assets and by a negative pdu_size mismatch test.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: true
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+
+promotion_rationale:
+  - Recipe and PDU authors must not confuse a message's raw serialized size with PduManager's actual runtime channel byte length; this is a recurring, easy-to-miss source of read failures for any new custom PDU type.
+
+resolution:
+  status: documented
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Candidate only. No upstream implementation issue has been filed; this is
+      an interface-contract fact about PduManager's runtime byte length
+      (raw message size plus a 24-byte metadata header), not a code defect.
+      resolution.verified is left false because no upstream fix/PR/revision
+      exists to verify against.

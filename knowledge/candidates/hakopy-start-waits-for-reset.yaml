@@ -1,0 +1,80 @@
+id: hakopy-start-waits-for-reset
+title: hakopy.start does not return after stop unless reset is also delivered
+status: candidate
+
+knowledge_type:
+  - runtime_rule
+  - known_pitfall
+  - validation_rule
+
+summary: >
+  In a Python asset's lifecycle, `hako-cmd stop` alone does not make
+  `hakopy.start()` return control to the calling code -- the asset remains
+  blocked, waiting for a subsequent Reset. Any summary/teardown logic that is
+  placed after `hakopy.start()` returns will therefore never run in a
+  stop-only harness; it must instead be executed inside the simulation step
+  callback (e.g. `on_simulation_step`) with an explicit flush, before the
+  process is killed.
+
+observation:
+  context: >
+    A verification harness that issues `hako-cmd stop` (but no explicit
+    reset) after a fixed number of simulation steps, expecting a Python asset
+    to print a benchmark/summary after `hakopy.start()` returns.
+  details:
+    - The code placed after `hakopy.start()` was never reached in a stop-only verify harness.
+    - The asset process progressed to a WAIT STOP state and then a WAIT RESET state, but was killed by the harness before reset was ever delivered.
+    - The workaround was to move summary/logging output into the simulation-step callback and flush it immediately, rather than relying on code after `hakopy.start()` returning.
+
+sources:
+  repositories: []
+  runtime_evidence:
+    - description: >-
+        External contributor's Windows 11 x86_64 native verification environment:
+        a Python asset's post-`hakopy.start()` summary code was never executed
+        under a stop-only harness; moving the same summary logic into
+        `on_simulation_step` with an explicit flush made it observable on every
+        run.
+  expert_input: []
+
+confidence: high
+
+contradictions:
+  - target: naive asset summary pattern
+    existing_claim: Print summaries after hakopy.start() returns.
+    new_evidence: A stop-only harness kills the asset process while it is still waiting for Reset, so that code path is never reached.
+
+validation:
+  status: partially_verified
+  required:
+    - If a reset-based harness (one that explicitly delivers Reset before teardown) is used instead, confirm whether the different lifecycle allows code after hakopy.start() to run normally.
+  notes:
+    - Verified across more than one Python asset in the same workspace's stop-only verification harness.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: true
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+
+promotion_rationale:
+  - Any Python asset recipe that reports a summary or performs teardown logic needs to know that stop alone does not unblock hakopy.start(); the safe pattern (move output into the step callback with an explicit flush) should be preserved for reuse.
+
+resolution:
+  status: documented
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Candidate only. No upstream implementation issue has been filed; this is
+      a description of hakopy's own stop/reset lifecycle semantics rather than
+      a code defect, and the workaround (moving summary output into the
+      simulation-step callback with an explicit flush) already resolves it at
+      the asset-authoring level. resolution.verified is left false because no
+      upstream fix/PR/revision exists to verify against.

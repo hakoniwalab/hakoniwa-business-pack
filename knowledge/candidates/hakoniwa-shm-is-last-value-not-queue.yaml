@@ -1,0 +1,80 @@
+id: hakoniwa-shm-is-last-value-not-queue
+title: Hakoniwa SHM reads are last-value observations, not queued events
+status: candidate
+
+knowledge_type:
+  - runtime_rule
+  - known_pitfall
+  - validation_rule
+
+summary: >
+  A reader polling Hakoniwa's SHM PDU transport sees the latest written value
+  each time it reads, not a reliable queue delivering every write a producer
+  ever made. A persistence/logging component built against this transport
+  must treat its output as a sampled sequence of distinct observed states, not
+  as a record of every write, and must guard against inserting duplicate rows
+  when a read happens to observe the same bytes as the previous read.
+
+observation:
+  context: >
+    Building and verifying a PDU-to-SQLite logger asset that polls an SHM PDU
+    channel on every simulation step and inserts a row per read.
+  details:
+    - An initial logger implementation could read and insert the same PDU bytes on consecutive simulation steps, because SHM retains only the latest written value rather than queuing every write.
+    - A verifier that only checked the total row count could pass even when duplicate rows corrupted the intended one-row-per-distinct-value semantics.
+    - The fix compares each newly read PDU's raw bytes against the last inserted value and skips inserting a duplicate row when they match.
+    - The resulting semantics are "observed distinct state sequence", not "every write the producer ever made" -- any consumer that needs the latter must use a different transport or an explicit sequence/acknowledgment mechanism.
+
+sources:
+  repositories: []
+  runtime_evidence:
+    - description: >-
+        External contributor's Windows 11 x86_64 native verification environment:
+        an initial logger implementation produced duplicate INSERT rows for
+        the same observed value across multiple simulation steps even though
+        its total row count matched an expected value; a corrected
+        byte-compare-against-last-inserted-value implementation eliminated the
+        duplicates and preserved a monotonic distinct-value sequence.
+  expert_input: []
+
+confidence: high
+
+contradictions:
+  - target: initial PDU-to-SQLite logger acceptance check
+    existing_claim: A matching total row count (e.g. SELECT COUNT(*)) is sufficient evidence that logging is correct.
+    new_evidence: Duplicate rows from repeatedly observing the same last-written value can satisfy a total-count check while corrupting the intended one-row-per-distinct-event semantics.
+
+validation:
+  status: verified
+  required:
+    - For any future claim that a consumer of this transport behaves like a reliable queue, add a separate transport-level or sequence-number acknowledgment proof rather than assuming it from SHM alone.
+  notes:
+    - The corrected logger's semantics are explicitly sampling-based (last value per poll), not queue-based.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: true
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+
+promotion_rationale:
+  - Any persistence or replay recipe built on Hakoniwa's SHM PDU transport needs this limitation stated explicitly to avoid overclaiming replay completeness or event-queue semantics that the transport does not actually provide.
+
+resolution:
+  status: documented
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Candidate only. No upstream implementation issue has been filed; this is
+      a design characteristic of Hakoniwa's SHM PDU transport (last-value, not
+      queued), not a code defect in an upstream repository. A private
+      PDU-to-SQLite logger asset was already corrected (byte-compare against
+      the last inserted value) to handle it correctly. resolution.verified is
+      left false because no upstream fix/PR/revision exists to verify against.
