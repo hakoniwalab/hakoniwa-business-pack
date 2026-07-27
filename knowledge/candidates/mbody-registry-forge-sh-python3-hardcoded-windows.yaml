@@ -73,6 +73,9 @@ sources:
     - repository: hakoniwalab/hakoniwa-mbody-registry
       path: tools/forge.sh
       revision: 8b14d5366e156f3147a69c37cf953f7f8a1ab9fb
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: docs/hakoniwa-runtime-primer.md
+      revision: 50681d5bc5538b34a43c3a37346b92be3938088a
   runtime_evidence:
     - description: >-
         External contributor's Windows 11 x86_64 verification environment (native, Git
@@ -97,9 +100,20 @@ validation:
       interpreter) and whether Windows is a documented supported platform for forge.sh at
       all -- this candidate does not yet establish whether upstream considers Windows a
       supported environment for this script.
-    - Test whether py.exe (the Python Launcher for Windows, py -3) or a plain
-      python-to-python3 PATH alias would be a more upstream-appropriate fix than a
-      per-workspace shim.
+    - As of hakoniwa-business-pack revision 50681d5, docs/hakoniwa-runtime-primer.md
+      already states the interpreter-selection contract this gap violates -- a
+      component-owned launch wrapper for a Hakoniwa Python workflow should select
+      Python 3.12 explicitly, honor a documented interpreter override such as
+      `HAKO_PYTHON` or `PYTHON_CMD`, and fail before starting assets when the selected
+      interpreter is not Python 3.12 or cannot import the required Hakoniwa packages.
+      tools/forge.sh implements none of these three behaviors (no explicit version
+      selection, no override variable, no preflight fail -- it fails deep inside
+      unrelated control flow instead). Confirm with upstream whether forge.sh is
+      expected to conform to this primer-level contract, and if so, whether the fix
+      should be an explicit `python3.12`/`py -3.12` selection plus a `HAKO_PYTHON`/
+      `PYTHON_CMD` override read at the top of the script, rather than a bare
+      python-to-python3 PATH alias (which would satisfy the immediate symptom but not
+      the version-pinning or fail-fast parts of the contract).
   notes:
     - Verified via one reproduced failure and one reproduced fix in the same session, on
       one Windows machine's specific PATH configuration (WindowsApps stub present, no
@@ -125,11 +139,18 @@ promotion_targets:
       mode: detect-only
       notes:
         - No existing preflight check in forge.sh detects a non-functional python3
-          resolution before the script's own control flow depends on its output; a doctor-
-          style check ("does `python3 --version` produce real Python version output,
-          exit 0?") run before the MODE-resolution heredocs would surface this class of
-          failure with an actionable message instead of an unrelated-looking "unbound
-          variable" error.
+          resolution before the script's own control flow depends on its output. Per
+          docs/hakoniwa-runtime-primer.md (revision 50681d5), the expected behavior is
+          not a generic "is python3 real" probe but conformance to the primer's own
+          interpreter contract -- explicitly select Python 3.12 (e.g. `python3.12`/
+          `py -3.12`, not a bare `python3` lookup), honor a `HAKO_PYTHON`/`PYTHON_CMD`
+          override if the caller has set one, and fail before the MODE-resolution
+          heredocs run (and before any asset/robot forge starts) with an actionable
+          message when the selected interpreter is not Python 3.12 or cannot import the
+          packages forge.sh's heredocs depend on (e.g. pyyaml). A doctor-style check
+          implementing exactly this (version + override + importability, in that order)
+          would surface this class of failure at the right point instead of the
+          unrelated-looking "unbound variable" error observed in this session.
 
 promotion_rationale:
   - This is a reusable, cross-robot gap (affects every python3 call site in forge.sh, for
@@ -138,6 +159,12 @@ promotion_rationale:
   - Left as detect-only because no fix has been drafted or applied upstream; a
     doctor-style preflight is a reasonable direction but was not implemented in this
     session.
+  - runtime_primer is left false rather than proposed as a new promotion target --
+    docs/hakoniwa-runtime-primer.md (revision 50681d5) already states the Python 3.12 /
+    `HAKO_PYTHON` / `PYTHON_CMD` / fail-before-launch contract this candidate's gap
+    violates. No new primer prose is needed; what is missing is enforcement in
+    hakoniwa-mbody-registry's own tools/forge.sh, which is why the promotion target is
+    an executable guardrail against that repository rather than a docs change.
 
 resolution:
   status: pending
@@ -149,4 +176,13 @@ resolution:
     - Diagnosis and workaround only; no upstream issue filed, no PR exists yet. Recorded
       as candidate material for an upstream issue against hakoniwa-mbody-registry's
       tools/forge.sh (and possibly its sibling scripts, which were not individually
-      checked for the same python3-only assumption in this session).
+      checked for the same python3-only assumption in this session). The issue should
+      frame the ask as bringing forge.sh into conformance with the interpreter-selection
+      contract hakoniwa-business-pack's own runtime primer already documents (revision
+      50681d5), not as a novel Windows-compatibility request.
+    - The `python3` -> `python` PATH shim used in this session's verification (see
+      runtime_evidence above) is a workspace-side workaround only, not the fix being
+      proposed upstream; it happened to unblock this session but does not select
+      Python 3.12 explicitly, does not honor `HAKO_PYTHON`/`PYTHON_CMD`, and does not
+      fail fast on a wrong-version or missing-package interpreter, so it does not by
+      itself satisfy the primer's contract.

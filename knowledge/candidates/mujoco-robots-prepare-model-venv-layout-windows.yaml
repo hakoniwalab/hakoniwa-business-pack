@@ -63,6 +63,9 @@ sources:
     - repository: hakoniwalab/hakoniwa-mujoco-robots
       path: examples/actuators/shadow_hand/prepare-model.bash
       revision: 1abffe415e15635503a46de2d2c50b246ca52545
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: docs/hakoniwa-runtime-primer.md
+      revision: 50681d5bc5538b34a43c3a37346b92be3938088a
   runtime_evidence:
     - description: >-
         External contributor's Windows 11 x86_64 verification environment (native, Git
@@ -91,6 +94,20 @@ validation:
       the existing .venv/bin/python check in prepare-model.bash would be sufficient, or
       whether the script's downstream calls to forge.sh/fetch.py also need an explicit
       interpreter path passed through rather than relying on PATH order.
+    - As of hakoniwa-business-pack revision 50681d5, docs/hakoniwa-runtime-primer.md
+      states that a component-owned launch wrapper for a Hakoniwa Python workflow should
+      select Python 3.12 explicitly, honor a documented interpreter override such as
+      `HAKO_PYTHON`/`PYTHON_CMD`, and fail before starting assets when the selected
+      interpreter is not Python 3.12 or cannot import the required packages.
+      prepare-model.bash's current venv probe (a single hardcoded `.venv/bin/python`
+      path check with a silent fall-through on failure, per this candidate's finding)
+      satisfies none of these -- it does not check for Python 3.12 specifically, does not
+      read any override variable, and does not fail -- it silently proceeds with
+      whatever interpreter PATH order happens to select. Confirm with upstream whether
+      the intended fix is adding just a `.venv/Scripts/python.exe` branch (portability
+      fix only) or reworking the whole probe to implement the primer's fuller
+      select-3.12 / respect-override / fail-fast contract, which would also subsume the
+      POSIX-vs-Windows layout gap.
   notes:
     - "Confidence is medium rather than high because the precise mechanics of
       prepare-model.bash's fallback (what interpreter it actually ends up invoking when
@@ -115,11 +132,17 @@ promotion_targets:
       mode: detect-only
       notes:
         - No existing check in prepare-model.bash distinguishes a POSIX venv layout from
-          a Windows venv layout; a doctor-style check that tries both
-          .venv/bin/python and .venv/Scripts/python.exe (or uses a portable resolution
-          such as `python -c "import sys; print(sys.executable)"` run through whatever
-          activation mechanism is appropriate per OS) would make this gap detectable
-          without relying on PATH ordering as a workaround.
+          a Windows venv layout, and per docs/hakoniwa-runtime-primer.md (revision
+          50681d5) the intended behavior for a Hakoniwa Python launch wrapper is not
+          merely "try both venv layouts" but the fuller interpreter contract -- select
+          Python 3.12 explicitly, honor a `HAKO_PYTHON`/`PYTHON_CMD` override, and fail
+          before any asset starts if the resolved interpreter is not 3.12 or cannot
+          import the required packages. A doctor-style check that resolves the
+          interpreter this way (via `HAKO_PYTHON`/`PYTHON_CMD` first, falling back to a
+          portable venv-python probe such as `python -c "import sys; print(sys.executable)"`
+          run against both .venv/bin/python and .venv/Scripts/python.exe) and then
+          verifies the 3.12 version and required imports before returning would close
+          both the layout gap and the silent-fallback gap in one guardrail.
 
 promotion_rationale:
   - This is a reusable, general Windows-vs-POSIX venv layout gap that likely applies to
@@ -128,6 +151,12 @@ promotion_rationale:
   - Left as detect-only because no fix has been drafted or applied, and the exact
     fallback behavior when the POSIX check fails was not fully traced in this session
     (see validation.required above).
+  - runtime_primer is left false rather than proposed as a new promotion target --
+    docs/hakoniwa-runtime-primer.md (revision 50681d5) already documents the Python 3.12
+    / `HAKO_PYTHON` / `PYTHON_CMD` / fail-before-launch contract that prepare-model.bash's
+    venv probe falls short of. The gap is enforcement inside hakoniwa-mujoco-robots'
+    own script, not missing primer content, so the promotion target is an executable
+    guardrail against that repository rather than a docs change.
 
 resolution:
   status: pending
@@ -140,4 +169,13 @@ resolution:
       upstream issue filed, no PR exists yet. Recorded as candidate material for an
       upstream issue against hakoniwa-mujoco-robots' prepare-model.bash (and any sibling
       scripts sharing the same venv-resolution pattern, which were not individually
-      audited in this session).
+      audited in this session). The issue should frame the ask as bringing
+      prepare-model.bash into conformance with the interpreter-selection contract
+      hakoniwa-business-pack's own runtime primer already documents (revision 50681d5),
+      not solely as a POSIX-vs-Windows venv-layout portability fix.
+    - The workspace-side workaround used in this session (placing the venv's Scripts/
+      directory on PATH ahead of other Python installations, alongside the companion
+      candidate's python3 shim) is not the fix being proposed upstream; it relies on
+      PATH ordering rather than the script explicitly selecting Python 3.12, honoring
+      `HAKO_PYTHON`/`PYTHON_CMD`, or failing fast on a wrong-version interpreter, so it
+      does not by itself satisfy the primer's contract.
