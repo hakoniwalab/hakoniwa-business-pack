@@ -1,0 +1,157 @@
+id: rpc-timeout-cancel-core-semantics
+title: Preserve Core-compatible timeout/cancel race semantics across PDU-RPC and Conductor Light
+status: promoted
+
+knowledge_type:
+  - interface_contract
+  - runtime_rule
+  - design_intent
+  - validation_rule
+  - known_pitfall
+
+summary: >
+  Hakoniwa RPC timeout is an event, not an implicit request termination. The client remains
+  in the in-flight state until the caller explicitly sends cancel and the request is resolved
+  by either a normal response or cancel completion. A normal response is allowed to win the
+  timeout/cancel race. This contract originates in hakoniwa-core-pro and should remain
+  consistent in hakoniwa-pdu-rpc and synchronous users such as hakoniwa-conductor-light.
+
+observation:
+  context: >
+    Cross-platform validation of hakoniwa-conductor-light exposed an Ubuntu ARM64 startup
+    failure. Investigation first found that Conductor Light collapsed RPC timeout/transport
+    failures into NOT_SUPPORTED, then found that hakoniwa-pdu-rpc had drifted from the
+    timeout/cancel state machine already implemented and regression-tested in hakoniwa-core-pro.
+  details:
+    - hakoniwa-core-pro reports request timeout without automatically cancelling; explicit cancel transitions the client into a canceling state.
+    - While cancel is racing with normal completion, either the normal response or the cancel completion may win; a late cancel received after normal completion is ignored by the server.
+    - hakoniwa-pdu-rpc previously auto-cancelled on timeout and could re-evaluate the expired request timeout while already cancelling, which could destroy the intended state-machine lifecycle.
+    - hakoniwa-pdu-rpc PR #9 aligned timeout handling with Core semantics and added regression coverage for both cancel-wins and normal-response-wins races.
+    - hakoniwa-conductor-light PR #5 explicitly cancels after timeout, keeps polling until the in-flight RPC reaches a terminal state, preserves a normal response that wins the race, and only retries event discovery after the endpoint is reusable.
+    - Correcting the semantics exposed several tests that intentionally stopped the RPC server and then attempted client cleanup RPCs. Those tests were fixed instead of weakening production timeout semantics.
+    - A peer/server disappearance is not treated as a normal RPC timeout recovery case. For Conductor Light, loss of the time-coordination server means the simulation itself is already failed; transparent HA/recovery is outside the Light product scope.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-core-pro
+      path: sources/core/src/service/hako_service_protocol_client.cpp
+      revision: main
+    - repository: hakoniwalab/hakoniwa-core-pro
+      path: sources/core/src/service/hako_service_protocol_server.cpp
+      revision: main
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      path: src/rpc_client_endpoint_impl.cpp
+      revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      path: test/rpc_timeout_cancel_semantics_test.cpp
+      revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
+    - repository: hakoniwalab/hakoniwa-conductor-light
+      path: src/client/rpc_client_transport.cpp
+      revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
+    - repository: hakoniwalab/hakoniwa-conductor-light
+      path: test/rpc_integration_test.cpp
+      revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
+  runtime_evidence:
+    - description: >-
+        Local WSL2 Ubuntu x64 verification on 2026-07-27 completed all 9 Conductor Light
+        tests successfully after the timeout/cancel and test-lifecycle fixes; rpc_integration_test,
+        rpc_client_facade_test, and rpc_server_transport_test all completed without hangs.
+    - description: >-
+        Conductor Light cross-platform workflow run 30247538916 on revision
+        ce2635ec48634555f383eb5073806de2a2aacc6c passed Doctor, Build, Test, Smoke auto,
+        and Smoke manual on Ubuntu x64, Ubuntu ARM64, macOS, and Windows x64. That verified
+        tree was subsequently merged through PR #5 and PR #4 into main revision
+        d4d1543161f6e5e1cf07452fbb90aae03211c30b.
+  expert_input:
+    - source: Hakoniwa developer
+      statement: >-
+        hakoniwa-core-pro is the source of truth for the RPC timeout/cancel state machine;
+        timeout must not silently collapse the request lifecycle or erase the normal-response
+        versus cancel race.
+    - source: Hakoniwa developer
+      statement: >-
+        Conductor Light does not need transparent recovery if the conductor server itself
+        disappears during simulation; losing the shared-time server means the simulation has failed.
+
+confidence: high
+
+contradictions:
+  - target: hakoniwalab/hakoniwa-pdu-rpc timeout behavior before PR #9
+    existing_claim: Timeout handling could automatically cancel and effectively recover the client endpoint without an explicit caller-controlled cancel lifecycle.
+    new_evidence: Core Pro keeps timeout and cancellation separate, and the corrected PDU-RPC implementation now preserves that contract.
+  - target: hakoniwalab/hakoniwa-conductor-light event capability detection before PR #5
+    existing_claim: RPC_TIMEOUT and TRANSPORT_ERROR during GetEvent startup probing could be normalized into NOT_SUPPORTED.
+    new_evidence: Capability rejection, transport failure, and timeout are distinct states; only an actual NOT_SUPPORTED response is a capability mismatch.
+
+validation:
+  status: verified
+  required: []
+  notes:
+    - PDU-RPC PR #9 is merged on main at b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0.
+    - Conductor Light PR #5 merged into the CI branch at d44a15a9ffea7acb5f80926fd2eab2d5f73e18a3; PR #4 then merged the verified tree to main at d4d1543161f6e5e1cf07452fbb90aae03211c30b.
+    - The pre-merge Conductor Light revision ce2635ec48634555f383eb5073806de2a2aacc6c passed the complete four-platform doctor/build/test/smoke matrix before final main integration.
+
+tracking:
+  implementation_status: resolved
+  issues: []
+
+promotion_targets:
+  catalog:
+    - hakoniwa-pdu-rpc
+    - hakoniwa-conductor-light
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      kind: test
+      path: test/rpc_timeout_cancel_semantics_test.cpp
+      mode: detect-only
+      notes:
+        - Covers timeout followed by explicit cancel and the normal-response-wins race.
+    - repository: hakoniwalab/hakoniwa-conductor-light
+      kind: test
+      path: test/rpc_integration_test.cpp
+      mode: detect-only
+      notes:
+        - Exercises the timeout/cancel race through the Conductor Light transport integration.
+    - repository: hakoniwalab/hakoniwa-conductor-light
+      kind: ci
+      path: .github/workflows/cross-platform.yml
+      mode: detect-only
+      notes:
+        - Runs doctor, build, tests, auto smoke, and manual smoke across the four-platform matrix.
+
+promotion_rationale:
+  - The timeout/cancel lifecycle is a reusable RPC interface contract, not a one-off Conductor Light implementation detail.
+  - The exact state-machine semantics belong in the owning RPC and Conductor component catalogs; broader ecosystem documents do not need this low-level race detail.
+  - The regression tests and cross-platform CI are the durable executable form of the discovered runtime rule.
+
+resolution:
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      issue: null
+      pull_request: 9
+      revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
+    - repository: hakoniwalab/hakoniwa-conductor-light
+      issue: null
+      pull_request: 5
+      revision: d44a15a9ffea7acb5f80926fd2eab2d5f73e18a3
+    - repository: hakoniwalab/hakoniwa-conductor-light
+      issue: null
+      pull_request: 4
+      revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
+  verified: true
+  promoted_to:
+    - catalog/components/hakoniwa-pdu-rpc.yaml
+    - catalog/components/hakoniwa-conductor-light.yaml
+  executable_guardrails:
+    - hakoniwalab/hakoniwa-pdu-rpc:test/rpc_timeout_cancel_semantics_test.cpp
+    - hakoniwalab/hakoniwa-conductor-light:test/rpc_integration_test.cpp
+    - hakoniwalab/hakoniwa-conductor-light:.github/workflows/cross-platform.yml
+  notes:
+    - PDU-RPC implementation is fixed and merged.
+    - Conductor Light timeout/cancel handling, regression tests, hang-safe test bounds, and four-platform CI are merged to main.
+    - The component-specific facts are promoted into the PDU-RPC and Conductor Light Catalog entries; the executable guardrails remain owned by their component repositories.
