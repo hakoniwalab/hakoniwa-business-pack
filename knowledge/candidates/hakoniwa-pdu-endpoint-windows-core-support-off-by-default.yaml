@@ -42,6 +42,29 @@ observation:
       (build-python-win.ps1 -EnableHakoniwaCore), so the requirement for the native C++
       dependency build is an implicit prerequisite left undocumented rather than a wrong
       command shown in the README."
+    - "A later re-verification against a manifest-driven build (tools/hako.py +
+      hakoniwa-build.yaml, following the manifest architecture introduced after this
+      candidate was first recorded) changes the premise of the original OFF-by-default
+      observation: the manifest's own features.hakoniwa_core flag now defaults to false
+      identically on every platform the manifest models, not just Windows. The raw
+      CMakeLists.txt's OS-conditional default (`if(WIN32) ... OFF ... else() ... ON ...
+      endif()`) was not directly re-read in that session to confirm whether it still
+      exists verbatim, but tools/hako.py always passes an explicit
+      -DHAKO_PDU_ENDPOINT_ENABLE_HAKONIWA_CORE=ON/OFF derived from the manifest's
+      features.hakoniwa_core value, so that raw CMake default is no longer reachable
+      through the documented (manifest-driven) build path on any OS. The
+      'off by default on Windows specifically' framing is therefore no longer accurate for
+      anyone using tools/hako.py; it would still describe a hypothetical caller who invokes
+      raw cmake directly and bypasses tools/hako.py entirely."
+    - "Setting features.hakoniwa_core: true through the manifest was confirmed to reach
+      configure correctly (the resolved manifest printed the expected
+      -DHAKO_PDU_ENDPOINT_ENABLE_HAKONIWA_CORE=ON argument for every platform), but the
+      resulting Windows build itself then failed for a separate, newly discovered reason
+      unrelated to the OFF-by-default question (a missing include directory in a
+      core-variants split introduced by the same manifest work). So while the
+      OFF-by-default framing itself is resolved by the manifest's now-uniform
+      cross-platform default, a working Hakoniwa-core-enabled Windows build was still not
+      achievable end to end through the manifest at that revision, for an unrelated cause."
 
 sources:
   repositories:
@@ -60,6 +83,13 @@ sources:
         no WSL/Docker), 2026-07-23: the exact "protocol 'shm' requested but Hakoniwa core
         support is disabled" failure with the first build, then a successful run after
         rebuilding with -EnableHakoniwaCore -HakoniwaCoreRoot.
+    - description: >-
+        Re-verification session on a native Windows 11 x86_64 workspace (external code
+        unmodified), against a manifest-driven revision of hakoniwa-pdu-endpoint:
+        `hako.py doctor`/`configure` with features.hakoniwa_core: true resolved cleanly and
+        printed the same -DHAKO_PDU_ENDPOINT_ENABLE_HAKONIWA_CORE=ON cmake argument the
+        manifest computes for every platform, confirming the default is now
+        manifest-controlled rather than an OS-conditional CMake option default.
   expert_input: []
 
 confidence: high
@@ -70,10 +100,12 @@ contradictions:
     new_evidence: "That exact invocation produces a DLL that fails at runtime for any SHM-based (Hakoniwa asset) use case; -EnableHakoniwaCore -HakoniwaCoreRoot must be added."
 
 validation:
-  status: verified
-  required: []
+  status: partially_verified
+  required:
+    - Confirm whether hakoniwa-pdu-endpoint's raw CMakeLists.txt still contains the OS-conditional (`if(WIN32) ... OFF ... else() ... ON ... endif()`) branch at the manifest-driven revision -- not directly re-read in the manifest re-verification session, which only inspected the manifest's resolved output (always an explicit ON/OFF flag regardless of that raw default).
   notes:
-    - Verified by an actual runtime failure, then an actual runtime success after the fix.
+    - Verified by an actual runtime failure, then an actual runtime success after the fix, against the pre-manifest build-win.ps1 entry point.
+    - "Manifest re-verification confirms the manifest-driven tools/hako.py flow no longer exposes an OS-conditional default at all: features.hakoniwa_core defaults to false identically across platforms, and the manifest always passes an explicit -DHAKO_PDU_ENDPOINT_ENABLE_HAKONIWA_CORE value. This narrows the original Windows-specific framing to only the legacy/raw-CMake entry point, which was not re-tested in that session. A working Hakoniwa-core-enabled Windows build via the manifest was also not achieved end to end, for a separate, unrelated missing-include-directory reason."
 
 promotion_targets:
   catalog:
@@ -93,3 +125,12 @@ resolution:
     - Candidate only.
     - "Filed as an actionable follow-up (documentation gap, not a business-pack knowledge
       change): hakoniwalab/hakoniwa-pdu-endpoint#37."
+    - "Follow-up: the manifest-driven build architecture (tools/hako.py) has changed the
+      premise of this candidate's title -- the default is no longer Windows-specific, it is
+      now a cross-platform manifest default (false) with an always-explicit CMake flag
+      derived from it. Whether the legacy CMakeLists.txt OS-conditional default still
+      exists was not directly re-read; even with features.hakoniwa_core: true correctly
+      resolved and passed through by the manifest, the resulting Windows build then failed
+      for a different, separately tracked reason (a missing include directory in a
+      core-variants split), so a working Hakoniwa-core-enabled Windows build still could
+      not be produced end to end via the manifest path at that revision."
