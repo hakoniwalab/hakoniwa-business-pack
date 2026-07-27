@@ -165,10 +165,6 @@ connects_to:
     direction: related
     interface: control-plane RPC concept
     notes: Both address control-plane coordination, with conductor-pro using broader distributed execution control.
-  - component_id: hakoniwa-core-pro
-    direction: related
-    interface: RPC state-machine semantics
-    notes: PDU-RPC timeout/cancel behavior is intentionally aligned with the older Core Pro client/server state machine and race semantics.
 
 data_contracts:
   - name: RPC service config
