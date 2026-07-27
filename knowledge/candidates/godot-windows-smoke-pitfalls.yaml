@@ -88,6 +88,22 @@ sources:
         configuration, removal of QuitAfterRun, WSL rejection of --quit, and updated test
         documentation. The merged revision still requires a post-fix native Windows runtime
         re-verification before resolution.verified can become true.
+    - description: >-
+        External contributor's Windows 11 x86_64 verification environment (native, no
+        WSL/Docker), 2026-07-26, re-run at the merged revision
+        5ca7e06007bcd7838419181344714a24649a1446 with an explicit -HakoConfigPath pointing
+        at the intended Hakoniwa Core config: tools/run_core_pro_smoke.ps1 reached
+        HAKO_CORE_SMOKE_OK / exit 0 / "[run-core-pro-smoke.ps1] passed", showing the full
+        START/STOP/RESET/RESTART lifecycle plus three time-synced simulation steps
+        (STEP:1/2/3, simtime=20000/40000/60000 matching world time exactly). Addons
+        normalization ran automatically (no manual copy needed), logging the expected
+        warning "Project addons path is not a symbolic link. Replacing it with a copy of
+        the repository addons directory: ...". Omitting -HakoConfigPath was also
+        re-verified as still reproducing the original pitfall in the new runner: it
+        printed the expected warning about inheriting HAKO_CONFIG_PATH, then failed with
+        HAKO_CORE_SMOKE_INITIALIZE_FAILED / "hakoniwa_simevent_init error=-1" against a
+        stale inherited config from another workspace -- confirming both the original
+        trap and the effectiveness of the -HakoConfigPath guard in the same session.
   expert_input: []
 
 confidence: high
@@ -99,7 +115,8 @@ validation:
   required: []
   notes:
     - The original three failure modes and their manual workarounds were verified by a full clean Windows run ending in HAKO_CORE_SMOKE_OK.
-    - The durable implementation is merged, but the merged runner has not yet been re-run on the native Windows environment, so resolution.verified remains false.
+    - The durable implementation is merged, and the merged runner has now been re-run on the native Windows environment at revision 5ca7e06007bcd7838419181344714a24649a1446, reaching HAKO_CORE_SMOKE_OK with an explicit -HakoConfigPath, and reproducing the original stale-config failure mode when -HakoConfigPath is omitted (confirming the warning path is exercised, not merely present in source).
+    - "Residual gap outside this candidate's verified scope: tools/run_codec_smoke.ps1 (the basic_subscriber / codec smoke path) was not part of hakoniwa-godot#6 and still fails by default with 'SCRIPT ERROR: Parse Error: Preload file \"res://addons/...\" does not exist' (exit 1) unless -SyncAddons is passed explicitly, at which point it reaches HAKONIWA_CODEC_SMOKE_OK / exit 0 / '[run-codec-smoke.ps1] passed'. This means the automatic addons-normalization fix from Pitfall 1 is applied asymmetrically: core_pro_smoke normalizes addons automatically, while codec smoke still requires an explicit flag. This asymmetry is recorded here as a known limitation of the current fix, not a regression of the three original pitfalls."
 
 tracking:
   implementation_status: resolved
@@ -128,7 +145,7 @@ resolution:
       issue: 5
       pull_request: 6
       revision: 5ca7e06007bcd7838419181344714a24649a1446
-  verified: false
+  verified: true
   promoted_to: []
   executable_guardrails:
     - tools/run_core_pro_smoke.ps1
@@ -136,4 +153,5 @@ resolution:
   notes:
     - hakoniwa-godot#5 is resolved by merged PR #6.
     - The Windows runner now turns the three previously implicit assumptions into executable checks, normalization, warnings, or guards.
-    - Keep verified=false until the merged hakoniwa-godot revision is run on native Windows and reaches HAKO_CORE_SMOKE_OK with the new runner.
+    - "verified: true is scoped specifically to the three core_pro smoke pitfalls (symlink-to-plain-file addons, implicit/stale HAKO_CONFIG_PATH, --quit racing the async lifecycle), re-verified on native Windows at the merged revision with tools/run_core_pro_smoke.ps1 reaching HAKO_CORE_SMOKE_OK, and with the omitted-HakoConfigPath path independently re-confirmed to still fail with the original hakoniwa_simevent_init error=-1 symptom (i.e. the warning is not a false negative)."
+    - "Not covered by this verified=true: tools/run_codec_smoke.ps1 (basic_subscriber / codec smoke) still fails by default without -SyncAddons, since PR #6's automatic addons normalization was applied to the core_pro_smoke runner only. This asymmetry is a residual gap, not a re-opening of the three original pitfalls; see validation.notes above."
