@@ -151,7 +151,7 @@ connects_to:
     direction: uses
     interface: RPC transport
     notes: Used for conductor server/client control-plane RPC; timeout/cancel lifecycle follows the Core-compatible PDU-RPC state machine.
-  - component_id: hakoniwalab-pdu-endpoint
+  - component_id: hakoniwa-pdu-endpoint
     direction: uses
     interface: TCP endpoint / generated configs
     notes: Provides endpoint transport for RPC and dynamic client connections.
