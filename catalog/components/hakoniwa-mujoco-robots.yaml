@@ -10,8 +10,8 @@ distribution:
   notes:
     - Public OSS Hakoniwa component.
 verification:
-  verified_at: 2026-07-19
-  source_revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+  verified_at: 2026-07-28
+  source_revision: aecfd8010f832b07c1bc3852c795a2fd7944f406
   source_ref: main
 summary: MuJoCo-based robot simulation assets for Hakoniwa, including TurtleBot3, sensor and actuator examples, Python controllers, and PDU integration.
 category:
@@ -155,8 +155,10 @@ platforms:
   supported:
     - macOS
     - Linux
+    - Windows
   notes:
-    - README includes macOS and Linux path setup; exact platform matrix should be verified.
+    - Component-owned build CI exercises the common hako.py build entry point on Ubuntu, macOS, and Windows.
+    - Platform-specific native scripts remain implementation details behind tools/hako.py.
 
 connects_to:
   - component_id: hakoniwa-core-pro
@@ -242,22 +244,24 @@ runtime_checks:
     platforms:
       - macos
       - linux
+      - windows
     command:
-      - bash
-      - doctor.bash
+      - python
+      - tools/hako.py
+      - doctor
     working_directory: repository
     output: text
     notes:
-      - Component-owned preflight for CMake, Git, Python/Hakoniwa modules, MuJoCo metadata, installed Core/Endpoint packages, and GLFW availability.
+      - Cross-platform component-owned entry point. On macOS/Linux it delegates to doctor.bash; on Windows it delegates to build-win.ps1 -DoctorOnly.
       - Exit status 0 means the environment passed the declared preflight; this is not behavioral verification of a complete Recipe.
 
 operations:
   build:
     commands:
-      - ./doctor.bash
-      - bash build.bash
+      - python tools/hako.py doctor
+      - python tools/hako.py build
     notes:
-      - README points to prerequisites and setup sections.
+      - tools/hako.py is the preferred OS-independent entry point; native build scripts remain available for low-level debugging.
   test:
     commands: []
     notes: Sensor tests exist under tests/sensors; exact commands should be cataloged later.
@@ -271,14 +275,13 @@ operations:
       - TurtleBot3 quick start uses four terminals.
 
 known_gaps:
-  - Need to catalog exact build commands from setup section and docs/README.md.
   - Need to map individual examples/sensors and examples/actuators into recipe fragments.
 
 source_refs:
   - repository: hakoniwalab/hakoniwa-mujoco-robots
     path: README.md
-    revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
-    description: Main overview, architecture, quick starts, requirements, and examples.
+    revision: aecfd8010f832b07c1bc3852c795a2fd7944f406
+    description: Main overview, architecture, quick starts, requirements, and cross-platform build entry point.
   - repository: hakoniwalab/hakoniwa-mujoco-robots
     path: docs/README.md
     revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
@@ -292,9 +295,21 @@ source_refs:
     revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
     description: Forklift context and RD-light handoff notes.
   - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: tools/hako.py
+    revision: aecfd8010f832b07c1bc3852c795a2fd7944f406
+    description: Preferred OS-independent doctor/build entry point.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
     path: doctor.bash
-    revision: main
-    description: Component-owned build/runtime prerequisite doctor invoked by Catalog Runtime Verification.
+    revision: aecfd8010f832b07c1bc3852c795a2fd7944f406
+    description: macOS/Linux component-owned preflight delegated through tools/hako.py.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: build-win.ps1
+    revision: aecfd8010f832b07c1bc3852c795a2fd7944f406
+    description: Windows native build/preflight implementation delegated through tools/hako.py.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: .github/workflows/build.yml
+    revision: aecfd8010f832b07c1bc3852c795a2fd7944f406
+    description: Cross-platform CI using the common tools/hako.py build entry point.
 
 tags:
   - hakoniwa
