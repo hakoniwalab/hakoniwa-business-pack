@@ -1,4 +1,4 @@
-schema_version: 0.2
+schema_version: 0.3
 description: Controlled vocabulary for Hakoniwa component catalog entries.
 
 controlled_fields:
@@ -130,6 +130,19 @@ controlled_fields:
       - time_sync
       - visualization_asset_source
       - visualizer
+  hako_cli.contract_version:
+    description: Version of the common tools/hako.py command-semantics contract declared by the component.
+    values:
+      - "1.0"
+  hako_cli.commands:
+    description: Standard hako.py commands whose support may be declared by each component. Component-specific extension commands may also exist but are not part of the common vocabulary.
+    values:
+      - doctor
+      - configure
+      - build
+      - test
+      - smoke
+      - run
   runtime_checks.kind:
     description: Type of executable guardrail owned by the component repository.
     values:
@@ -163,8 +176,11 @@ authoring_rules:
   - Use `distribution.channel: commercial` when a component is only available through commercial licensing.
   - Use `distribution.channel: dual-license` when one technical component or codebase is offered under distinct non-commercial/OSS and commercial licensing paths.
   - Do not create separate catalog components solely to represent different licenses for the same codebase; represent those variants in the component's license metadata instead.
-  - Mark private Hakoniwa business/product repositories as `distribution.channel: commercial` only when they represent a distinct technical component, not merely a commercial distribution of an existing component.
   - Treat `connects_to` as component-level planning knowledge. Put recipe-specific connection contracts, required adapters, and validation status in recipe `connections[].contract`.
+  - Keep `hako_cli` optional. Absence means standard CLI support is unknown or unavailable, not that the component failed.
+  - Declare only commands actually owned by the component repository; the existence of tools/hako.py does not imply every standard command.
+  - Keep stable smoke modes and operationally relevant options in `hako_cli`; do not mirror every implementation-specific CLI flag.
+  - Follow `docs/hako-cli-contract.md` for standard command semantics and contract versioning.
   - Keep `runtime_checks` optional. Absence means runtime readiness is unknown, not that the component failed.
   - Runtime checks must be owned by the component repository; do not duplicate component-specific diagnostic logic in Business Pack.
   - Prefer non-destructive detection and remediation guidance over automatic installation, download, or repair in doctor-style checks.
