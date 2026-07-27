@@ -142,6 +142,7 @@ controlled_fields:
       - build
       - test
       - smoke
+      - install
       - run
   runtime_checks.kind:
     description: Type of executable guardrail owned by the component repository.
