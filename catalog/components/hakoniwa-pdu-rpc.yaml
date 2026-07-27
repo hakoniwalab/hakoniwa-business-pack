@@ -10,8 +10,8 @@ distribution:
   notes:
     - Public OSS Hakoniwa component.
 verification:
-  verified_at: 2026-07-19
-  source_revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+  verified_at: 2026-07-27
+  source_revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
   source_ref: main
 summary: C++ request-response layer for Hakoniwa control-plane RPC built on endpoint topology and PDU definitions.
 category:
@@ -25,7 +25,7 @@ status:
   maturity: active
   catalog_confidence: high
   notes:
-    - Cataloged from README, examples, tutorial links, and config validation guidance.
+    - Cataloged from README, examples, config validation, implementation, and timeout/cancel regression tests.
     - Scope is intentionally narrower than a general RPC framework.
 
 capabilities:
@@ -34,37 +34,48 @@ capabilities:
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: README.md
-        revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+        revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
   - name: Config-driven service topology
     description: Defines services, clients, endpoints, request IDs, channels, and timeout behavior in JSON.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: README.md
-        revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+        revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
   - name: Multi-client C++ service support
     description: Allows a service server to handle multiple uniquely named clients.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: README.md
-        revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+        revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
   - name: Typed helper API
     description: Provides template helpers for packing and unpacking ROS service-derived PDU request and response types.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: README.md
-        revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+        revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
   - name: Configuration validation
     description: Includes Python validation for schema and RPC consistency such as duplicate names and channel collisions.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: README.md
-        revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+        revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
+  - name: Core-compatible timeout and cancellation state machine
+    description: A request timeout is reported as an event while the client remains in-flight; the caller explicitly cancels, and either the normal response or cancel completion may resolve the request before the endpoint returns to idle.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: src/rpc_client_endpoint_impl.cpp
+        revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: test/rpc_timeout_cancel_semantics_test.cpp
+        revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
 
 limitations:
   - Not a general-purpose RPC framework like gRPC.
   - Not a dynamic service mesh with discovery, auth, tracing, and streaming semantics.
   - Primarily targeted at C++ Hakoniwa-native control-plane integration.
   - Requires endpoint and registry alignment; mismatched endpoint IDs, node names, PDU sizes, or channels fail at config/runtime boundaries.
+  - Timeout does not mean the endpoint is immediately reusable. A caller that observes timeout must explicitly cancel or otherwise resolve the in-flight request before starting a new RPC.
+  - The RPC state machine does not infer peer death from timeout alone; a higher layer owns any policy for a permanently unavailable server.
 
 interfaces:
   inputs:
@@ -77,13 +88,19 @@ interfaces:
     - name: Generated service PDU types
       kind: api
       description: Request and response packet types generated from service definitions.
+    - name: Explicit cancel request
+      kind: api
+      description: Caller-controlled cancellation request for an in-flight RPC after timeout or other cancellation decision.
   outputs:
     - name: RPC response PDUs
       kind: pdu
-      description: Response payloads sent over endpoint transports.
+      description: Normal or cancellation response payloads sent over endpoint transports.
     - name: Validation diagnostics
       kind: command
       description: Schema and consistency errors reported by the config validator.
+    - name: Client events
+      kind: api
+      description: Poll events distinguish normal response, timeout, cancel completion, and no-event states without collapsing timeout into implicit cancellation.
   protocols:
     - name: Endpoint transports
       role: client | server
@@ -108,7 +125,7 @@ dependencies:
       notes: Required build system.
     - name: Hakoniwa core library
       type: repository
-      notes: Typically installed under /usr/local/hakoniwa.
+      notes: Typically installed under /usr/local/hakoniwa for the standalone repository build path.
     - name: hakoniwa-pdu-endpoint
       type: repository
       notes: Required for endpoint topology and transport I/O.
@@ -128,7 +145,8 @@ platforms:
     - macOS
     - Linux
   notes:
-    - README documents Linux/macOS library path handling; Windows support is not called out.
+    - README documents Linux/macOS standalone library path handling.
+    - Revision b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0 is also compiled and behaviorally exercised as an embedded Conductor Light dependency by its four-platform Ubuntu x64, Ubuntu ARM64, macOS, and Windows x64 CI matrix; this is integration evidence, not a claim that the standalone PDU-RPC packaging path is fully Windows-verified.
 
 connects_to:
   - component_id: hakoniwa-pdu-endpoint
@@ -142,11 +160,15 @@ connects_to:
   - component_id: hakoniwa-conductor-light
     direction: used_by
     interface: RPC client/server transport
-    notes: Conductor-light uses PDU-RPC for server/client coordination examples.
+    notes: Conductor Light uses PDU-RPC for server/client coordination and now preserves the same explicit timeout/cancel lifecycle.
   - component_id: hakoniwa-conductor-pro
     direction: related
     interface: control-plane RPC concept
     notes: Both address control-plane coordination, with conductor-pro using broader distributed execution control.
+  - component_id: hakoniwa-core-pro
+    direction: related
+    interface: RPC state-machine semantics
+    notes: PDU-RPC timeout/cancel behavior is intentionally aligned with the older Core Pro client/server state machine and race semantics.
 
 data_contracts:
   - name: RPC service config
@@ -154,13 +176,25 @@ data_contracts:
     source:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: config/schema/service-schema.json
-        revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+        revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
   - name: Request-response PDU channels
     description: Request and response traffic uses explicit PDU channels and endpoint mappings.
     source:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: README.md
-        revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+        revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
+  - name: Timeout/cancel lifecycle
+    description: Timeout leaves the client request running. The caller may send cancel using the same request ID, which moves the client into cancelling; the client remains non-idle until either a matching normal response or cancel response resolves the race. A late cancel reaching an already-idle server is ignored.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: src/rpc_client_endpoint_impl.cpp
+        revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: src/rpc_server_endpoint_impl.cpp
+        revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: test/rpc_timeout_cancel_semantics_test.cpp
+        revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
 
 recipe_roles:
   - role: control_plane
@@ -175,12 +209,14 @@ typical_usecases:
   - Request/response operations that must follow endpoint topology and PDU binary contracts.
   - Deterministic or tick-driven integration loops where hidden scheduler behavior is undesirable.
   - Config-reviewed RPC wiring in CI.
+  - Control-plane clients that must distinguish timeout observation from explicit cancellation and preserve race-safe endpoint reuse.
 
 anti_usecases:
   - Public web APIs across many languages.
   - Streaming RPC workloads.
   - Dynamic service discovery, auth, tracing, or full service mesh requirements.
   - Simple browser or JSON-only RPC unrelated to Hakoniwa PDU channels.
+  - Callers that assume timeout automatically aborts an RPC and immediately resets the client to idle.
 
 demo_candidates:
   - name: AddTwoInts RPC pair
@@ -192,10 +228,18 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: examples/rpc_server.cpp
-        revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+        revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: examples/rpc_client.cpp
-        revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+        revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
+  - name: Timeout/cancel race regression
+    description: Run the dedicated regression test that covers explicit cancellation after timeout and the case where a normal response wins before cancel completion.
+    required_components:
+      - hakoniwa-pdu-rpc
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: test/rpc_timeout_cancel_semantics_test.cpp
+        revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
 
 operations:
   build:
@@ -205,10 +249,12 @@ operations:
       - ./build.bash
     notes:
       - install.bash installs headers and libraries under /usr/local/hakoniwa by default.
+      - Conductor Light also consumes PDU-RPC sources directly as a submodule integration path rather than relying on this standalone packaging flow.
   test:
     commands:
-      - ctest --test-dir build
+      - ctest --test-dir build --output-on-failure
     notes:
+      - The current test suite includes rpc_timeout_cancel_semantics_test.cpp for Core-compatible timeout/cancel race behavior.
       - README also documents make test from the build directory.
   run:
     commands:
@@ -221,25 +267,38 @@ operations:
 known_gaps:
   - Catalog does not yet list every schema field and validation rule.
   - Cross-language RPC support beyond C++ should not be assumed.
-  - Runtime behavior should be verified with exact endpoint configs in each recipe.
+  - Standalone Windows packaging/build support is not promoted from Conductor Light integration evidence alone.
+  - PDU-RPC deliberately does not define a general peer-failure/HA policy; higher layers decide what a permanently unavailable server means for their simulation.
 
 source_refs:
   - repository: hakoniwalab/hakoniwa-pdu-rpc
     path: README.md
-    revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+    revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
     description: Main overview, scope, quick start, build, and validation guidance.
   - repository: hakoniwalab/hakoniwa-pdu-rpc
     path: examples/README.md
-    revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+    revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
     description: Example usage documentation.
   - repository: hakoniwalab/hakoniwa-pdu-rpc
     path: docs/tutorials/rpc.md
-    revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+    revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
     description: RPC tutorial.
   - repository: hakoniwalab/hakoniwa-pdu-rpc
     path: config/schema/service-schema.json
-    revision: e07ce7e09d2abe2b30542be5b1358a914f2cb581
+    revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
     description: Service schema.
+  - repository: hakoniwalab/hakoniwa-pdu-rpc
+    path: src/rpc_client_endpoint_impl.cpp
+    revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
+    description: Client state machine, timeout event handling, explicit cancellation, response matching, and endpoint reuse behavior.
+  - repository: hakoniwalab/hakoniwa-pdu-rpc
+    path: src/rpc_server_endpoint_impl.cpp
+    revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
+    description: Server handling for request, cancel, cancelling state, and late cancel received while idle.
+  - repository: hakoniwalab/hakoniwa-pdu-rpc
+    path: test/rpc_timeout_cancel_semantics_test.cpp
+    revision: b72db0dbceed1163261a9b7e65e6a7cd7a9a34d0
+    description: Regression coverage for cancel-wins and normal-response-wins timeout races.
 
 tags:
   - hakoniwa
