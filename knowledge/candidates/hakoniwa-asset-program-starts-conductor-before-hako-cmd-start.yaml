@@ -29,6 +29,7 @@ observation:
     - In the Shadow Hand Foxglove bridge smoke, the ShadowHandAsset executable also owns conductor startup, so it must be launched before bridge or sender assets.
     - Multi-asset demos should use Hakoniwa Launcher to encode this order instead of relying on manual terminal timing.
     - A bridge process that reads callback SHM must itself participate in the Hakoniwa asset lifecycle and should be started only after the conductor-owning plant asset is up.
+    - "A related but distinct case: a process that attaches to a running simulation's PDU data via init_for_external (i.e. it does NOT call hako_asset_register() and is not a registered asset) does not share the registered-asset lifecycle above. Starting such an external reader/writer before hako-cmd start has created the PDU data segment was found to produce a native access violation on Windows. The safe order verified for this external, non-asset case is: owner asset up and waiting to start, then hako-cmd start, then (after a short delay) the external client attaches. This does not contradict the registered-asset ordering above -- it is a narrower rule for code that participates in the simulation's PDU data without registering as an asset at all, and should not be assumed to follow the same 'may start before hako-cmd start once the conductor owner exists' allowance that registered non-owner assets get."
 
 sources:
   repositories:
@@ -68,6 +69,12 @@ sources:
         receive, generated CDR conversion, and FoxgloveComm publication. Logs
         showed sent JointState CDR samples and published CDR frame samples after
         hako-cmd start.
+    - description: >-
+        External contributor's Windows 11 x86_64 native verification environment:
+        an init_for_external reader started before hako-cmd start produced a
+        native access violation (0xC0000005); starting the same external
+        reader only after hako-cmd start, with a short delay, ran without error
+        across multiple external tap/injector style processes.
   expert_input:
     - source: user
       statement: >
@@ -95,6 +102,7 @@ validation:
   status: verified
   required:
     - Add a controlled shutdown pattern that does not rely on hako-cmd stop in environments where stop is unavailable.
+    - The exact native crash origin for an init_for_external client started before hako-cmd start remains unconfirmed at the Hakoniwa core source level; only the safe call ordering (attach after hako-cmd start) has been verified as a workaround.
   notes:
     - This candidate captures the runtime ordering and the local Tracer smoke.
     - The current rover sample is still a prototype path, not a fully generic rover asset.
@@ -103,6 +111,7 @@ validation:
       Shadow Hand extended the rule from two manually launched programs to a
       multi-asset launcher scenario: conductor-owning plant asset first,
       callback-SHM bridge asset after registration, then hako-cmd start.
+    - The init_for_external (non-asset, non-registered) ordering rule above is a narrower, separately verified extension covering code that attaches to PDU data without registering as an asset at all; it does not change the registered-asset ordering already promoted to the Runtime Primer.
 
 promotion_targets:
   catalog:
@@ -130,3 +139,4 @@ resolution:
   notes:
     - Candidate created from the AgileX Tracer Twist PDU runtime smoke.
     - Promoted the conductor/asset-registration/hako-cmd-start ordering rule to the Runtime Primer on 2026-07-22.
+    - "Follow-up: a narrower ordering rule for init_for_external (non-asset) clients was verified separately (attach only after hako-cmd start, with a short delay) and is recorded above; no upstream implementation issue has been filed for it, since the underlying native crash when this order is violated has not been root-caused at the Hakoniwa core source level."
