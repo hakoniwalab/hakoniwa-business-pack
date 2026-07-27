@@ -11,8 +11,8 @@ distribution:
     - Private commercial Hakoniwa component.
 verification:
   verified_at: 2026-07-27
-  source_revision: ce2635ec48634555f383eb5073806de2a2aacc6c
-  source_ref: fix/rpc-event-discovery-retry
+  source_revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
+  source_ref: main
 summary: Lightweight conductor for coordinating dynamically joining and leaving assets under a shared virtual time.
 category:
   primary: simulation-core
@@ -28,7 +28,7 @@ status:
   notes:
     - Cataloged from the product README, QuickStart, public API/design documentation, cross-platform tooling, tests, and CI evidence.
     - Designed as a lighter conductor than the pro/RD stack.
-    - Revision ce2635ec48634555f383eb5073806de2a2aacc6c passed the full four-platform cross-platform workflow before PR #5 merge.
+    - The fully verified PR #5 tree was merged through cross-platform CI PR #4 into main revision d4d1543161f6e5e1cf07452fbb90aae03211c30b.
 
 capabilities:
   - name: Shared virtual-time coordination
@@ -36,40 +36,40 @@ capabilities:
     evidence:
       - repository: hakoniwalab/hakoniwa-conductor-light
         path: README.md
-        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+        revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
   - name: Dynamic client participation
     description: Clients generate their own endpoint and RPC configuration and do not need to be pre-registered in server config.
     evidence:
       - repository: hakoniwalab/hakoniwa-conductor-light
         path: README.md
-        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+        revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
   - name: RPC facade for C++ clients
     description: ConductorLightRpcClient wraps client config generation, endpoint container initialization, RPC calls, sleep, notify behavior, and event handling.
     evidence:
       - repository: hakoniwalab/hakoniwa-conductor-light
         path: README.md
-        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+        revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
   - name: Manual simulation control
     description: Supports manual start, stop, reset, state, and time commands through hakoctl when configured for manual start.
     evidence:
       - repository: hakoniwalab/hakoniwa-conductor-light
         path: README.md
-        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+        revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
   - name: Synchronization observability
     description: Can record asset synchronization delay to CSV and plot it with the included tool.
     evidence:
       - repository: hakoniwalab/hakoniwa-conductor-light
         path: docs/QuickStart.md
-        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+        revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
   - name: Cross-platform build, test, and smoke entry point
     description: tools/hako.py provides the same doctor, build, test, smoke auto, and smoke manual workflow across Linux, macOS, and Windows.
     evidence:
       - repository: hakoniwalab/hakoniwa-conductor-light
         path: tools/hako.py
-        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+        revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
       - repository: hakoniwalab/hakoniwa-conductor-light
         path: .github/workflows/cross-platform.yml
-        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+        revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
 
 limitations:
   - Does not aim to cover the full RD functionality of conductor-pro.
@@ -144,14 +144,14 @@ platforms:
     - Manual verification completed on macOS arm64 with build, 9 tests, smoke auto, and smoke manual.
     - Manual verification completed on WSL2 Ubuntu x64 with build, 9 tests, smoke auto, and smoke manual.
     - Manual verification completed on native Windows x64 with build, 9 tests, smoke auto, and smoke manual.
-    - Cross-platform workflow run 30247538916 passed Doctor, Build, Test, Smoke auto, and Smoke manual on Ubuntu x64, Ubuntu ARM64, macOS, and Windows x64 for revision ce2635ec48634555f383eb5073806de2a2aacc6c.
+    - Cross-platform workflow run 30247538916 passed Doctor, Build, Test, Smoke auto, and Smoke manual on Ubuntu x64, Ubuntu ARM64, macOS, and Windows x64 for revision ce2635ec48634555f383eb5073806de2a2aacc6c; that verified tree is included in main revision d4d1543161f6e5e1cf07452fbb90aae03211c30b.
 
 connects_to:
   - component_id: hakoniwa-pdu-rpc
     direction: uses
     interface: RPC transport
     notes: Used for conductor server/client control-plane RPC; timeout/cancel lifecycle follows the Core-compatible PDU-RPC state machine.
-  - component_id: hakoniwa-pdu-endpoint
+  - component_id: hakoniwalab-pdu-endpoint
     direction: uses
     interface: TCP endpoint / generated configs
     notes: Provides endpoint transport for RPC and dynamic client connections.
@@ -170,22 +170,22 @@ data_contracts:
     source:
       - repository: hakoniwalab/hakoniwa-conductor-light
         path: README.md
-        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+        revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
   - name: Generated config naming
     description: Client-generated configs use stable names derived from client_name and reject duplicate same-name concurrent use in the same directory.
     source:
       - repository: hakoniwalab/hakoniwa-conductor-light
         path: README.md
-        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+        revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
   - name: RPC timeout and cancellation lifecycle
     description: Timeout is a transient event, not an implicit request termination. Conductor Light explicitly sends cancel, continues polling the in-flight RPC, accepts a normal response if it wins the race, and retries only after the endpoint reaches a reusable terminal state.
     source:
       - repository: hakoniwalab/hakoniwa-conductor-light
         path: src/client/rpc_client_transport.cpp
-        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+        revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
       - repository: hakoniwalab/hakoniwa-conductor-light
         path: test/rpc_integration_test.cpp
-        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+        revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
 
 recipe_roles:
   - role: simulation_core
@@ -218,7 +218,7 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-conductor-light
         path: examples/config/server.json
-        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+        revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
   - name: Manual-start control loop
     description: Run manual server and manual clients, then control simulation through hakoctl commands.
     required_components:
@@ -226,7 +226,7 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-conductor-light
         path: examples/config/server-manual-start.json
-        revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+        revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
 
 operations:
   build:
@@ -322,40 +322,39 @@ runtime_checks:
 known_gaps:
   - The exact full C++ API surface should still be read from public headers and docs/api-design.md before generating SDK-level code beyond the standard facade examples.
   - Server disappearance is intentionally not implemented as transparent HA/recovery; a simulation that loses its shared-time conductor is considered failed.
-  - The catalog currently references the fully verified PR #5 revision; refresh source_ref/source_revision to the final main merge revision after that PR is merged.
 
 source_refs:
   - repository: hakoniwalab/hakoniwa-conductor-light
     path: README.md
-    revision: ce2635ec48634555f383eb5073806de2a2aacc6c
-    description: Product overview, standard tools/hako.py entry point, runtime modes, platform status section, dependencies, and public API entry points.
+    revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
+    description: Product overview, standard tools/hako.py entry point, runtime modes, dependencies, and public API entry points.
   - repository: hakoniwalab/hakoniwa-conductor-light
     path: docs/QuickStart.md
-    revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+    revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
     description: Detailed build, test, smoke, manual-terminal, Windows dependency, and CSV workflows.
   - repository: hakoniwalab/hakoniwa-conductor-light
     path: docs/api-design.md
-    revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+    revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
     description: Public API and core/light layering.
   - repository: hakoniwalab/hakoniwa-conductor-light
     path: tools/hako.py
-    revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+    revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
     description: Cross-platform doctor/configure/build/test/smoke orchestration and remediation guidance.
   - repository: hakoniwalab/hakoniwa-conductor-light
     path: .github/workflows/cross-platform.yml
-    revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+    revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
     description: Ubuntu x64, Ubuntu ARM64, macOS, and Windows x64 CI matrix running doctor, build, tests, auto smoke, and manual smoke.
   - repository: hakoniwalab/hakoniwa-conductor-light
     path: src/client/rpc_client_transport.cpp
-    revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+    revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
     description: Core-compatible timeout/cancel resolution semantics used by synchronous RPC calls.
   - repository: hakoniwalab/hakoniwa-conductor-light
     path: test/rpc_integration_test.cpp
-    revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+    revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
     description: Integration coverage for timeout/cancel race recovery and server/client cleanup behavior.
   - repository: hakoniwalab/hakoniwa-conductor-light
     path: examples/config
-    revision: ce2635ec48634555f383eb5073806de2a2aacc6c
+    revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
     description: Auto/manual server, client, PDU, and cache configs.
 
 tags:
