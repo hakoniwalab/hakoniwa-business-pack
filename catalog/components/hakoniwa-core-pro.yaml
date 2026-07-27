@@ -10,9 +10,9 @@ distribution:
   notes:
     - Public OSS Hakoniwa component under the MIT license.
 verification:
-  verified_at: 2026-07-19
-  source_revision: 98a057ab91184921e283ab43279b8ed05cf25363
-  source_ref: main
+  verified_at: 2026-07-28
+  source_revision: a68bb9e3c263f1efcf6d366a16d7b24a879051a4
+  source_ref: agent/add-hako-doctor-entrypoint
 summary: Hakoniwa core runtime extension layer built on hakoniwa-core-cpp, providing shared-memory simulation hub integration, asset APIs, commands, events, and RPC services.
 category:
   primary: simulation-core
@@ -26,6 +26,7 @@ status:
   catalog_confidence: high
   notes:
     - Cataloged from README and core-cpp references.
+    - The standard operational entry point is tools/hako.py; platform-specific build logic remains component-owned.
 
 capabilities:
   - name: Simulation hub integration
@@ -119,8 +120,10 @@ platforms:
   supported:
     - macOS
     - Linux
+    - Windows
   notes:
-    - Exact platform matrix should be verified from build docs.
+    - tools/hako.py provides the common doctor/build entry point.
+    - Linux/macOS build delegates to build.bash; native Windows build delegates to win-build.ps1.
 
 connects_to:
   - component_id: hakoniwa-pdu-endpoint
@@ -234,13 +237,32 @@ demo_candidates:
         path: examples/external
         revision: 98a057ab91184921e283ab43279b8ed05cf25363
 
+runtime_checks:
+  - id: build-readiness
+    kind: doctor
+    platforms:
+      - macos
+      - linux
+      - windows
+    command:
+      - python
+      - tools/hako.py
+      - doctor
+    working_directory: repository
+    output: text
+    notes:
+      - Component-owned prerequisite and repository-layout check.
+      - Exit status 0 means the declared build prerequisites are present; this is not runtime behavior verification.
+
 operations:
   build:
     commands:
-      - bash build.bash
-      - bash install.bash
+      - python tools/hako.py doctor
+      - python tools/hako.py build
     notes:
-      - Install path is commonly /usr/local/hakoniwa.
+      - tools/hako.py is the preferred OS-independent entry point.
+      - Linux/macOS delegate to build.bash; Windows delegates to win-build.ps1.
+      - Installation remains a separate component-owned step where required.
   test:
     commands: []
     notes: Add exact test commands after reading test docs.
@@ -262,6 +284,18 @@ source_refs:
     path: README.md
     revision: 98a057ab91184921e283ab43279b8ed05cf25363
     description: Main overview, architecture, asset APIs, events, time, and RPC services.
+  - repository: hakoniwalab/hakoniwa-core-pro
+    path: tools/hako.py
+    revision: a68bb9e3c263f1efcf6d366a16d7b24a879051a4
+    description: Common doctor/build entry point that dispatches to the platform-native build driver.
+  - repository: hakoniwalab/hakoniwa-core-pro
+    path: build.bash
+    revision: 44c32dd7cfb3766b13b3a4eaabff0cfe3bcf248c
+    description: Existing Linux/macOS build implementation used by tools/hako.py.
+  - repository: hakoniwalab/hakoniwa-core-pro
+    path: win-build.ps1
+    revision: 44c32dd7cfb3766b13b3a4eaabff0cfe3bcf248c
+    description: Existing native Windows build implementation used by tools/hako.py.
   - repository: hakoniwalab/hakoniwa-core-pro
     path: hakoniwa-core-cpp/README.md
     revision: 98a057ab91184921e283ab43279b8ed05cf25363
