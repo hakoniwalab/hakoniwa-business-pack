@@ -1,0 +1,82 @@
+id: windows-mmap-runtime-state-persists-across-runs
+title: Windows mmap runtime state can persist across verify runs and taint negative tests
+status: candidate
+
+knowledge_type:
+  - runtime_rule
+  - known_pitfall
+  - validation_rule
+
+summary: >
+  Hakoniwa's Windows mmap backend can leave runtime state files behind after
+  a process ends, so a subsequent run -- including a negative test that
+  expects no producer/master to exist -- can attach to leftover state from a
+  prior run instead of observing a genuinely empty environment, unless
+  verification scripts explicitly clean that state before both positive and
+  negative runs.
+
+observation:
+  context: >
+    Negative-path verification (running a reader with no producer present)
+    for an external SHM tap asset repeatedly appeared to observe an
+    initialized/running state even though no producer process was actually
+    running.
+  details:
+    - Stale mmap runtime files left over from a previous run can make a producer-absent negative test reach an unexpected "already initialized" state instead of the expected failure/absence signal.
+    - Verify scripts were changed to call a common cleanup step (removing generated mmap runtime state, not source files) before both positive and negative runs.
+    - This is also why running two verify passes concurrently on the same machine is unsafe -- both would eventually contend for and observe overlapping mmap runtime state.
+
+sources:
+  repositories: []
+  runtime_evidence:
+    - description: >-
+        External contributor's Windows 11 x86_64 native verification environment:
+        a negative test (no producer running) intermittently reached an
+        "already initialized" state before a common cleanup step was added to
+        the verify scripts; after adding cleanup before both positive and
+        negative runs, the negative test consistently reproduced the expected
+        producer-absent signal.
+  expert_input: []
+
+confidence: high
+
+contradictions:
+  - target: producer-absent negative test assumption
+    existing_claim: The absence of a running producer process always means no master/runtime state exists for a reader to observe.
+    new_evidence: Leftover mmap runtime files from a prior run can make that assumption false unless the runtime state is explicitly cleaned between runs.
+
+validation:
+  status: verified
+  required:
+    - Keep the cleanup step scoped to generated runtime state only, not source files, to avoid accidentally deleting anything that should persist between runs.
+  notes:
+    - A common verify-cleanup step is now used as a convention across affected verify scripts.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: true
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+
+promotion_rationale:
+  - Any negative-path validation built on Hakoniwa's Windows mmap backend needs this cleanup discipline, since a false-negative (or false-positive) outcome from stale runtime state undermines the meaning of the negative test itself.
+
+resolution:
+  status: documented
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Candidate only. No upstream implementation issue has been filed; the
+      stale-mmap-file behavior was observed, and a cleanup-before-run
+      convention was adopted, only inside a private workspace's own tooling.
+      Whether Hakoniwa core's Windows mmap backend itself should clean up
+      this state on stop was not investigated and is not claimed either way.
+      resolution.verified is left false because no upstream fix/PR/revision
+      exists to verify against.

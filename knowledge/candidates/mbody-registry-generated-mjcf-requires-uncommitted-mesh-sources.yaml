@@ -38,6 +38,19 @@ observation:
     - "The same gap likely applies to turtlebot3_waffle and turtlebot3_waffle_pi (their
       source/ trees were not populated in this verification; only Burger was verified end
       to end)."
+    - "A later re-verification session (unrelated Shadow Hand body, not turtlebot3_burger
+      itself) confirmed that hakoniwa-mbody-registry's own regular materialization flow --
+      tools/forge.sh's fetch.py step, run against a body's sources/*.yaml -- clones the
+      pinned upstream revision directly into bodies/<name>/source and reaches a completed
+      forge in one command, with no manual git clone or manual mesh-directory copy needed.
+      This is the same forge.sh entry point turtlebot3_burger.yaml would use, so the
+      durable fix for this candidate's gap is to run tools/forge.sh (or fetch.py) against
+      the component's own sources/*.yaml rather than the ad hoc manual mesh-directory
+      clone-and-copy this candidate originally recorded as a workaround. This was not
+      re-run specifically against turtlebot3_burger's own sources/*.yaml, so the exact
+      Burger case was not directly re-confirmed end to end through forge.sh in that
+      session -- only the general mechanism (forge.sh materializing an un-vendored
+      source/ tree from a pinned upstream revision) was re-verified, for a different body."
 
 sources:
   repositories:
@@ -66,8 +79,10 @@ validation:
   status: verified
   required:
     - Confirm the same fix (or the full forge.sh pipeline) for Waffle/Waffle Pi.
+    - Re-run tools/forge.sh (or fetch.py) directly against turtlebot3_burger's own sources/turtlebot3_burger.yaml to confirm the regular materialization flow (not just the ad hoc manual clone-and-copy originally recorded) reproduces the same successful model load; only a different body (Shadow Hand) was re-exercised through forge.sh so far.
   notes:
     - Verified for turtlebot3_burger only, on Windows.
+    - "Follow-up re-verification (different body, Shadow Hand): confirmed the general mechanism -- tools/forge.sh's fetch.py step materializes an un-vendored source/ tree directly from a pinned upstream revision in one command -- but did not re-run it against turtlebot3_burger's own sources/*.yaml, so this candidate's exact original TurtleBot3 Burger case has not been re-confirmed through the regular forge.sh flow end to end."
 
 promotion_targets:
   catalog:
@@ -87,3 +102,10 @@ resolution:
     - Candidate only.
     - "Filed as an actionable follow-up (documentation gap / misleading error message, not
       a business-pack knowledge change): hakoniwalab/hakoniwa-mbody-registry#12."
+    - "Follow-up: a later session confirmed hakoniwa-mbody-registry's own tools/forge.sh
+      (fetch.py) materialization flow is the durable, general-purpose replacement for the
+      manual git-clone-and-copy workaround this candidate originally recorded -- verified
+      for a different body (Shadow Hand), not re-run against turtlebot3_burger's own
+      sources/*.yaml specifically. This does not change the underlying observation (a
+      pre-generated MJCF's existence alone does not guarantee its mesh sources are
+      vendored); it identifies the already-intended fix path more precisely."
