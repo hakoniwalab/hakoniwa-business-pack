@@ -65,16 +65,34 @@ observation:
       registration) is a Python *module resolution order* problem, while
       hakoniwa_pdu_endpoint (the cffi binding) is a *DLL search path* problem
       for a module that Python already resolved correctly."
-    - "Evidence strength distinction (important, do not overstate): the fact
-      that two hakopy.pyd builds existed and that the older one was resolved
-      via a persistent PYTHONPATH entry ahead of the project's own path is
-      directly observed (file inspection plus reproducing the failure and then
-      the fix). The claim that this specific file/module mismatch is what
-      caused the downstream registration failure to manifest as a PDU
-      conversion error is a reasonable inference from the observed sequence,
-      not something verified at the ABI/struct level (no struct-layout diff or
-      debugger-level inspection of HakoMasterData was performed to prove a
-      binary layout mismatch is the underlying mechanism)."
+    - "Evidence strength distinction, kept in two separate layers (important, do
+      not collapse them): Layer 1 -- why a failed registration surfaces as a
+      per-step PDU conversion error rather than staying a registration-only
+      symptom -- is now CONFIRMED by source-level review, not merely inferred
+      from the observed sequence: hakoniwa-core-pro zero-fills every PDU
+      channel's buffer at asset registration time
+      (sources/assets/callback/src/hako_asset_impl.cpp:563), its PDU metadata
+      validator (hakoniwa-pdu-registry/pdu/types/pdu_primitive_ctypes.h:82,187)
+      rejects a zero-filled buffer as invalid, the typed converter
+      (hakoniwa-pdu-registry/pdu/types/std_msgs/pdu_cpptype_conv_Float64MultiArray.hpp:141)
+      logs exactly this error on that rejection, and the read path
+      (hakoniwa-core-cpp/src/hako/data/hako_pdu_data.hpp:364) never
+      distinguishes 'nobody wrote yet' from 'written'. So once registration
+      fails silently and the sender never writes, the plant reading that
+      channel with a typed converter reliably produces this exact error on
+      every step, by the core's design -- no ABI/struct-layout hypothesis is
+      needed to explain this layer. Layer 2 -- why hakopy.asset_register()
+      itself failed silently instead of raising a Python exception once the
+      wrong hakopy.pyd was resolved -- remains an open question: the fact that
+      two hakopy.pyd builds existed and that the older one was resolved via a
+      persistent PYTHONPATH entry ahead of the project's own path is directly
+      observed (file inspection plus reproducing the failure and then the
+      fix), but the internal reason the native call fails silently rather than
+      raising is still a reasonable inference (e.g. an ABI/struct-layout
+      mismatch such as a HakoMasterData size or layout difference between the
+      two builds), not something verified at the ABI/struct level -- no
+      struct-layout diff or debugger-level inspection was performed to confirm
+      it."
     - "Separately, on this same Windows verification workspace, running the
       sender at all required the hakoniwa_pdu_endpoint cffi native extension
       to be present in the active venv's site-packages. There is no
@@ -132,10 +150,14 @@ validation:
       wrong one resolved via persistent PYTHONPATH, fix via sys.path ordering)
       is directly reproduced and confirmed on one external contributor's
       Windows workspace.
-    - The ABI/ mechanism claim (why the wrong module produces a PDU conversion
-      error rather than an immediate crash or import error) is an inference
-      from the observed sequence, not independently verified at the binary
-      level; keep this distinction explicit rather than asserting it as fact.
+    - "Why a failed/absent registration surfaces as a per-step PDU conversion
+      error (Layer 1 above) is now confirmed by source-level review of
+      hakoniwa-core-pro's zero-fill-at-registration + typed-metadata-validation
+      design; only Layer 2 (why hakopy.asset_register() itself fails silently
+      rather than raising, once the wrong hakopy.pyd is resolved) remains an
+      inference from the observed sequence, not independently verified at the
+      binary/ABI level. Keep this distinction explicit rather than asserting
+      Layer 2 as fact."
 
 tracking:
   implementation_status: none
