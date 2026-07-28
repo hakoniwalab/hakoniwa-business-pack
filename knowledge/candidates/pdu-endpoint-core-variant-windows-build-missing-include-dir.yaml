@@ -184,34 +184,75 @@ confidence: high
 contradictions: []
 
 validation:
-  status: partially_verified
-  required:
-    - Independently re-read src/core_variants/CMakeLists.txt and src/CMakeLists.txt at
-      revision 5c2b815ae661f6063a91840c356717558dab9ab3 directly (this candidate's
-      citation of hako_configure_core_endpoint_variant() at lines 89-94 and the legacy
-      target's include additions at src/CMakeLists.txt:265-268 relies on this workspace's
-      earlier reading of that exact revision, which is no longer checked out locally for
-      independent re-confirmation in this pass; the compiler error pattern is fully
-      consistent with that account but the specific line numbers were not re-verified in
-      this session).
-    - Confirm on a non-Windows platform (Linux or macOS) whether a clean
-      find_package(hakoniwa-core CONFIG)-only consumption of a hakoniwa-core-pro install
-      tree (no system package /usr/include/hakoniwa, no pkg-config-based consumer)
-      reproduces the same missing-include-directory failure, to settle whether other
-      platforms are unaffected or merely masked.
-    - Apply and build-test either fix direction (Core package export correction, or
-      symmetric include addition in core_variants/CMakeLists.txt) before claiming
-      resolution.
+  status: verified
+  required: []
   notes:
     - "The .pc-vs-CMake-export mismatch (Cflags: -I${includedir}/hakoniwa vs.
       INTERFACE_INCLUDE_DIRECTORIES ${_IMPORT_PREFIX}/include) was independently
       re-verified in this pass by reading the actual installed files, not taken on the
       strength of the parallel review alone."
-    - No upstream issue has been filed for this defect yet.
+    - "2026-07-28 re-verification, external contributor's Windows 11 x86_64 verification
+      environment (native, 2026-07-28), hakoniwa-core-pro revision 576f40e (includes
+      merged PR #75 'Export Core frontend include requirements' and PR #76 'Fix
+      relocatable Core include export'), hakoniwa-pdu-endpoint revision f395a92 (includes
+      merged PR #59 'ci: reproduce Windows Core build through hako.py'): the installed
+      hakoniwa-core-targets.cmake's INTERFACE_INCLUDE_DIRECTORIES for the assets/shakoc
+      frontend targets now reads '${_IMPORT_PREFIX}/include/hakoniwa;
+      ${_IMPORT_PREFIX}/include/hakoniwa/pdu;${_IMPORT_PREFIX}/include' (previously
+      '${_IMPORT_PREFIX}/include' only, confirmed by directly diffing the old install
+      tree against the new one). `hako.py doctor` (0.6s), `configure` (prints '--
+      Hakoniwa Core endpoint variants enabled: core_callback, core_polling'), and
+      `build` (6m05s) all exited 0 with zero C1083 errors in the build log; `test`
+      passed the python import smoke (HAKO_PYTHON_IMPORT_OK <class
+      'hakoniwa_pdu_endpoint.c_endpoint.Endpoint'>). All four expected artifacts were
+      produced: hakoniwa_pdu_endpoint.dll, hakoniwa_pdu_endpoint_core_callback.dll,
+      hakoniwa_pdu_endpoint_core_polling.dll, and _c_endpoint_ffi.cp312-win_amd64.pyd.
+      This confirms the fix landed in the Core package export (fix direction (a)
+      above), not as an endpoint-side compatibility patch (fix direction (b)) -- the
+      direction this candidate's diagnosis judged more durable."
+    - "Correction 1 (self-reported): this candidate's own reproduction steps used
+      `hako.py build --config Release`, which misreads what --config means -- it is the
+      path to an alternate manifest file, not a CMake configuration selector; the build
+      type comes from the manifest's own build.type field. The correct standard sequence
+      is `doctor` -> `configure` -> `build` (+ `test`), passing `--config <manifest
+      path>` only when substituting a non-default manifest. This mis-description is
+      believed to be why the maintainer's first draft CI run (before PR #59) exercised
+      `build --config Release` and went RED for the wrong reason: that RED was an
+      artifact of the CLI-usage description here, not evidence of the Core defect itself
+      (the maintainer documents this in upstream issue #58 and PR #59). A proposal to
+      promote --config to a documented common hako.py CLI contract is tracked separately
+      as hakoniwa-business-pack issue #49."
+    - "Correction 2 (self-reported): the C1083 failure this candidate originally recorded
+      was observed against hakoniwa-core-pro revision 98a057a (an install built on
+      2026-07-10), which predates both PR #75 (merged 2026-07-26T02:46Z) and PR #76
+      (merged 2026-07-26T10:22Z). The candidate's original framing as 'a defect in the
+      current Core' was therefore imprecise; the accurate framing is 'reproduced against
+      a pre-fix Core revision.' The diagnosis content itself -- that the Core CMake
+      export omitted the ${prefix}/include/hakoniwa directory its own headers live under
+      -- was correct, and is exactly what PR #75/#76 corrected."
+    - "Honest unresolved observation (do not overstate): in this same 2026-07-28
+      environment, `hako.py test`'s python-import smoke passed for the core-enabled
+      build without any custom os.add_dll_directory() launcher. This appears to
+      contradict a 2026-07-26 finding (see the companion
+      pdu-endpoint-python-binding-windows-recipe.yaml candidate) that the DLL-search gap
+      -- c_endpoint.py never reading hako.py's own computed
+      HAKO_PDU_ENDPOINT_RUNTIME_DIRS -- reproduces on a core-enabled build. Reading the
+      2026-07-28 revision's python/hakoniwa_pdu_endpoint/c_endpoint.py confirms
+      HAKO_PDU_ENDPOINT_RUNTIME_DIRS is still not read (add_dll_directory is only called
+      for candidate lib dirs), and both the old and new Core installs' bin directories
+      contain shakoc.dll. The reason the trap did not reproduce this time is not
+      identified. Do not record this as 'the DLL-search trap is fixed' -- record it
+      as 'did not reproduce in this configuration, reason unconfirmed.' This is relevant
+      to hakoniwa-business-pack issue #51 (common Python environment / install boundary
+      for Hakoniwa bindings)."
 
 tracking:
-  implementation_status: none
-  issues: []
+  implementation_status: open
+  issues:
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      number: 58
+      relation: fix
+      status: open
 
 promotion_targets:
   catalog: []
@@ -222,30 +263,50 @@ promotion_targets:
   executable_guardrails:
     - repository: hakoniwalab/hakoniwa-pdu-endpoint
       kind: ci
-      path: .github/workflows/ci.yml
-      mode: detect-only
+      path: .github/workflows/hako-core-integration.yml
+      mode: detect-and-suggest-remediation
       notes:
-        - "No existing CI job currently builds the Windows core-enabled manifest
-          (features.hakoniwa_core=true); adding one would turn this candidate's
-          reproduction into a standing regression guardrail rather than a one-off
-          manual finding."
+        - "PR #59 ('ci: reproduce Windows Core build through hako.py') added this
+          workflow, turning this candidate's reproduction into a standing regression
+          guardrail for the Windows Core-enabled manifest build."
 
 promotion_rationale:
   - This is a concrete, reproducible Windows build failure in the current manifest-driven
     architecture with a plausible cross-platform root cause (a CMake-export/pkg-config
     metadata mismatch in the owning Core package), making it good material for an
     upstream issue in either or both of hakoniwa-pdu-endpoint and hakoniwa-core-pro.
-  - Kept as detect-only for the CI guardrail because no fix has been drafted or applied;
-    promoting further would overstate the current state of remediation.
+  - "Promoted beyond detect-only now that hakoniwa-core-pro PR #75/#76 and
+    hakoniwa-pdu-endpoint PR #59 landed a durable fix plus a standing CI guardrail,
+    independently re-verified in this workspace's own native Windows build."
 
 resolution:
-  status: pending
-  fixed_by: []
-  verified: false
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-core-pro
+      pull_request: 75
+      title: "Export Core frontend include requirements"
+      merged_at: "2026-07-26T02:46:23Z"
+    - repository: hakoniwalab/hakoniwa-core-pro
+      pull_request: 76
+      title: "Fix relocatable Core include export"
+      merged_at: "2026-07-26T10:22:07Z"
+  verified: true
   promoted_to: []
-  executable_guardrails: []
+  executable_guardrails:
+    - "hakoniwalab/hakoniwa-pdu-endpoint:.github/workflows/hako-core-integration.yml
+      (added by PR #59)"
   notes:
-    - Diagnosis only; no fix applied, no upstream issue filed, no PR exists yet. Recorded
-      here as candidate material for filing an upstream issue against
-      hakoniwa-pdu-endpoint (core_variants/CMakeLists.txt) and/or hakoniwa-core-pro (CMake
-      package export).
+    - "Verified 2026-07-28, external contributor's Windows 11 x86_64 verification
+      environment (native): hakoniwa-core-pro revision 576f40e, hakoniwa-pdu-endpoint
+      revision f395a92. `hako.py doctor` (exit 0, 0.6s), `configure` (exit 0, prints the
+      core_callback/core_polling variants-enabled line), `build` (exit 0, 6m05s, zero
+      C1083 errors), `test` (exit 0, python import smoke passed) all green. Artifacts
+      confirmed: hakoniwa_pdu_endpoint.dll, hakoniwa_pdu_endpoint_core_callback.dll,
+      hakoniwa_pdu_endpoint_core_polling.dll, _c_endpoint_ffi.cp312-win_amd64.pyd."
+    - "Implementation issue: hakoniwa-pdu-endpoint #58 (state at time of writing: open;
+      confirmed via `gh issue view` read, not assumed)."
+    - "This candidate's own diagnosis was correct about which layer owned the bug (the
+      Core package's CMake export, not the endpoint's core_variants/CMakeLists.txt, and
+      not an MSVC-only defect) -- see Correction 1/2 in validation.notes for the two
+      places this candidate's own record-keeping was imprecise (a misleading --config
+      description, and citing a pre-fix Core revision as if it were 'the current Core')."

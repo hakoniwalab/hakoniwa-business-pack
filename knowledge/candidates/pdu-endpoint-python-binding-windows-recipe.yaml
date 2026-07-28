@@ -36,7 +36,28 @@ observation:
     - "The previous hard-coded /usr/lib/x86_64-linux-gnu fallback is another architecture leak; platform-specific library discovery should use the resolved CMake library architecture rather than encode x86_64 in the common component logic."
     - "ROS 2 venv, rclpy, and colcon setup remains a hakoniwa-pdu-ros integration concern. pdu-endpoint owns its native/Python build and transport-runtime boundary and should not absorb higher-level ROS 2 workspace setup."
     - "The maintainer lesson is broader than Raspberry Pi: platform-specific observations should first be tested against the common manifest/capability model, and reusable failure conditions should become executable guardrails at the owning component boundary."
-    - "A native Windows re-verification of the manifest-driven build (tools/hako.py doctor/configure/build/test) confirms the original cffi/setuptools/Visual-Studio-detection gap is durably resolved: create_context() locates vswhere.exe and prepends its parent directory to PATH before invoking cmake/cffi, so a plain PowerShell session with no manual vcvarsall.bat call builds and imports cleanly on the default (Hakoniwa Core disabled) manifest. A separate, still-open gap was found once Hakoniwa Core support is enabled (features.hakoniwa_core: true): tools/hako.py already computes the correct runtime library directories (hakoniwa-core-pro's install-win/bin and vcpkg's installed/x64-windows/bin) into an environment variable, but python/hakoniwa_pdu_endpoint/c_endpoint.py's own `_candidate_native_lib_dirs()` / `_add_runtime_search_dirs()` never read that variable, so the computed value is silently unused at import time and a DLL-load failure still occurs unless a caller manually calls os.add_dll_directory() for those two directories itself. Wiring c_endpoint.py's DLL-search helpers to read hako.py's own computed runtime-directories variable would close this gap without any manual launcher."
+    - "A native Windows re-verification of the manifest-driven build (tools/hako.py doctor/configure/build/test) confirms the original cffi/setuptools/Visual-Studio-detection gap is durably resolved: create_context() locates vswhere.exe and prepends its parent directory to PATH before invoking cmake/cffi, so a plain PowerShell session with no manual vcvarsall.bat call builds and imports cleanly on the default (Hakoniwa Core disabled) manifest. A separate, still-open gap was found once Hakoniwa Core support is enabled (features.hakoniwa_core: true): tools/hako.py already computes the correct runtime library directories (hakoniwa-core-pro's install bin directory and vcpkg's installed/x64-windows/bin) into an environment variable, but python/hakoniwa_pdu_endpoint/c_endpoint.py's own `_candidate_native_lib_dirs()` / `_add_runtime_search_dirs()` never read that variable, so the computed value is silently unused at import time and a DLL-load failure still occurs unless a caller manually calls os.add_dll_directory() for those two directories itself. Wiring c_endpoint.py's DLL-search helpers to read hako.py's own computed runtime-directories variable would close this gap without any manual launcher."
+    - "2026-07-28 re-verification (external contributor's Windows 11 x86_64 verification
+      environment, native): the companion pdu-endpoint-core-variant-windows-build-
+      missing-include-dir.yaml candidate's Windows Core build defect is now fixed
+      (hakoniwa-core-pro revision 576f40e, which includes merged PR #75/#76), so a
+      core-enabled build is now producible via `hako.py build` itself. Given that, this
+      DLL-search-path gap was re-tested against a genuine manifest-driven core-enabled
+      build (hakoniwa-pdu-endpoint revision f395a92) for the first time. Honest
+      observation, do not overstate: `hako.py test`'s python-import smoke passed without
+      any custom os.add_dll_directory() launcher -- i.e. the gap described in the
+      preceding paragraph did not reproduce in this run. This contradicts the earlier
+      finding above (same gap, same failure class, deliberately reproduced with PATH
+      stripped of the Core/vcpkg bin directories). Reading the 2026-07-28 revision of
+      python/hakoniwa_pdu_endpoint/c_endpoint.py confirms HAKO_PDU_ENDPOINT_RUNTIME_DIRS
+      is still not read by _candidate_native_lib_dirs()/_add_runtime_search_dirs(), and
+      both the old and new Core installs' bin directories contain shakoc.dll, so no
+      obvious environment difference explains it. The reason for the non-reproduction is
+      NOT identified. Do not write 'the gap is fixed' -- write 'did not reproduce in this
+      configuration, reason unconfirmed.' This observation is relevant to
+      hakoniwa-business-pack issue #51 (defining a common Python environment / install
+      boundary for Hakoniwa bindings), since it bears on whether DLL-search wiring should
+      be treated as a hard requirement or as environment-dependent in that design."
 
 sources:
   repositories:
@@ -114,6 +135,14 @@ validation:
     - The ARM64/ROS 2/Zenoh failure modes are based on a concrete third-party Raspberry Pi reproduction in issue #36 and source-level dependency analysis.
     - PR #41 CI verifies shared pdu-endpoint + Zenoh builds successfully and that the resulting ELF does not declare libzenohc.so as a dynamic dependency.
     - Post-fix verification on the reporter's Raspberry Pi / ROS 2 Jazzy environment is still required before resolution.verified can become true.
+    - "2026-07-28: the companion core-variant build defect (see
+      pdu-endpoint-core-variant-windows-build-missing-include-dir.yaml) is now fixed, so
+      the Hakoniwa-Core-enabled DLL-search-path gap documented above was re-tested
+      against a real manifest-driven core-enabled build for the first time -- and did
+      not reproduce (see the observation.details entry above). This does not change
+      overall status here: the underlying wiring gap (HAKO_PDU_ENDPOINT_RUNTIME_DIRS
+      unread by c_endpoint.py) is still confirmed present in source; only the ability to
+      trigger it in this particular run is in question, and the reason is unconfirmed."
 
 tracking:
   implementation_status: in_progress
