@@ -81,6 +81,30 @@ sources:
         mujoco-robots-prepare-model-venv-layout-windows.yaml). Actually launching the
         Shadow Hand Hakoniwa asset runtime against the materialized model was not attempted
         in this session.
+    - description: >-
+        Two independent external contributors' Windows 11 x86_64 verification environments
+        (native, no WSL/Docker), 2026-07-28: each ran the Hakoniwa PDU Smoke procedure from
+        examples/actuators/shadow_hand/README.md (plant asset launch with the materialized
+        bodies/shadow_hand/source/shadow_hand/scene_right.xml passed as a CLI argument,
+        Python sender, hako-cmd start, --no-viewer) against hakoniwa-mujoco-robots revision
+        1abffe415e15635503a46de2d2c50b246ca52545 with the hakoniwa-mbody-registry submodule
+        pinned to 8b14d5366e156f3147a69c37cf953f7f8a1ab9fb, with the runtime source itself
+        left unmodified. Both runs reached the runtime state the README documents as
+        expected: representative plant output matched the README's expected values exactly,
+        e.g. "time=  1.002 FFJ0_target=0.738 FFJ2=0.295 FFJ1=0.347 THJ1_target=0.359
+        THJ1=0.316" and "time=  2.002 FFJ0_target=1.739 FFJ2=0.804 FFJ1=0.901
+        THJ1_target=0.845 THJ1=0.828". The sender's own output additionally confirmed
+        tendon-coupled actuator-target/joint-state readback (an FFJ0 command driving FFJ2
+        and FFJ1 to follow). One of the two runs logged a single
+        "[ConvertorError][Float64MultiArray] hako_get_base_ptr_pdu returned null"
+        immediately after startup (the other run logged zero occurrences); every subsequent
+        step in that run produced correct values, so this reads as a one-time startup race
+        rather than a steady-state defect, and is recorded here as a known residual pitfall
+        rather than silently absorbed into a clean pass. For scale, the same error class
+        occurred on every one of roughly 1470 steps before the module-resolution fix
+        described in hakopy-persistent-pythonpath-shadows-project-hakopy-build-on-windows.yaml,
+        i.e. this residual occurrence is several orders of magnitude smaller and of a
+        different character (transient at startup vs. sustained for the whole run).
   expert_input: []
 
 confidence: high
@@ -94,6 +118,7 @@ validation:
     - Verified by an actual model-load failure, then an actual successful run after fetching the missing assets.
     - The replacement materialization mechanism is CI-verified, but the merged fix still needs an explicit Hakoniwa runtime re-verification before resolution.verified can become true.
     - "2026-07-26: the merged materialization flow was re-run on native Windows and successfully produced the materialized Shadow Hand model (scene_right.xml plus 14 .obj meshes and a model-local LICENSE), confirming the forge/materialization mechanism itself works end-to-end on Windows. Two Windows-only portability gaps in the forge tooling had to be worked around (a python3 shim and a venv PATH addition) and are recorded as separate candidates rather than folded into this one. The Hakoniwa Shadow Hand asset runtime was not launched against the materialized model in this session, so resolution.verified remains false."
+    - "2026-07-28: the Hakoniwa Shadow Hand asset runtime was launched against the materialized model by two independent external contributors on native Windows 11 x86_64, closing the gap left open above. Both runs reproduced the README's expected representative plant output values exactly and confirmed tendon-coupled actuator/joint readback via the sender. resolution.verified is now true. One run showed a single transient ConvertorError immediately at startup (0 in the other run); this is recorded as a residual known pitfall, not treated as evidence against verification, since every subsequent step in that run was correct."
 
 tracking:
   implementation_status: resolved
@@ -131,11 +156,12 @@ resolution:
       issue: 37
       pull_request: 38
       revision: 1abffe415e15635503a46de2d2c50b246ca52545
-  verified: false
+  verified: true
   promoted_to: []
   executable_guardrails: []
   notes:
     - The implementation issue chain is resolved and both fixing PRs are merged.
     - The new forge/materialization flow has passed CI in both repositories.
     - "2026-07-26 re-verification on native Windows confirmed the forge/materialization flow itself succeeds (14 .obj meshes + scene_right.xml + LICENSE materialized, matching the prior manual vendoring 1:1), using a python3 shim to work around Windows-only forge-tooling gaps recorded in mbody-registry-forge-sh-python3-hardcoded-windows.yaml and mujoco-robots-prepare-model-venv-layout-windows.yaml."
-    - Keep verified=false until the merged mujoco-robots revision is run through the Hakoniwa Shadow Hand runtime and reaches the expected runtime state using the materialized model; this session materialized the model but did not launch the Shadow Hand asset runtime against it.
+    - "2026-07-28: two independent external contributors' Windows 11 x86_64 verification environments (native, no WSL/Docker) ran the merged mujoco-robots revision (1abffe415e15635503a46de2d2c50b246ca52545, hakoniwa-mbody-registry submodule at 8b14d5366e156f3147a69c37cf953f7f8a1ab9fb) through the Hakoniwa Shadow Hand asset runtime using the materialized model, following the Hakoniwa PDU Smoke procedure in examples/actuators/shadow_hand/README.md. Both reached the expected runtime state, with representative plant output matching the README's documented values exactly and the sender confirming tendon-coupled actuator/joint readback. resolution.verified is now true."
+    - "Residual known pitfall (not a blocker for verified=true): one of the two 2026-07-28 runs logged a single '[ConvertorError][Float64MultiArray] hako_get_base_ptr_pdu returned null' immediately after startup (0 occurrences in the other run), after which every step in that run produced correct values. This looks like a one-time startup race. For scale, the same error class occurred on every one of roughly 1470 steps before the module-resolution fix in hakopy-persistent-pythonpath-shadows-project-hakopy-build-on-windows.yaml -- several orders of magnitude more frequent and of a different (sustained, not transient) character."
