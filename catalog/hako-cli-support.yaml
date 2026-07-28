@@ -1,14 +1,16 @@
-contract_version: "1.0"
+contract_version: "1.1"
 description: >-
-  Cross-component support matrix for the six standard tools/hako.py operations:
-  doctor, configure, build, test, install, and smoke. This matrix is derived from
-  the actual command dispatch implemented by each repository; component catalog
-  entries and runtime_checks remain the source of detailed evidence. Options and
-  extension commands are repository-owned and do not gain cross-repository semantics.
+  Cross-component support matrix for the six standard tools/hako.py operations and
+  the common manifest-selection option introduced in contract v1.1. The common
+  --config contract standardizes how callers select a configuration source; manifest
+  schema and other options remain repository-owned. This matrix is derived from the
+  actual command dispatch implemented by each repository.
 
 components:
   hakoniwa-conductor-light:
     path: tools/hako.py
+    common_options:
+      - --config
     commands:
       doctor:
         supported: true
@@ -30,7 +32,8 @@ components:
           - auto
           - manual
     notes:
-      - "--dry-run is a repository-owned modifier and is intentionally rejected for smoke."
+      - "The selected build manifest owns Conductor Light build/component/validation settings."
+      - "--dry-run is repository-owned and is intentionally rejected for smoke."
       - "smoke auto verifies dynamic attach and world-time progress; smoke manual also verifies start/stop/reset transitions."
 
   hakoniwa-pdu-endpoint:
@@ -54,7 +57,7 @@ components:
           - --dry-run
     notes:
       - "configure/build/test are manifest-driven through hakoniwa-build.yaml or --config."
-      - "--dry-run is implemented as a repository-owned modifier; its presence does not make dry-run a standard operation."
+      - "--dry-run is a repository-owned modifier; its presence does not make dry-run a standard operation."
       - "test behavior follows validation flags in the resolved build manifest, including optional CTest and Python import validation."
 
   hakoniwa-pdu-bridge-core:
@@ -78,17 +81,13 @@ components:
           - --dry-run
     notes:
       - "configure/build/test are manifest-driven through hakoniwa-build.yaml or --config."
-      - "--dry-run is implemented as a repository-owned modifier; its presence does not make dry-run a standard operation."
+      - "--dry-run is a repository-owned modifier; its presence does not make dry-run a standard operation."
       - "The validation.integration_tcp manifest flag is reserved; hako.py currently reports it as not implemented rather than claiming smoke coverage."
 
   hakoniwa-pdu-rpc:
     path: tools/hako.py
     common_options:
-      - --build-dir
-      - --install-dir
-      - --build-type
-      - --endpoint-root
-      - --vcpkg-root
+      - --config
     commands:
       doctor:
         supported: true
@@ -109,11 +108,15 @@ components:
       - test-cancel-race
       - package-test
     notes:
-      - "--dry-run is implemented for configure; it is not advertised for build/test/install."
+      - "The manifest is intentionally thin: build.type, build.dir, build.install_dir, and dependency paths are configurable while operation semantics remain code-owned."
+      - "build keeps RPC tests disabled; test/test-* enable the reviewed test targets. Test execution is an operation, not a manifest on/off switch."
+      - "Repository-owned overrides such as --build-dir, --install-dir, --build-type, --endpoint-root, and --vcpkg-root remain available."
       - "Specialized test commands and package-test are stable repository-owned extensions, not common contract operations."
 
   hakoniwa-mujoco-robots:
     path: tools/hako.py
+    common_options:
+      - --config
     commands:
       doctor:
         supported: true
@@ -126,12 +129,14 @@ components:
     capabilities:
       - native-argument-passthrough
     notes:
+      - "Manifest v1 intentionally exposes only build.dir; build.dir=auto preserves the existing platform-native default."
       - "The wrapper delegates to doctor.bash/build.bash on POSIX and build-win.ps1 on Windows."
-      - "--dry-run is a wrapper-specific modifier rather than a standard operation."
-      - "Arguments after -- are passed through to the platform-native script."
+      - "Arguments after -- are passed through to the platform-native script; viewer/toolchain/dependency options remain native-driver-owned."
 
   hakoniwa-core-pro:
     path: tools/hako.py
+    common_options:
+      - --config
     commands:
       doctor:
         supported: true
@@ -140,5 +145,6 @@ components:
     capabilities:
       - native-argument-passthrough
     notes:
-      - "build delegates to build.bash on POSIX and win-build.ps1 on Windows."
-      - "Arguments after -- are passed through to the platform-native build script."
+      - "The user-facing build manifest is validated by hako.py and adapted into the existing native build-default mechanism."
+      - "Default manifest values reproduce the tracked native capacity defaults."
+      - "build delegates to build.bash on POSIX and win-build.ps1 on Windows; native arguments remain available after --."
