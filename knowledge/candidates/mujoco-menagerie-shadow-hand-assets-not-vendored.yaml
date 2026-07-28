@@ -105,6 +105,26 @@ sources:
         described in hakopy-persistent-pythonpath-shadows-project-hakopy-build-on-windows.yaml,
         i.e. this residual occurrence is several orders of magnitude smaller and of a
         different character (transient at startup vs. sustained for the whole run).
+    - description: >-
+        Follow-up source-level review of hakoniwa-core-pro (same verification round)
+        confirmed the mechanism behind this ConvertorError class rather than leaving it as
+        an unexplained race: the PDU metadata validator
+        (hakoniwa-pdu-registry/pdu/types/pdu_primitive_ctypes.h:82,187,
+        hako_pdu_metadata_is_invalid_inline() / hako_get_base_ptr_pdu()) treats a buffer as
+        invalid unless its leading magicno/version fields match, the typed converter
+        (hakoniwa-pdu-registry/pdu/types/std_msgs/pdu_cpptype_conv_Float64MultiArray.hpp:141)
+        logs exactly this [ConvertorError] when that validation fails, every PDU channel is
+        core-initialized with a zero-filled buffer at asset registration time
+        (sources/assets/callback/src/hako_asset_impl.cpp:563,
+        hako_asset_impl_pdus_write_done()) which is not valid metadata, and the PDU read
+        path (hakoniwa-core-cpp/src/hako/data/hako_pdu_data.hpp:364, read_pdu()) returns
+        whatever bytes are in shared memory without distinguishing "never written" from
+        "written". A typed read on a channel nobody has written yet therefore reliably
+        produces this error by the core's design; this is a noisy-by-construction property
+        of typed PDU access before the first writer, not a defect to report upstream. The
+        residual one-time occurrence above and the sustained 1470-occurrence failure mode
+        in hakopy-persistent-pythonpath-shadows-project-hakopy-build-on-windows.yaml are the
+        same mechanism at different initialization-order timings, not two different bugs.
   expert_input: []
 
 confidence: high
@@ -165,3 +185,4 @@ resolution:
     - "2026-07-26 re-verification on native Windows confirmed the forge/materialization flow itself succeeds (14 .obj meshes + scene_right.xml + LICENSE materialized, matching the prior manual vendoring 1:1), using a python3 shim to work around Windows-only forge-tooling gaps recorded in mbody-registry-forge-sh-python3-hardcoded-windows.yaml and mujoco-robots-prepare-model-venv-layout-windows.yaml."
     - "2026-07-28: two independent external contributors' Windows 11 x86_64 verification environments (native, no WSL/Docker) ran the merged mujoco-robots revision (1abffe415e15635503a46de2d2c50b246ca52545, hakoniwa-mbody-registry submodule at 8b14d5366e156f3147a69c37cf953f7f8a1ab9fb) through the Hakoniwa Shadow Hand asset runtime using the materialized model, following the Hakoniwa PDU Smoke procedure in examples/actuators/shadow_hand/README.md. Both reached the expected runtime state, with representative plant output matching the README's documented values exactly and the sender confirming tendon-coupled actuator/joint readback. resolution.verified is now true."
     - "Residual known pitfall (not a blocker for verified=true): one of the two 2026-07-28 runs logged a single '[ConvertorError][Float64MultiArray] hako_get_base_ptr_pdu returned null' immediately after startup (0 occurrences in the other run), after which every step in that run produced correct values. This looks like a one-time startup race. For scale, the same error class occurred on every one of roughly 1470 steps before the module-resolution fix in hakopy-persistent-pythonpath-shadows-project-hakopy-build-on-windows.yaml -- several orders of magnitude more frequent and of a different (sustained, not transient) character."
+    - "Mechanism confirmed by source-level review (see runtime_evidence): the core zero-fills every PDU channel's buffer at asset registration time, and a typed converter's metadata validation rejects that zero-filled buffer as invalid, logging exactly this ConvertorError. This is a known initialization-order property of typed PDU access before a channel's first write -- not an unexplained one-off race, and not a regression of this candidate's fix."
