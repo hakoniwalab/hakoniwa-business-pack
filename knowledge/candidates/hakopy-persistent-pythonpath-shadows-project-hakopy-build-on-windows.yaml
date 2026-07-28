@@ -1,0 +1,183 @@
+id: hakopy-persistent-pythonpath-shadows-project-hakopy-build-on-windows
+title: A stale persistent PYTHONPATH entry can make Python resolve a different project's old hakopy build, causing silent asset-registration failure
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - validation_rule
+
+summary: >
+  On Windows, `import hakopy` in a Hakoniwa Python asset/sender script does not
+  necessarily load the current project's own hakopy native module. If the user's
+  persistent PYTHONPATH environment variable already contains a path from an
+  unrelated project, and that path is searched before the current project's own
+  Hakoniwa Core install `bin` directory, Python resolves the unrelated project's
+  older hakopy.pyd instead. The failure this produces is far removed from its
+  cause: hakopy.asset_register() fails silently (or logs a generic registration
+  error) and the plant asset then reads an empty/unwritten PDU channel for the
+  entire run, which surfaces as a PDU conversion error on every step rather than
+  as an import or registration error. Fixing this requires making the launch
+  wrapper put the current project's own core-install bin directory at the front
+  of sys.path (and, separately, registering it as a DLL search directory);
+  os.add_dll_directory() alone does not fix it, because this is a module
+  resolution order problem, not a DLL search path problem.
+
+observation:
+  context: >
+    Encountered while getting the Hakoniwa PDU Smoke sender
+    (examples/actuators/shadow_hand/send_shadow_hand_targets.py, which does
+    `import hakopy` and later calls hakopy.asset_register()) to run correctly
+    against a locally built hakoniwa-mujoco-robots Shadow Hand plant asset on a
+    Windows 11 x86_64 verification workspace, 2026-07-28.
+  details:
+    - "Symptom: the plant asset ran and logged a PDU conversion error on every
+      step of the run (roughly 1470 steps), which read as a plant-side or
+      PDU-schema defect."
+    - "Root cause, confirmed by direct inspection: two different hakopy native
+      modules existed on the machine -- the current project's own build
+      (hakopy.pyd, dated 2026-07-10, 354,304 bytes) and an older build left
+      over from an unrelated project's global install (hakopy.pyd, dated
+      2025-10-12, 734,720 bytes)."
+    - "The sender's `import hakopy` resolved the older, unrelated-project
+      module because the user's persistent PYTHONPATH environment variable
+      already contained that unrelated project's path, and it was searched
+      ahead of the current project's own Hakoniwa Core install bin directory."
+    - "With the wrong hakopy module loaded, hakopy.asset_register() failed with
+      `ERROR: Can not register asset` (a generic, silent-looking registration
+      failure). Because the sender's registration failure did not halt the
+      plant asset, the plant kept polling the PDU channel for the sender's
+      targets, found it empty/unwritten for the whole run, and logged a PDU
+      conversion error on every single step."
+    - "The distance between symptom (a per-step PDU conversion error, which
+      looks like a plant-side/schema problem) and cause (which hakopy module
+      Python resolved, due to environment PYTHONPATH ordering) is the specific
+      value of recording this pitfall: nothing at the PDU-schema or plant-asset
+      layer was wrong."
+    - "The fix applied: in the launch wrapper, insert the current project's own
+      Hakoniwa Core install bin directory at the front of sys.path before
+      `import hakopy`, and separately call os.add_dll_directory() for the same
+      directory. Both were necessary in practice -- os.add_dll_directory() only
+      affects native DLL search order for a module that has already been
+      resolved by name; it does not change which same-named .pyd Python finds
+      first on sys.path. That means this is a distinct category of Windows
+      packaging pitfall from the already-documented cffi-binding DLL
+      search-path pitfall for hakoniwa_pdu_endpoint: hakopy (core asset
+      registration) is a Python *module resolution order* problem, while
+      hakoniwa_pdu_endpoint (the cffi binding) is a *DLL search path* problem
+      for a module that Python already resolved correctly."
+    - "Evidence strength distinction (important, do not overstate): the fact
+      that two hakopy.pyd builds existed and that the older one was resolved
+      via a persistent PYTHONPATH entry ahead of the project's own path is
+      directly observed (file inspection plus reproducing the failure and then
+      the fix). The claim that this specific file/module mismatch is what
+      caused the downstream registration failure to manifest as a PDU
+      conversion error is a reasonable inference from the observed sequence,
+      not something verified at the ABI/struct level (no struct-layout diff or
+      debugger-level inspection of HakoMasterData was performed to prove a
+      binary layout mismatch is the underlying mechanism)."
+    - "Separately, on this same Windows verification workspace, running the
+      sender at all required the hakoniwa_pdu_endpoint cffi native extension
+      to be present in the active venv's site-packages. There is no
+      Windows-specific pip-driven step that wires this in automatically; the
+      working resolution copied an existing build artifact of matching size
+      into the venv's site-packages rather than modifying its contents. This
+      is recorded here as a Windows installation-recipe gap for
+      hakoniwa_pdu_endpoint's Python packaging, distinct from the hakopy
+      resolution-order pitfall above, but discovered in the same verification
+      session."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      path: examples/actuators/shadow_hand/send_shadow_hand_targets.py
+      revision: 1abffe415e15635503a46de2d2c50b246ca52545
+  runtime_evidence:
+    - description: >-
+        External contributor's Windows 11 x86_64 verification environment
+        (native, no WSL/Docker), 2026-07-28: reproduced the failure (plant
+        logging a PDU conversion error on effectively every step of a run) and
+        traced it to `import hakopy` resolving an unrelated project's older
+        hakopy.pyd (2025-10-12, 734,720 bytes) ahead of the current project's
+        own build (2026-07-10, 354,304 bytes), due to a persistent PYTHONPATH
+        entry from the unrelated project. After inserting the current
+        project's own Hakoniwa Core install bin directory at the front of
+        sys.path (plus os.add_dll_directory() for the same directory) in the
+        launch wrapper, hakopy.asset_register() succeeded and the plant/sender
+        pair ran cleanly for the rest of the verification session.
+    - description: >-
+        Same verification session: getting the sender to run at all also
+        required manually placing a matching hakoniwa_pdu_endpoint cffi build
+        artifact into the venv's site-packages, since no Windows pip-driven
+        step wired it in automatically; this is recorded as a separate
+        packaging-recipe gap rather than folded into the hakopy pitfall above.
+  expert_input: []
+
+confidence: medium
+
+contradictions: []
+
+validation:
+  status: pending
+  required:
+    - Confirm on another Windows workspace with a clean PYTHONPATH (or a
+      deliberately reintroduced stale entry) that the same symptom (per-step
+      PDU conversion error masking a silent asset_register failure) reproduces
+      and that the sys.path-ordering fix resolves it there too.
+    - "Optional deeper verification: inspect HakoMasterData layout across the
+      two hakopy builds (or attach a debugger) to confirm or rule out an ABI
+      struct-layout mismatch as the actual mechanism, rather than relying on
+      the observed symptom sequence alone."
+  notes:
+    - The environment/module-resolution observation (two hakopy.pyd builds,
+      wrong one resolved via persistent PYTHONPATH, fix via sys.path ordering)
+      is directly reproduced and confirmed on one external contributor's
+      Windows workspace.
+    - The ABI/ mechanism claim (why the wrong module produces a PDU conversion
+      error rather than an immediate crash or import error) is an inference
+      from the observed sequence, not independently verified at the binary
+      level; keep this distinction explicit rather than asserting it as fact.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog:
+    - hakoniwa-mujoco-robots
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+
+promotion_rationale:
+  - "Generalizes to any Hakoniwa Python asset/sender on a Windows machine that
+    has more than one Hakoniwa Core install on PYTHONPATH: launch wrappers
+    should not assume `import hakopy` resolves the current project's own
+    build, and should make the current project's core-install bin directory
+    win module resolution explicitly rather than relying on DLL search path
+    fixes alone."
+  - "Establishes a reusable distinction for Windows Python packaging pitfalls
+    in the Hakoniwa ecosystem: hakopy is a module-resolution-order concern,
+    hakoniwa_pdu_endpoint's cffi binding is a DLL-search-path concern, and a
+    fix for one does not address the other."
+  - The associated hakoniwa_pdu_endpoint Windows packaging gap (cffi extension
+    not auto-wired into a venv via pip) is a concrete, reusable installation
+    documentation gap for Windows users of the Python sender/asset samples.
+
+resolution:
+  status: documented
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - No implementation-issue tracking has been filed for this; issue filing
+      is upstream maintainers' responsibility, not this candidate's.
+    - The workaround (insert the project's own core-install bin directory at
+      the front of sys.path, plus os.add_dll_directory() for the same
+      directory, before importing hakopy) is recorded as the practical fix
+      applied in the 2026-07-28 verification session, not as a merged
+      upstream change.
+    - Keep resolution.verified=false until this is reproduced independently
+      (see validation.required) and, ideally, until the ABI-level mechanism
+      question is resolved rather than left as an inference.
