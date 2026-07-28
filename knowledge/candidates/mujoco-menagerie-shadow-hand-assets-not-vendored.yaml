@@ -66,6 +66,21 @@ sources:
         hakoniwa-mujoco-robots#38, including a real sparse fetch of the pinned Menagerie
         revision, recursive MJCF include/mesh validation, submodule initialization, and
         creation of the materialized scene_right.xml.
+    - description: >-
+        External contributor's Windows 11 x86_64 verification environment (native, no
+        WSL/Docker), 2026-07-26: ran the merged forge/materialization flow at
+        hakoniwa-mujoco-robots revision 1abffe415e15635503a46de2d2c50b246ca52545 with the
+        hakoniwa-mbody-registry submodule pinned to 8b14d5366e156f3147a69c37cf953f7f8a1ab9fb.
+        Mesh materialization succeeded: bodies/shadow_hand/source/shadow_hand/scene_right.xml
+        was produced along with 14 .obj mesh files under assets/ (matching the prior manual
+        vendoring's mesh count 1:1) and a model-local LICENSE file. On this Windows machine
+        the flow did not succeed unmodified out of the box -- a `python3` shim was required
+        for hakoniwa-mbody-registry's tools/forge.sh to run at all, because of two
+        Windows-specific portability gaps recorded as separate candidates in this batch
+        (mbody-registry-forge-sh-python3-hardcoded-windows.yaml and
+        mujoco-robots-prepare-model-venv-layout-windows.yaml). Actually launching the
+        Shadow Hand Hakoniwa asset runtime against the materialized model was not attempted
+        in this session.
   expert_input: []
 
 confidence: high
@@ -78,6 +93,7 @@ validation:
   notes:
     - Verified by an actual model-load failure, then an actual successful run after fetching the missing assets.
     - The replacement materialization mechanism is CI-verified, but the merged fix still needs an explicit Hakoniwa runtime re-verification before resolution.verified can become true.
+    - "2026-07-26: the merged materialization flow was re-run on native Windows and successfully produced the materialized Shadow Hand model (scene_right.xml plus 14 .obj meshes and a model-local LICENSE), confirming the forge/materialization mechanism itself works end-to-end on Windows. Two Windows-only portability gaps in the forge tooling had to be worked around (a python3 shim and a venv PATH addition) and are recorded as separate candidates rather than folded into this one. The Hakoniwa Shadow Hand asset runtime was not launched against the materialized model in this session, so resolution.verified remains false."
 
 tracking:
   implementation_status: resolved
@@ -121,4 +137,5 @@ resolution:
   notes:
     - The implementation issue chain is resolved and both fixing PRs are merged.
     - The new forge/materialization flow has passed CI in both repositories.
-    - Keep verified=false until the merged mujoco-robots revision is run through the Hakoniwa Shadow Hand runtime and reaches the expected runtime state using the materialized model.
+    - "2026-07-26 re-verification on native Windows confirmed the forge/materialization flow itself succeeds (14 .obj meshes + scene_right.xml + LICENSE materialized, matching the prior manual vendoring 1:1), using a python3 shim to work around Windows-only forge-tooling gaps recorded in mbody-registry-forge-sh-python3-hardcoded-windows.yaml and mujoco-robots-prepare-model-venv-layout-windows.yaml."
+    - Keep verified=false until the merged mujoco-robots revision is run through the Hakoniwa Shadow Hand runtime and reaches the expected runtime state using the materialized model; this session materialized the model but did not launch the Shadow Hand asset runtime against it.

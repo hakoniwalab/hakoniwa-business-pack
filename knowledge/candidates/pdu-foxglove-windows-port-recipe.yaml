@@ -125,6 +125,57 @@ sources:
         addition to Boost.Asio, and PowerShell helper arguments such as `-C`
         must be passed as an explicit argument array to avoid parameter-binding
         ambiguity.
+    - description: >-
+        External contributor's Windows 11 x86_64 verification environment (native, no
+        WSL/Docker), 2026-07-26: built and ran the merged upstream revision
+        d961217b2dba6fa6c1a2bf062278f0d8a47ae03b directly (not the earlier fork
+        implementation). tools/run_windows_smoke.ps1 completed with exit 0: ctest
+        reported "1/1 Test #1: hakoniwa_pdu_foxglove_tests ... Passed", the publisher
+        smoke started a server at "Foxglove WebSocket: ws://127.0.0.1:8765" and
+        published "time_usec=0/100000/200000 bytes=12" for three samples, and the
+        script printed "[run_windows_smoke.ps1] passed" (total run time approximately
+        4 minutes). The smoke script's own final line states its verification
+        boundary: "this smoke verifies build/tests and publisher lifecycle only; it
+        does not prove a Foxglove Desktop client can connect through the local
+        Windows network/firewall configuration" -- i.e. the remaining unverified gap
+        is now exactly the official Foxglove Desktop end-to-end connection, not the
+        build/test/publisher lifecycle.
+    - description: >-
+        This workspace's earlier fork implementation (ykikuchii/hakoniwa-pdu-foxglove,
+        branch win-foxglove-sdk-support, commit 3cc7b29) was compared against the
+        merged upstream revision d961217b2dba6fa6c1a2bf062278f0d8a47ae03b: both share a
+        common git ancestor (909f507fd5ea14d281a1ee52f63f4d6efb09a6bf), but 3cc7b29 is
+        not an ancestor of d961217 -- upstream implemented the same Windows port
+        independently from that common point, and the fork branch was never merged.
+        The fork's Windows implementation is therefore superseded by the merged
+        upstream implementation; no further action is planned on the fork branch.
+    - description: >-
+        External contributor's Windows 11 x86_64 verification environment
+        (native, 2026-07-28): a human operator connected the official
+        Foxglove Desktop application (version 2.57.0) to the merged upstream
+        revision's cdr_publisher_example, started with only a config
+        argument and listening on ws://127.0.0.1:8765, and reported the
+        connection succeeded and the application operated normally. This is
+        the specific end-to-end official-Foxglove-Desktop connection step
+        that the 2026-07-26 re-verification had identified as the one
+        remaining unverified item against the merged revision. Detail beyond
+        "connected, operated normally" was not reported by the operator and
+        is not asserted here.
+    - description: >-
+        Separately, in the same 2026-07-28 session, an automated attempt to
+        connect to the same running merged-revision server with a generic
+        WebSocket client (a Python websockets-library client and a
+        hand-rolled raw-socket client, both declaring the documented
+        foxglove.websocket.v1 subprotocol) was rejected every time with
+        HTTP/1.1 400 Bad Request / "Missing expected sec-websocket-protocol
+        header," while the official Foxglove Desktop app connected to the
+        identical server/config without issue. Because the official client
+        succeeded against the same server, this is not treated as an
+        hakoniwa-pdu-foxglove protocol defect. It is recorded as an
+        operational rule instead: automated end-to-end connectivity checks
+        for this server need a handshake equivalent to the official
+        client's, not merely a matching subprotocol string. The exact
+        byte-level handshake difference was not isolated.
   expert_input:
     - description: >-
         An AI-assisted root-cause analysis of the C2908/C3856 MSVC template
@@ -147,8 +198,10 @@ validation:
     - "Windows ARM64 remains unsupported/unverified; do not claim ARM64 Windows support until its SDK archive/checksum and runtime path are independently validated."
     - "Repository CI validates build/tests/publisher lifecycle, not end-to-end official Foxglove Desktop connectivity through arbitrary local Windows firewall/network policy."
   notes:
-    - Verified end-to-end in the original external Windows 11 reproduction with the official Foxglove Desktop app.
+    - Verified end-to-end in the original external Windows 11 reproduction with the official Foxglove Desktop app (against the earlier fork implementation, since superseded).
     - Upstream PR #6 CI independently verifies the durable Windows x86_64 build, tests, and publisher smoke path on windows-2022 / Visual Studio 2022.
+    - "2026-07-26 re-verification ran the merged upstream revision d961217b2dba6fa6c1a2bf062278f0d8a47ae03b directly on native Windows and reached exit 0 for build, tests, and publisher lifecycle via tools/run_windows_smoke.ps1. This narrows the remaining gap to exactly one item: an end-to-end connection from the official Foxglove Desktop application to the merged revision's WebSocket server has not yet been independently re-confirmed (the original Desktop-app confirmation was against the now-superseded fork implementation, not this merged revision)."
+    - "2026-07-28: that remaining gap was closed. An external contributor's Windows 11 verification environment connected the official Foxglove Desktop application (version 2.57.0) to the merged revision's cdr_publisher_example and confirmed the connection succeeded and the application operated normally."
 
 tracking:
   implementation_status: resolved
@@ -175,11 +228,14 @@ resolution:
       issue: 5
       pull_request: 6
       revision: d961217b2dba6fa6c1a2bf062278f0d8a47ae03b
-  verified: false
+  verified: true
   promoted_to: []
   executable_guardrails:
     - tools/run_windows_smoke.ps1
     - .github/workflows/windows-x64.yml
   notes:
     - Upstream PR #6 merged the Windows x86_64 implementation and CI guardrail; its final PR-head Windows CI run completed successfully.
-    - Keep resolution.verified=false until the merged upstream revision is re-verified end-to-end with the official Foxglove Desktop application on a Windows machine; the original external reproduction used an equivalent fork implementation rather than the merged upstream revision.
+    - "2026-07-26: the merged revision d961217b2dba6fa6c1a2bf062278f0d8a47ae03b was built and run natively on Windows and reached exit 0 for build, ctest (1/1 passed), and the publisher lifecycle smoke (tools/run_windows_smoke.ps1, ~4 minutes). This is a genuine re-verification of the merged revision itself, superseding the original external reproduction which had used this workspace's own now-superseded fork implementation (ykikuchii/hakoniwa-pdu-foxglove@3cc7b29, sharing common ancestor 909f507 with d961217 but never merged upstream)."
+    - "2026-07-28: resolution.verified changed from false to true. An external contributor's Windows 11 verification environment connected the official Foxglove Desktop application (version 2.57.0) to the merged revision's cdr_publisher_example, listening on ws://127.0.0.1:8765, and confirmed the connection succeeded and the application operated normally. This closes the one remaining gap noted below: the smoke script verifies build/tests/publisher lifecycle only, and this additional interactive step confirms official Foxglove Desktop connectivity against the merged revision itself (not the superseded fork)."
+    - "Separate operational note, not a defect: the same 2026-07-28 session found that generic WebSocket clients (a Python websockets-library client and a hand-rolled raw socket, both declaring the documented foxglove.websocket.v1 subprotocol) were rejected by the same running merged-revision server with HTTP/1.1 400 Bad Request, while the official Foxglove Desktop app connected successfully to the identical server/config. This was not filed as an SDK/protocol defect. It is recorded as an operational rule: automated end-to-end connectivity checks for this server need a handshake equivalent to the official client's, not merely a matching subprotocol string; the exact handshake difference was not isolated. This also supports why tools/run_windows_smoke.ps1 intentionally stops short of an automated client-connect check."
+    - "Historical note (superseded by the entry above): this candidate previously kept resolution.verified=false because the smoke script itself documents that it verifies build/tests/publisher lifecycle only, and does not prove official Foxglove Desktop connectivity. That gap is now closed."
