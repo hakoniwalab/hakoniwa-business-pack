@@ -4,27 +4,29 @@
 
 Hakoniwa repositories may expose `tools/hako.py` as a component-owned, cross-platform operational entry point for humans, CI, Business Pack recipes, and AI agents.
 
-The goal is to define a small set of **common operations that can be understood consistently across repositories**. The contract standardizes command names and their operational meaning; it does not standardize the internal implementation.
+The goal is to define a small set of common operations that can be understood consistently across repositories. The contract standardizes command names, their operational meaning, and—when a repository is manifest-driven—the common way to select the configuration source. It does **not** standardize repository-internal implementation or manifest schema.
 
 A repository may delegate to Bash, PowerShell, CMake, native tools, or other existing scripts. Component-specific build and diagnostic knowledge remains owned by the component repository.
 
 The standard invocation form is:
 
 ```text
-python tools/hako.py <command> [command arguments/options]
+python tools/hako.py <command> [common options] [repository-specific options]
 ```
 
-A repository is not required to implement every standard operation. The Business Pack catalog records which operations each repository actually supports.
+A repository is not required to implement every standard operation. The Business Pack catalog records which operations and common options each repository actually supports.
 
 ## Contract version
 
-This document defines contract version `1.0`.
+This document defines contract version `1.1`.
 
-Catalog declarations SHOULD include `contract_version: "1.0"` so tooling can reason about command semantics without parsing repository-specific documentation.
+Contract v1.1 keeps the v1.0 operation vocabulary unchanged and promotes explicit manifest/configuration selection with `--config <path>` into the common option contract for manifest-driven repositories.
+
+Catalog declarations SHOULD include `contract_version: "1.1"` when they implement the v1.1 semantics described here.
 
 ## Standard operation model
 
-Contract v1.0 defines six standard operations:
+Contract v1.1 defines the same six standard operations as v1.0:
 
 ```text
 doctor -> configure -> build -> test -> install
@@ -32,7 +34,7 @@ doctor -> configure -> build -> test -> install
                          +--------> smoke
 ```
 
-This diagram is a conceptual lifecycle, not a mandatory execution sequence. For example, a repository may not need `configure` or `install`, and a smoke test may run directly from build-tree artifacts.
+This diagram is a conceptual lifecycle, not a mandatory execution sequence. A repository may not need every phase, and a smoke test may run directly from build-tree artifacts.
 
 The six names form the common cross-repository vocabulary:
 
@@ -42,8 +44,6 @@ The six names form the common cross-repository vocabulary:
 - `test`: verify the component with automated tests.
 - `install`: place consumable artifacts into an installation/package layout.
 - `smoke`: exercise the smallest reproducible live behavior proving the component operates.
-
-These meanings are deliberately broad enough to apply across different Hakoniwa repositories while remaining distinct enough for humans, CI, recipes, and AI agents to choose the correct operation.
 
 ## Standard operations
 
@@ -59,8 +59,6 @@ Semantics:
 - MUST return exit code `0` when no blocking readiness problem is detected.
 - MUST return a non-zero exit code when a blocking readiness problem is detected.
 - SHOULD NOT install, download, or repair dependencies automatically unless such behavior is explicitly requested by a repository-specific option.
-
-Typical checks include toolchains, submodules, native dependencies, required files, platform support, package discovery, and component-specific runtime prerequisites.
 
 In operational terms, `doctor` answers:
 
@@ -116,10 +114,6 @@ Semantics:
 - MUST return non-zero when installation fails.
 - Installation destinations and options remain component-specific and SHOULD be documented by the owning repository/catalog entry.
 
-In operational terms, `install` answers:
-
-> Can the built component be materialized in the layout expected by downstream consumers?
-
 ### `smoke [mode]`
 
 Purpose: execute the smallest reproducible runtime scenario that demonstrates the component is operational beyond compilation or unit tests.
@@ -133,24 +127,50 @@ Semantics:
 - MAY accept a positional `mode` or component-specific options when multiple smoke scenarios are useful.
 - Supported smoke modes MUST be declared in the catalog when they form a stable operational contract.
 
-In operational terms, `smoke` answers:
+## Common manifest/config selection: `--config`
 
-> Does the built component actually perform its minimum expected live behavior?
+Contract v1.1 promotes `--config <path>` to a common option for repositories whose `hako.py` is driven by a build/configuration manifest.
 
-Example: Hakoniwa Conductor Light supports `smoke auto` and `smoke manual`. `auto` verifies dynamic attach and world-time progress; `manual` additionally verifies explicit start/stop/reset state transitions.
+Canonical form:
 
-## `--dry-run` and other options
+```text
+python tools/hako.py <command> --config <path> [repository-specific options]
+```
 
-`--dry-run` is **not** a seventh standard operation. It is an optional modifier whose exact placement is repository-owned.
+Semantics:
 
-A repository MAY expose `--dry-run` on `doctor`, `configure`, or another operation when doing so is useful and its behavior is unambiguous. In practice it is most naturally associated with diagnosis/configuration because those phases resolve intent before expensive or state-changing work.
+- `--config` selects the repository-owned build/configuration manifest used by the requested operation.
+- A manifest-driven repository SHOULD support `--config <path>` consistently across the standard operations for which the manifest is relevant.
+- An explicitly supplied relative path SHOULD be interpreted relative to the caller's current working directory.
+- A repository MAY define and document a default manifest, commonly `hakoniwa-build.yaml`.
+- The resolution rule for an omitted default is repository-owned and MUST be documented when it matters operationally.
+- Repositories that are not manifest-driven are not required to invent a manifest solely to satisfy this contract.
+- Existing repository-specific CLI/native options MAY remain available for backward compatibility.
 
-The common contract intentionally does not require one universal `--dry-run` behavior. Depending on the repository it may, for example:
+Most importantly, the common contract standardizes **selection**, not **schema**:
 
-- print a resolved configuration;
-- print the native command that would be executed;
-- validate arguments/configuration without invoking the underlying build tool;
-- suppress a later build/test/runtime action after resolution.
+```text
+common:     how a caller selects the configuration source
+repo-owned: what that configuration source is allowed to contain
+```
+
+The selected manifest's schema, supported keys, defaults, validation rules, and precedence with repository-specific overrides remain component-owned. Contract v1.1 does not require identical YAML structures across repositories.
+
+A repository MAY expose only a very small manifest surface. The component roll-out that motivated v1.1 intentionally produced different shapes while preserving the same selection contract:
+
+- Endpoint / Bridge Core: relatively rich manifest-driven build configuration.
+- Conductor Light: component/build/validation configuration owned directly by `hako.py`.
+- Core Pro: user-facing YAML adapted into the existing native build-default mechanism.
+- PDU RPC: a thin configuration layer preserving existing `build`, `test`, `install`, and extension-command semantics.
+- MuJoCo Robots: only `build.dir` is configurable in manifest v1; the platform-native build drivers remain authoritative for everything else.
+
+This diversity is intentional. A cross-repository contract is successful when it removes caller-side platform/config-selection knowledge without forcing unrelated component internals into one schema.
+
+## `--dry-run` and repository-owned options
+
+`--dry-run` is not a seventh standard operation and does not acquire one universal behavior in v1.1.
+
+A repository MAY expose `--dry-run` where useful. Depending on the repository it may print resolved configuration, print delegated commands, validate without invoking the underlying build tool, or suppress a later action.
 
 Therefore:
 
@@ -159,7 +179,7 @@ Therefore:
 - the catalog SHOULD record it only where the implementation actually supports it;
 - the owning repository defines its detailed semantics.
 
-The same rule applies to other command options such as `--config`, `--build-dir`, or native argument pass-through: stable operationally relevant options may be cataloged, but they are not themselves part of the common operation vocabulary.
+Other options such as `--build-dir`, `--install-dir`, build-type overrides, dependency roots, toolchain arguments, and native argument pass-through remain repository-owned unless explicitly promoted by a future contract revision.
 
 ## Extension commands
 
@@ -183,8 +203,6 @@ Extension commands are intentionally outside the common contract:
 - cross-repository tooling MUST NOT assume an extension exists or has the same meaning elsewhere;
 - when a standard operation expresses the same intent, tooling SHOULD prefer the standard operation.
 
-For example, `run` is not a standard v1.0 operation because the meaning of "run" varies too widely between libraries, services, simulators, generators, and sample-oriented repositories. A repository remains free to expose `run` as an extension.
-
 ## Catalog declaration
 
 Catalog data SHOULD declare the supported `hako.py` surface when the repository exposes the standard entry point.
@@ -194,7 +212,9 @@ Example:
 ```yaml
 hako_cli:
   path: tools/hako.py
-  contract_version: "1.0"
+  contract_version: "1.1"
+  common_options:
+    - --config
   commands:
     doctor:
       supported: true
@@ -222,19 +242,18 @@ Rules:
 - Absence of `hako_cli` means support is unknown or the repository does not expose the standard interface; it MUST NOT be interpreted as failure.
 - A standard operation not declared under `commands` MUST NOT be assumed to exist.
 - `supported: false` MAY be used when explicitly recording a known unsupported standard operation is useful; otherwise omission is preferred.
+- `common_options` records options whose cross-repository semantics are defined by this contract, currently `--config` for manifest-driven repositories.
+- `options` records stable repository-owned modifiers for individual commands.
 - `modes` records stable positional smoke modes such as `auto` and `manual`.
-- `options` records stable, operationally relevant options; it is not intended to mirror every argparse/help flag.
-- Stable repository-specific commands MAY be recorded separately as extensions, but their semantics are not standardized by this contract.
-- Catalog declarations describe repository-owned behavior. Business Pack MUST NOT duplicate component-specific doctor/configure/build/test/install/smoke implementation logic.
+- Stable repository-specific commands MAY be recorded separately as extensions.
+- Catalog declarations describe repository-owned behavior. Business Pack MUST NOT duplicate component-specific implementation logic.
 
 ## Relationship to `runtime_checks`
 
 `hako_cli` and `runtime_checks` answer different questions.
 
-- `hako_cli` declares the **available operational interface** of the component.
-- `runtime_checks` records **specific executable checks and evidence**, including platform coverage and exact invocation.
-
-For example, a component may declare `hako_cli.commands.smoke.modes: [auto, manual]` and separately provide two `runtime_checks` entries documenting the exact smoke commands and platforms on which they are verified.
+- `hako_cli` declares the available operational interface of the component.
+- `runtime_checks` records specific executable checks and evidence, including platform coverage and exact invocation.
 
 ## Design principle
 
@@ -251,6 +270,8 @@ Human / CI / AI / Business Pack
    Bash  PowerShell  CMake / native tools
 ```
 
-Business Pack defines the shared operational vocabulary and catalogs support. Each component owns the implementation and remains free to evolve its internal tooling without forcing callers to learn OS-specific entry points.
+Contract v1.1 adds one more reusable boundary rule:
 
-The contract is successful when a caller can approach an unfamiliar Hakoniwa repository and ask the same small set of operational questions — readiness, configuration, build, verification, installation, and live smoke behavior — without first learning that repository's platform-specific scripts.
+> Standardize the caller-facing selection mechanism only when that removes real cross-repository friction. Preserve component-owned semantics behind that boundary.
+
+This is why `--config` is common while manifest schema is not. The contract is successful when a caller can approach an unfamiliar Hakoniwa repository and ask the same operational questions—and select the intended configuration source—without first learning that repository's OS-specific build scripts or inventing a universal component schema.
