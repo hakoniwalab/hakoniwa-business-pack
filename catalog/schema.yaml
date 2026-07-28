@@ -134,6 +134,7 @@ controlled_fields:
     description: Version of the common tools/hako.py command-semantics contract declared by the component.
     values:
       - "1.0"
+      - "1.1"
   hako_cli.commands:
     description: Six standard cross-repository hako.py operations. Repositories may expose any supported subset; repository-specific extension commands are outside this controlled vocabulary.
     values:
@@ -180,7 +181,8 @@ authoring_rules:
   - Keep `hako_cli` optional. Absence means standard CLI support is unknown or unavailable, not that the component failed.
   - The common hako.py operation vocabulary is doctor, configure, build, test, install, and smoke; repositories may implement any supported subset.
   - Declare only operations actually owned by the component repository; the existence of tools/hako.py does not imply every standard operation.
-  - Treat --dry-run and other flags as repository-owned options rather than standard operations; catalog them only where implementation support is verified.
+  - For contract v1.1 manifest-driven repositories, use `hako_cli.common_options: [--config]` to declare the common configuration-selection surface; manifest schema remains component-owned.
+  - Treat --dry-run, --build-dir, toolchain flags, dependency-root flags, and native pass-through as repository-owned options unless a future contract explicitly promotes them.
   - Keep stable smoke modes and operationally relevant options in `hako_cli`; do not mirror every implementation-specific CLI flag.
   - Repository-specific commands such as package-test, specialized test commands, generators, or run commands are extensions and do not acquire cross-repository semantics automatically.
   - Follow `docs/hako-cli-contract.md` for standard operation semantics and contract versioning.
