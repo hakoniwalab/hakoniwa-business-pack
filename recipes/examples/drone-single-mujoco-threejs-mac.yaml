@@ -1,6 +1,6 @@
 id: drone-single-mujoco-threejs-mac
 title: Single Hakoniwa Drone MuJoCo Three.js Demo on macOS
-recipe_version: 0.1
+recipe_version: 0.2
 
 goal:
   user_request: Macで箱庭ドローンを1台飛ばし、Python APIで動かしてThree.jsで可視化したい
@@ -17,45 +17,28 @@ feasibility:
     - hakoniwa-drone-core provides macOS prebuilt binaries, MuJoCo drone service, DroneVisualStatePublisher, and Python external_rpc APIs.
     - hakoniwa-threejs-drone documents a fleets viewer mode that consumes DroneVisualStateArray through WebSocket.
     - hakoniwa-pdu-bridge-core provides the WebSocket bridge configuration used by the Three.js fleets viewer.
-    - The Mac binary acquisition, MuJoCo dylib link, launcher flow, Python mission, and Three.js browser visualization were exercised locally.
+    - The macOS binary acquisition and MuJoCo link contract are owned by the hakoniwa-drone-core-mujoco-mac-setup prerequisite Recipe.
+    - The Foundation-aware launcher flow, Python mission, and Three.js browser visualization were exercised locally.
 
 validation:
   status: verified
   verified_at: 2026-07-20
   summary: >
-    The Mac one-drone runtime was launched locally on 2026-07-20 with
-    hakoniwa-drone-core release binaries under ./lib, MuJoCo 3.9.0 linked into
-    those binaries, Python 3.12 external_rpc control, DroneVisualStatePublisher,
-    WebBridge, and the Three.js HTTP server. Python control, visual-state
-    publication, HTTP serving, browser Connect, and visible Three.js drone
-    motion were confirmed.
+    The Mac one-drone runtime was launched with Drone Core artifacts prepared
+    by the hakoniwa-drone-core-mujoco-mac-setup prerequisite Recipe. This
+    Recipe verified the Foundation-aware Python 3.12 external_rpc control,
+    DroneVisualStatePublisher, WebBridge, Three.js HTTP server, browser
+    connection, and visible Drone motion.
   steps:
-    - id: mac_binary_setup
+    - id: drone_core_mac_setup_prerequisite
       status: verified
       evidence:
-        - repository: toppers/hakoniwa-drone-core
-          path: tools/fetch_libs.sh
-          revision: local-research-2026-07-20
-        - repository: toppers/hakoniwa-drone-core
-          path: README.md
-          revision: local-research-2026-07-20
+        - repository: hakoniwalab/hakoniwa-business-pack
+          path: recipes/examples/hakoniwa-drone-core-mujoco-mac-setup.yaml
+          revision: issue-56-foundation-mvp
       notes:
-        - tools/fetch_libs.sh downloads the OS release archive and installs binaries into ./lib.
-        - Older Mac articles and docs may show manual mac.zip extraction into ./mac.
-        - Local validation found executable ./lib/mac-main_hako_drone_service and ./lib/mac-drone_visual_state_publisher.
-    - id: mujoco_link_setup
-      status: verified
-      evidence:
-        - repository: toppers/hakoniwa-drone-core
-          path: tools/install-mujoco-mac.bash
-          revision: local-research-2026-07-20
-        - repository: toppers/hakoniwa-drone-core
-          path: tools/link-mujoco-mac.bash
-          revision: local-research-2026-07-20
-      notes:
-        - MuJoCo is installed under vendor/mujoco.
-        - Release binaries must be patched with an rpath to vendor/mujoco/lib.
-        - Local validation ran tools/install-mujoco-mac.bash and tools/link-mujoco-mac.bash against ./lib.
+        - The prerequisite owns release binary acquisition, repository-local MuJoCo installation, Mach-O link adjustment, and otool verification.
+        - This Demo Recipe does not repeat component setup commands.
     - id: python_external_rpc_control
       status: verified
       evidence:
@@ -93,6 +76,7 @@ validation:
         - On macOS, opening the viewer URL automatically is useful, but the user still needs to press the browser Connect button.
 
 constraints:
+  - depends-on-hakoniwa-drone-core-mujoco-mac-setup
   - macos-first
   - single-pc
   - native
@@ -123,13 +107,15 @@ target_environment:
       version: unknown
       path: unknown
   hakoniwa:
-    install_prefix: /usr/local/hakoniwa
+    install_prefix: work/foundation/install
     components_built:
       - hakoniwa-core-pro
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-pdu-python
       - hakoniwa-pdu-bridge-core
-      - hakoniwa-drone-core
   notes:
     - This Recipe intentionally targets macOS first. Linux/Docker generalization should be a later Recipe variant.
+    - Complete recipes/examples/hakoniwa-drone-core-mujoco-mac-setup.yaml before configuring this Demo.
     - Python 3.12 must be the environment that can import both hakopy and hakoniwa_pdu.
 
 execution_environment:
@@ -153,10 +139,11 @@ execution_environment:
     environment: venv
     hakopy_available: unknown
   hakoniwa:
-    install_prefix: /usr/local/hakoniwa
+    install_prefix: work/foundation/install
     hako_cmd_access: requires-unsandboxed-command
   notes:
-    - Required preflight includes python3.12 import checks for hakopy and hakoniwa_pdu.
+    - Foundation doctor verifies Receipt, Artifact, dependency, and capability compatibility before Recipe configure.
+    - The Foundation shared Python 3.12 environment imports hakopy, hakoniwa_pdu, and the Endpoint CFFI package.
     - Ports 8000 and 8765 must be available for the browser viewer and WebSocket bridge.
     - Use an absolute HAKO_THREEJS_VIEWER_PATH. A relative value can be resolved relative to the launch file and point at the wrong directory.
     - For Mac demos, it is acceptable to open the browser automatically and then ask the user to press Connect in the viewer UI.
@@ -192,6 +179,23 @@ components:
       - visualizer
     purpose: Render the drone in a browser using the fleets viewer configuration and WebSocket PDU stream.
 
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      shared_memory: true
+      hako_cmd: true
+
+  hakoniwa-pdu-python:
+    capabilities:
+      hako_launcher: true
+      shm_backend: true
+
+  hakoniwa-pdu-bridge-core:
+    capabilities:
+      hakoniwa_app: true
+      web_bridge: true
+      web_bridge_fleets_config_format: true
+
 connections:
   - from: hakoniwa-core-pro
     to: hakoniwa-drone-core
@@ -203,7 +207,8 @@ connections:
     contract:
       status: verified
       requires:
-        - hakoniwa-core-pro-installed-under-usr-local-hakoniwa
+        - local-Foundation-Core-runtime
+        - hakoniwa-drone-core-mujoco-mac-setup-completed
         - one-conductor-for-the-demo
         - shared-memory-access
       validation_notes:
@@ -311,8 +316,7 @@ artifact_sets:
       - config/drone/fleets/api-current.json
       - config/drone/mujoco-current/drone.xml
     notes:
-      - tools/fetch_libs.sh installs release binaries into ./lib.
-      - tools/link-mujoco-mac.bash must target the directory where the binaries were installed.
+      - Binary acquisition, repository-local MuJoCo installation, link adjustment, and otool verification belong to the prerequisite setup Recipe.
   visualization_artifacts:
     description: Visual-state publisher, WebBridge fleets configuration, and Three.js viewer config.
     status: verified
@@ -383,62 +387,75 @@ demo:
   steps:
     - order: 1
       component: hakoniwa-core-pro
-      action: Run the Business Pack common preflight.
-      command: bash tools/doctor-mac.bash
+      action: Inspect the reusable local Foundation without changing it.
+      command: python3.12 tools/foundation.py doctor --recipe recipes/examples/drone-single-mujoco-threejs-mac.yaml
       evidence:
         - repository: hakoniwalab/hakoniwa-business-pack
-          path: tools/doctor-mac.bash
-          revision: local-validation-2026-07-20
+          path: tools/foundation.py
+          revision: issue-56-foundation-mvp
     - order: 2
-      component: hakoniwa-drone-core
-      action: Download Mac prebuilt Hakoniwa Drone binaries.
-      command: bash tools/fetch_libs.sh
+      component: hakoniwa-core-pro
+      action: Show the dependency-ordered Foundation build plan.
+      command: python3.12 tools/foundation.py plan --recipe recipes/examples/drone-single-mujoco-threejs-mac.yaml
       evidence:
-        - repository: toppers/hakoniwa-drone-core
-          path: tools/fetch_libs.sh
-          revision: local-research-2026-07-20
+        - repository: hakoniwalab/hakoniwa-business-pack
+          path: catalog/foundation-components.json
+          revision: issue-56-foundation-mvp
     - order: 3
-      component: hakoniwa-drone-core
-      action: Install MuJoCo for macOS under vendor/mujoco.
-      command: bash tools/install-mujoco-mac.bash .
+      component: hakoniwa-core-pro
+      action: Build only missing or incompatible Foundation components into the Business Pack workspace.
+      command: python3.12 tools/foundation.py build --recipe recipes/examples/drone-single-mujoco-threejs-mac.yaml
+      notes:
+        - If the Foundation is already SATISFIED, no component build or install command is executed.
+        - UNKNOWN is not overwritten automatically.
       evidence:
-        - repository: toppers/hakoniwa-drone-core
-          path: tools/install-mujoco-mac.bash
-          revision: local-research-2026-07-20
+        - repository: hakoniwalab/hakoniwa-business-pack
+          path: foundation/README.md
+          revision: issue-56-foundation-mvp
     - order: 4
       component: hakoniwa-drone-core
-      action: Patch Mac binary rpath so the drone service can load MuJoCo.
-      command: bash tools/link-mujoco-mac.bash ./lib --lib-dir ./vendor/mujoco/lib
-      evidence:
-        - repository: toppers/hakoniwa-drone-core
-          path: tools/link-mujoco-mac.bash
-          revision: local-research-2026-07-20
-    - order: 5
-      component: hakoniwa-pdu-python
-      action: Confirm Python 3.12 can import required Hakoniwa modules.
-      command: python3.12 -c "import hakopy; import hakoniwa_pdu"
+      action: Confirm the macOS Drone Core setup prerequisite is complete.
       evidence:
         - repository: hakoniwalab/hakoniwa-business-pack
-          path: docs/hakoniwa-runtime-primer.md
-          revision: local-research-2026-07-20
+          path: recipes/examples/hakoniwa-drone-core-mujoco-mac-setup.yaml
+          revision: issue-56-foundation-mvp
+      notes:
+        - Do not duplicate binary fetch, MuJoCo install, or Mach-O link commands in this Demo Recipe.
+        - Continue only after the prerequisite Recipe's Artifact and otool checks pass.
+    - order: 5
+      component: hakoniwa-business-pack
+      action: Generate Recipe-specific PDU, Fleet, Bridge, Viewer, Launcher, and Mission configuration.
+      command: python3.12 tools/drone_threejs.py configure
+      evidence:
+        - repository: hakoniwalab/hakoniwa-business-pack
+          path: tools/drone_threejs.py
+          revision: issue-56-foundation-mvp
+      notes:
+        - This step does not modify hakoniwa-drone-core.
+        - Generated files are placed under work/recipes/drone-single-mujoco-threejs-mac.
     - order: 6
+      component: hakoniwa-business-pack
+      action: Run Recipe runtime preflight without rebuilding Foundation.
+      command: python3.12 tools/drone_threejs.py doctor
+      evidence:
+        - repository: hakoniwalab/hakoniwa-business-pack
+          path: tools/drone_threejs.py
+          revision: issue-56-foundation-mvp
+    - order: 7
       component: hakoniwa-drone-core
-      action: Launch one-drone runtime, visual-state publisher, WebBridge, and Three.js webserver with Mac binary path overrides.
-      command: >
-        PYTHON_BIN=python3.12 HAKO_DRONE_SERVICE_BIN=./lib/mac-main_hako_drone_service
-        HAKO_VISUAL_STATE_PUBLISHER_BIN=./lib/mac-drone_visual_state_publisher
-        HAKO_THREEJS_VIEWER_PATH=/absolute/path/to/hakoniwa-threejs-drone
-        bash tools/launch-fleets-scale-perf.bash 1 "" 1
+      action: Launch one-drone runtime, visual-state publisher, local Foundation WebBridge, and Three.js webserver.
+      command: work/recipes/drone-single-mujoco-threejs-mac/launch.bash
       notes:
         - This launcher is a long-running lifecycle manager. Do not treat foreground blocking after hako-cmd start as failure.
         - Keep the launcher process alive while running the browser and external_rpc mission steps.
         - The launcher is ready for the next step when its output reaches hako-cmd start exited with 0.
-        - Do not edit config/launcher/fleets-scale-perf-nproc.generated.launch.json during execution; it is regenerated by the launch script.
+        - HAKO_CONFIG_PATH points to the Foundation Core config, and all native/Python paths point to work/foundation/install.
+        - To finish the Demo, press Ctrl+C in this launcher terminal. The launcher terminates all child assets; do not use hako-cmd stop as the launcher shutdown operation.
       evidence:
-        - repository: toppers/hakoniwa-drone-core
-          path: tools/launch-fleets-scale-perf.bash
-          revision: local-research-2026-07-20
-    - order: 7
+        - repository: hakoniwalab/hakoniwa-business-pack
+          path: tools/drone_threejs.py
+          revision: issue-56-foundation-mvp
+    - order: 8
       component: hakoniwa-threejs-drone
       action: Open the fleets viewer and ask the user to press Connect.
       command: >
@@ -451,13 +468,10 @@ demo:
         - repository: hakoniwalab/hakoniwa-threejs-drone
           path: README.md
           revision: local-research-2026-07-20
-    - order: 8
+    - order: 9
       component: hakoniwa-pdu-python
       action: Run a Python external_rpc command sequence for one drone.
-      command: >
-        PATH=/path/to/python3.12/bin:$PATH bash drone_api/external_rpc/apps/run_single_mission.bash
-        --drone Drone-1 --alt 1.0 --x 1.5 --y 0.5 --z 1.0 --yaw 30
-        --speed 1.0 --timeout-sec 20 --land
+      command: work/recipes/drone-single-mujoco-threejs-mac/missions/run-single-mission.bash
       notes:
         - Run this only after the launcher is still alive and the user has confirmed Three.js Connect.
         - The mission response validates Python/API control; this Recipe also records user-visible browser motion as validation evidence.
@@ -480,6 +494,7 @@ demo:
       - Port 8000 or 8765 is already in use.
       - The launcher exits before hako-cmd start completes.
       - The external_rpc mission is run before the browser viewer has connected, leaving no browser-side visual evidence.
+      - hako-cmd stop blocks while the foreground launcher remains responsible for child-process lifecycle; use Ctrl+C in the launcher terminal.
     fixtures:
       - One generated fleet drone with a matching service config and PDU definition.
       - Browser with WebGL support.
@@ -525,18 +540,10 @@ source_catalogs:
     catalog_path: ../catalog/components/hakoniwa-threejs-drone.yaml
 
 source_artifacts:
-  - repository: toppers/hakoniwa-drone-core
-    path: tools/fetch_libs.sh
-    revision: local-research-2026-07-20
-    description: Downloads OS-specific Hakoniwa Drone release binaries into ./lib.
-  - repository: toppers/hakoniwa-drone-core
-    path: tools/install-mujoco-mac.bash
-    revision: local-research-2026-07-20
-    description: Installs MuJoCo under vendor/mujoco on macOS.
-  - repository: toppers/hakoniwa-drone-core
-    path: tools/link-mujoco-mac.bash
-    revision: local-research-2026-07-20
-    description: Patches Mac release binaries to find MuJoCo dylib through rpath.
+  - repository: hakoniwalab/hakoniwa-business-pack
+    path: recipes/examples/hakoniwa-drone-core-mujoco-mac-setup.yaml
+    revision: issue-56-foundation-mvp
+    description: Owns the macOS Drone binary acquisition, repository-local MuJoCo installation, link adjustment, and otool verification.
   - repository: toppers/hakoniwa-drone-core
     path: tools/launch-fleets-scale-perf.bash
     revision: local-research-2026-07-20
@@ -549,10 +556,6 @@ source_artifacts:
     path: README.md
     revision: local-research-2026-07-20
     description: Documents fleets viewer URL and WebSocket/PDU configuration.
-  - repository: external/qiita
-    path: https://qiita.com/kanetugu2018/items/e463e12a7ae3439cbd66
-    revision: 2026-07-05
-    description: Mac setup reference for Hakoniwa Drone binaries, MuJoCo install, and binary link flow.
   - repository: external/qiita
     path: https://qiita.com/kanetugu2018/items/947a4c6eda5d8f3c482c
     revision: 2026-04-23

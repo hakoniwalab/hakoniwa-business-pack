@@ -19,6 +19,7 @@ in order:
 7. relevant `catalog/components/*.yaml`
 8. `recipes/README.md`
 9. relevant `recipes/examples/*.yaml`
+10. `foundation/README.md` for Foundation-aware local execution
 
 The documents have different responsibilities:
 
@@ -65,17 +66,18 @@ verifies another version. `hakopy` comes from `hakoniwa-core-pro`; `hakoniwa-pdu
 comes from `pip install hakoniwa-pdu`. Verify both in the same Python 3.12
 environment before running SHM/PDU demos.
 
-Before executing a local Hakoniwa Recipe, run the common preflight:
+Foundation-aware Recipes use the reusable Business Pack-local install:
 
 ```bash
-bash tools/doctor.bash
+python3.12 tools/foundation.py doctor --recipe <recipe.yaml>
+python3.12 tools/foundation.py plan --recipe <recipe.yaml>
+python3.12 tools/foundation.py build --recipe <recipe.yaml>
 ```
 
-This checks the shared assumptions used by many Recipes: Hakoniwa core install,
-`hako-cmd`, Python 3.12, `hakopy`, `hakoniwa_pdu`, and the Python launcher.
-The common doctor dispatches to an OS-specific script such as
-`tools/doctor-mac.bash`. `tools/docker-mac.bash` is kept as a compatibility
-alias for the Mac preflight name discussed during early trials.
+See [`foundation/README.md`](foundation/README.md) for the Receipt-based reuse
+contract and [`docs/hakoniwa-foundation-recipe-design-ja.md`](docs/hakoniwa-foundation-recipe-design-ja.md)
+for the design. `bash tools/doctor.bash` remains the legacy common preflight for
+Recipes that still explicitly use a system-installed Hakoniwa environment.
 
 ## 箱庭で、何をしたいですか？
 
@@ -323,6 +325,17 @@ Catalog は部品表、Recipe は構成書です。
 
 PDU や Registry、Endpoint、Bridge、RPC、Core / Conductor の概念的な位置付けは、
 Runtime Primer ではなく Base Ecosystem Guide を参照してください。
+
+### Foundation / Recipe Design
+
+[`docs/hakoniwa-foundation-recipe-design-ja.md`](docs/hakoniwa-foundation-recipe-design-ja.md) は、
+複数のRecipeから再利用するローカルFoundationと、個別Recipeが宣言する
+Foundation要求・固有configure設定の責務分離を定義します。
+
+FoundationはBusiness Pack配下へクロスプラットフォームにインストールし、
+Core共通設定とmmapを含めて複数Recipeから共有します。インストール済み
+バイナリのbuild情報とRecipe要求を比較して、再利用または必要範囲だけの
+再構築を判断する設計です。
 
 ### Demo Recording Runbook
 

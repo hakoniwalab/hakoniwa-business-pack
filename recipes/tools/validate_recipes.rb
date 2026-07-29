@@ -4,6 +4,7 @@
 require "set"
 require "yaml"
 require "date"
+require_relative "../../foundation/tools/validation"
 
 def load_yaml_file(path)
   YAML.load_file(path, permitted_classes: [Date])
@@ -127,6 +128,14 @@ recipe_paths.each do |path|
   unless missing_catalog_sources.empty?
     warnings << "#{label}: components missing from source_catalogs: #{missing_catalog_sources.join(', ')}"
   end
+
+  errors.concat(
+    FoundationValidation.validate_requirements(
+      data["foundation_requirements"],
+      label: label,
+      catalog_ids: catalog_ids
+    )
+  )
 end
 
 warnings.each { |message| warn "warning: #{message}" }

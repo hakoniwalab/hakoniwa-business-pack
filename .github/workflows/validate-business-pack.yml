@@ -15,6 +15,10 @@ jobs:
         with:
           ruby-version: '3.2'
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Validate catalog
         run: ruby catalog/tools/validate_catalog.rb
 
@@ -25,6 +29,12 @@ jobs:
 
       - name: Validate recipes
         run: ruby recipes/tools/validate_recipes.rb
+
+      - name: Test Foundation schemas
+        run: ruby foundation/tools/test_validation.rb
+
+      - name: Test Foundation inspector and Recipe configurator
+        run: python -m unittest tools/test_foundation.py tools/test_drone_threejs.py -v
 
       - name: Validate usecases
         run: ruby usecases/tools/validate_usecases.rb

@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "components": {
+    "hakoniwa-core-pro": {
+      "source": "../hakoniwa-core-pro",
+      "dependencies": [],
+      "operations": ["doctor", "build", "install"]
+    },
+    "hakoniwa-pdu-endpoint": {
+      "source": "../hakoniwa-pdu-endpoint",
+      "dependencies": ["hakoniwa-core-pro"],
+      "operations": ["doctor", "configure", "build", "install"]
+    },
+    "hakoniwa-pdu-rpc": {
+      "source": "../hakoniwa-pdu-rpc",
+      "dependencies": ["hakoniwa-pdu-endpoint"],
+      "operations": ["doctor", "configure", "build", "install"]
+    },
+    "hakoniwa-pdu-bridge-core": {
+      "source": "../hakoniwa-pdu-bridge-core",
+      "dependencies": [
+        "hakoniwa-core-pro",
+        "hakoniwa-pdu-endpoint"
+      ],
+      "operations": ["doctor", "configure", "build", "install"]
+    },
+    "hakoniwa-pdu-python": {
+      "source": "../hakoniwa-pdu-python",
+      "dependencies": ["hakoniwa-core-pro"],
+      "operations": ["doctor", "configure", "build", "install", "smoke"]
+    }
+  }
+}

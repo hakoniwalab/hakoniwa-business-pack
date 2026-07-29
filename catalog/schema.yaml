@@ -181,7 +181,7 @@ authoring_rules:
   - Keep `hako_cli` optional. Absence means standard CLI support is unknown or unavailable, not that the component failed.
   - The common hako.py operation vocabulary is doctor, configure, build, test, install, and smoke; repositories may implement any supported subset.
   - Declare only operations actually owned by the component repository; the existence of tools/hako.py does not imply every standard operation.
-  - For contract v1.1 manifest-driven repositories, use `hako_cli.common_options: [--config]` to declare the common configuration-selection surface; manifest schema remains component-owned.
+  - "For contract v1.1 manifest-driven repositories, use `hako_cli.common_options: [--config]` to declare the common configuration-selection surface; manifest schema remains component-owned."
   - Treat --dry-run, --build-dir, toolchain flags, dependency-root flags, and native pass-through as repository-owned options unless a future contract explicitly promotes them.
   - Keep stable smoke modes and operationally relevant options in `hako_cli`; do not mirror every implementation-specific CLI flag.
   - Repository-specific commands such as package-test, specialized test commands, generators, or run commands are extensions and do not acquire cross-repository semantics automatically.

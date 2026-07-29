@@ -98,7 +98,9 @@ Before producing executable steps, collect or state:
 - native, container, VM, or WSL execution mode;
 - required runtimes such as Godot, MuJoCo, Python, Node.js, Docker, or .NET;
 - Python 3.12 for Hakoniwa Python workflows unless the Recipe verifies another version;
-- Hakoniwa install prefix such as `/usr/local/hakoniwa`;
+- Hakoniwa install prefix; Foundation-aware Recipes use
+  `work/foundation/install`, while legacy Recipes may still state a system
+  prefix such as `/usr/local/hakoniwa`;
 - whether required components are already built;
 - commercial/private component availability;
 - required physical devices;
@@ -107,15 +109,18 @@ Before producing executable steps, collect or state:
 If missing information changes commands, feasibility, or Agency Boundary, ask the
 user before writing the runbook.
 
-For Recipes that use Hakoniwa shared memory, PDU, Python controllers, or the
-launcher, include the Business Pack common preflight:
+For Foundation-aware Recipes that use Hakoniwa shared memory, PDU, Python
+controllers, or the launcher, declare `foundation_requirements` and use:
 
 ```bash
-bash tools/doctor.bash
+python3.12 tools/foundation.py doctor --recipe <recipe.yaml>
 ```
 
-A passing doctor check supports the environment claim; it does not verify runtime
-behavior or remove an Agency Boundary gate.
+The Foundation doctor compares Recipe requirements with installed Component
+Receipts and never builds. Keep component build/install in the shared Foundation
+setup phase, and keep ports, processes, producers, browser state, and user gates
+in the Recipe runtime preflight. `bash tools/doctor.bash` remains available to
+Recipes that still explicitly use the legacy system install.
 
 ## Feasibility, Validation, And Connection Contracts
 
@@ -139,6 +144,24 @@ Each important `connections[]` entry should therefore include a `contract` with:
 - `status`
 - `requires`
 - `validation_notes`
+
+## Prerequisite Recipes
+
+Component-specific, platform-specific setup that is reusable across multiple
+Demos belongs in its own Recipe. A consuming Recipe should reference that base
+Recipe through:
+
+- a `depends-on-<recipe-id>` constraint;
+- a validation step whose evidence points to the prerequisite Recipe;
+- a Demo prerequisite step that checks the prepared Artifacts without repeating
+  the setup commands.
+
+For example,
+[`hakoniwa-drone-core-mujoco-mac-setup.yaml`](examples/hakoniwa-drone-core-mujoco-mac-setup.yaml)
+owns macOS Drone binary acquisition, repository-local MuJoCo installation,
+Mach-O link adjustment, and `otool` verification. The Drone Three.js Recipe
+owns only its Foundation requirements, runtime configuration, launch, mission,
+and visual validation.
 
 ## Agency Boundary
 

@@ -1,0 +1,71 @@
+schema_version: 1
+description: Minimal Foundation requirements and Component Receipt contract for Issue #56.
+
+foundation_requirements:
+  type: mapping
+  component_key: catalog_component_id
+  allowed_component_fields:
+    - capabilities
+    - build_limits
+  capabilities:
+    type: mapping
+    key_format: snake_case
+    required_value: true
+  build_limits:
+    type: mapping
+    key_format: snake_case
+    value:
+      required_fields:
+        - min
+      min:
+        type: positive_integer
+
+component_receipt:
+  required_fields:
+    - schema_version
+    - component
+    - platform
+    - install
+    - capabilities
+    - build_limits
+    - dependencies
+    - artifacts
+    - resolved_manifest
+  schema_version: 1
+  component:
+    required_fields:
+      - id
+      - version
+      - source_revision
+  platform:
+    required_fields:
+      - os
+      - architecture
+      - toolchain
+  install:
+    required_fields:
+      - prefix
+  capabilities:
+    type: mapping
+    key_format: snake_case
+    value_type: boolean
+  build_limits:
+    type: mapping
+    key_format: snake_case
+    value_type: positive_integer
+  dependencies:
+    type: mapping
+    component_key: catalog_component_id
+    allowed_fields:
+      - version
+      - source_revision
+      - build_limits
+  artifacts:
+    type: list
+    item:
+      required_fields:
+        - path
+        - kind
+      path: install_prefix_relative
+  resolved_manifest:
+    type: install_prefix_relative_path
