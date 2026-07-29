@@ -14,6 +14,66 @@ rescue ArgumentError
   YAML.load_file(path)
 end
 
+def non_empty_string?(value)
+  value.is_a?(String) && !value.empty?
+end
+
+def launcher_managed_recipe?(data)
+  demo = data["demo"] || {}
+  profiles = Array(demo["profiles"])
+  return true if profiles.any? { |profile| profile.is_a?(Hash) && non_empty_string?(profile["launcher"]) }
+
+  Array(demo["steps"]).any? do |step|
+    next false unless step.is_a?(Hash)
+
+    command = step["command"].to_s
+    command.include?("hako_launcher") || command.match?(%r{(^|/)launch\.bash(?:\s|$)})
+  end
+end
+
+def validate_cleanup(value, label:)
+  errors = []
+  unless value.is_a?(Hash) && !value.empty?
+    return ["#{label}: demo.cleanup must be a non-empty mapping"]
+  end
+
+  %w[expected_behavior verification_checks cautions].each do |field|
+    items = value[field]
+    unless items.is_a?(Array) && !items.empty? && items.all? { |item| non_empty_string?(item) }
+      errors << "#{label}: demo.cleanup.#{field} must be a non-empty string list"
+    end
+  end
+
+  if value.key?("owner") && !non_empty_string?(value["owner"])
+    errors << "#{label}: demo.cleanup.owner must be a non-empty string"
+  end
+  if value.key?("provider") && !non_empty_string?(value["provider"])
+    errors << "#{label}: demo.cleanup.provider must be a non-empty string"
+  end
+  if value.key?("mode") && !non_empty_string?(value["mode"])
+    errors << "#{label}: demo.cleanup.mode must be a non-empty string"
+  end
+  if value.key?("target") && !non_empty_string?(value["target"])
+    errors << "#{label}: demo.cleanup.target must be a non-empty string"
+  end
+  if value.key?("trigger") && !non_empty_string?(value["trigger"])
+    errors << "#{label}: demo.cleanup.trigger must be a non-empty string"
+  end
+
+  if value.key?("normal")
+    normal = value["normal"]
+    unless normal.is_a?(Hash)
+      errors << "#{label}: demo.cleanup.normal must be a mapping"
+    else
+      %w[interactive signal].each do |field|
+        errors << "#{label}: demo.cleanup.normal.#{field} must be a non-empty string" unless non_empty_string?(normal[field])
+      end
+    end
+  end
+
+  errors
+end
+
 ROOT = File.expand_path("../..", __dir__)
 CATALOG_DIR = File.join(ROOT, "catalog")
 RECIPE_DIRS = [File.join(ROOT, "recipes", "examples")]
@@ -127,6 +187,14 @@ recipe_paths.each do |path|
   missing_catalog_sources = recipe_component_ids.reject { |id| source_catalog_ids.include?(id) }
   unless missing_catalog_sources.empty?
     warnings << "#{label}: components missing from source_catalogs: #{missing_catalog_sources.join(', ')}"
+  end
+
+  demo = data["demo"] || {}
+  cleanup = demo["cleanup"]
+  if launcher_managed_recipe?(data) && cleanup.nil?
+    errors << "#{label}: long-running launcher Recipe must define demo.cleanup"
+  elsif !cleanup.nil?
+    errors.concat(validate_cleanup(cleanup, label: label))
   end
 
   errors.concat(
