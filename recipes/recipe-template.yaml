@@ -99,7 +99,9 @@ target_environment:
       version: unknown
       path: unknown
   hakoniwa:
-    install_prefix: /usr/local/hakoniwa
+    # Foundation-aware Recipes use the Business Pack-local prefix below.
+    # Legacy Recipes may explicitly retain a system prefix such as /usr/local/hakoniwa.
+    install_prefix: work/foundation/install
     components_built:
       - component-id
   notes:
@@ -126,10 +128,24 @@ execution_environment:
     environment: system | venv | conda | unknown
     hakopy_available: unknown
   hakoniwa:
-    install_prefix: /usr/local/hakoniwa
+    # Keep this aligned with target_environment for Foundation-aware Recipes.
+    install_prefix: work/foundation/install
     hako_cmd_access: unknown
   notes:
     - Runtime verification must state these assumptions.
+
+# Optional. Add this section when the Recipe uses the reusable local Foundation.
+# Declare only component capabilities or build limits that the Recipe actually needs.
+# Omit this section for Recipes that intentionally use a legacy/system-installed runtime.
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      shared_memory: true
+      hako_cmd: true
+  hakoniwa-pdu-endpoint:
+    capabilities:
+      hakoniwa_core: true
+      core_callback: true
 
 process_topology:
   required_for: multi-process-demo
