@@ -22,14 +22,25 @@ feasibility:
 
 validation:
   status: verified
-  verified_at: 2026-07-20
+  verified_at: 2026-07-29
   summary: >
     The Mac one-drone runtime was launched with Drone Core artifacts prepared
-    by the hakoniwa-drone-core-mujoco-mac-setup prerequisite Recipe. This
-    Recipe verified the Foundation-aware Python 3.12 external_rpc control,
-    DroneVisualStatePublisher, WebBridge, Three.js HTTP server, browser
-    connection, and visible Drone motion.
+    by the hakoniwa-drone-core-mujoco-mac-setup prerequisite Recipe. The first
+    Foundation run built and installed the required components, while the
+    second run resolved every requirement as SATISFIED with no build actions.
+    This Recipe then verified the Foundation-aware Python 3.12 external_rpc
+    control, DroneVisualStatePublisher, WebBridge, Three.js HTTP server,
+    browser connection, and visible Drone motion.
   steps:
+    - id: foundation_build_and_reuse
+      status: verified
+      evidence:
+        - source: local-foundation-e2e
+          date: 2026-07-29
+      notes:
+        - The first run built and installed the required Foundation components and produced their Receipts.
+        - The second run reported every Foundation requirement as SATISFIED and Actions as none.
+        - The same installed Foundation was reused for Recipe configuration, launch, browser connection, and mission execution.
     - id: drone_core_mac_setup_prerequisite
       status: verified
       evidence:
