@@ -1,6 +1,6 @@
 id: drone-single-mujoco-threejs-mac
 title: Single Hakoniwa Drone MuJoCo Three.js Demo on macOS
-recipe_version: 0.2
+recipe_version: 0.3
 
 goal:
   user_request: Macで箱庭ドローンを1台飛ばし、Python APIで動かしてThree.jsで可視化したい
@@ -520,7 +520,7 @@ demo:
       - hako_launcher starts drone-service before hako-cmd start.
       - visual-state-publisher and WebBridge start before or with simulation lifecycle.
       - hako-cmd start succeeds.
-      - Long-running processes are stopped by launcher cleanup or explicit hako-cmd stop.
+      - Launcher-managed processes are stopped through the Launcher cleanup path; hako-cmd stop is not OS-process cleanup.
     behavior:
       - Drone position z increases after takeoff.
       - Drone position x or y changes after goto.
@@ -530,6 +530,26 @@ demo:
       - Python external_rpc prints ok responses for set_ready, takeoff, goto, and land.
       - WebBridge logs show ws=ws://127.0.0.1:8765 or equivalent startup.
       - Browser console reports fleets visual-state channels.
+  cleanup:
+    owner: hakoniwa-launcher
+    provider: hakoniwa-pdu-python
+    mode: immediate
+    target: launcher-main-process
+    normal:
+      interactive: Ctrl+C
+      signal: SIGINT
+    expected_behavior:
+      - Launcher invokes its normal terminate path and reports state -> TERMINATED.
+      - Launcher terminates only the assets it manages, including the Drone service, visual-state publisher, WebBridge, and Three.js HTTP server.
+    verification_checks:
+      - Confirm no Launcher-managed asset process remains.
+      - Confirm no process is listening on TCP port 8000.
+      - Confirm no process is listening on TCP port 8765.
+    cautions:
+      - Do not substitute kill <PID>, whose default POSIX signal is SIGTERM, for Ctrl+C/SIGINT.
+      - Do not use hako-cmd stop as the Launcher shutdown operation; it controls simulation lifecycle, not OS-process ownership.
+      - Do not broadly terminate an unrelated process group, Python processes, or browser processes.
+      - Use POSIX kill -INT <launcher-pid> only when the Launcher main PID is known and the interactive terminal is unavailable.
 
 expected_result: >
   On macOS arm64, one Hakoniwa Drone is controlled by a Python 3.12 script and

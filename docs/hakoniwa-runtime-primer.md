@@ -1,5 +1,7 @@
 # Hakoniwa Runtime Primer
 
+[日本語](hakoniwa-runtime-primer-ja.md)
+
 This document explains the runtime assumptions that an AI or human must
 understand before writing Hakoniwa Recipes.
 
@@ -461,6 +463,66 @@ a command needs to change, find the source script, environment variable, or
 Recipe parameter that controls generation, and record the change as a new
 issue or Recipe update before treating it as a fix.
 
+### Launcher termination and cleanup contract
+
+`hako-cmd stop` and Launcher termination are different operations. `hako-cmd
+stop` changes Hakoniwa simulation lifecycle state; it does not mean that the
+Launcher-owned OS processes have been terminated.
+
+For the current `hakoniwa-pdu` Launcher, interactive `Ctrl+C` sends `SIGINT` to
+the Launcher main process. The Launcher installs a `SIGINT` handler that calls
+its normal termination path, which invokes `LauncherService.terminate()` and
+`monitor.abort()` to stop the assets owned by that Launcher.
+
+On POSIX, Launcher-managed assets are started in their own process
+sessions/groups. Therefore, killing the Launcher's process group is not a safe
+replacement for the Launcher's own termination path.
+
+Use this normal shutdown order:
+
+```text
+interactive launcher terminal available
+  -> send Ctrl+C to that terminal/session
+
+only the launcher main PID is available on POSIX
+  -> send SIGINT to that launcher PID
+     kill -INT <launcher-pid>
+
+after launcher termination
+  -> confirm launcher reports state -> TERMINATED
+  -> confirm managed asset processes are gone
+  -> confirm Recipe-owned ports/listeners are released
+  -> inspect logs for incomplete cleanup
+```
+
+Do not substitute these as the normal cleanup path:
+
+```bash
+kill <launcher-pid>       # default POSIX signal is SIGTERM, not Ctrl+C/SIGINT
+kill -- -<PGID>           # may target the wrong process group and is too broad
+kill -9 <launcher-pid>    # bypasses the Launcher's cleanup handler
+```
+
+Treat `SIGTERM`, process-group termination, and `SIGKILL` as escalation paths,
+not as equivalent forms of `Ctrl+C`. Before escalation, verify process ownership
+and avoid broad cleanup that can terminate unrelated Python, browser, or other
+Recipe processes.
+
+Do not generalize the POSIX `kill -INT` example to Windows. Use the
+console/Launcher termination mechanism documented for the provider and target
+environment. The cross-platform contract is: invoke the Launcher's supported
+normal termination path, then verify that its owned assets and ports are gone.
+
+A Launcher-based executable Recipe should record a structured `demo.cleanup`
+contract. At minimum it should identify:
+
+- Launcher owner/provider and mode when known;
+- cleanup target;
+- normal interactive action and signal;
+- expected behavior;
+- post-exit process/port/log verification;
+- cautions and fallback boundaries.
+
 When writing a Recipe, record:
 
 - launcher file path;
@@ -531,6 +593,8 @@ Avoid these mistakes:
 - starting a controller before simulation time exists;
 - starting multiple Conductor owners in one composed demo;
 - treating `hako-cmd stop` as process cleanup;
+- replacing `Ctrl+C`/`SIGINT` with default `kill <PID>` when the Recipe depends on the Launcher SIGINT cleanup path;
+- broadly killing a launcher process group or unrelated Python/browser processes;
 - leaving bridge, viewer, HTTP server, or simulator processes running;
 - inventing component IDs that do not exist in the catalog;
 - calling a browser viewer a simulator;

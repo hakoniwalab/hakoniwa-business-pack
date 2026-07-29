@@ -376,6 +376,52 @@ after_start assets
 
 Launcherによっては、中間成果物として具体的なlaunch fileを生成するものがあります。Recipeで明示的にcustomize pointとして定義されていない限り、デモ実行中に生成済みlaunch fileを直接編集しないでください。再生成によって編集内容が失われる可能性があります。commandを変更する必要がある場合は、生成元のscript、環境変数、またはRecipe parameterを確認し、それを修正として扱う前に、新しいissueまたはRecipe更新として記録してください。
 
+### Launcherの停止・cleanup契約
+
+`hako-cmd stop` とLauncherの終了は別の操作です。`hako-cmd stop` は箱庭のシミュレーションライフサイクル状態を変更しますが、Launcherが所有するOSプロセスを終了したことにはなりません。
+
+現在の `hakoniwa-pdu` Launcherでは、対話terminalでの `Ctrl+C` はLauncher main processへ `SIGINT` を送ります。Launcherは `SIGINT` handlerを登録しており、正規の終了経路として `LauncherService.terminate()` から `monitor.abort()` を呼び、Launcherが管理するアセットを停止します。
+
+POSIXでは、Launcher管理アセットはそれぞれ独立したprocess session/groupとして起動されます。そのため、Launcher自身のprocess groupをまとめて終了することは、Launcherの正規終了処理の代替にはなりません。
+
+正常終了は次の順序で扱ってください。
+
+```text
+対話Launcher terminalを保持している
+  -> 同じterminal/sessionへCtrl+Cを送る
+
+Launcher main PIDだけを保持している（POSIX）
+  -> Launcher PIDへSIGINTを送る
+     kill -INT <launcher-pid>
+
+Launcher終了後
+  -> state -> TERMINATEDを確認する
+  -> Launcher管理Assetが残っていないことを確認する
+  -> Recipe所有port/listenerが解放されたことを確認する
+  -> cleanup不完全を示すlogがないか確認する
+```
+
+次を正常停止の代替として扱わないでください。
+
+```bash
+kill <launcher-pid>       # POSIXの既定signalはSIGTERMで、Ctrl+C/SIGINTではない
+kill -- -<PGID>           # targetが広く、Launcher管理Assetのsession構造とも一致しない可能性がある
+kill -9 <launcher-pid>    # Launcherのcleanup handlerを実行できない
+```
+
+`SIGTERM`、process-group termination、`SIGKILL` は、`Ctrl+C` と等価な正常系ではなく、必要な場合のエスカレーションとして扱ってください。エスカレーション前にprocess ownershipを確認し、無関係なPython、browser、別Recipeのprocessを広く終了しないでください。
+
+POSIXの `kill -INT` 例をWindowsへ一般化しないでください。Windowsでは、対象Launcher/providerが保証するconsole操作または終了方法を使用します。クロスプラットフォームな契約は、「Launcherが保証する正規終了経路を呼び、その後に所有Assetとportの消滅を確認する」です。
+
+Launcherを使う実行可能Recipeでは、`demo.cleanup` として少なくとも次を構造化してください。
+
+- Launcher owner/providerと、分かる場合はmode。
+- cleanup target。
+- 正常系の対話操作とsignal。
+- expected behavior。
+- process / port / logの終了後verification。
+- cautionsとfallbackの境界。
+
 Recipeを書く際には、次の内容を記録してください。
 
 - Launcher file path。
@@ -440,6 +486,8 @@ Launcherが存在しない、あるいはRecipeが意図的にmanual runbookを�
 - シミュレーション時刻が存在する前にcontrollerを起動する。
 - 1つの構成済みデモで複数のConductor ownerを起動する。
 - `hako-cmd stop` をプロセスcleanupと同一視する。
+- RecipeがLauncherのSIGINT cleanupに依存しているのに、`Ctrl+C` / `SIGINT` を既定の `kill <PID>` に置き換える。
+- Launcher process groupや無関係なPython/browser processを広く終了する。
 - Bridge、viewer、HTTP server、simulatorのプロセスを起動したまま残す。
 - Catalogに存在しないcomponent IDを捏造する。
 - browser viewerをsimulatorと呼ぶ。
