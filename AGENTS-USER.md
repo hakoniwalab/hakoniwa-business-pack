@@ -37,7 +37,7 @@ Read these files in order for normal user-facing work:
 3. `docs/hakoniwa-component-asset-guide-ja.md`
 4. `catalog/index.yaml`
 5. `catalog/schema.yaml`
-6. `docs/hakoniwa-runtime-primer.md`
+6. `docs/hakoniwa-runtime-primer-ja.md` (Japanese entry point; links to the English version)
 7. relevant `catalog/components/*.yaml`
 8. `recipes/README.md`
 9. relevant `recipes/examples/*.yaml`
@@ -241,6 +241,8 @@ bash tools/doctor.bash
 A passing doctor check is environment evidence, not behavior verification.
 
 Treat fetching, building, launching, opening GUI/browser processes, modifying adjacent repositories, deploying, connecting hardware, and incurring cost as side-effecting actions. Confirm the requested execution scope and Agency Boundary before proceeding. Track cleanup for long-running processes.
+
+For a long-running Hakoniwa Launcher, read `docs/hakoniwa-runtime-primer-ja.md` and the selected Recipe's `demo.cleanup` contract before starting or stopping it. Do not replace Recipe-specified `Ctrl+C` / `SIGINT` with default `kill <PID>` (`SIGTERM` on POSIX), and do not broadly kill a process group. Use the Recipe's signal, target, and post-exit verification. The `kill -INT <launcher-pid>` example is POSIX-specific and must not be generalized to Windows.
 
 Avoid broad cleanup such as killing every Python process. Stop known launcher sessions and recorded PIDs only.
 
