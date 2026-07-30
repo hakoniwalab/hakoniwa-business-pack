@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -38,21 +39,21 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
 
     def _generate(self, root: Path):
         paths = self._paths(root)
-        drone_root = (root / "hakoniwa-drone-core").resolve()
-        viewer_root = (root / "hakoniwa-threejs-drone").resolve()
+        drone_root = (root / "hakoniwa-drone-core").absolute()
+        viewer_root = (root / "hakoniwa-threejs-drone").absolute()
         runtime = recipe.RuntimePaths(
             system_name="Darwin",
-            drone_service=(drone_root / "lib" / "mac-main_hako_drone_service").resolve(),
+            drone_service=(drone_root / "lib" / "mac-main_hako_drone_service").absolute(),
             visual_state_publisher=(
                 drone_root / "lib" / "mac-drone_visual_state_publisher"
-            ).resolve(),
+            ).absolute(),
             foundation_python=(
                 paths.install_prefix / "python" / "bin" / "python"
-            ).resolve(),
-            hako_cmd=(paths.install_prefix / "bin" / "hako-cmd").resolve(),
+            ).absolute(),
+            hako_cmd=(paths.install_prefix / "bin" / "hako-cmd").absolute(),
             web_bridge=(
                 paths.install_prefix / "bin" / "hakoniwa-pdu-web-bridge"
-            ).resolve(),
+            ).absolute(),
         )
         launcher = recipe.write_launcher(paths, drone_root, viewer_root, runtime)
         return paths, drone_root, viewer_root, runtime, launcher
@@ -76,7 +77,10 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
             )
             self.assertIn("--mujoco-viewer", assets["drone-service-1"]["args"])
             self.assertEqual(
-                assets["remote-controller"]["command"],
+                assets["remote-controller"]["command"], str(runtime.foundation_python)
+            )
+            self.assertEqual(
+                assets["threejs-viewer-webserver"]["command"],
                 str(runtime.foundation_python),
             )
             self.assertEqual(
@@ -91,7 +95,7 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
             self.assertIn(str(paths.install_prefix), json.dumps(data))
             self.assertNotIn("/usr/local", json.dumps(data))
 
-    def test_operator_commands_use_python_entry_points(self) -> None:
+    def test_operator_commands_use_foundation_python_entry_points(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             paths, _drone_root, _viewer_root, runtime, launcher = self._generate(root)
@@ -107,15 +111,35 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
                 runtime.foundation_python, "terminate", session
             )
 
-            self.assertEqual(start[0], str(runtime.foundation_python))
-            self.assertIn("hakoniwa_pdu.apps.launcher.hako_launcher", start)
-            self.assertIn("--background", start)
-            self.assertIn("hakoniwa_pdu.apps.launcher.hako_launcher_ctl", status)
-            self.assertEqual(status[-2], "status")
-            self.assertEqual(stop[-2], "terminate")
             for command in (start, status, stop):
+                self.assertEqual(command[0], str(runtime.foundation_python))
                 self.assertNotIn("bash", command)
                 self.assertNotIn("pwsh", command)
+            self.assertIn("hakoniwa_pdu.apps.launcher.hako_launcher", start)
+            self.assertIn("--background", start)
+            self.assertEqual(status[-2], "status")
+            self.assertEqual(stop[-2], "terminate")
+
+    def test_user_cli_has_no_arbitrary_python_override(self) -> None:
+        self.assertNotIn("--python-bin", recipe.parser().format_help())
+
+    def test_foundation_python_symlink_is_not_resolved_to_system_python(self) -> None:
+        if os.name == "nt":
+            self.skipTest("POSIX venv symlink behavior")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            venv_root = root / "work" / "foundation" / "install" / "python"
+            (venv_root / "bin").mkdir(parents=True)
+            system_python = root / "system-python"
+            system_python.write_text("", encoding="utf-8")
+            venv_python = venv_root / "bin" / "python"
+            venv_python.symlink_to(system_python)
+            paths = SimpleNamespace(foundation_python=venv_root)
+
+            selected = recipe.resolve_foundation_python(paths)
+
+            self.assertEqual(selected, venv_python)
+            self.assertNotEqual(selected, system_python)
 
     def test_reset_keeps_platform_shells_out_of_user_contract(self) -> None:
         commands = recipe.reset_commands(Path("/foundation/bin/hako-cmd"))
@@ -135,6 +159,7 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
         self.assertIn("--mujoco-viewer", content)
         self.assertIn("mode: background", content)
         self.assertIn("hako_launcher_ctl terminate", content)
+        self.assertIn("environment: foundation-venv", content)
         self.assertIn("human_actions:", content)
         self.assertIn("operate_gamepad", content)
 
