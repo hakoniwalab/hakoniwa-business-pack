@@ -112,7 +112,7 @@ validation:
       while genuinely invalid states still remain distinguishable as errors.
   notes:
     - The original diagnosis is verified by source reading plus repeated Windows runs.
-      Upstream #80 is implemented and tested, but `resolution.verified` remains false until
+      Upstream issue 80 is implemented and tested, but `resolution.verified` remains false until
       the contributor repeats the original runtime scenario against the fixed Core.
 
 tracking:
@@ -151,7 +151,7 @@ resolution:
   promoted_to: []
   executable_guardrails: []
   notes:
-    - Core #80 reads the state once, reports Stopping/Resetting as expected transition
+    - Core issue 80 reads the state once, reports Stopping/Resetting as expected transition
       retries, preserves error diagnostics for invalid states, and adds focused tests.
     - The workspace-side regex tolerance remains historical evidence only; the upstream
       implementation is the actual fix.
