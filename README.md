@@ -2,6 +2,15 @@
 
 > **A catalog and recipe hub for composing Hakoniwa components with AI to turn user ideas into working demos and products.**
 
+## 箱庭ビジネスパックの全体像
+
+[![要求から検証、知見還流までの箱庭ビジネスパック全体像](docs/assets/hakoniwa-business-pack-overview-ja.png)](docs/assets/hakoniwa-business-pack-overview-ja.png)
+
+箱庭ビジネスパックは、ユーザーの要求を技術カタログと実行可能なレシピへ落とし込み、
+箱庭上で異なる技術を構成・実行・検証するための知識基盤です。
+実行と評価から得られた知見を Catalog、Recipe、Use Case へ継続的に還流し、
+接続の選択肢と実現できる価値を育てていきます。
+
 ## AI Bootstrap Prompt
 
 If you are an AI agent, do not summarize this repository after reading only this
