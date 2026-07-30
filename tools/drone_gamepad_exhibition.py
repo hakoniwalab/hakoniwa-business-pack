@@ -320,7 +320,7 @@ def write_launcher(paths, drone_root: Path, viewer_root: Path, runtime: RuntimeP
 
 
 def session_file(paths) -> Path:
-    return paths.recipe_root / "session" / "launcher-session.json"
+    return paths.recipe_root / "runtime" / "launcher-session.json"
 
 
 def launcher_start_command(python: Path, launcher: Path, session: Path) -> list[str]:
@@ -381,7 +381,7 @@ def _run(command: list[str], env: dict[str, str] | None = None) -> int:
 def configure(drone_root: Path, viewer_root: Path, overrides: dict[str, Path | None]) -> int:
     foundation, paths, runtime = preflight(drone_root, viewer_root, overrides)
     foundation.prepare_workspace(paths)
-    (paths.recipe_root / "session").mkdir(parents=True, exist_ok=True)
+    (paths.recipe_root / "runtime").mkdir(parents=True, exist_ok=True)
     copy_recipe_config(drone_root, paths.recipe_config)
     launcher = write_launcher(paths, drone_root, viewer_root, runtime)
     print(f"Recipe workspace : {paths.recipe_root}")
