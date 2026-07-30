@@ -18,6 +18,13 @@ summary: >
   HakoSim_Stopped == 0. The condition is transient and self-healing (the next loop
   iteration succeeds), but any log scanner that treats "Error:" lines as fatal will fail
   intermittently -- measured at roughly 50% of runs.
+  Important qualifier, added after a second measurement pass: the same message ALSO
+  appears with state(4) = HakoSim_Resetting, and that variant is not the race at all. It
+  is an ordinary, correct rejection while `hako-cmd reset` is in progress. So the message
+  is emitted for two different reasons, only one of which is a defect, and the printed
+  state value is the only way to tell them apart. That makes the double read worse than a
+  cosmetic issue: it destroys the one signal a reader could use to distinguish "the core
+  reported a stale state" from "the asset legitimately called start too early".
 
 observation:
   context: >
@@ -26,8 +33,18 @@ observation:
     2026-07-30, at hakoniwa-core-pro revision 9727e1d, immediately after rebuilding and
     reinstalling Core through `python tools/hako.py doctor|build|install`.
   details:
+    - "Both observed state values, and what separates them. HakoSimulationStateType in
+      hakoniwa-core-cpp/src/include/types/hako_types.hpp is 0 Stopped, 1 Runnable,
+      2 Running, 3 Stopping, 4 Resetting, 5 Error, 6 Terminated. state(4) = Resetting was
+      measured in a later run set and is NOT the race: `hako-cmd reset` is in progress,
+      the spin loop calls start, and the rejection is correct. state(0) = Stopped IS the
+      race, because 0 is precisely the value the check demanded. A harness that pins its
+      tolerance to state(0) alone therefore goes red on the Resetting runs, and one that
+      tolerates any state hides Error(5) and Terminated(6). This was not theory: pinning
+      to state(0) was tried in this workspace and immediately reproduced FAIL on the
+      state(4) runs."
     - "Measured flakiness: runs 1 and 4 failed, runs 2 and 3 passed. Every failure was
-      caused by the single stderr line 'Error: simulation state(0) is invalid, expeting
+      caused by the single stderr line 'Error: simulation state(N) is invalid, expeting
       HakoSim_Stopeed.' emitted by the asset process. Positive evidence of correct
       operation (the on_simulation_step callback log) was present in ALL four runs,
       including the failing ones, and the asset process never crashed or exited
@@ -39,10 +56,11 @@ observation:
       ...; return EINVAL; }`. The same double-read pattern appears again at lines 262-264
       inside hako_trigger_event(). src/include/types/hako_types.hpp defines
       HakoSim_Stopped = 0."
-    - "The printed value is the proof, not a guess: the message reports state(0) while
-      demanding HakoSim_Stopped, and HakoSim_Stopped IS 0. A genuinely wrong state would
-      print a non-zero value. The only way to print 0 here is for the state to have
-      changed between the deciding read and the reporting read."
+    - "For the state(0) variant the printed value is the proof, not a guess: the message
+      reports state(0) while demanding HakoSim_Stopped, and HakoSim_Stopped IS 0. The only
+      way to print 0 here is for the state to have changed between the deciding read and
+      the reporting read. This argument applies ONLY to state(0); a non-zero value such as
+      the measured state(4) is a truthful report of a state that really was not Stopped."
     - "Why it surfaces at teardown specifically: examples/hello_world/src/hello_world.c
       calls hako_asset_start() inside `while (1)` and prints its return value. After
       `hako-cmd stop`, hako_asset_start_no_wait returns EINTR ('INFO: stopped simulation')
@@ -128,8 +146,16 @@ resolution:
   notes:
     - Diagnosis only; no upstream issue filed (issue filing for implementation work is
       owned by upstream maintainers per the agreed role split).
-    - The workspace-side change made in this session (tolerating this exact line, by
-      regex, in the smoke test's log scanner, with the mechanism documented at the call
-      site) is a false-positive suppression, not a fix. Positive pass evidence -- the
-      on_simulation_step callback log plus a clean process outcome -- was deliberately
-      left required.
+    - The workspace-side change made in this session (tolerating this line, by two
+      anchored regexes pinned to state(0) and state(4), in the smoke test's log scanner,
+      with the mechanism documented at the call site) is a false-positive suppression,
+      not a fix. Positive pass evidence -- the on_simulation_step callback log plus a
+      clean process outcome -- was deliberately left required, and states 1, 2, 3, 5
+      (Error) and 6 (Terminated) remain fatal.
+    - Sequencing note for anyone reproducing this. The first workspace pass tolerated any
+      state value; an adversarial review correctly objected that this hides genuinely bad
+      states, so the pattern was pinned to state(0) -- and the very next measurement pass
+      went red on state(4) = Resetting, which is how the second, benign cause of the same
+      message was found. The lesson is that the message alone does not identify its own
+      cause, which is the strongest practical argument for fixing the double read
+      upstream.

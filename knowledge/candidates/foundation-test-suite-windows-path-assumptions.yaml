@@ -1,5 +1,5 @@
 id: foundation-test-suite-windows-path-assumptions
-title: The Local Foundation implementation works on Windows, but its own test suite assumes POSIX paths and fails 10 of 24 tests there
+title: The Local Foundation paths and doctor surfaces work on Windows, but its own test suite assumes POSIX paths and fails 10 of 24 tests there
 status: candidate
 
 knowledge_type:
@@ -7,8 +7,13 @@ knowledge_type:
   - validation_rule
 
 summary: >
-  The Local Foundation layer added in hakoniwa-business-pack PR #57 (foundation/,
-  tools/foundation.py, tools/drone_threejs.py) runs correctly on native Windows: `paths`
+  Scope first, because the headline is easy to over-read: only the `paths` and `doctor`
+  subcommands were exercised on Windows. `prepare`, `plan` and `build` were not run, so
+  this candidate is NOT a Windows acceptance statement for the Foundation layer as a
+  whole -- nothing here covers the shared Foundation venv, the primer's
+  same-interpreter ABI rule, or component build orchestration.
+  Within that scope, the Local Foundation layer added in hakoniwa-business-pack PR #57
+  (foundation/, tools/foundation.py, tools/drone_threejs.py) runs correctly: `paths`
   resolves Windows paths, and `doctor` evaluated against a real Component Receipt written
   by hakoniwa-core-pro's `tools/hako.py install` reports SATISFIED for a satisfied
   requirement and INCOMPATIBLE with a correct reason and exit code 1 for an unsatisfiable
