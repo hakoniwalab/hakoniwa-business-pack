@@ -1,5 +1,5 @@
 id: foundation-test-suite-windows-path-assumptions
-title: The Local Foundation paths and doctor surfaces work on Windows, but its own test suite assumes POSIX paths and fails 10 of 24 tests there
+title: The Local Foundation paths and doctor surfaces work on Windows, but Foundation tests contain POSIX path assumptions
 status: candidate
 
 knowledge_type:
@@ -17,14 +17,15 @@ summary: >
   resolves Windows paths, and `doctor` evaluated against a real Component Receipt written
   by hakoniwa-core-pro's `tools/hako.py install` reports SATISFIED for a satisfied
   requirement and INCOMPATIBLE with a correct reason and exit code 1 for an unsatisfiable
-  one. The shipped tests, however, fail on Windows -- 9 of 21 in tools/test_foundation.py
-  and 1 of 3 in tools/test_drone_threejs.py. Every failure examined is in the TEST code,
-  not in foundation.py: the fixtures interpolate Windows paths into double-quoted YAML
-  scalars without escaping backslashes (which foundation.py correctly rejects, because it
-  parses double-quoted scalars with json.loads while the production writer emits them with
-  json.dumps), and the assertions compare unescaped path strings against correctly escaped
-  YAML/JSON output or hard-code a POSIX separator. A Windows contributor running the suite
-  today gets a red result that looks like a Foundation defect and is not one.
+  one. The main Foundation test suite, however, fails on Windows -- 9 of 21 tests in
+  tools/test_foundation.py. A separate assertion in tools/test_drone_threejs.py also fails
+  on Windows because it compares a raw path against JSON-escaped output; that Recipe is
+  macOS-oriented, so this is tracked as assertion portability rather than evidence that the
+  Recipe itself must execute on Windows. Every Foundation failure examined is in TEST code,
+  not in foundation.py: fixtures interpolate Windows paths into double-quoted YAML scalars
+  without escaping backslashes, assertions compare unescaped paths against correctly
+  escaped YAML/JSON output, or hard-code a POSIX separator. A Windows contributor running
+  the suite today gets a red result that looks like a Foundation defect and is not one.
 
 observation:
   context: >
@@ -123,15 +124,14 @@ contradictions: []
 validation:
   status: verified
   required:
-    - Confirm whether upstream intends the Foundation test suite to be part of the Windows
-      contributor workflow at all. If yes, the fixture should escape paths the same way
-      the production writer does (json.dumps / _yaml_string) rather than interpolating raw
-      Path objects, and the separator/substring assertions should be made
+    - Implement Business Pack #62 and re-run `tools/test_foundation.py` on native Windows.
+      The fixture should escape paths the same way the production writer does
+      (json.dumps / _yaml_string), and separator/serialization assertions should be
       platform-neutral.
-    - Decide whether foundation.py should reject an unescapable receipt more loudly. Today
+    - Decide whether foundation.py should reject an unparseable receipt more loudly. Today
       an unparseable receipt degrades silently to UNKNOWN, which is what made the test
-      failures look like evaluation-logic bugs rather than parse failures. A distinct
-      status or an explicit warning naming the offending file would be easier to diagnose.
+      failures look like evaluation-logic bugs rather than parse failures. This is a
+      follow-up design question, not required to fix the test portability defect.
     - The 8.3 versus long-form path mixing in the generated launcher document was observed
       but not investigated; whether it originates in tempfile behavior only (test context)
       or can occur in a real prepared workspace is unresolved.
@@ -146,8 +146,12 @@ validation:
       isolating load_receipt probe, not merely by the passing doctor run.
 
 tracking:
-  implementation_status: none
-  issues: []
+  implementation_status: open
+  issues:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      number: 62
+      relation: fix
+      status: open
 
 promotion_targets:
   catalog: []
@@ -169,11 +173,14 @@ promotion_targets:
 
 promotion_rationale:
   - The valuable knowledge is the pairing -- the Foundation implementation is Windows-ready
-    for the paths/doctor surface AND its test suite currently reports otherwise. Recording
-    only the red test result would misrepresent the layer; recording only the passing
-    doctor run would leave the next Windows contributor to rediscover ten failures.
+    for the paths/doctor surface AND its main Foundation test suite currently reports nine
+    false failures there. Recording only the red test result would misrepresent the layer;
+    recording only the passing doctor run would leave the next Windows contributor to
+    rediscover the test portability problem.
   - The promotion target is the Business Pack's own test tooling rather than any component
-    repository, because that is where the defect is.
+    repository, because that is where the demonstrated defect is. The separate
+    drone_threejs assertion can be made serialization-aware or explicitly platform-scoped
+    without implying that the macOS-oriented Recipe itself is Windows-supported.
 
 resolution:
   status: pending
@@ -182,6 +189,7 @@ resolution:
   promoted_to: []
   executable_guardrails: []
   notes:
-    - Observation only; no upstream issue filed (issue filing for implementation work is
-      owned by upstream maintainers per the agreed role split). No change was made to the
-      fork or to upstream test code in this session.
+    - Business Pack #62 now tracks the test-side portability fix. No Foundation runtime
+      behavior change is requested by this candidate.
+    - After #62 is implemented, native Windows re-verification should determine whether the
+      original 9 of 21 Foundation failures are eliminated without weakening test coverage.
