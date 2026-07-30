@@ -1,6 +1,6 @@
 id: drone-single-mujoco-threejs-gamepad
 title: Human-operated Hakoniwa Drone MuJoCo and Three.js Exhibition Demo
-recipe_version: 0.2
+recipe_version: 0.3
 
 goal:
   user_request: 展示会場で参加者がPS5コントローラを使って箱庭ドローンを飛ばし、MuJoCoとブラウザの両方で見たい
@@ -320,7 +320,7 @@ artifact_sets:
       - config/controller
       - config/assets/visual_state_publisher
       - config/assets/web_bridge_fleets
-      - session/launcher-session.json
+      - runtime/launcher-session.json
       - logs
 
 artifacts:
@@ -328,7 +328,7 @@ artifacts:
     - path: work/recipes/drone-single-mujoco-threejs-gamepad/config/launcher.json
       owner: hakoniwa-business-pack
       purpose: Common cross-platform Launcher topology with resolved absolute executable paths.
-    - path: work/recipes/drone-single-mujoco-threejs-gamepad/session/launcher-session.json
+    - path: work/recipes/drone-single-mujoco-threejs-gamepad/runtime/launcher-session.json
       owner: hakoniwa-pdu-python
       purpose: Background Launcher lifecycle and ownership record.
   reused:
@@ -407,7 +407,7 @@ demo:
     owner: hakoniwa-launcher
     provider: hakoniwa-pdu-python
     mode: background
-    target: work/recipes/drone-single-mujoco-threejs-gamepad/session/launcher-session.json
+    target: work/recipes/drone-single-mujoco-threejs-gamepad/runtime/launcher-session.json
     trigger: python tools/drone_gamepad_exhibition.py stop
     expected_behavior:
       - hako_launcher_ctl terminate invokes the Launcher normal termination path.
