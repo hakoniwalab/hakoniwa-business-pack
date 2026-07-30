@@ -168,7 +168,7 @@ resolution:
     - repository: hakoniwalab/hakoniwa-pdu-python
       issue: 45
       pull_request: 46
-      revision: 9128354
+      revision: "9128354"
     - repository: hakoniwalab/hakoniwa-pdu-python
       issue: 45
       pull_request: 47
