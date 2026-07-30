@@ -1,0 +1,159 @@
+id: core-asset-start-state-check-toctou-double-read
+title: hako_asset_start_no_wait reads the simulation state twice, so a rejected start can report a different state than the one that caused the rejection
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+
+summary: >
+  In hakoniwa-core-pro's asset callback library, hako_asset_start_no_wait() (and the
+  sibling check in hako_trigger_event()) evaluated `hako_asset_impl_state() !=
+  HakoSim_Stopped` to decide whether to reject the call, then called
+  hako_asset_impl_state() a SECOND time to build the error message. The two reads were not
+  atomic. When an asset re-entered start immediately after `hako-cmd stop` -- which is
+  exactly what the vendored hello_world example does, since its main loop is an unbounded
+  `while (1) { hako_asset_start(); }` -- the check could fail while the state settled
+  microseconds later, producing the self-contradictory line
+  "Error: simulation state(0) is invalid, expeting HakoSim_Stopeed." with
+  HakoSim_Stopped == 0. The condition was transient and self-healing (the next loop
+  iteration succeeded), but a log scanner that treated every "Error:" line as fatal could
+  fail intermittently -- directly observed in 2 of 4 consecutive smoke runs.
+  A second measurement pass also produced state(4) = HakoSim_Resetting for the same old
+  message. That variant was not the double-read race: it was a truthful rejection while
+  reset was still in progress. The important lesson is therefore that the state snapshot
+  used for the decision and the diagnostic must be the same, and expected lifecycle
+  transitions such as Stopping/Resetting should remain distinguishable from genuinely bad
+  states. hakoniwa-core-pro #80 implemented that fix; native Windows re-verification is
+  still pending.
+
+observation:
+  context: >
+    Re-running an external contributor's core smoke test (register asset -> hako-cmd start
+    -> step -> stop -> reset) four times consecutively on native Windows 11 x86_64,
+    2026-07-30, at hakoniwa-core-pro revision 9727e1d, immediately after rebuilding and
+    reinstalling Core through `python tools/hako.py doctor|build|install`.
+  details:
+    - "Both observed state values, and what separates them. HakoSimulationStateType in
+      hakoniwa-core-cpp/src/include/types/hako_types.hpp is 0 Stopped, 1 Runnable,
+      2 Running, 3 Stopping, 4 Resetting, 5 Error, 6 Terminated. state(4) = Resetting was
+      measured in a later run set and is NOT the race: `hako-cmd reset` is in progress,
+      the spin loop calls start, and the rejection is correct. state(0) = Stopped IS the
+      race, because 0 is precisely the value the check demanded. A harness that pins its
+      tolerance to state(0) alone therefore goes red on the Resetting runs, and one that
+      tolerates any state hides Error(5) and Terminated(6). This was not theory: pinning
+      to state(0) was tried in this workspace and immediately reproduced FAIL on the
+      state(4) runs."
+    - "Measured flakiness: runs 1 and 4 failed, runs 2 and 3 passed. Every failure was
+      caused by the single stderr line 'Error: simulation state(N) is invalid, expeting
+      HakoSim_Stopeed.' emitted by the asset process. Positive evidence of correct
+      operation (the on_simulation_step callback log) was present in ALL four runs,
+      including the failing ones, and the asset process never crashed or exited
+      abnormally."
+    - "Mechanism, read from the source rather than inferred:
+      sources/assets/callback/src/hako_asset.cpp lines 88-90 contain
+      `if (hako_asset_impl_state() != HakoSim_Stopped) { std::cerr << \"Error: simulation
+      state(\" << hako_asset_impl_state() << \") is invalid, expeting HakoSim_Stopeed.\"
+      ...; return EINVAL; }`. The same double-read pattern appears again at lines 262-264
+      inside hako_trigger_event(). src/include/types/hako_types.hpp defines
+      HakoSim_Stopped = 0."
+    - "For the state(0) variant the printed value is the proof, not a guess: the message
+      reports state(0) while demanding HakoSim_Stopped, and HakoSim_Stopped IS 0. The only
+      way to print 0 here is for the state to have changed between the deciding read and
+      the reporting read. This argument applies ONLY to state(0); a non-zero value such as
+      the measured state(4) is a truthful report of a state that really was not Stopped."
+    - "Why it surfaces at teardown specifically: examples/hello_world/src/hello_world.c
+      calls hako_asset_start() inside `while (1)` and prints its return value. After
+      `hako-cmd stop`, hako_asset_start_no_wait returns EINTR ('INFO: stopped simulation')
+      and the loop immediately re-enters start while the master is still transitioning.
+      The asset then retries and proceeds normally, so nothing downstream is affected."
+    - "This is NOT a regression from the Core update performed in the same session
+      (98a057a -> 9727e1d). That range touched only the build system, the user-facing
+      build manifest and tools/hako.py, the Python binding CMakeLists, and the
+      hakoniwa-pdu-registry submodule pointer; no simulation-state source file changed.
+      The race was simply never observed before because this workspace had never scanned
+      the vendored example's stderr for Error/Exception content, and had never run the
+      smoke test repeatedly in one session."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-core-pro
+      path: sources/assets/callback/src/hako_asset.cpp
+      revision: 9727e1d
+    - repository: hakoniwalab/hakoniwa-core-pro
+      path: examples/hello_world/src/hello_world.c
+      revision: 9727e1d
+    - repository: hakoniwalab/hakoniwa-core-pro
+      path: sources/assets/callback/src/hako_asset_state_check.hpp
+      revision: dccd99f
+    - repository: hakoniwalab/hakoniwa-core-pro
+      path: tests/cpp/hako_asset_state_check_test.cpp
+      revision: dccd99f
+  runtime_evidence:
+    - description: >-
+        External contributor's Windows 11 x86_64 verification environment (native, MSVC
+        x64/Release build produced via tools/hako.py, external/ unmodified), 2026-07-30.
+        Four consecutive smoke runs before any workspace change: FAIL, PASS, PASS, FAIL,
+        with every failure attributable to the single stderr line above and to nothing
+        else. Four consecutive runs after tolerating that exact line in the workspace log
+        scanner: PASS, PASS, PASS, PASS, all exit code 0, with the step-callback evidence
+        and process-outcome checks left unchanged.
+  expert_input: []
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - Re-run the native Windows smoke test against hakoniwa-core-pro main at or after
+      dccd99f and confirm the old self-contradictory state(0) Error line no longer appears.
+    - Confirm Stopping/Resetting are reported as expected transition/retry diagnostics,
+      while genuinely invalid states still remain distinguishable as errors.
+  notes:
+    - The original diagnosis is verified by source reading plus repeated Windows runs.
+      Upstream issue 80 is implemented and tested, but `resolution.verified` remains false until
+      the contributor repeats the original runtime scenario against the fixed Core.
+
+tracking:
+  implementation_status: resolved
+  issues:
+    - repository: hakoniwalab/hakoniwa-core-pro
+      number: 80
+      relation: fix
+      status: closed
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: true
+  recipes: []
+  executable_guardrails: []
+
+promotion_rationale:
+  - The reusable asset-side lesson is not to ignore the state number. Use one simulation
+    state snapshot for both the decision and its diagnostic, and distinguish expected
+    lifecycle transitions (Stopping/Resetting) from genuinely invalid states. That belongs
+    with component/asset guidance rather than in the Catalog or a Recipe.
+  - No Business Pack executable guardrail is proposed. The owning Core repository now has
+    a focused helper and C++ tests for this behavior; duplicating that check in a doctor
+    command would add little value.
+
+resolution:
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-core-pro
+      issue: 80
+      pull_request: null
+      revision: dccd99f
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Core issue 80 reads the state once, reports Stopping/Resetting as expected transition
+      retries, preserves error diagnostics for invalid states, and adds focused tests.
+    - The workspace-side regex tolerance remains historical evidence only; the upstream
+      implementation is the actual fix.
+    - Native Windows re-verification of the original smoke scenario is still required
+      before marking this resolution verified.

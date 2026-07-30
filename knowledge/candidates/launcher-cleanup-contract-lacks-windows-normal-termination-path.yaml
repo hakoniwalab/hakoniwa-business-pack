@@ -1,0 +1,185 @@
+id: launcher-cleanup-contract-lacks-windows-normal-termination-path
+title: The Launcher cleanup contract exposed a missing OS-independent background lifecycle path on Windows
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - validation_rule
+
+summary: >
+  Native Windows verification exposed a real gap in the Business Pack cleanup contract:
+  POSIX callers had a concrete background stop path (`kill -INT <launcher-pid>`), while
+  Windows callers were told not to generalize that command and were given no equivalent
+  Launcher-level operation. The durable resolution is not to teach each caller a
+  Windows-specific signal recipe. hakoniwa-pdu Launcher now exposes an OS-independent
+  background lifecycle contract using an explicit caller-owned session file:
+  `hako_launcher ... --background <session-file>`, followed by
+  `hako_launcher_ctl status <session-file>` or `terminate <session-file>`. The Launcher
+  owns platform-specific process-control behavior internally, and `terminate` goes through
+  LauncherService.terminate() rather than directly killing a recorded PID. The original
+  Windows measurements below remain valuable as the observation that revealed the missing
+  lifecycle surface; the implementation has landed, but native Windows re-verification of
+  the new interface is still pending.
+
+observation:
+  context: >
+    Aligning an external contributor's Windows workspace teardown scripts with the
+    Launcher cleanup contract added in hakoniwa-business-pack PR #59 (merge commit
+    ed04582), on native Windows 11 x86_64, 2026-07-30. The workspace runs multi-asset
+    configurations whose participants are Python processes started by PowerShell
+    (Start-Process) plus native executables, torn down by a per-configuration
+    stop-all.ps1.
+  details:
+    - "The contract's cross-platform requirement is stated as: invoke the launcher's
+      supported normal termination path, then verify that its owned assets and ports are
+      gone. Its worked example, its signal names (SIGINT/SIGTERM/SIGKILL), its
+      anti-patterns (`kill <pid>`, `kill -- -<PGID>`, `kill -9`) and its process-group
+      caveat are all POSIX. For Windows it states only what NOT to do (do not generalize
+      `kill -INT`) and refers to 'the console/Launcher termination mechanism documented
+      for the provider and target environment'. No such Windows mechanism is documented in
+      the primer, and none was found elsewhere in the Business Pack at revision ed04582."
+    - "The prohibition is stated in two independent places, while its counterpart is stated
+      in neither. docs/hakoniwa-runtime-primer.md (and its -ja translation, which was
+      compared line by line and carries the same content) says 'Do not generalize the POSIX
+      kill -INT example to Windows. Use the console/Launcher termination mechanism
+      documented for the provider and target environment.' AGENTS-USER.md repeats it in the
+      side-effecting-actions section as 'The kill -INT <launcher-pid> example is
+      POSIX-specific and must not be generalized to Windows', in the same paragraph that
+      requires reading the Recipe's demo.cleanup contract before starting or stopping a
+      long-running Launcher. So the guidance a User/Solution Agent reads on Windows is
+      prohibition twice and instruction zero times. A repository-wide search of every .md
+      and .yaml file at ed04582 for the terms a Windows mechanism would have to name
+      (taskkill, CTRL_BREAK, CTRL_C_EVENT, GenerateConsoleCtrlEvent, SIGBREAK,
+      CREATE_NEW_PROCESS_GROUP) returned no hits outside this candidate itself."
+    - "Measured on Windows: issuing `taskkill.exe /PID <pid> /T` (no /F) against each
+      running Python asset of a 3-party configuration returns exit code 255 with the
+      message 'この処理は、/F オプションのみで強制終了できます' (this process can only be
+      terminated forcefully). It is a definitive refusal, not a slow shutdown -- the
+      process is still running immediately afterwards and remains running indefinitely.
+      Reproduced for every Python participant across four separate configurations
+      (producer/consumer/external tap, producer/limiter/consumer/tap, two producers plus
+      aggregator, and a native simulator plus a Python route demo)."
+    - "Why a real SIGINT equivalent is not simply available: on Windows the closest
+      analogue is GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT), which only reaches a target
+      that was created with CREATE_NEW_PROCESS_GROUP. PowerShell's Start-Process does not
+      expose that creation flag, and the caller-side workaround (FreeConsole + AttachConsole
+      + SetConsoleCtrlHandler + GenerateConsoleCtrlEvent) destroys the console-control
+      state of the harness process itself, which is not acceptable inside a verification
+      script. Even if the signal were delivered, the asset side must install a handler for
+      it: in this workspace only the RPC service/client assets handle KeyboardInterrupt at
+      all, and the vendored C example (external/hakoniwa-core-pro/examples/hello_world)
+      installs no console control handler."
+    - "Net effect on a conforming implementation at the observed revision: a Windows caller
+      that follows the contract's ordering logs 'requested close -> refused -> escalating
+      to force' for the directly started Python assets. The escalation branch, which the
+      contract frames as an exception requiring caution, therefore became the normal path
+      in that workspace. This observation motivated moving background lifecycle ownership
+      into the Launcher instead of standardizing taskkill or console-control details as a
+      caller-facing contract."
+    - "What still works and is worth keeping: the contract's post-exit verification half is
+      fully implementable on Windows. Confirming that each recorded PID is gone
+      (Get-Process) and that Recipe-owned ports are released (Get-NetTCPConnection -State
+      Listen) was implemented and passed in all four configurations, including the
+      WebSocket port 8765 owned by hakoniwa-webserver in one of them."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: docs/hakoniwa-runtime-primer.md
+      revision: ed04582
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: docs/hakoniwa-runtime-primer-ja.md
+      revision: ed04582
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: AGENTS-USER.md
+      revision: ed04582
+    - repository: hakoniwalab/hakoniwa-pdu-python
+      path: src/hakoniwa_pdu/apps/launcher/hako_launcher.py
+      revision: 8a80019
+    - repository: hakoniwalab/hakoniwa-pdu-python
+      path: src/hakoniwa_pdu/apps/launcher/hako_launcher_control.py
+      revision: 8a80019
+    - repository: hakoniwalab/hakoniwa-pdu-python
+      path: src/hakoniwa_pdu/apps/launcher/hako_launcher_ctl.py
+      revision: 8a80019
+  runtime_evidence:
+    - description: >-
+        External contributor's Windows 11 x86_64 verification environment (native
+        PowerShell, external/ unmodified), 2026-07-30. Four multi-process configurations
+        were torn down through a contract-ordered helper (request-to-close, bounded wait,
+        escalate, report which path ended each process). Recorded termination paths:
+        producer=forced, consumer=forced, tap=forced; producer=forced, limiter=forced,
+        consumer=forced, tap=forced; producer_a=forced, producer_b=forced,
+        aggregator=forced; sim=forced, route=already-exited; producer=forced,
+        webserver=forced, ws_client=already-exited. No configuration ever produced a
+        'graceful' outcome. taskkill exit code was 255 in every refused case. Post-exit
+        verification (processes gone, ports released) passed in all five runs, and all
+        five configuration verify scripts exited 0.
+  expert_input: []
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - Re-verify on native Windows using hakoniwa-pdu-python main after pull request 47 and
+      exercise the new caller-facing sequence with `--background`, `status`, and `terminate`.
+      Verify that the managed assets and Recipe-owned ports are gone afterwards.
+    - Confirm the caller-facing commands are identical on Windows and POSIX and that no
+      taskkill / CTRL_BREAK / PID-kill knowledge is required by the caller.
+  notes:
+    - The original observation is verified on one Windows machine. The replacement
+      Launcher lifecycle implementation has Linux CI coverage and maintainer review, but
+      this candidate remains with `resolution.verified` set to false until the contributor
+      repeats the lifecycle test on native Windows.
+
+tracking:
+  implementation_status: resolved
+  issues:
+    - repository: hakoniwalab/hakoniwa-pdu-python
+      number: 45
+      relation: fix
+      status: closed
+
+promotion_targets:
+  catalog: []
+  runtime_primer: true
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+  executable_guardrails: []
+
+promotion_rationale:
+  - The reusable rule belongs in the Runtime Primer because background Launcher lifecycle
+    should be expressed as the OS-independent `--background <session-file>` / `status` /
+    `terminate` contract. Recipes and agents should not need to encode POSIX-vs-Windows
+    signal mechanics.
+  - Post-exit verification remains part of the cleanup contract. After `terminate`, verify
+    that Launcher-owned assets and Recipe-owned ports are actually gone.
+  - No separate executable guardrail is proposed here. The lifecycle interface and its
+    tests live in hakoniwa-pdu-python; the Business Pack should consume and document that
+    contract rather than duplicate process-control implementation.
+
+resolution:
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-pdu-python
+      issue: 45
+      pull_request: 46
+      revision: "9128354"
+    - repository: hakoniwalab/hakoniwa-pdu-python
+      issue: 45
+      pull_request: 47
+      revision: 8a80019
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - The missing lifecycle surface was implemented in pull request 46 and then
+      refactored and hardened in pull request 47. The final caller-facing contract uses an
+      explicit session file, a localhost control endpoint, ownership checks, and
+      LauncherService.terminate().
+    - Native Windows re-verification is still required before marking this resolution
+      verified and promoting the contract into the Runtime Primer.
