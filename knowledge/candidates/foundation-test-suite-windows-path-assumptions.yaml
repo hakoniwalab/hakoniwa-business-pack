@@ -124,7 +124,7 @@ contradictions: []
 validation:
   status: verified
   required:
-    - Implement Business Pack #62 and re-run `tools/test_foundation.py` on native Windows.
+    - Implement Business Pack issue 62 and re-run `tools/test_foundation.py` on native Windows.
       The fixture should escape paths the same way the production writer does
       (json.dumps / _yaml_string), and separator/serialization assertions should be
       platform-neutral.
@@ -189,7 +189,7 @@ resolution:
   promoted_to: []
   executable_guardrails: []
   notes:
-    - Business Pack #62 now tracks the test-side portability fix. No Foundation runtime
+    - Business Pack issue 62 now tracks the test-side portability fix. No Foundation runtime
       behavior change is requested by this candidate.
-    - After #62 is implemented, native Windows re-verification should determine whether the
+    - After issue 62 is implemented, native Windows re-verification should determine whether the
       original 9 of 21 Foundation failures are eliminated without weakening test coverage.
