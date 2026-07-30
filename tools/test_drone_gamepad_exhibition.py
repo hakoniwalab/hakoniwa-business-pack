@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 SCRIPT = Path(__file__).with_name("drone_gamepad_exhibition.py")
 SPEC = importlib.util.spec_from_file_location("drone_gamepad_exhibition_recipe", SCRIPT)
@@ -141,6 +142,26 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
             self.assertEqual(selected, venv_python)
             self.assertNotEqual(selected, system_python)
 
+    def test_python_runtime_probe_requires_foundation_prefix_and_imports(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            venv = Path(temporary) / "work" / "foundation" / "install" / "python"
+            output = json.dumps(
+                {
+                    "prefix": str(venv),
+                    "executable": str(venv / "bin" / "python"),
+                }
+            )
+            completed = SimpleNamespace(returncode=0, stdout=output + "\n", stderr="")
+            with mock.patch.object(recipe.subprocess, "run", return_value=completed) as run:
+                ok, detail = recipe._probe_python_runtime(venv / "bin" / "python", venv)
+
+            self.assertTrue(ok, detail)
+            command = run.call_args.args[0]
+            self.assertEqual(command[0], str(venv / "bin" / "python"))
+            self.assertIn("import hakopy", command[-1])
+            self.assertIn("import hakoniwa_pdu", command[-1])
+            self.assertIn("hako_launcher", command[-1])
+
     def test_reset_keeps_platform_shells_out_of_user_contract(self) -> None:
         commands = recipe.reset_commands(Path("/foundation/bin/hako-cmd"))
         self.assertEqual(
@@ -160,6 +181,7 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
         self.assertIn("mode: background", content)
         self.assertIn("hako_launcher_ctl terminate", content)
         self.assertIn("environment: foundation-venv", content)
+        self.assertIn("interpreter_override: forbidden", content)
         self.assertIn("human_actions:", content)
         self.assertIn("operate_gamepad", content)
 
