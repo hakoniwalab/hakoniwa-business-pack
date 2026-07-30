@@ -1,0 +1,135 @@
+id: core-asset-start-state-check-toctou-double-read
+title: hako_asset_start_no_wait reads the simulation state twice, so a rejected start prints an error naming the very state it required
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+
+summary: >
+  In hakoniwa-core-pro's asset callback library, hako_asset_start_no_wait() (and the
+  sibling check in hako_trigger_event()) evaluates `hako_asset_impl_state() !=
+  HakoSim_Stopped` to decide whether to reject the call, then calls
+  hako_asset_impl_state() a SECOND time to build the error message. The two reads are not
+  atomic. When an asset re-enters start immediately after `hako-cmd stop` -- which is
+  exactly what the vendored hello_world example does, since its main loop is an unbounded
+  `while (1) { hako_asset_start(); }` -- the check can fail while the state settles
+  microseconds later, producing the self-contradictory line
+  "Error: simulation state(0) is invalid, expeting HakoSim_Stopeed." with
+  HakoSim_Stopped == 0. The condition is transient and self-healing (the next loop
+  iteration succeeds), but any log scanner that treats "Error:" lines as fatal will fail
+  intermittently -- measured at roughly 50% of runs.
+
+observation:
+  context: >
+    Re-running an external contributor's core smoke test (register asset -> hako-cmd start
+    -> step -> stop -> reset) four times consecutively on native Windows 11 x86_64,
+    2026-07-30, at hakoniwa-core-pro revision 9727e1d, immediately after rebuilding and
+    reinstalling Core through `python tools/hako.py doctor|build|install`.
+  details:
+    - "Measured flakiness: runs 1 and 4 failed, runs 2 and 3 passed. Every failure was
+      caused by the single stderr line 'Error: simulation state(0) is invalid, expeting
+      HakoSim_Stopeed.' emitted by the asset process. Positive evidence of correct
+      operation (the on_simulation_step callback log) was present in ALL four runs,
+      including the failing ones, and the asset process never crashed or exited
+      abnormally."
+    - "Mechanism, read from the source rather than inferred:
+      sources/assets/callback/src/hako_asset.cpp lines 88-90 contain
+      `if (hako_asset_impl_state() != HakoSim_Stopped) { std::cerr << \"Error: simulation
+      state(\" << hako_asset_impl_state() << \") is invalid, expeting HakoSim_Stopeed.\"
+      ...; return EINVAL; }`. The same double-read pattern appears again at lines 262-264
+      inside hako_trigger_event(). src/include/types/hako_types.hpp defines
+      HakoSim_Stopped = 0."
+    - "The printed value is the proof, not a guess: the message reports state(0) while
+      demanding HakoSim_Stopped, and HakoSim_Stopped IS 0. A genuinely wrong state would
+      print a non-zero value. The only way to print 0 here is for the state to have
+      changed between the deciding read and the reporting read."
+    - "Why it surfaces at teardown specifically: examples/hello_world/src/hello_world.c
+      calls hako_asset_start() inside `while (1)` and prints its return value. After
+      `hako-cmd stop`, hako_asset_start_no_wait returns EINTR ('INFO: stopped simulation')
+      and the loop immediately re-enters start while the master is still transitioning.
+      The asset then retries and proceeds normally, so nothing downstream is affected."
+    - "This is NOT a regression from the Core update performed in the same session
+      (98a057a -> 9727e1d). That range touched only the build system, the user-facing
+      build manifest and tools/hako.py, the Python binding CMakeLists, and the
+      hakoniwa-pdu-registry submodule pointer; no simulation-state source file changed.
+      The race was simply never observed before because this workspace had never scanned
+      the vendored example's stderr for Error/Exception content, and had never run the
+      smoke test repeatedly in one session."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-core-pro
+      path: sources/assets/callback/src/hako_asset.cpp
+      revision: 9727e1d
+    - repository: hakoniwalab/hakoniwa-core-pro
+      path: examples/hello_world/src/hello_world.c
+      revision: 9727e1d
+  runtime_evidence:
+    - description: >-
+        External contributor's Windows 11 x86_64 verification environment (native, MSVC
+        x64/Release build produced via tools/hako.py, external/ unmodified), 2026-07-30.
+        Four consecutive smoke runs before any workspace change: FAIL, PASS, PASS, FAIL,
+        with every failure attributable to the single stderr line above and to nothing
+        else. Four consecutive runs after tolerating that exact line in the workspace log
+        scanner: PASS, PASS, PASS, PASS, all exit code 0, with the step-callback evidence
+        and process-outcome checks left unchanged.
+  expert_input: []
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - Confirm whether upstream considers the double read worth fixing (read the state once
+      into a local and report that value) or considers the message cosmetic. The
+      functional behavior -- reject and let the caller retry -- is arguably correct; it is
+      the diagnostics that mislead.
+    - Determine whether the intended contract is that an asset MAY spin on
+      hako_asset_start() the way the vendored hello_world example does. If that loop is
+      the recommended pattern, the transient error is guaranteed for every asset at every
+      stop, and downgrading it from stderr "Error:" to an informational retry line would
+      remove a permanent source of false positives in log-scanning harnesses.
+    - Not measured on POSIX. The race is in platform-neutral C++ and the reasoning does not
+      depend on Windows, but the ~50% hit rate was measured only on this Windows machine
+      and will depend on scheduling.
+  notes:
+    - Verified by source reading plus eight measured runs (four before, four after), on one
+      machine, at one Core revision.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: true
+  recipes: []
+  executable_guardrails: []
+
+promotion_rationale:
+  - The actionable knowledge for anyone writing an asset or a verification harness is
+    "this specific stderr line is transient and self-healing at stop/reset boundaries; do
+    not treat it as fatal, and do not treat its state number as meaningful". That belongs
+    with component/asset guidance rather than in the catalog or a Recipe.
+  - No executable guardrail is proposed -- a doctor-style check cannot detect a race, and
+    the correct fix (single read, or demotion of the message severity) is a two-line
+    change in the owning repository.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Diagnosis only; no upstream issue filed (issue filing for implementation work is
+      owned by upstream maintainers per the agreed role split).
+    - The workspace-side change made in this session (tolerating this exact line, by
+      regex, in the smoke test's log scanner, with the mechanism documented at the call
+      site) is a false-positive suppression, not a fix. Positive pass evidence -- the
+      on_simulation_step callback log plus a clean process outcome -- was deliberately
+      left required.

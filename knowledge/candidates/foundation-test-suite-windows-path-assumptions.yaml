@@ -1,0 +1,182 @@
+id: foundation-test-suite-windows-path-assumptions
+title: The Local Foundation implementation works on Windows, but its own test suite assumes POSIX paths and fails 10 of 24 tests there
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - validation_rule
+
+summary: >
+  The Local Foundation layer added in hakoniwa-business-pack PR #57 (foundation/,
+  tools/foundation.py, tools/drone_threejs.py) runs correctly on native Windows: `paths`
+  resolves Windows paths, and `doctor` evaluated against a real Component Receipt written
+  by hakoniwa-core-pro's `tools/hako.py install` reports SATISFIED for a satisfied
+  requirement and INCOMPATIBLE with a correct reason and exit code 1 for an unsatisfiable
+  one. The shipped tests, however, fail on Windows -- 9 of 21 in tools/test_foundation.py
+  and 1 of 3 in tools/test_drone_threejs.py. Every failure examined is in the TEST code,
+  not in foundation.py: the fixtures interpolate Windows paths into double-quoted YAML
+  scalars without escaping backslashes (which foundation.py correctly rejects, because it
+  parses double-quoted scalars with json.loads while the production writer emits them with
+  json.dumps), and the assertions compare unescaped path strings against correctly escaped
+  YAML/JSON output or hard-code a POSIX separator. A Windows contributor running the suite
+  today gets a red result that looks like a Foundation defect and is not one.
+
+observation:
+  context: >
+    First acceptance evaluation of the Local Foundation layer on an external contributor's
+    native Windows 11 x86_64 workspace, 2026-07-30, at hakoniwa-business-pack revision
+    ed04582 with CPython 3.12.7, against a real hakoniwa-core-pro install produced in the
+    same session by `python tools/hako.py install --install-dir <prefix>` (Core revision
+    9727e1d).
+  details:
+    - "Production path works. `python tools/foundation.py paths --recipe-id
+      drone-single-mujoco-threejs-mac` printed all fourteen workspace paths with correct
+      Windows separators and created nothing. `python tools/foundation.py doctor --recipe
+      <recipe> --install-dir <core install prefix>` printed 'Foundation: SATISFIED /
+      [SATISFIED] hakoniwa-core-pro' for a recipe requiring capabilities shared_memory +
+      hako_cmd and build_limits.asset_num.min=16. Raising the requirement to
+      asset_num.min=32 produced 'Foundation: INCOMPATIBLE' with the reason
+      'build_limits.asset_num.min: required=32, installed=16' and exit code 1, which
+      satisfies the hako CLI contract's rule that a readiness failure MUST be non-zero."
+    - "The receipt consumed above was written by hako.py install, not hand-authored. It
+      records platform.os 'windows', architecture 'x64', install.prefix as a
+      backslash-escaped double-quoted scalar, ten artifacts, and the resolved capacity
+      limits -- i.e. the Receipt half of the Foundation contract is already being produced
+      correctly by a component repository on Windows."
+    - "Test suite result: tools/test_foundation.py -> Ran 21 tests, FAILED (failures=9).
+      tools/test_drone_threejs.py -> Ran 3 tests, FAILED (failures=1). Failing names:
+      test_satisfied, test_plan_has_no_actions_when_foundation_is_satisfied,
+      test_incompatible_reports_capability_limit_platform_and_artifact,
+      test_dependency_receipt_mismatch_is_incompatible,
+      test_aggregate_status_uses_actionable_priority,
+      test_plan_adds_dependencies_and_rebuilds_downstream,
+      test_force_rebuilds_component_and_downstream_dependencies,
+      test_component_commands_keep_shared_python_before_endpoint_cffi,
+      test_cli_paths_json_does_not_create_workspace, and
+      test_generated_launcher_uses_only_local_foundation_and_recipe_paths."
+    - "Cause 1 (7 of the failures, all the UNKNOWN/BLOCKED/short-plan ones): the fixture
+      helper FoundationInspectorTest.write_receipt() emits `install:\\n  prefix:
+      \"{self.prefix}\"` with self.prefix being a pathlib Path. On Windows that yields a
+      double-quoted YAML scalar containing single backslashes, e.g. \"C:\\Users\\...\".
+      foundation.py's _scalar() parses double-quoted scalars with json.loads(), which
+      raises 'Invalid \\escape' on that input, so the receipt cannot be loaded and the
+      component degrades to UNKNOWN (and, transitively, aggregate status BLOCKED and
+      truncated build plans). Confirmed directly: feeding foundation.load_receipt() a
+      fixture-style unescaped scalar raises JSONDecodeError, while feeding it the
+      hako.py-install-style escaped scalar returns the correct path. The production writer
+      _yaml_string() is json.dumps(), so real receipts are symmetric with the reader and
+      round-trip correctly -- only the test fixture is inconsistent with both."
+    - "Cause 2 (2 failures): substring assertions compare an unescaped path against output
+      that is correctly escaped. test_component_commands_keep_shared_python_before_endpoint_cffi
+      asserts that `hakoniwa_core_root: \"C:\\Users\\...\"` appears in a manifest whose
+      actual (correct) text is `hakoniwa_core_root: \"C:\\\\Users\\\\...\"`;
+      test_generated_launcher_uses_only_local_foundation_and_recipe_paths asserts
+      str(paths.install_prefix) appears verbatim in a JSON document where it is, correctly,
+      JSON-escaped."
+    - "Cause 3 (1 failure): test_cli_paths_json_does_not_create_workspace asserts
+      data['foundation_root'].endswith('work/foundation'), a hard-coded POSIX separator.
+      The value is correct on Windows; only the assertion is not portable."
+    - "One further Windows-specific detail worth upstream's attention, seen in the
+      test_drone_threejs failure output but not itself a failure cause: the generated
+      launcher document mixes 8.3 short-form paths (C:\\Users\\<SHORT~1>\\...) for some
+      external roots with long-form paths (C:\\Users\\<LongUserName>\\...) for
+      Foundation-owned paths within the same document. Two spellings of one directory in
+      one generated artifact is a portability hazard for any later string comparison; not
+      investigated further in this session."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/foundation.py
+      revision: ed04582
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/test_foundation.py
+      revision: ed04582
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/test_drone_threejs.py
+      revision: ed04582
+    - repository: hakoniwalab/hakoniwa-core-pro
+      path: tools/hako.py
+      revision: 9727e1d
+  runtime_evidence:
+    - description: >-
+        External contributor's Windows 11 x86_64 verification environment (native, CPython
+        3.12.7, external/ unmodified), 2026-07-30. Commands run: `foundation.py paths`
+        (14 paths, nothing created); `foundation.py doctor` against a real Core receipt
+        (SATISFIED, exit 0); the same with asset_num.min raised to 32 (INCOMPATIBLE with
+        the correct reason line, exit 1); `python tools/test_foundation.py` (21 tests, 9
+        failures); `python tools/test_drone_threejs.py` (3 tests, 1 failure); and a direct
+        probe calling foundation.load_receipt() on an unescaped versus an escaped
+        double-quoted Windows path scalar (JSONDecodeError versus correct value), which
+        isolates the fixture as the cause rather than the parser.
+  expert_input: []
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - Confirm whether upstream intends the Foundation test suite to be part of the Windows
+      contributor workflow at all. If yes, the fixture should escape paths the same way
+      the production writer does (json.dumps / _yaml_string) rather than interpolating raw
+      Path objects, and the separator/substring assertions should be made
+      platform-neutral.
+    - Decide whether foundation.py should reject an unescapable receipt more loudly. Today
+      an unparseable receipt degrades silently to UNKNOWN, which is what made the test
+      failures look like evaluation-logic bugs rather than parse failures. A distinct
+      status or an explicit warning naming the offending file would be easier to diagnose.
+    - The 8.3 versus long-form path mixing in the generated launcher document was observed
+      but not investigated; whether it originates in tempfile behavior only (test context)
+      or can occur in a real prepared workspace is unresolved.
+    - Only `paths` and `doctor` were exercised. `prepare`, `plan`, and `build` were not run
+      on Windows in this session, so nothing is claimed about the shared Foundation venv
+      (work/foundation/install/python), about the primer's requirement that the same
+      interpreter build Core hakopy and the Endpoint CFFI extension, or about component
+      build orchestration.
+  notes:
+    - Verified on one Windows machine at one revision. The claim that the failures are
+      test-side rather than implementation-side is supported by source reading plus the
+      isolating load_receipt probe, not merely by the passing doctor run.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      kind: test
+      path: tools/test_foundation.py
+      mode: detect-only
+      notes:
+        - The suite currently cannot distinguish "Foundation is broken here" from "the
+          fixture wrote a receipt this platform's own writer would never produce". Making
+          the fixture use the production writer (_yaml_string / json.dumps) would both fix
+          the Windows failures and keep the test honest about the format it claims to
+          exercise.
+
+promotion_rationale:
+  - The valuable knowledge is the pairing -- the Foundation implementation is Windows-ready
+    for the paths/doctor surface AND its test suite currently reports otherwise. Recording
+    only the red test result would misrepresent the layer; recording only the passing
+    doctor run would leave the next Windows contributor to rediscover ten failures.
+  - The promotion target is the Business Pack's own test tooling rather than any component
+    repository, because that is where the defect is.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Observation only; no upstream issue filed (issue filing for implementation work is
+      owned by upstream maintainers per the agreed role split). No change was made to the
+      fork or to upstream test code in this session.
