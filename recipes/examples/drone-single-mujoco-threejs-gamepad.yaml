@@ -1,0 +1,485 @@
+id: drone-single-mujoco-threejs-gamepad
+title: Human-operated Hakoniwa Drone MuJoCo and Three.js Exhibition Demo
+recipe_version: 0.1
+
+goal:
+  user_request: 展示会場で参加者がPS5コントローラを使って箱庭ドローンを飛ばし、MuJoCoとブラウザの両方で見たい
+  description: >
+    Generate and operate a single-drone exhibition runtime in which a human uses
+    a PS5 controller with the verified ps4-control.json mapping. Hakoniwa Drone
+    runs the physics simulation and native MuJoCo viewer, while the visual-state
+    publisher, WebBridge, and Three.js viewer expose the same motion in a browser.
+    Business Pack owns the generated Launcher and operator workflow; Drone Core
+    remains unchanged.
+
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - Drone Core already provides the MuJoCo service, rc-custom.py, and the PS4 controller mapping confirmed to work with the PS5 controller.
+    - DroneVisualStatePublisher, WebBridge, and Three.js already form a verified browser visualization path.
+    - hakoniwa-pdu-python provides the common Launcher and OS-independent background lifecycle control.
+
+validation:
+  status: partially_verified
+  verified_at: 2026-07-31
+  summary: >
+    The component topology is based on the existing Drone Core RC/WebBridge
+    Launcher and the verified Business Pack Three.js Recipe. PS5 operation with
+    ps4-control.json is confirmed by the user. The new Business Pack-owned
+    generator and complete exhibition lifecycle still require runtime validation.
+  steps:
+    - id: ps5_with_ps4_mapping
+      status: verified
+      evidence:
+        - source: user-runtime-confirmation
+          date: 2026-07-31
+      notes:
+        - The existing ps4-control.json mapping operates the PS5 controller; no separate PS5 mapping is required.
+    - id: generated_launcher_topology
+      status: not_tested
+      evidence: []
+      notes:
+        - Unit tests validate the generated topology; live process startup remains to be exercised.
+    - id: exhibition_end_to_end
+      status: not_tested
+      evidence: []
+      notes:
+        - Verify gamepad flight, MuJoCo rendering, Three.js rendering, participant reset, and background termination on the exhibition machine.
+
+constraints:
+  - single-pc
+  - native
+  - human-operated-gamepad
+  - mujoco-native-viewer
+  - threejs-browser-viewer
+  - shared-memory-pdu
+  - no-px4
+  - business-pack-owned-launcher
+  - no-drone-core-modification
+
+target_environment:
+  required_for: executable-demo
+  status: specified
+  os: macOS | Linux | Windows
+  os_version: current-supported-host
+  architecture: host-native
+  execution_mode: native
+  runtimes:
+    - name: MuJoCo
+      required: true
+      version: Drone-Core-compatible
+      path: hakoniwa-drone-core/vendor/mujoco
+    - name: Python
+      required: true
+      version: "3.12"
+      path: work/foundation/install/python
+    - name: Browser
+      required: true
+      version: current
+      path: system-default
+  hakoniwa:
+    install_prefix: work/foundation/install
+    components_built:
+      - hakoniwa-core-pro
+      - hakoniwa-pdu-python
+      - hakoniwa-pdu-bridge-core
+  notes:
+    - Runtime executable names are selected by Business Pack platform adapters.
+    - Architecture-specific arm64/x64 qualification is not a strict exhibition acceptance gate.
+    - Initial live validation may be macOS-first, but the common Launcher model must not contain macOS-only paths.
+
+execution_environment:
+  required_for: executable-demo
+  status: specified
+  os: host-native
+  os_version: current-supported-host
+  architecture: host-native
+  execution_mode: native
+  gui:
+    required: true
+    status: required
+  shared_memory:
+    required: true
+    access: local-host
+  devices:
+    - name: PS5 controller
+      required: true
+      available: user-confirmed
+      mapping: hakoniwa-drone-core/drone_api/rc/rc_config/ps4-control.json
+  python:
+    environment: foundation-venv
+    hakopy_available: required
+  hakoniwa:
+    install_prefix: work/foundation/install
+    hako_cmd_access: required
+  notes:
+    - TCP ports 8000 and 8765 must be available.
+    - The operator uses one Python command surface on every supported OS.
+    - OS-specific executable discovery is isolated under tools/platforms/drone_gamepad.
+
+agency_boundary:
+  agent_actions:
+    - id: generate_exhibition_runtime
+      description: Run configure and doctor to generate and inspect the Recipe workspace and Launcher.
+      autonomous: true
+      preconditions:
+        - user_requested_execution
+    - id: inspect_exhibition_status
+      description: Read Launcher status and logs without operating the gamepad.
+      autonomous: true
+      preconditions:
+        - launcher_started_by_operator
+  human_decisions:
+    - id: begin_participant_session
+      description: Decide when the exhibition runtime is ready to hand to a participant.
+      required_before:
+        - operate_gamepad
+  human_actions:
+    - id: start_exhibition
+      description: Start the generated Launcher on the exhibition machine.
+      confirmation_required: true
+      required_before:
+        - operate_gamepad
+    - id: operate_gamepad
+      description: Hold and operate the PS5 controller to fly the simulated drone.
+      confirmation_required: true
+      required_before: []
+    - id: reset_for_next_participant
+      description: Run the reset command between participants and confirm the initial state is restored.
+      confirmation_required: true
+      required_before:
+        - next_participant_session
+    - id: stop_exhibition
+      description: Terminate the owned Launcher session at the end of the demonstration.
+      confirmation_required: true
+      required_before: []
+  required_permissions:
+    - id: hakoniwa_drone_license
+      description: Confirm that the exhibition machine has the required Hakoniwa Drone Core or PRO usage entitlement.
+      status: required
+      required_before:
+        - start_exhibition
+
+components:
+  - id: hakoniwa-drone-core
+    roles:
+      - physics_runtime
+      - simulation_core
+    purpose: Run the MuJoCo drone service, native viewer, DroneVisualStatePublisher, and gamepad RC application.
+  - id: hakoniwa-core-pro
+    roles:
+      - simulation_core
+      - time_sync
+    purpose: Provide shared-memory PDU space, simulation lifecycle, and hako-cmd.
+  - id: hakoniwa-pdu-python
+    roles:
+      - language_binding
+      - control_plane
+    purpose: Provide the Python Launcher, background session lifecycle, and operator command runtime.
+  - id: hakoniwa-pdu-bridge-core
+    roles:
+      - bridge
+      - communication_infrastructure
+    purpose: Bridge DroneVisualStateArray from shared memory to WebSocket.
+  - id: hakoniwa-threejs-drone
+    roles:
+      - visualizer
+    purpose: Render the simulated drone in the browser.
+
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      shared_memory: true
+      hako_cmd: true
+  hakoniwa-pdu-python:
+    capabilities:
+      hako_launcher: true
+      shm_backend: true
+  hakoniwa-pdu-bridge-core:
+    capabilities:
+      hakoniwa_app: true
+      web_bridge: true
+      web_bridge_fleets_config_format: true
+
+connections:
+  - from: hakoniwa-core-pro
+    to: hakoniwa-drone-core
+    interface: pdu
+    data:
+      - shared-memory-pdu-space
+      - simulation-time
+      - lifecycle
+    contract:
+      status: partially_verified
+      requires:
+        - matching Core configuration
+        - one Conductor owner
+      validation_notes:
+        - The existing single-drone and RC launch paths use this contract.
+  - from: hakoniwa-pdu-python
+    to: hakoniwa-drone-core
+    interface: pdu
+    data:
+      - GameControllerOperation
+    contract:
+      status: partially_verified
+      requires:
+        - pygame
+        - connected PS5 controller
+        - ps4-control.json
+      validation_notes:
+        - The controller mapping is user-verified; the generated exhibition Launcher remains to be exercised.
+  - from: hakoniwa-drone-core
+    to: hakoniwa-pdu-bridge-core
+    interface: pdu
+    data:
+      - DroneVisualStateArray
+    contract:
+      status: verified
+      requires:
+        - DroneVisualStatePublisher
+        - matching WebBridge fleets configuration
+      validation_notes:
+        - Verified by the existing Drone Three.js Recipe.
+  - from: hakoniwa-pdu-bridge-core
+    to: hakoniwa-threejs-drone
+    interface: websocket
+    data:
+      - DroneVisualStateArray
+    contract:
+      status: verified
+      requires:
+        - ws://127.0.0.1:8765
+        - viewer-config-fleets.json
+        - wireVersion=v2
+      validation_notes:
+        - Verified by the existing Drone Three.js Recipe.
+
+data_flow:
+  summary: >
+    The PS5 controller is read by Drone Core's pygame-based rc-custom.py using
+    ps4-control.json. GameControllerOperation enters the Hakoniwa PDU space and
+    commands the MuJoCo drone. DroneVisualStatePublisher converts simulated state
+    to DroneVisualStateArray, WebBridge sends it over WebSocket, and Three.js
+    renders the same motion in the browser.
+  steps:
+    - from: PS5 controller
+      to: hakoniwa-pdu-python
+      data:
+        - axes
+        - buttons
+      description: The human participant supplies live gamepad input.
+    - from: hakoniwa-pdu-python
+      to: hakoniwa-drone-core
+      data:
+        - GameControllerOperation
+      description: rc-custom.py publishes the mapped gamepad operation.
+    - from: hakoniwa-drone-core
+      to: hakoniwa-pdu-bridge-core
+      data:
+        - DroneVisualStateArray
+      description: DroneVisualStatePublisher publishes browser-oriented visual state.
+    - from: hakoniwa-pdu-bridge-core
+      to: hakoniwa-threejs-drone
+      data:
+        - WebSocket visual state
+      description: Three.js renders the drone for exhibition observers.
+
+time_model:
+  mode: shared-simulation-time
+  components:
+    - hakoniwa-core-pro
+    - hakoniwa-drone-core
+    - hakoniwa-pdu-bridge-core
+  notes:
+    - Launcher process startup and hako-cmd simulation start are separate lifecycle operations.
+    - The gamepad controller starts after simulation start and does not own simulation time.
+    - The browser viewer is an external observer and does not own simulation time.
+
+artifact_sets:
+  physics_artifacts:
+    description: Drone service, MuJoCo runtime, fleet configuration, and native viewer option.
+    status: partially_verified
+    artifacts:
+      - platform-selected Drone service binary
+      - config/drone/fleets/api-current.json
+      - config/pdudef/drone-pdudef-current.json
+      - --mujoco-viewer
+  interaction_artifacts:
+    description: Gamepad RC application and controller mapping.
+    status: partially_verified
+    artifacts:
+      - drone_api/rc/rc-custom.py
+      - drone_api/rc/rc_config/ps4-control.json
+    notes:
+      - The PS4 mapping has been confirmed to work with the PS5 controller.
+  visualization_artifacts:
+    description: Visual-state publisher, WebBridge fleets config, and Three.js viewer.
+    status: verified
+    artifacts:
+      - platform-selected DroneVisualStatePublisher binary
+      - config/assets/web_bridge_fleets
+      - hakoniwa-threejs-drone
+  runtime_artifacts:
+    description: Business Pack-generated Launcher and operator command surface.
+    status: not_tested
+    artifacts:
+      - work/recipes/drone-single-mujoco-threejs-gamepad/config/launcher.json
+      - work/recipes/drone-single-mujoco-threejs-gamepad/session/launcher-session.json
+      - tools/drone_gamepad_exhibition.py
+      - tools/platforms/drone_gamepad
+
+artifacts:
+  - name: generated-launcher
+    kind: configuration
+    producer: hakoniwa-business-pack
+    consumer:
+      - hakoniwa-pdu-python
+    path: work/recipes/drone-single-mujoco-threejs-gamepad/config/launcher.json
+  - name: launcher-session
+    kind: runtime-state
+    producer: hakoniwa-pdu-python
+    consumer:
+      - hakoniwa-business-pack
+    path: work/recipes/drone-single-mujoco-threejs-gamepad/session/launcher-session.json
+  - name: viewer-url
+    kind: endpoint
+    producer: hakoniwa-threejs-drone
+    consumer:
+      - exhibition-operator
+    path: http://127.0.0.1:8000/index.html?viewerConfigPath=/config/viewer-config-fleets.json&wsUri=ws://127.0.0.1:8765&wireVersion=v2
+
+missing_pieces:
+  - Run the generated Launcher end to end on the ROSCon JP exhibition machine.
+  - Confirm the platform-selected DroneVisualStatePublisher binary name on native Windows before claiming Windows runtime verification.
+  - Confirm repeated reset cycles restore a stable participant-ready initial state.
+
+demo:
+  objective: >
+    Let an exhibition participant fly one simulated Hakoniwa Drone with a PS5
+    controller while observers see synchronized MuJoCo and Three.js views.
+  profiles:
+    - id: human-operated-gamepad
+      launcher: work/recipes/drone-single-mujoco-threejs-gamepad/config/launcher.json
+      operator_tool: tools/drone_gamepad_exhibition.py
+  steps:
+    - order: 1
+      component: hakoniwa-business-pack
+      action: Generate the Recipe workspace and common Launcher.
+      command: python tools/drone_gamepad_exhibition.py configure
+    - order: 2
+      component: hakoniwa-business-pack
+      action: Check runtime artifacts, ports, pygame, and the connected gamepad.
+      command: python tools/drone_gamepad_exhibition.py doctor
+    - order: 3
+      component: hakoniwa-pdu-python
+      action: Start the Launcher using its OS-independent background session contract.
+      command: python tools/drone_gamepad_exhibition.py start
+    - order: 4
+      component: hakoniwa-threejs-drone
+      action: Open the browser viewer and press Connect.
+      command: python tools/drone_gamepad_exhibition.py open-viewer
+    - order: 5
+      component: hakoniwa-drone-core
+      action: Hand the PS5 controller to the participant and operate the simulated drone.
+      command: human action
+    - order: 6
+      component: hakoniwa-core-pro
+      action: Restore the simulation for the next participant.
+      command: python tools/drone_gamepad_exhibition.py reset
+    - order: 7
+      component: hakoniwa-pdu-python
+      action: Terminate the owned Launcher session after the exhibition.
+      command: python tools/drone_gamepad_exhibition.py stop
+  observability:
+    success_signals:
+      - MuJoCo viewer opens and shows the drone.
+      - Three.js connects to ws://127.0.0.1:8765 and shows the same drone motion.
+      - PS5 stick and button input changes GameControllerOperation and drone motion.
+      - Reset returns the drone to the participant-ready initial state.
+      - Stop reports Launcher state TERMINATED and releases ports 8000 and 8765.
+    failure_signals:
+      - pygame reports no connected joystick.
+      - Drone service cannot load MuJoCo.
+      - WebBridge or HTTP server cannot bind its port.
+      - The MuJoCo view moves but Three.js does not receive DroneVisualStateArray.
+      - hako_launcher_ctl reports a stale or failed session.
+    fixtures:
+      - One PS5 controller using ps4-control.json.
+      - One generated fleet drone.
+      - Browser with WebGL support.
+    automation:
+      - Business Pack generates the Launcher and resolves platform executable paths.
+      - User-facing lifecycle operations use one Python command surface on every OS.
+      - Human operation remains outside AI automation.
+  verification_checks:
+    lifecycle:
+      - Background Launcher reaches RUNNING.
+      - All five Launcher assets start in dependency order.
+      - hako_launcher_ctl terminate reaches TERMINATED.
+    behavior:
+      - Gamepad input changes drone attitude, altitude, or position.
+      - MuJoCo and Three.js display consistent motion.
+      - Reset supports repeated participant sessions.
+    logs:
+      - No asset exits unexpectedly.
+      - WebBridge reports the expected WebSocket endpoint.
+      - Controller logs identify the connected joystick.
+  cleanup:
+    owner: hakoniwa-launcher
+    provider: hakoniwa-pdu-python
+    mode: background
+    target: work/recipes/drone-single-mujoco-threejs-gamepad/session/launcher-session.json
+    trigger: python tools/drone_gamepad_exhibition.py stop
+    expected_behavior:
+      - The operator tool invokes hako_launcher_ctl terminate for the owned session file.
+      - LauncherService terminates only its five managed assets and records TERMINATED.
+    verification_checks:
+      - Confirm python tools/drone_gamepad_exhibition.py status reports TERMINATED.
+      - Confirm no Launcher-managed process remains.
+      - Confirm TCP ports 8000 and 8765 are released.
+    cautions:
+      - Do not replace the session-file lifecycle with OS-specific PID killing.
+      - Do not broadly terminate Python, browser, or unrelated Hakoniwa processes.
+      - hako-cmd stop changes simulation state but does not terminate Launcher-owned OS processes.
+
+expected_result: >
+  The exhibition operator uses the same Python commands on each supported OS to
+  configure, check, start, inspect, reset, and stop the demo. A participant flies
+  one simulated drone with the PS5 controller, and synchronized motion is visible
+  in both the native MuJoCo viewer and the Three.js browser viewer.
+
+source_catalogs:
+  - component_id: hakoniwa-drone-core
+    catalog_path: ../catalog/components/hakoniwa-drone-core.yaml
+  - component_id: hakoniwa-core-pro
+    catalog_path: ../catalog/components/hakoniwa-core-pro.yaml
+  - component_id: hakoniwa-pdu-python
+    catalog_path: ../catalog/components/hakoniwa-pdu-python.yaml
+  - component_id: hakoniwa-pdu-bridge-core
+    catalog_path: ../catalog/components/hakoniwa-pdu-bridge-core.yaml
+  - component_id: hakoniwa-threejs-drone
+    catalog_path: ../catalog/components/hakoniwa-threejs-drone.yaml
+
+source_artifacts:
+  - repository: toppers/hakoniwa-drone-core
+    path: tools/launch-mujoco-rc-web-bridge.bash
+    revision: main-2026-07-31
+    description: Existing topology reference for MuJoCo, RC, WebBridge, and Three.js.
+  - repository: toppers/hakoniwa-drone-core
+    path: config/launcher/drone-mujoco-rc-web-bridge.launch.json
+    revision: main-2026-07-31
+    description: Existing Launcher structure used as evidence, not copied as the generated artifact.
+  - repository: toppers/hakoniwa-drone-core
+    path: drone_api/rc/rc-custom.py
+    revision: main-2026-07-31
+    description: pygame-based RC application reused without modification.
+  - repository: toppers/hakoniwa-drone-core
+    path: drone_api/rc/rc_config/ps4-control.json
+    revision: main-2026-07-31
+    description: Mapping confirmed to operate the PS5 controller.
+  - repository: hakoniwalab/hakoniwa-business-pack
+    path: recipes/examples/drone-single-mujoco-threejs-mac.yaml
+    revision: main-2026-07-31
+    description: Verified Foundation and Three.js visualization path reused by this human-operated variant.
