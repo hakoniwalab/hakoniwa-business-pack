@@ -102,6 +102,10 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
             paths, _drone_root, _viewer_root, runtime, launcher = self._generate(root)
             session = recipe.session_file(paths)
 
+            self.assertEqual(
+                session,
+                paths.recipe_root / "runtime" / "launcher-session.json",
+            )
             start = recipe.launcher_start_command(
                 runtime.foundation_python, launcher, session
             )
@@ -182,6 +186,7 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
         self.assertIn("hako_launcher_ctl terminate", content)
         self.assertIn("environment: foundation-venv", content)
         self.assertIn("interpreter_override: forbidden", content)
+        self.assertIn("runtime/launcher-session.json", content)
         self.assertIn("human_actions:", content)
         self.assertIn("operate_gamepad", content)
 
