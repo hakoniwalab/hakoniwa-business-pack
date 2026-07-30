@@ -15,7 +15,7 @@ import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
 
-TOOLS_DIR = Path(__file__).resolve().parent
+TOOLS_DIR = Path(__file__).absolute().parent
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
@@ -57,7 +57,7 @@ def load_foundation_module():
 
 
 def root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).absolute().parents[1]
 
 
 def default_source(name: str) -> Path:
@@ -68,20 +68,29 @@ def recipe_file() -> Path:
     return root() / "recipes" / "examples" / f"{RECIPE_ID}.yaml"
 
 
-def _required(path: Path, label: str) -> Path:
-    if not path.exists():
-        raise RecipeError(f"{label} not found: {path}")
-    return path.resolve()
+def _absolute_without_resolving(path: Path) -> Path:
+    return Path(os.path.abspath(path.expanduser()))
+
+
+def _required(path: Path, label: str, *, preserve_symlink: bool = False) -> Path:
+    candidate = _absolute_without_resolving(path)
+    if not candidate.exists():
+        raise RecipeError(f"{label} not found: {candidate}")
+    return candidate if preserve_symlink else candidate.resolve()
 
 
 def _resolve_candidate(
-    candidates: tuple[Path, ...], label: str, override: Path | None = None
+    candidates: tuple[Path, ...],
+    label: str,
+    override: Path | None = None,
+    *,
+    preserve_symlink: bool = False,
 ) -> Path:
     if override is not None:
-        return _required(override.expanduser(), label)
+        return _required(override, label, preserve_symlink=preserve_symlink)
     for candidate in candidates:
         if candidate.is_file():
-            return candidate.resolve()
+            return _required(candidate, label, preserve_symlink=preserve_symlink)
     rendered = ", ".join(str(candidate) for candidate in candidates)
     raise RecipeError(f"{label} not found; checked: {rendered}")
 
@@ -98,13 +107,21 @@ def _port_available(port: int) -> bool | None:
     return True
 
 
-def resolve_foundation_python(paths, override: Path | None = None) -> Path:
+def resolve_foundation_python(paths) -> Path:
     adapter = current_adapter()
-    return _resolve_candidate(
+    python = _resolve_candidate(
         adapter.foundation_python_candidates(paths.foundation_python),
         "Foundation Python",
-        override,
+        preserve_symlink=True,
     )
+    venv_root = _absolute_without_resolving(paths.foundation_python)
+    try:
+        python.relative_to(venv_root)
+    except ValueError as exc:
+        raise RecipeError(
+            f"Foundation Python must stay under the shared venv: {venv_root}"
+        ) from exc
+    return python
 
 
 def resolve_runtime(
@@ -113,7 +130,6 @@ def resolve_runtime(
     *,
     drone_service_bin: Path | None = None,
     visual_state_publisher_bin: Path | None = None,
-    python_bin: Path | None = None,
     hako_cmd_bin: Path | None = None,
     web_bridge_bin: Path | None = None,
 ) -> RuntimePaths:
@@ -131,11 +147,7 @@ def resolve_runtime(
             "Visual-state publisher",
             visual_state_publisher_bin,
         ),
-        foundation_python=_resolve_candidate(
-            adapter.foundation_python_candidates(paths.foundation_python),
-            "Foundation Python",
-            python_bin,
-        ),
+        foundation_python=resolve_foundation_python(paths),
         hako_cmd=_resolve_candidate(
             adapter.hako_cmd_candidates(paths.install_prefix),
             "hako-cmd",
@@ -267,11 +279,7 @@ def write_launcher(paths, drone_root: Path, viewer_root: Path, runtime: RuntimeP
                 "command": str(runtime.web_bridge),
                 "args": [
                     "--config-root",
-                    str(
-                        paths.recipe_config
-                        / "assets"
-                        / "web_bridge_fleets"
-                    ),
+                    str(paths.recipe_config / "assets" / "web_bridge_fleets"),
                     "--node-name",
                     "web_bridge_fleets_node1",
                     "--delta-time-step-usec",
@@ -349,7 +357,10 @@ def reset_commands(hako_cmd: Path) -> list[list[str]]:
 def runtime_environment(paths, runtime: RuntimePaths) -> dict[str, str]:
     env = os.environ.copy()
     env["HAKO_CONFIG_PATH"] = str(paths.foundation_config / "cpp_core_config.json")
-    path_entries = [str(runtime.foundation_python.parent), str(paths.install_prefix / "bin")]
+    path_entries = [
+        str(runtime.foundation_python.parent),
+        str(paths.install_prefix / "bin"),
+    ]
     env["PATH"] = os.pathsep.join(path_entries + [env.get("PATH", "")])
     library_entries = [str(paths.install_prefix / "lib")]
     if runtime.system_name == "Darwin":
@@ -363,7 +374,7 @@ def runtime_environment(paths, runtime: RuntimePaths) -> dict[str, str]:
 
 
 def _run(command: list[str], env: dict[str, str] | None = None) -> int:
-    print("+", " ".join(command))
+    print("+", subprocess.list2cmdline(command))
     return subprocess.run(command, env=env, check=False).returncode
 
 
@@ -376,9 +387,36 @@ def configure(drone_root: Path, viewer_root: Path, overrides: dict[str, Path | N
     print(f"Recipe workspace : {paths.recipe_root}")
     print(f"Launcher         : {launcher}")
     print(f"Session          : {session_file(paths)}")
+    print(f"Foundation Python: {runtime.foundation_python}")
     print(f"Viewer           : {VIEWER_URL}")
     print("Operator command : python tools/drone_gamepad_exhibition.py start")
     return 0
+
+
+def _probe_python_runtime(python: Path, venv_root: Path) -> tuple[bool, str]:
+    code = (
+        "import json, pathlib, sys; "
+        "import hakopy; "
+        "import hakoniwa_pdu; "
+        "import hakoniwa_pdu.apps.launcher.hako_launcher; "
+        "print(json.dumps({'prefix': str(pathlib.Path(sys.prefix).absolute()), "
+        "'executable': str(pathlib.Path(sys.executable).absolute())}))"
+    )
+    result = subprocess.run(
+        [str(python), "-c", code],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return False, result.stderr.strip() or "Foundation imports failed"
+    try:
+        payload = json.loads(result.stdout.strip().splitlines()[-1])
+        prefix = _absolute_without_resolving(Path(payload["prefix"]))
+        prefix.relative_to(_absolute_without_resolving(venv_root))
+    except (KeyError, ValueError, json.JSONDecodeError, IndexError) as exc:
+        return False, f"Python is not running inside the Foundation venv: {exc}"
+    return True, f"venv={prefix}"
 
 
 def _probe_controller(python: Path) -> tuple[bool, str]:
@@ -395,8 +433,7 @@ def _probe_controller(python: Path) -> tuple[bool, str]:
         check=False,
     )
     if result.returncode != 0:
-        detail = result.stderr.strip() or "pygame import/probe failed"
-        return False, detail
+        return False, result.stderr.strip() or "pygame import/probe failed"
     try:
         count = int(result.stdout.strip().splitlines()[-1])
     except (ValueError, IndexError):
@@ -420,6 +457,10 @@ def doctor(drone_root: Path, viewer_root: Path, overrides: dict[str, Path | None
         ("port 8000", _port_available(8000), "available"),
         ("port 8765", _port_available(8765), "available"),
     ]
+    python_ok, python_detail = _probe_python_runtime(
+        runtime.foundation_python, paths.foundation_python
+    )
+    checks.append(("Foundation Python imports", python_ok, python_detail))
     controller_ok, controller_detail = _probe_controller(runtime.foundation_python)
     checks.append(("gamepad", controller_ok, controller_detail))
     launcher = paths.recipe_config / "launcher.json"
@@ -446,17 +487,17 @@ def start(drone_root: Path, viewer_root: Path, overrides: dict[str, Path | None]
     )
 
 
-def status(overrides: dict[str, Path | None]) -> int:
+def status() -> int:
     foundation = load_foundation_module()
     paths = foundation.resolve_workspace(root(), RECIPE_ID)
-    python = resolve_foundation_python(paths, overrides.get("python_bin"))
+    python = resolve_foundation_python(paths)
     return _run(launcher_control_command(python, "status", session_file(paths)))
 
 
-def stop(overrides: dict[str, Path | None]) -> int:
+def stop() -> int:
     foundation = load_foundation_module()
     paths = foundation.resolve_workspace(root(), RECIPE_ID)
-    python = resolve_foundation_python(paths, overrides.get("python_bin"))
+    python = resolve_foundation_python(paths)
     return _run(launcher_control_command(python, "terminate", session_file(paths)))
 
 
@@ -500,7 +541,6 @@ def parser() -> argparse.ArgumentParser:
     )
     result.add_argument("--drone-service-bin", type=Path)
     result.add_argument("--visual-state-publisher-bin", type=Path)
-    result.add_argument("--python-bin", type=Path)
     result.add_argument("--hako-cmd-bin", type=Path)
     result.add_argument("--web-bridge-bin", type=Path)
     return result
@@ -511,13 +551,12 @@ def main(argv: list[str] | None = None) -> int:
     overrides = {
         "drone_service_bin": args.drone_service_bin,
         "visual_state_publisher_bin": args.visual_state_publisher_bin,
-        "python_bin": args.python_bin,
         "hako_cmd_bin": args.hako_cmd_bin,
         "web_bridge_bin": args.web_bridge_bin,
     }
     try:
-        drone_root = args.drone_root.expanduser().resolve()
-        viewer_root = args.viewer_root.expanduser().resolve()
+        drone_root = _absolute_without_resolving(args.drone_root)
+        viewer_root = _absolute_without_resolving(args.viewer_root)
         if args.command == "configure":
             return configure(drone_root, viewer_root, overrides)
         if args.command == "doctor":
@@ -525,11 +564,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "start":
             return start(drone_root, viewer_root, overrides)
         if args.command == "status":
-            return status(overrides)
+            return status()
         if args.command == "reset":
             return reset(drone_root, viewer_root, overrides)
         if args.command == "stop":
-            return stop(overrides)
+            return stop()
         return open_viewer()
     except RecipeError as exc:
         print(f"error: {exc}", file=sys.stderr)
