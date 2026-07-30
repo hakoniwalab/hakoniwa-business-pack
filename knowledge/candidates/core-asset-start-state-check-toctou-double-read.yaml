@@ -1,5 +1,5 @@
 id: core-asset-start-state-check-toctou-double-read
-title: hako_asset_start_no_wait reads the simulation state twice, so a rejected start prints an error naming the very state it required
+title: hako_asset_start_no_wait reads the simulation state twice, so a rejected start can report a different state than the one that caused the rejection
 status: candidate
 
 knowledge_type:
@@ -7,24 +7,24 @@ knowledge_type:
 
 summary: >
   In hakoniwa-core-pro's asset callback library, hako_asset_start_no_wait() (and the
-  sibling check in hako_trigger_event()) evaluates `hako_asset_impl_state() !=
-  HakoSim_Stopped` to decide whether to reject the call, then calls
-  hako_asset_impl_state() a SECOND time to build the error message. The two reads are not
-  atomic. When an asset re-enters start immediately after `hako-cmd stop` -- which is
+  sibling check in hako_trigger_event()) evaluated `hako_asset_impl_state() !=
+  HakoSim_Stopped` to decide whether to reject the call, then called
+  hako_asset_impl_state() a SECOND time to build the error message. The two reads were not
+  atomic. When an asset re-entered start immediately after `hako-cmd stop` -- which is
   exactly what the vendored hello_world example does, since its main loop is an unbounded
-  `while (1) { hako_asset_start(); }` -- the check can fail while the state settles
+  `while (1) { hako_asset_start(); }` -- the check could fail while the state settled
   microseconds later, producing the self-contradictory line
   "Error: simulation state(0) is invalid, expeting HakoSim_Stopeed." with
-  HakoSim_Stopped == 0. The condition is transient and self-healing (the next loop
-  iteration succeeds), but any log scanner that treats "Error:" lines as fatal will fail
-  intermittently -- measured at roughly 50% of runs.
-  Important qualifier, added after a second measurement pass: the same message ALSO
-  appears with state(4) = HakoSim_Resetting, and that variant is not the race at all. It
-  is an ordinary, correct rejection while `hako-cmd reset` is in progress. So the message
-  is emitted for two different reasons, only one of which is a defect, and the printed
-  state value is the only way to tell them apart. That makes the double read worse than a
-  cosmetic issue: it destroys the one signal a reader could use to distinguish "the core
-  reported a stale state" from "the asset legitimately called start too early".
+  HakoSim_Stopped == 0. The condition was transient and self-healing (the next loop
+  iteration succeeded), but a log scanner that treated every "Error:" line as fatal could
+  fail intermittently -- directly observed in 2 of 4 consecutive smoke runs.
+  A second measurement pass also produced state(4) = HakoSim_Resetting for the same old
+  message. That variant was not the double-read race: it was a truthful rejection while
+  reset was still in progress. The important lesson is therefore that the state snapshot
+  used for the decision and the diagnostic must be the same, and expected lifecycle
+  transitions such as Stopping/Resetting should remain distinguishable from genuinely bad
+  states. hakoniwa-core-pro #80 implemented that fix; native Windows re-verification is
+  still pending.
 
 observation:
   context: >
@@ -82,6 +82,12 @@ sources:
     - repository: hakoniwalab/hakoniwa-core-pro
       path: examples/hello_world/src/hello_world.c
       revision: 9727e1d
+    - repository: hakoniwalab/hakoniwa-core-pro
+      path: sources/assets/callback/src/hako_asset_state_check.hpp
+      revision: dccd99f
+    - repository: hakoniwalab/hakoniwa-core-pro
+      path: tests/cpp/hako_asset_state_check_test.cpp
+      revision: dccd99f
   runtime_evidence:
     - description: >-
         External contributor's Windows 11 x86_64 verification environment (native, MSVC
@@ -100,25 +106,22 @@ contradictions: []
 validation:
   status: verified
   required:
-    - Confirm whether upstream considers the double read worth fixing (read the state once
-      into a local and report that value) or considers the message cosmetic. The
-      functional behavior -- reject and let the caller retry -- is arguably correct; it is
-      the diagnostics that mislead.
-    - Determine whether the intended contract is that an asset MAY spin on
-      hako_asset_start() the way the vendored hello_world example does. If that loop is
-      the recommended pattern, the transient error is guaranteed for every asset at every
-      stop, and downgrading it from stderr "Error:" to an informational retry line would
-      remove a permanent source of false positives in log-scanning harnesses.
-    - Not measured on POSIX. The race is in platform-neutral C++ and the reasoning does not
-      depend on Windows, but the ~50% hit rate was measured only on this Windows machine
-      and will depend on scheduling.
+    - Re-run the native Windows smoke test against hakoniwa-core-pro main at or after
+      dccd99f and confirm the old self-contradictory state(0) Error line no longer appears.
+    - Confirm Stopping/Resetting are reported as expected transition/retry diagnostics,
+      while genuinely invalid states still remain distinguishable as errors.
   notes:
-    - Verified by source reading plus eight measured runs (four before, four after), on one
-      machine, at one Core revision.
+    - The original diagnosis is verified by source reading plus repeated Windows runs.
+      Upstream #80 is implemented and tested, but `resolution.verified` remains false until
+      the contributor repeats the original runtime scenario against the fixed Core.
 
 tracking:
-  implementation_status: none
-  issues: []
+  implementation_status: resolved
+  issues:
+    - repository: hakoniwalab/hakoniwa-core-pro
+      number: 80
+      relation: fix
+      status: closed
 
 promotion_targets:
   catalog: []
@@ -129,33 +132,28 @@ promotion_targets:
   executable_guardrails: []
 
 promotion_rationale:
-  - The actionable knowledge for anyone writing an asset or a verification harness is
-    "this specific stderr line is transient and self-healing at stop/reset boundaries; do
-    not treat it as fatal, and do not treat its state number as meaningful". That belongs
-    with component/asset guidance rather than in the catalog or a Recipe.
-  - No executable guardrail is proposed -- a doctor-style check cannot detect a race, and
-    the correct fix (single read, or demotion of the message severity) is a two-line
-    change in the owning repository.
+  - The reusable asset-side lesson is not to ignore the state number. Use one simulation
+    state snapshot for both the decision and its diagnostic, and distinguish expected
+    lifecycle transitions (Stopping/Resetting) from genuinely invalid states. That belongs
+    with component/asset guidance rather than in the Catalog or a Recipe.
+  - No Business Pack executable guardrail is proposed. The owning Core repository now has
+    a focused helper and C++ tests for this behavior; duplicating that check in a doctor
+    command would add little value.
 
 resolution:
-  status: pending
-  fixed_by: []
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-core-pro
+      issue: 80
+      pull_request: null
+      revision: dccd99f
   verified: false
   promoted_to: []
   executable_guardrails: []
   notes:
-    - Diagnosis only; no upstream issue filed (issue filing for implementation work is
-      owned by upstream maintainers per the agreed role split).
-    - The workspace-side change made in this session (tolerating this line, by two
-      anchored regexes pinned to state(0) and state(4), in the smoke test's log scanner,
-      with the mechanism documented at the call site) is a false-positive suppression,
-      not a fix. Positive pass evidence -- the on_simulation_step callback log plus a
-      clean process outcome -- was deliberately left required, and states 1, 2, 3, 5
-      (Error) and 6 (Terminated) remain fatal.
-    - Sequencing note for anyone reproducing this. The first workspace pass tolerated any
-      state value; an adversarial review correctly objected that this hides genuinely bad
-      states, so the pattern was pinned to state(0) -- and the very next measurement pass
-      went red on state(4) = Resetting, which is how the second, benign cause of the same
-      message was found. The lesson is that the message alone does not identify its own
-      cause, which is the strongest practical argument for fixing the double read
-      upstream.
+    - Core #80 reads the state once, reports Stopping/Resetting as expected transition
+      retries, preserves error diagnostics for invalid states, and adds focused tests.
+    - The workspace-side regex tolerance remains historical evidence only; the upstream
+      implementation is the actual fix.
+    - Native Windows re-verification of the original smoke scenario is still required
+      before marking this resolution verified.
