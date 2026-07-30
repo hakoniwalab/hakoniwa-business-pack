@@ -39,6 +39,19 @@ observation:
       `kill -INT`) and refers to 'the console/Launcher termination mechanism documented
       for the provider and target environment'. No such Windows mechanism is documented in
       the primer, and none was found elsewhere in the Business Pack at revision ed04582."
+    - "The prohibition is stated in two independent places, while its counterpart is stated
+      in neither. docs/hakoniwa-runtime-primer.md (and its -ja translation, which was
+      compared line by line and carries the same content) says 'Do not generalize the POSIX
+      kill -INT example to Windows. Use the console/Launcher termination mechanism
+      documented for the provider and target environment.' AGENTS-USER.md repeats it in the
+      side-effecting-actions section as 'The kill -INT <launcher-pid> example is
+      POSIX-specific and must not be generalized to Windows', in the same paragraph that
+      requires reading the Recipe's demo.cleanup contract before starting or stopping a
+      long-running Launcher. So the guidance a User/Solution Agent reads on Windows is
+      prohibition twice and instruction zero times. A repository-wide search of every .md
+      and .yaml file at ed04582 for the terms a Windows mechanism would have to name
+      (taskkill, CTRL_BREAK, CTRL_C_EVENT, GenerateConsoleCtrlEvent, SIGBREAK,
+      CREATE_NEW_PROCESS_GROUP) returned no hits outside this candidate itself."
     - "Measured on Windows: issuing `taskkill.exe /PID <pid> /T` (no /F) against each
       running Python asset of a 3-party configuration returns exit code 255 with the
       message 'この処理は、/F オプションのみで強制終了できます' (this process can only be
@@ -73,6 +86,12 @@ sources:
   repositories:
     - repository: hakoniwalab/hakoniwa-business-pack
       path: docs/hakoniwa-runtime-primer.md
+      revision: ed04582
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: docs/hakoniwa-runtime-primer-ja.md
+      revision: ed04582
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: AGENTS-USER.md
       revision: ed04582
   runtime_evidence:
     - description: >-
@@ -133,6 +152,12 @@ promotion_rationale:
     normal-vs-escalation ordering; what is missing is a Windows counterpart to the POSIX
     recipe, plus an explicit statement of the asset-side precondition (own process group
     plus console control handler) without which no Windows request-to-close can succeed.
+  - AGENTS-USER.md carries the same POSIX-only prohibition and would need the same
+    counterpart, but it is not listed as a separate promotion target because the
+    promotion_targets vocabulary has no field for the role guides and because that
+    paragraph is a summary of the primer's contract rather than an independent statement
+    of it. Fixing the primer and re-summarizing it in the User guide is one change, not
+    two.
   - Recording escalation-as-normal explicitly matters for the contract's own goal -- the
     primer asks readers to treat SIGTERM/SIGKILL as escalation paths and to be cautious
     about them. On Windows that caution currently fires on every teardown, which trains
