@@ -626,4 +626,44 @@ components:
   - multi-drone
   - 100-drones
   catalog_path: components/hakoniwa-threejs-drone.yaml
+- id: tobas
+  name: Tobas
+  category: tool
+  secondary_categories:
+  - integration
+  - control-plane
+  - ros2
+  - simulator
+  - visualization
+  maturity: active
+  distribution: dual-license
+  summary: Linux and ROS 2 based model-driven flight-control stack for conventional
+    and unconventional robotic aircraft, with airframe configuration, Gazebo simulation,
+    mission control, tuning, monitoring, and real-hardware deployment paths.
+  recipe_roles:
+  - control_plane
+  - integration_boundary
+  - monitor
+  - visualizer
+  connects_to:
+  - hakoniwa-pdu-ros
+  - hakoniwa-pdu-registry
+  - hakoniwa-drone-core
+  tags:
+  - tobas
+  - flight-control
+  - model-based-control
+  - aircraft
+  - drone
+  - ros2
+  - gazebo
+  - uadf
+  - mission
+  - state-estimation
+  - failsafe
+  - ground-control-station
+  - simulation
+  - integration
+  - dual-license
+  catalog_path: components/tobas.yaml
 

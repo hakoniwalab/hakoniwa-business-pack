@@ -1,0 +1,335 @@
+id: tobas
+name: Tobas
+repository:
+  owner: TobasFlightControl
+  name: tobas
+  url: https://github.com/TobasFlightControl/tobas
+  visibility: public
+distribution:
+  channel: dual-license
+  notes:
+    - The public repository is distributed under GPL-3.0-or-later unless otherwise noted.
+    - Message, service, and action definition packages named *_msgs are distributed under Apache-2.0.
+    - Alternative commercial licensing is available under a separate written agreement for proprietary distribution, OEM use, support, or other commercial requirements.
+verification:
+  verified_at: 2026-07-30
+  source_revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+  source_ref: rolling
+summary: Linux and ROS 2 based model-driven flight-control stack for conventional and unconventional robotic aircraft, with airframe configuration, Gazebo simulation, mission control, tuning, monitoring, and real-hardware deployment paths.
+category:
+  primary: tool
+  secondary:
+    - integration
+    - control-plane
+    - ros2
+    - simulator
+    - visualization
+
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - Cataloged from the repository overview, current package metadata, user documentation, ROS API, simulation workflow, and licensing documents.
+    - Tobas is not currently a native Hakoniwa PDU asset; a concrete Hakoniwa connection requires an explicit ROS 2/PDU bridge Recipe and compatible generated data contracts.
+
+capabilities:
+  - name: Model-driven aircraft flight control
+    description: Builds flight and motor-control behavior from an airframe physical model so the same software architecture can support conventional multicopters, nonplanar multirotors, tilt aircraft, fixed-wing aircraft, and other robotic aircraft configurations.
+    evidence:
+      - repository: TobasFlightControl/tobas
+        path: README.md
+        revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+      - repository: TobasFlightControl/tobas
+        path: tobas_core/tobas_controllers
+        revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+  - name: Common real and simulated flight interface
+    description: Uses a hardware abstraction layer to convert physical-vehicle or Gazebo sensor data into common ROS 2 messages and route actuator targets back to either environment.
+    evidence:
+      - repository: TobasFlightControl/tobas
+        path: docs/docs/en/additional_information/system_architecture.md
+        revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+  - name: Gazebo flight-control prevalidation
+    description: Builds and launches a Gazebo aircraft simulation from Tobas GCS, supports wind configuration and command input, and exposes mission planning and parameter tuning through the same user workflow used for a physical aircraft.
+    evidence:
+      - repository: TobasFlightControl/tobas
+        path: docs/docs/en/getting_started/simulation.md
+        revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+      - repository: TobasFlightControl/tobas
+        path: tobas_gui/tobas_gazebo
+        revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+  - name: Aircraft-specific body and propulsion modeling
+    description: Defines UADF as an extension of URDF with aircraft-specific thrust, control-surface, and tilt joints, then uses the resulting model and propulsion properties to generate a Tobas project.
+    evidence:
+      - repository: TobasFlightControl/tobas
+        path: docs/docs/en/additional_information/what_is_uadf.md
+        revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+      - repository: TobasFlightControl/tobas
+        path: docs/docs/en/getting_started/airframe_config.md
+        revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+  - name: ROS 2 control and observation boundary
+    description: Exposes flight commands, state and sensor topics, arming services, and mission actions through ROS 2 for use by external programs in simulation or approved physical-aircraft workflows.
+    evidence:
+      - repository: TobasFlightControl/tobas
+        path: docs/docs/en/for_developers/ros_api.md
+        revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+      - repository: TobasFlightControl/tobas
+        path: docs/docs/en/getting_started/simulation.md
+        revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+  - name: Integrated state estimation, control, mission, and failsafe stack
+    description: Provides vehicle state estimation, multicopter and fixed-wing controllers, rotor control, mission execution, health monitoring, and failsafe nodes as one ROS 2 flight-control stack.
+    evidence:
+      - repository: TobasFlightControl/tobas
+        path: tobas_core/tobas_eskf/package.xml
+        revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+      - repository: TobasFlightControl/tobas
+        path: tobas_core/tobas_controllers/tobas_controllers/package.xml
+        revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+      - repository: TobasFlightControl/tobas
+        path: tobas_core/tobas_mission/tobas_mission/package.xml
+        revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+      - repository: TobasFlightControl/tobas
+        path: tobas_core/tobas_failsafe/package.xml
+        revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+  - name: Ground control, tuning, visualization, and flight-log tools
+    description: Provides Qt and RViz based tools for project setup, vehicle monitoring, mission planning, online parameter tuning, actuator testing, visualization, and flight-log recording and replay.
+    evidence:
+      - repository: TobasFlightControl/tobas
+        path: docs/docs/en/getting_started/flight_test.md
+        revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+      - repository: TobasFlightControl/tobas
+        path: tobas_gui
+        revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+
+limitations:
+  - No native Hakoniwa PDU, Endpoint, shared-memory, or Conductor integration is verified in the current Tobas repository.
+  - A Hakoniwa composition must define exact ROS 2 topic/service/action mappings, compatible PDU types, generated converters, producer/consumer ownership, and time/lifecycle behavior; ROS 2 support alone does not prove that connection.
+  - The documented PC environment is Ubuntu 24.04 LTS with ROS 2 Jazzy; the documented flight-controller image targets Debian Trixie.
+  - The documented simulation runtime is Gazebo. Tobas is not itself a replacement for Hakoniwa Core, Endpoint, Bridge, or Conductor.
+  - First-time Gazebo simulation may download environment data and therefore is not guaranteed to be an offline-only operation.
+  - Physical-aircraft setup, calibration, actuator tests, arming, flight, and parameter acceptance require human actions and safety judgement; simulation evidence does not authorize real-world actuation.
+  - GPL and alternative commercial-license obligations must be evaluated separately from technical feasibility.
+
+interfaces:
+  inputs:
+    - name: UADF airframe description
+      kind: file
+      description: URDF-compatible aircraft model extended with thrust, control-surface, and tilt joint semantics.
+    - name: Tobas project
+      kind: config
+      description: Project data produced by Setup Assistant, including mass properties, propulsion models, hardware mapping, remote connection, and controller configuration.
+    - name: ROS 2 flight commands
+      kind: api
+      description: Command topics such as rate, angle, throttle, position, velocity, acceleration, and yaw targets with explicit command priority.
+    - name: ROS 2 services and mission actions
+      kind: api
+      description: Arming, simulation configuration, and mission-execution request boundaries.
+    - name: Sensor and hardware-abstraction data
+      kind: api
+      description: Physical or Gazebo sensor messages consumed by estimation and control nodes through the Tobas HAL.
+  outputs:
+    - name: ROS 2 vehicle state and sensor topics
+      kind: api
+      description: Battery, IMU, GNSS, odometry, joint state, actuator state, controller feedback, health, and other observation data.
+    - name: Actuator target commands
+      kind: api
+      description: Target motor speeds, thrust, and joint commands routed through the HAL to Gazebo or supported physical hardware.
+    - name: Mission result and feedback
+      kind: api
+      description: Mission execution result, error information, and current-command progress through a ROS 2 action.
+    - name: Ground-control and visualization UI
+      kind: api
+      description: GCS, RViz, tuning, actuator-test, and flight-log user interfaces.
+  protocols:
+    - name: ROS 2 DDS
+      role: pubsub
+      notes: Primary software integration boundary for topics, services, and actions; documented remote communication uses ROS 2 DDS.
+  configuration:
+    - path: docs/docs/en/additional_information/what_is_uadf.md
+      description: UADF model contract and examples.
+    - path: docs/docs/en/for_developers/ros_api.md
+      description: Main ROS 2 topic, service, and action contracts.
+    - path: tobas_gui/tobas_setup_assistant/templates
+      description: Project and package templates generated from the configured airframe.
+
+dependencies:
+  required:
+    - name: ROS 2 Jazzy
+      type: runtime
+      notes: Primary middleware, message, service, action, launch, and package environment for the documented PC workflow.
+    - name: colcon and ament_cmake
+      type: tool
+      notes: Required to build the complete ROS 2 workspace from source.
+    - name: CMake 3.25 or newer
+      type: tool
+      notes: Minimum version declared by the top-level Tobas aggregation package.
+  optional:
+    - name: Gazebo
+      type: runtime
+      notes: Provides the documented simulation and software-only flight-validation environment.
+    - name: Tobas flight-controller hardware
+      type: runtime
+      notes: Required only for physical-aircraft deployment and hardware I/O.
+    - name: RC transmitter and S.BUS interface
+      type: runtime
+      notes: Optional manual-control input for simulation or physical-aircraft workflows.
+
+platforms:
+  supported:
+    - Ubuntu 24.04 LTS
+    - Debian Trixie
+  notes:
+    - Ubuntu 24.04 LTS with ROS 2 Jazzy is the documented PC, GCS, and Gazebo development environment.
+    - Debian Trixie is the documented target for flight-controller images.
+
+connects_to:
+  - component_id: hakoniwa-pdu-ros
+    direction: related
+    interface: ROS 2 topics / services / actions to Hakoniwa PDU mapping
+    notes: A future Recipe can use the ROS 2 bridge for selected Tobas topics after compatible PDU types and binding configuration are generated and runtime-verified; no Tobas-specific mapping is currently verified.
+  - component_id: hakoniwa-pdu-registry
+    direction: related
+    interface: generated PDU types and converters for selected Tobas ROS 2 interfaces
+    notes: Tobas custom message definitions require explicit Registry generation and converter validation before they can cross a PDU boundary.
+  - component_id: hakoniwa-drone-core
+    direction: related
+    interface: external flight-control or co-simulation boundary
+    notes: Hakoniwa Drone provides drone simulation and optional external-control integration paths, but a Tobas adapter, signal mapping, lifecycle contract, and closed-loop validation have not yet been established.
+
+data_contracts:
+  - name: UADF aircraft-model contract
+    description: UADF extends URDF with thrust, control-surface, and tilt joints and supplies aircraft structure and physical properties used to create a Tobas project.
+    source:
+      - repository: TobasFlightControl/tobas
+        path: docs/docs/en/additional_information/what_is_uadf.md
+        revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+  - name: ROS 2 control and state contract
+    description: Tobas publishes state and sensor data and consumes priority-bearing command topics, services, and mission actions through the documented ROS API.
+    source:
+      - repository: TobasFlightControl/tobas
+        path: docs/docs/en/for_developers/ros_api.md
+        revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+  - name: Real and Gazebo HAL contract
+    description: The flight logic consumes common ROS 2 sensor messages and produces target actuator values while the HAL owns whether the upstream and downstream system is Gazebo or physical hardware.
+    source:
+      - repository: TobasFlightControl/tobas
+        path: docs/docs/en/additional_information/system_architecture.md
+        revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+
+recipe_roles:
+  - role: control_plane
+    description: Provides model-based flight control, mission execution, parameter management, health monitoring, and failsafe behavior.
+  - role: integration_boundary
+    description: Exposes a ROS 2 boundary that can be mapped into a Hakoniwa Recipe only when exact topic/PDU and lifecycle contracts are defined.
+  - role: monitor
+    description: Provides GCS and flight-log tools for observing vehicle state, health, controller behavior, missions, and recorded data.
+  - role: visualizer
+    description: Provides Gazebo, RViz, and Qt-based views for simulation, airframe state, trajectories, sensors, and control-system inspection.
+
+typical_usecases:
+  - Design and simulate a model-based flight controller for a conventional or unconventional aircraft from its physical model.
+  - Validate flight commands, state estimation, mission execution, failsafe behavior, and tuning in Gazebo before planning physical-aircraft tests.
+  - Develop external ROS 2 programs that command or observe a Tobas aircraft through documented topics, services, and actions.
+  - Configure an aircraft, monitor its state, tune control parameters, plan missions, and inspect flight logs through the Tobas desktop tools.
+  - Use Tobas as the ROS 2 flight-control side of a proposed Hakoniwa co-simulation after the PDU mapping and time/lifecycle contract have been implemented and verified.
+
+anti_usecases:
+  - Treating Tobas as a native Hakoniwa asset without an explicit bridge, PDU definitions, generated converters, and a runtime Recipe.
+  - Replacing Hakoniwa Core, Endpoint, Bridge, or Conductor with the Tobas flight-control stack.
+  - Claiming a Gazebo or future Hakoniwa simulation proves physical-aircraft safety, model fidelity, or production readiness.
+  - Automatically connecting simulated commands to physical actuators without an explicit human approval and safety gate.
+  - Assuming GPL source availability automatically grants proprietary redistribution rights without license review.
+
+demo_candidates:
+  - name: Tobas Gazebo model-driven flight simulation
+    description: Load a configured Tobas project in GCS, start its Gazebo simulation, send a software command or mission, and observe state, controller, and vehicle motion through the documented ROS 2 and GUI paths.
+    required_components:
+      - tobas
+    source_examples:
+      - repository: TobasFlightControl/tobas
+        path: docs/docs/en/getting_started/simulation.md
+        revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+  - name: Tobas ROS 2 to Hakoniwa PDU bridge prototype
+    description: Select a minimal Tobas command/state pair, generate compatible PDU artifacts, configure bidirectional hakoniwa-pdu-ros bindings, and verify field mapping, command consumption, state publication, and cleanup in a simulation-only environment.
+    required_components:
+      - tobas
+      - hakoniwa-pdu-ros
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-pdu-python
+      - hakoniwa-pdu-registry
+    source_examples:
+      - repository: TobasFlightControl/tobas
+        path: docs/docs/en/for_developers/ros_api.md
+        revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+
+operations:
+  build:
+    commands:
+      - colcon build --symlink-install --parallel-workers $(nproc) --cmake-args -DCMAKE_BUILD_TYPE=Release --packages-up-to tobas
+    notes:
+      - Source ROS 2 Jazzy and install dependencies with rosdep before building.
+      - The command is the documented Ubuntu source-build path; flight-controller deployment uses separate synchronization and deployment scripts.
+  test:
+    commands: []
+    notes:
+      - No single repository-wide test command is documented in the inspected source setup guide; use package-level tests and CI evidence before claiming runtime validation.
+  run:
+    commands:
+      - ros2 launch tobas_gcs gcs.launch.py
+    notes:
+      - Load a generated Tobas project in GCS before starting a Gazebo simulation or physical-aircraft workflow.
+      - Gazebo startup, behavior verification, and termination remain distinct from a future Hakoniwa Recipe lifecycle.
+
+known_gaps:
+  - Add a simulation-only Business Pack Recipe for a minimal Tobas ROS 2 command/state mapping through hakoniwa-pdu-ros.
+  - Generate and validate PDU Registry artifacts for the selected Tobas custom message packages; source message definitions alone do not prove fixed-offset or CDR interoperability.
+  - Define whether Tobas or a Hakoniwa simulator owns vehicle physics, and specify sensor, actuator, coordinate-frame, unit, update-rate, simulation-time, and reset semantics for that composition.
+  - Verify the selected ROS 2 topic, service, or action mapping end to end; the current Catalog connection is inferred from component interfaces and is not runtime-verified.
+  - Record exact Gazebo, Qt, DDS implementation, and GPU/display requirements for reproducible Tobas simulation Recipes.
+  - Model real-aircraft calibration, arming, actuation, flight, licensing, and acceptance as explicit human or permission gates in any executable Recipe.
+
+source_refs:
+  - repository: TobasFlightControl/tobas
+    path: README.md
+    revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+    description: Product scope, supported platforms, repository layout, and license overview.
+  - repository: TobasFlightControl/tobas
+    path: docs/docs/en/additional_information/system_architecture.md
+    revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+    description: Hardware/software architecture and common HAL boundary for real and Gazebo vehicles.
+  - repository: TobasFlightControl/tobas
+    path: docs/docs/en/getting_started/simulation.md
+    revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+    description: Gazebo simulation, software commands, mission planning, tuning, and ROS control workflow.
+  - repository: TobasFlightControl/tobas
+    path: docs/docs/en/additional_information/what_is_uadf.md
+    revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+    description: UADF aircraft-model semantics and examples.
+  - repository: TobasFlightControl/tobas
+    path: docs/docs/en/for_developers/ros_api.md
+    revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+    description: Main command, state, service, Gazebo, and mission action interfaces.
+  - repository: TobasFlightControl/tobas
+    path: SETUP.md
+    revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+    description: Supported source-build and flight-controller deployment environments.
+  - repository: TobasFlightControl/tobas
+    path: COMMERCIAL-LICENSE.md
+    revision: a5f1b3efa91a6628e4485f41996b3a3e017a9f16
+    description: Alternative commercial licensing scope and approval requirement.
+
+tags:
+  - tobas
+  - flight-control
+  - model-based-control
+  - aircraft
+  - drone
+  - ros2
+  - gazebo
+  - uadf
+  - mission
+  - state-estimation
+  - failsafe
+  - ground-control-station
+  - simulation
+  - integration
+  - dual-license
