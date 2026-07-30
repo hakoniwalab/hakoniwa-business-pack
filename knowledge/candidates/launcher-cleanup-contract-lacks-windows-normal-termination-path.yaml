@@ -124,17 +124,16 @@ contradictions: []
 validation:
   status: verified
   required:
-    - Re-verify on native Windows using hakoniwa-pdu-python main after PR #47: start the
-      Launcher with `--background <session-file>`, confirm `status` reports the expected
-      Launcher state, then call `terminate <session-file>` and verify managed assets and
-      Recipe-owned ports are gone.
+    - Re-verify on native Windows using hakoniwa-pdu-python main after pull request 47 and
+      exercise the new caller-facing sequence with `--background`, `status`, and `terminate`.
+      Verify that the managed assets and Recipe-owned ports are gone afterwards.
     - Confirm the caller-facing commands are identical on Windows and POSIX and that no
       taskkill / CTRL_BREAK / PID-kill knowledge is required by the caller.
   notes:
     - The original observation is verified on one Windows machine. The replacement
       Launcher lifecycle implementation has Linux CI coverage and maintainer review, but
-      this candidate remains `resolution.verified: false` until the contributor repeats
-      the lifecycle test on native Windows.
+      this candidate remains with `resolution.verified` set to false until the contributor
+      repeats the lifecycle test on native Windows.
 
 tracking:
   implementation_status: resolved
@@ -153,11 +152,11 @@ promotion_targets:
   executable_guardrails: []
 
 promotion_rationale:
-  - The reusable rule belongs in the Runtime Primer: background Launcher lifecycle should
-    be expressed as the OS-independent `--background <session-file>` / `status` /
+  - The reusable rule belongs in the Runtime Primer because background Launcher lifecycle
+    should be expressed as the OS-independent `--background <session-file>` / `status` /
     `terminate` contract. Recipes and agents should not need to encode POSIX-vs-Windows
     signal mechanics.
-  - Post-exit verification remains part of the cleanup contract: after `terminate`, verify
+  - Post-exit verification remains part of the cleanup contract. After `terminate`, verify
     that Launcher-owned assets and Recipe-owned ports are actually gone.
   - No separate executable guardrail is proposed here. The lifecycle interface and its
     tests live in hakoniwa-pdu-python; the Business Pack should consume and document that
@@ -178,8 +177,9 @@ resolution:
   promoted_to: []
   executable_guardrails: []
   notes:
-    - The missing lifecycle surface was implemented in PR #46 and then refactored/hardened
-      in PR #47. The final caller-facing contract uses an explicit session file, a localhost
-      control endpoint, ownership checks, and LauncherService.terminate().
+    - The missing lifecycle surface was implemented in pull request 46 and then
+      refactored and hardened in pull request 47. The final caller-facing contract uses an
+      explicit session file, a localhost control endpoint, ownership checks, and
+      LauncherService.terminate().
     - Native Windows re-verification is still required before marking this resolution
       verified and promoting the contract into the Runtime Primer.
