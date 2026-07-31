@@ -110,13 +110,10 @@ class WorkspaceEnvironmentTest(unittest.TestCase):
         self.assertIn("HAKO_PDU_ENDPOINT_RUNTIME_DIRS", powershell_text)
 
     def test_prepare_installs_foundation_python_bootstrap_pth(self) -> None:
-        site_packages = (
-            self.paths.foundation_python_root
-            / "lib"
-            / "python3.12"
-            / "site-packages"
-        )
-        site_packages.mkdir(parents=True)
+        venv.EnvBuilder(with_pip=False).create(self.paths.foundation_python_root)
+        site_packages_dirs = workspace._foundation_site_package_dirs(self.paths)
+        self.assertEqual(len(site_packages_dirs), 1)
+        site_packages = site_packages_dirs[0]
 
         workspace.prepare(self.paths)
 
