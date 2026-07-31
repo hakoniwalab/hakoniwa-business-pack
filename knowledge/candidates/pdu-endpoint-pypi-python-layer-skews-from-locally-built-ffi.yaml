@@ -1,56 +1,35 @@
 id: pdu-endpoint-pypi-python-layer-skews-from-locally-built-ffi
-title: The documented Windows install flow pairs the PyPI hakoniwa-pdu-endpoint Python layer with a locally built cffi extension, and the two disagree on a cdecl type so recv_next raises TypeError
+title: Legacy Windows installation mixed a released Python layer with a locally built CFFI extension; the current workspace model keeps one source generation together
 status: candidate
 
 knowledge_type:
   - known_pitfall
+  - validation_rule
 
 summary: >
-  On Windows the documented way to get a working hakoniwa-pdu-endpoint Python binding is to
-  pip install the package and then copy a locally built `_c_endpoint_ffi*.pyd` and
-  `hakoniwa_pdu_endpoint.dll` into the installed package directory, which is what
-  install-python-win.ps1 does. That pairing is only safe when the PyPI Python layer and the
-  locally built extension come from the same generation. Measured here they did not: the
-  extension built from the current repository declares the recv_next timestamp parameter as
-  `uint64_t *`, while the PyPI `c_endpoint.py` allocates `ffi.new("unsigned long long*")`.
-  cffi treats those as distinct types, so the first `recv_next()` call fails with
-  `TypeError: initializer for ctype 'uint64_t *' must be a pointer to same type, not cdata
-  'unsigned long long *'`. Import succeeds and the endpoint opens, starts and reaches
-  post_start, so the mismatch only surfaces at the first receive.
+  The legacy Windows installation flow combined the released PyPI
+  hakoniwa-pdu-endpoint Python layer with a CFFI extension and DLL built from a separate
+  source checkout. That combination could import, open, start, and reach post_start while
+  failing at the first `recv_next()` because the Python layer and extension disagreed on a
+  C declaration type. The problem is not an inherent CFFI limitation; it is a generation
+  ownership problem caused by manually mixing artifacts. The current Business Pack
+  direction resolves it by creating a workspace that materializes the Python layer, CFFI
+  extension, and required DLLs from the same pinned source revision and runs them through
+  the workspace's exact Python environment.
 
 observation:
   context: >
     Standing up the Windows peer of a Tobas-to-Hakoniwa PDU bridge on native Windows 11
-    x86_64, CPython 3.12.7, using a hakoniwa-pdu-endpoint checkout already built with
-    HAKO_PDU_ENDPOINT_ENABLE_HAKONIWA_CORE=ON, 2026-07-30/31.
+    x86_64 with CPython 3.12.7, using the earlier PyPI-plus-local-extension installation
+    flow, 2026-07-30/31.
   details:
-    - "What was installed. `pip install hakoniwa-pdu-endpoint` provided the Python layer, and
-      the locally built `_c_endpoint_ffi.cp312-win_amd64.pyd` plus
-      `hakoniwa_pdu_endpoint.dll` were copied next to it, mirroring what
-      install-python-win.ps1 performs."
-    - "Failure. `Endpoint.open()`, `start()` and `post_start()` all succeeded and the PDU
-      definition loaded, so the binding looked healthy. The first `recv_next()` raised
-      `TypeError: initializer for ctype 'uint64_t *' must be a pointer to same type, not
-      cdata 'unsigned long long *'` from c_endpoint.py."
-    - "Both sides read directly. The generated extension source declares
-      `_cffi_d_hako_pdu_endpoint_recv_next(hako_pdu_endpoint_handle_t *, void *, size_t,
-      hako_pdu_resolved_key_t *, uint64_t *, size_t *)`. The PyPI c_endpoint.py at line 384
-      allocates `out_timestamp_ns = ffi.new(\"unsigned long long*\")`. The repository's own
-      python/hakoniwa_pdu_endpoint/c_endpoint.py at line 526 allocates
-      `ffi.new(\"uint64_t*\")`, which matches the extension."
-    - "Resolution used. Import the repository's Python layer together with the extension
-      built from that same tree, instead of the PyPI Python layer. With the versions aligned,
-      recv_next works and the endpoint delivered 1222 PDUs in one run."
-    - "Why the install flow makes this likely rather than unlikely. The flow deliberately
-      mixes a released Python layer with a freshly built extension, so any cdecl change
-      between the released version and the checkout produces exactly this class of error.
-      Nothing in the flow compares the two generations or warns."
-    - "Related but distinct from the DLL search problem. Independently of this skew, the
-      extension does not resolve its own sibling DLLs on Windows, so importing it requires
-      explicitly adding both the package directory and the Hakoniwa Core bin directory via
-      os.add_dll_directory. Without those two calls the import fails with 'DLL load failed
-      while importing _c_endpoint_ffi' before any of the above is reachable. That gap
-      reproduced in this configuration."
+    - "The PyPI Python layer allocated `ffi.new(\"unsigned long long*\")` while the locally built extension expected `uint64_t *`."
+    - "Import, Endpoint.open(), start(), and post_start() succeeded; the first recv_next() raised a CFFI TypeError."
+    - "Using the repository's Python layer with the extension built from the same source tree removed the mismatch and delivered 1222 PDUs."
+    - "The failure was created by combining independently versioned artifacts, not by the endpoint protocol or received PDU data."
+    - "The modern resolution is to let a Business Pack workspace own the pinned source, build products, Python layer, DLL placement, and runtime interpreter as one artifact set."
+    - "Because the old combination failed only at recv_next(), a workspace smoke that stops at import or start is insufficient."
+    - "DLL search-path failures are related deployment evidence but conceptually separate from the Python/CFFI generation skew; the workspace must materialize and test its DLL layout explicitly."
 
 sources:
   repositories:
@@ -60,15 +39,25 @@ sources:
     - repository: hakoniwalab/hakoniwa-pdu-endpoint
       path: install-python-win.ps1
       revision: f2d7bc0
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: docs/hakoniwa-foundation-recipe-design-ja.md
+      revision: ef416438645374330e2e505a136ce353db6e3f35
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/foundation.py
+      revision: ef416438645374330e2e505a136ce353db6e3f35
   runtime_evidence:
     - description: >-
-        External contributor's native Windows 11 x86_64 environment, CPython 3.12.7,
-        2026-07-30/31. PyPI Python layer plus locally built extension - import OK, open OK,
-        start OK, post_start OK, first recv_next raised the cdecl TypeError quoted above.
-        Repository Python layer plus the same extension - recv_next worked and one run
-        received 1222 JointState PDUs. The DLL search gap reproduced in the same
-        configuration and required two explicit os.add_dll_directory calls.
-  expert_input: []
+        PyPI Python layer plus a locally built extension imported and started successfully
+        but failed at the first recv_next() with a C declaration mismatch.
+    - description: >-
+        Pairing the Python layer and extension from the same source tree removed the mismatch
+        and allowed 1222 JointState PDUs to be received.
+  expert_input:
+    - source: Hakoniwa maintainer
+      statement: >-
+        The current solution is to create a Business Pack workspace that owns and
+        materializes the Python layer, CFFI extension, and DLLs from one pinned revision
+        instead of asking users to combine them manually.
 
 confidence: high
 
@@ -77,20 +66,14 @@ contradictions: []
 validation:
   status: verified
   required:
-    - Determine the intended pairing rule. Either the released wheel should ship a matching
-      prebuilt extension for the platform, or the install flow should verify that the
-      extension and the Python layer come from the same revision and refuse otherwise.
-    - Establish whether a version or ABI marker exists that a caller could check before the
-      first call. Nothing obvious was found, which is why the failure lands at recv_next
-      rather than at import.
-    - Only the recv_next signature was found to disagree. Whether other entry points have
-      the same skew between the released layer and current main was not audited.
+    - Keep Python source, CFFI extension, native DLLs, and the runtime interpreter under one workspace receipt or equivalent pinned revision contract.
+    - Add a workspace smoke that reaches `recv_next()` with a minimal endpoint peer; import/open/start alone cannot detect this mismatch.
+    - Verify the workspace DLL layout on native Windows rather than relying on an unrelated Python installation or ambient PATH.
   notes:
-    - Both sides of the mismatch were read in source and the failure and the fix were each
-      reproduced once, on one machine, with one Python version.
+    - The generation-skew mechanism and same-source workaround were measured directly. The workspace architecture is the current maintained solution direction.
 
 tracking:
-  implementation_status: none
+  implementation_status: resolved
   issues: []
 
 promotion_targets:
@@ -100,31 +83,27 @@ promotion_targets:
   component_asset_guide: false
   recipes: []
   executable_guardrails:
-    - repository: hakoniwalab/hakoniwa-pdu-endpoint
-      kind: doctor
-      path: install-python-win.ps1
+    - repository: hakoniwalab/hakoniwa-business-pack
+      kind: test
+      path: tools/foundation.py
       mode: detect-only
       notes:
-        - The install flow knows both the installed package version and the checkout it
-          built the extension from, so it can compare them and fail with an actionable
-          message instead of producing a combination that imports cleanly and breaks on the
-          first receive.
+        - After the workspace materializes one pinned generation, use the workspace Python to exercise import, open, start, and recv_next against a minimal peer.
 
 promotion_rationale:
-  - The defect is in the interaction the install flow itself creates, so it belongs to the
-    owning repository rather than to any Recipe.
-  - A detect-only check at install time is proposed rather than a runtime guard, because by
-    the time recv_next raises, the caller has already been told the endpoint started
-    successfully.
+  - The historical defect belongs to the old mixed-installation workflow, while the current solution belongs to Business Pack workspace ownership.
+  - Recording the distinction prevents maintainers from treating the symptom as an unresolved generic CFFI defect or reintroducing manual cross-generation copying.
+  - recv_next-level smoke remains the important regression guard because all earlier lifecycle calls succeeded in the failed configuration.
 
 resolution:
-  status: pending
-  fixed_by: []
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      revision: ef416438645374330e2e505a136ce353db6e3f35
   verified: false
-  promoted_to: []
+  promoted_to:
+    - docs/hakoniwa-foundation-recipe-design-ja.md
   executable_guardrails: []
   notes:
-    - Diagnosis and workaround only; no upstream issue filed, since issue filing for
-      implementation work is owned by the upstream maintainers.
-    - The workaround is to import the repository's own Python layer alongside the extension
-      built from the same tree. It is a local arrangement, not a proposed upstream change.
+    - The maintained resolution is workspace-owned, same-revision materialization rather than revision comparison inside the legacy copy script.
+    - A dedicated native-Windows recv_next smoke should still be recorded before marking the resolution runtime-verified in this candidate.
