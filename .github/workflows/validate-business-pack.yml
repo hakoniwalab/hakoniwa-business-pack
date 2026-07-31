@@ -66,4 +66,8 @@ jobs:
           python-version: '3.12'
 
       - name: Test Workspace Environment
-        run: python -m unittest tools/test_workspace.py -v
+        run: >-
+          python -m unittest
+          tools/test_workspace.py
+          tools/test_workspace_enter.py
+          -v

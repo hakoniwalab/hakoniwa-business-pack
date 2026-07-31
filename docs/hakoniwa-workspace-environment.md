@@ -6,9 +6,45 @@
 
 Hakoniwa Foundation keeps reusable binaries, libraries, a shared Python virtual environment, Core configuration, and runtime state under `work/foundation/`.
 
-The Hakoniwa Workspace Environment is the corresponding **process-environment boundary**. It is not an OS-level container. It applies a Foundation-owned environment only to a selected shell or child process.
+The Hakoniwa Workspace Environment applies that Foundation only to an isolated child process. It does not modify the parent shell or system Python. This prevents stale `hakopy.pyd` files, persistent `PYTHONPATH` entries, and unrelated virtual environments from taking precedence over the selected Foundation.
 
-This prevents stale `hakopy.pyd` files, persistent `PYTHONPATH` entries, unrelated virtual environments, and system Python state from taking precedence over the selected Foundation.
+## Standard user operation
+
+The entry point is the same on every supported OS:
+
+```bash
+python tools/workspace.py enter
+```
+
+`enter` refreshes the required preparation before starting an isolated child shell:
+
+- regenerate compatibility activation scripts;
+- update the Python bootstrap `.pth` when the Foundation venv exists;
+- build the latest workspace environment;
+- start a child shell without user profiles;
+- prefix its prompt with `(hako)`.
+
+Example:
+
+```text
+(hako) tmori@TakashinoMBP hakoniwa-business-pack %
+```
+
+The `(hako)` marker means the current shell is inside the Hakoniwa Workspace Environment.
+
+Leave it with the same command on every OS:
+
+```bash
+exit
+```
+
+The child shell terminates and control returns to the unchanged parent shell. No environment-restoration command is required.
+
+The standard lifecycle is:
+
+```text
+enter -> Hakoniwa work -> exit
+```
 
 ## Managed boundary
 
@@ -24,87 +60,17 @@ work/foundation/
 └── Activate.ps1
 ```
 
-The environment sets:
-
-- `HAKONIWA_WORKSPACE_ACTIVE=1`
-- `HAKONIWA_WORKSPACE_ROOT=<business-pack-root>`
-- `HAKONIWA_HOME=<workspace>/work/foundation/install`
-- `HAKO_CONFIG_PATH=<workspace>/work/foundation/config/cpp_core_config.json`
-- `HAKO_PDU_ENDPOINT_RUNTIME_DIRS=<workspace>/work/foundation/install/bin`
-- `VIRTUAL_ENV=<workspace>/work/foundation/install/python`
-- `PYTHONNOUSERSITE=1`
-- Foundation Python and Foundation `bin` at the front of `PATH`
-- Foundation `lib` at the front of `LD_LIBRARY_PATH` on Linux
-- Foundation `lib` at the front of `DYLD_LIBRARY_PATH` on macOS
-- Foundation `bin` at the front of Windows `PATH` for DLL lookup
-
-It intentionally does not inherit:
-
-- `PYTHONPATH`
-- `PYTHONHOME`
-
-The Foundation venv, its installed packages, and its `.pth` entries own Python module selection.
-
-## Prepare
-
-Generate local activation scripts:
-
-```bash
-python tools/workspace.py prepare
-```
-
-The generated files live under `work/` and are not committed.
-When the Foundation venv exists, `prepare` also installs a `.pth` bootstrap
-that registers Foundation `bin` for dependent DLL resolution by native Windows
-Python modules. If `prepare` runs before the Foundation build, run it again
-after the venv has been created.
-
-## Enter and leave
-
-### Isolated child shell
-
-```bash
-python tools/workspace.py enter
-```
-
-Exit the child shell to return to the original environment. The parent shell is unchanged.
-The child starts without user profiles so persistent Python and path settings
-cannot be reintroduced. Bash, Zsh, Fish, PowerShell, cmd, and standard POSIX
-shells are supported.
-
-### Current POSIX shell
-
-```bash
-source work/foundation/activate
-```
-
-Restore the previous environment with:
-
-```bash
-deactivate_hakoniwa
-```
-
-The script preserves whether each managed variable was originally unset or set.
-
-### PowerShell
-
-```powershell
-. .\work\foundation\Activate.ps1
-```
-
-Restore the previous environment with:
-
-```powershell
-Exit-HakoniwaWorkspace
-```
+The environment sets Foundation-owned Python, binary, library, configuration, and runtime paths. It intentionally does not inherit `PYTHONPATH` or `PYTHONHOME`.
 
 ## Run one command
 
-CI, Recipe wrappers, AI agents, and other non-interactive callers must not depend on a previously activated shell.
+CI, Recipe wrappers, AI agents, and other non-interactive callers use:
 
 ```bash
 python tools/workspace.py run -- <command> [args...]
 ```
+
+`run` also refreshes the preparation before starting the command with the same workspace contract.
 
 Example:
 
@@ -113,9 +79,9 @@ python tools/workspace.py run -- python tools/foundation.py doctor \
   --recipe recipes/examples/drone-single-mujoco-threejs.yaml
 ```
 
-`enter`, generated activation scripts, and `run` use the same environment contract.
-
 ## Validate Python bindings
+
+After entering the workspace, validate the selected interpreter and module origins with:
 
 ```bash
 python tools/workspace.py doctor
@@ -123,13 +89,25 @@ python tools/workspace.py doctor
 
 The check requires:
 
-- `sys.executable` under the Foundation venv;
-- `sys.prefix` under the Foundation venv;
-- `hakopy` resolved from the Foundation workspace;
-- `hakoniwa_pdu` resolved from the Foundation workspace;
-- `hakoniwa_pdu_endpoint` resolved from the Foundation workspace.
+- `sys.executable` and `sys.prefix` under the Foundation venv;
+- `hakopy`, `hakoniwa_pdu`, and `hakoniwa_pdu_endpoint` resolved from the Foundation workspace.
 
-A module resolved from an ambient path is a boundary violation and fails the check.
+## Low-level compatibility operations
+
+`prepare`, the POSIX activation script, and the PowerShell activation script remain available for compatibility and debugging, but they are not the standard user workflow.
+
+```bash
+python tools/workspace.py prepare
+source work/foundation/activate
+deactivate_hakoniwa
+```
+
+```powershell
+. .\work\foundation\Activate.ps1
+Exit-HakoniwaWorkspace
+```
+
+Normal users should use the OS-independent `enter` and `exit` lifecycle.
 
 ## Ownership
 
@@ -137,15 +115,8 @@ A module resolved from an ambient path is a boundary violation and fails the che
 | --- | --- |
 | Component `hako.py install` | Install Python/native artifacts into the Foundation boundary |
 | Foundation workspace | Own the shared venv, Core Python, configuration, runtime state, and Receipts |
-| Workspace Environment | Remove ambient Python discovery and put the Foundation first |
+| Workspace Environment | Remove ambient Python discovery and put the Foundation first in a child process |
 | `doctor` / smoke | Verify the selected interpreter and actual module origins |
 | Recipe / Launcher wrapper | Use `workspace.py run` or the same environment contract |
 
-## Non-goals
-
-- OS filesystem, network, or user-namespace isolation
-- Container-image dependency pinning
-- Concurrent Foundation profile switching
-- Modifying or deleting system Python or user virtual environments
-
-The goal is a reproducible process environment explicitly owned by the selected Hakoniwa Foundation, not a container.
+The goal is not an OS-specific activation procedure. It is a clear lifecycle: enter the selected Hakoniwa Foundation, work inside it, and discard the child shell with `exit`.
