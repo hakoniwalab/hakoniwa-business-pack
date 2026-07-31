@@ -128,16 +128,11 @@ class WorkspaceEnvironmentTest(unittest.TestCase):
         )
 
     def test_windows_site_packages_layout_is_detected(self) -> None:
-        site_packages = (
-            self.paths.foundation_python_root / "Lib" / "site-packages"
-        )
+        site_packages = self.paths.foundation_python_root / "Lib" / "site-packages"
         site_packages.mkdir(parents=True)
 
         self.assertEqual(
-            workspace._foundation_site_package_dirs(
-                self.paths,
-                windows=True,
-            ),
+            workspace._foundation_site_package_dirs(self.paths, windows=True),
             [site_packages],
         )
 
@@ -300,7 +295,6 @@ unset LD_LIBRARY_PATH
         }
 
         errors = workspace.validate_snapshot(snapshot, self.paths)
-
         self.assertTrue(any("hakopy resolved outside" in error for error in errors))
 
     def test_interactive_shell_commands_disable_profiles(self) -> None:
@@ -314,11 +308,18 @@ unset LD_LIBRARY_PATH
         )
         self.assertEqual(
             workspace._interactive_shell_command("pwsh.exe"),
-            ["pwsh.exe", "-NoLogo", "-NoProfile", "-NoExit"],
+            [
+                "pwsh.exe",
+                "-NoLogo",
+                "-NoProfile",
+                "-NoExit",
+                "-Command",
+                "function global:prompt { '(hako) PS ' + (Get-Location) + '> ' }",
+            ],
         )
         self.assertEqual(
             workspace._interactive_shell_command("cmd.exe"),
-            ["cmd.exe", "/d"],
+            ["cmd.exe", "/d", "/k", "prompt (hako) $P$G"],
         )
 
     def test_windows_bootstrap_registers_foundation_dll_directory(self) -> None:
@@ -419,7 +420,6 @@ if (Test-Path Env:\\HAKONIWA_WORKSPACE_ACTIVE) {{ exit 18 }}
             capture_output=True,
             text=True,
         )
-
         self.assertEqual(result.returncode, 0, result.stderr)
 
     @unittest.skipUnless(
@@ -454,7 +454,6 @@ if (Test-Path Env:\\HAKONIWA_WORKSPACE_ACTIVE) {{ exit 18 }}
             capture_output=True,
             text=True,
         )
-
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_run_command_does_not_inherit_pythonpath(self) -> None:
