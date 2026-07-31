@@ -1,6 +1,6 @@
 id: drone-single-mujoco-threejs-gamepad
 title: Human-operated Hakoniwa Drone MuJoCo and Three.js Exhibition Demo
-recipe_version: 0.3
+recipe_version: 0.4
 
 goal:
   user_request: 展示会場で参加者がPS5コントローラを使って箱庭ドローンを飛ばし、MuJoCoとブラウザの両方で見たい
@@ -9,8 +9,8 @@ goal:
     a PS5 controller with the verified ps4-control.json mapping. Hakoniwa Drone
     runs the physics simulation and native MuJoCo viewer, while the visual-state
     publisher, WebBridge, and Three.js viewer expose the same motion in a browser.
-    Business Pack owns the generated Launcher and operator workflow; Drone Core
-    remains unchanged.
+    Business Pack owns the generated Launcher, workspace portal, and operator
+    workflow; Drone Core remains unchanged.
 
 feasibility:
   status: feasible
@@ -42,14 +42,22 @@ validation:
       notes:
         - Unit tests validate the generated topology; live process startup remains to be exercised.
     - id: foundation_python_venv
-      status: partially_verified
+      status: verified
       evidence:
         - source: Business Pack generator tests
           date: 2026-07-31
       notes:
         - The generated Launcher uses only work/foundation/install/python for Launcher, gamepad control, and the Three.js HTTP server.
         - Runtime doctor verifies hakopy, hakoniwa_pdu, and the Launcher import from the same Foundation venv.
-        - Live verification on the exhibition machine remains required.
+        - Live exhibition validation is tracked separately by exhibition_end_to_end.
+    - id: generated_recipe_portal
+      status: verified
+      evidence:
+        - source: Business Pack generator tests
+          date: 2026-07-31
+      notes:
+        - configure generates index.html at the Recipe workspace root.
+        - The portal records topology, Foundation Python, operator commands, resource links, and Agency Boundary without executing local commands.
     - id: exhibition_end_to_end
       status: not_tested
       evidence: []
@@ -64,6 +72,7 @@ constraints:
   - threejs-browser-viewer
   - shared-memory-pdu
   - shared-foundation-python-venv
+  - generated-recipe-workspace-portal
   - no-px4
   - business-pack-owned-launcher
   - no-drone-core-modification
@@ -134,11 +143,12 @@ execution_environment:
     - The operator uses one Python command surface on every supported OS.
     - OS-specific executable discovery is isolated under tools/platforms/drone_gamepad.
     - The Foundation Python executable path must be preserved without resolving its venv symlink to a system interpreter.
+    - The generated workspace root index.html is the human-facing entry point for this Recipe result.
 
 agency_boundary:
   agent_actions:
     - id: generate_exhibition_runtime
-      description: Run configure and doctor to generate and inspect the Recipe workspace and Launcher.
+      description: Run configure and doctor to generate and inspect the Recipe workspace, portal, and Launcher.
       autonomous: true
       preconditions:
         - user_requested_execution
@@ -314,6 +324,7 @@ artifact_sets:
     status: not_tested
     owner: work/recipes/drone-single-mujoco-threejs-gamepad
     artifacts:
+      - index.html
       - config/launcher.json
       - config/drone
       - config/pdudef
@@ -322,9 +333,13 @@ artifact_sets:
       - config/assets/web_bridge_fleets
       - runtime/launcher-session.json
       - logs
+      - validation
 
 artifacts:
   generated:
+    - path: work/recipes/drone-single-mujoco-threejs-gamepad/index.html
+      owner: hakoniwa-business-pack
+      purpose: Human-facing entry point with topology, workflow, environment, resources, and Agency Boundary.
     - path: work/recipes/drone-single-mujoco-threejs-gamepad/config/launcher.json
       owner: hakoniwa-business-pack
       purpose: Common cross-platform Launcher topology with resolved absolute executable paths.
@@ -355,16 +370,23 @@ demo:
     - command: python tools/foundation.py doctor --recipe recipes/examples/drone-single-mujoco-threejs-gamepad.yaml
       expected: Foundation SATISFIED
     - command: python tools/drone_gamepad_exhibition.py configure
-      expected: Recipe workspace and common Launcher JSON generated.
+      expected: Recipe workspace, index.html portal, and common Launcher JSON generated.
     - command: python tools/drone_gamepad_exhibition.py doctor
-      expected: Foundation venv imports, gamepad presence, runtime binaries, ports, and generated Launcher are ready.
+      expected: Foundation venv imports, gamepad presence, runtime binaries, ports, generated portal, and generated Launcher are ready.
   steps:
     - id: configure
       command: python tools/drone_gamepad_exhibition.py configure
       status: not_tested
       expected:
+        - index.html is generated at the Recipe workspace root.
         - Launcher JSON is generated under the Recipe workspace.
         - The selected Python is work/foundation/install/python and is not replaced by a system interpreter.
+    - id: read_portal
+      command: human opens work/recipes/drone-single-mujoco-threejs-gamepad/index.html
+      status: not_tested
+      expected:
+        - The operator can recover the topology, exact commands, environment, resource paths, and Agency Boundary from one page.
+        - The page offers command copy controls but does not execute local commands.
     - id: doctor
       command: python tools/drone_gamepad_exhibition.py doctor
       status: not_tested
@@ -423,12 +445,13 @@ demo:
       - Do not run Launcher, controller, or viewer server with a Python outside work/foundation/install/python.
 
 expected_result: >
-  A human can use the PS5 controller with the existing ps4-control.json mapping to
-  operate one simulated Hakoniwa Drone. The native MuJoCo viewer and Three.js browser
-  viewer display the same run. Business Pack generates and owns the common Launcher
-  and workspace, all Python runtime participants use the same shared Foundation venv,
-  the operator uses one Python command surface on every OS, and Drone Core remains
-  unmodified.
+  A human can open the generated Recipe workspace index.html to recover the exact
+  exhibition workflow, then use the PS5 controller with the existing ps4-control.json
+  mapping to operate one simulated Hakoniwa Drone. The native MuJoCo viewer and
+  Three.js browser viewer display the same run. Business Pack generates and owns the
+  portal, common Launcher, and workspace, all Python runtime participants use the same
+  shared Foundation venv, the operator uses one Python command surface on every OS,
+  and Drone Core remains unmodified.
 
 source_catalogs:
   - component_id: hakoniwa-drone-core
@@ -458,6 +481,9 @@ source_artifacts:
   - repository: hakoniwalab/hakoniwa-business-pack
     path: tools/foundation.py
     relation: workspace-and-receipt-provider
+  - repository: hakoniwalab/hakoniwa-business-pack
+    path: tools/recipe_portal.py
+    relation: reusable-workspace-portal-renderer
   - repository: hakoniwalab/hakoniwa-business-pack
     path: tools/drone_gamepad_exhibition.py
     relation: generator-and-operator-interface
