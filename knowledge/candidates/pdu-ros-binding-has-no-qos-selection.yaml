@@ -1,0 +1,123 @@
+id: pdu-ros-binding-has-no-qos-selection
+title: hakoniwa-pdu-ros subscribes with the rclpy default RELIABLE QoS and its binding config cannot change it, so a BEST_EFFORT publisher yields zero messages with no error
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+
+summary: >
+  hakoniwa-pdu-ros's bridge node creates its ROS subscription as
+  `self.create_subscription(msg_cls, binding.topic, _on_msg, 10)`, which uses the rclpy
+  default reliability of RELIABLE. DDS QoS compatibility rules forbid a RELIABLE
+  subscription from matching a BEST_EFFORT publisher, so when the source topic is
+  BEST_EFFORT the bridge simply never receives anything. There is no error, no warning and
+  no diagnostic; the bridge looks healthy and the PDU channel stays empty. The binding
+  configuration has no QoS field, so a caller cannot fix it from configuration, and when
+  the publisher belongs to a third-party stack that must not be modified there is no fix on
+  that side either. Tobas publishes joint_states as BEST_EFFORT, which is how this was
+  found.
+
+observation:
+  context: >
+    Bridging Tobas's `joint_states` topic (ROS 2 Jazzy, WSL2 Ubuntu 24.04,
+    rmw_cyclonedds_cpp) into a Hakoniwa PDU channel for the Tobas bridge prototype named in
+    hakoniwa-business-pack's Tobas catalog entry, 2026-07-30.
+  details:
+    - "Publisher side. Tobas publishes `<ns>/joint_states` with BEST_EFFORT reliability. The
+      Tobas workspace is read-only for this exercise, so changing the publisher was not an
+      option, which is the normal situation when bridging a third-party stack."
+    - "Subscriber side. hakoniwa_pdu_ros/bridge_node.py creates the subscription with a
+      plain depth argument and no QoS profile, so rclpy applies its default sensor-agnostic
+      profile with RELIABLE reliability."
+    - "Result. Incompatible QoS means the subscription never matches the publisher. The
+      bridge process starts, loads its PDU definition, reports itself running and receives
+      exactly zero messages. Nothing in its output indicates a QoS mismatch."
+    - "Confirmed by working around it rather than by inference. A minimal relay node that
+      subscribes BEST_EFFORT and republishes the identical message on a second topic with
+      RELIABLE was inserted, and the bridge was pointed at the relayed topic. The relay
+      sustained the source rate without loss, reporting 250 messages per 5 s (50 Hz) and
+      1194 messages relayed in total, and the bridge then received normally."
+    - "The relay is not a solution, it is the evidence. It exists only to change one QoS
+      setting that the binding config cannot express. Every consumer bridging a BEST_EFFORT
+      sensor topic would have to ship the same node."
+    - "Diagnostic cost. Because the failure is silent, this presents identically to 'the
+      bridge is misconfigured', 'the topic name is wrong' and 'the publisher is not running'.
+      A QoS-mismatch warning, or simply logging the resolved subscription QoS at startup,
+      would separate those cases immediately."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      path: hakoniwa_pdu_ros/bridge_node.py
+      revision: 8693f4d82a61765feb990754459427a287347bb3
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      path: config/sample/sample_binding.json
+      revision: 8693f4d82a61765feb990754459427a287347bb3
+  runtime_evidence:
+    - description: >-
+        External contributor's WSL2 Ubuntu 24.04 / ROS 2 Jazzy environment, 2026-07-30.
+        Bridge subscribed to a BEST_EFFORT Tobas topic received 0 messages with no error
+        output. With a BEST_EFFORT-to-RELIABLE relay node inserted, the same bridge received
+        normally and the relay logged a sustained 50 Hz (250 messages per 5 s, 1194 total).
+  expert_input: []
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - Confirm the intended shape of a QoS option in the binding contract. Reliability alone
+      would have covered this case, but durability, history and depth have the same
+      compatibility consequences and a partial option risks a second round of this.
+    - Decide whether the bridge should default to a sensor-data profile for topics it
+      recognizes as sensor streams, or stay explicit and require configuration. This
+      candidate does not assume which upstream prefers.
+    - Not tested against other RMW implementations. QoS compatibility is a DDS-level rule,
+      so the behavior should be implementation-independent, but only rmw_cyclonedds_cpp was
+      measured.
+  notes:
+    - Verified on one machine with one publisher whose QoS could not be changed, which is
+      what makes the missing configuration surface actionable rather than cosmetic.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      kind: doctor
+      path: hakoniwa_pdu_ros/bridge_node.py
+      mode: detect-only
+      notes:
+        - After subscribing, the node can compare its own QoS against the discovered
+          publishers on that topic and log an actionable warning when they are
+          incompatible. That turns a silent zero-message run into a named cause without
+          waiting for the configuration surface to be designed.
+
+promotion_rationale:
+  - The missing capability is in the component's configuration contract, so the fix belongs
+    to the owning repository. A Recipe cannot express what the binding schema does not
+    accept.
+  - The detect-only guardrail is proposed separately from the feature because the diagnostic
+    gap hurts even after a QoS option exists -- a mismatch will still be the most common
+    first-run failure when bridging third-party sensor topics.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Observation and workaround only; no upstream issue filed, since issue filing for
+      implementation work is owned by the upstream maintainers.
+    - The relay node used to prove the mechanism is a workspace-side artifact and is not
+      proposed as an upstream addition.

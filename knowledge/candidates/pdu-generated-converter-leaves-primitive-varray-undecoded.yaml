@@ -1,0 +1,131 @@
+id: pdu-generated-converter-leaves-primitive-varray-undecoded
+title: hakoniwa-pdu's generated converters decode a varray of string but hand back a varray of a primitive as raw bytes, so numeric arrays look populated while carrying byte values
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - validation_rule
+
+summary: >
+  In the generated Python converter for `sensor_msgs/JointState` (hakoniwa-pdu 1.4.3), the
+  variable-length array of `string` is decoded through
+  `binary_io.binToArrayValues("string", ...)`, but each variable-length array of a
+  *primitive* is assigned straight through as the raw byte slice --
+  `py_obj.position = array_value`. The resulting Python object therefore reports
+  `position`, `velocity` and `effort` as bytes rather than numbers. This is worse than an
+  empty field, because a caller checking "did the numeric arrays arrive" sees a non-empty
+  value of plausible length and concludes success. A first end-to-end bridge run passed on
+  exactly that basis before the byte values were noticed.
+
+observation:
+  context: >
+    Decoding `sensor_msgs/JointState` PDUs received over TCP from a hakoniwa-pdu-ros bridge,
+    on native Windows 11 x86_64 with CPython 3.12.7 and hakoniwa-pdu 1.4.3 installed from
+    PyPI, 2026-07-31.
+  details:
+    - "What the generated code does. In
+      hakoniwa_pdu/pdu_msgs/sensor_msgs/pdu_conv_JointState.py, inside
+      binary_read_recursive_JointState, the `name` field (varray of string) ends with
+      `py_obj.name = binary_io.binToArrayValues(\"string\", array_value, array_size,
+      one_elm_size)`, while `position`, `velocity` and `effort` (varray of float64) each end
+      with `py_obj.position = array_value` and no conversion call. The array_size and heap
+      offset arithmetic is identical for both; only the final decode step is missing for
+      primitives."
+    - "Observable result. `pdu_to_py_JointState(payload)` returned
+      `position=[213, 254, 75, 222, 242, 216, 238, 63, ...]` -- 32 values in the range
+      0..255 for a 4-joint message, i.e. 4 float64 values' worth of raw bytes."
+    - "Proof that the data itself is intact, not corrupted. The first eight bytes of the
+      effort field were 154, 153, 153, 153, 153, 153, 185, 63, which little-endian is
+      0x3FB999999999999A = 0.1. Unpacking all three arrays with struct little-endian float64
+      yielded position and velocity tracking the sender's known sin/cos waveform within
+      +/-1 and effort exactly [0.1, 0.2, 0.3, 0.4], which matches the sender's constant.
+      So the transport, the pdu_size sizing and the heap layout are all correct; only the
+      Python-side decode of primitive varrays is missing."
+    - "Why this is dangerous rather than merely inconvenient. A harness that asserts
+      `len(position) > 0` passes. A harness that prints the values sees plausible-looking
+      integers. The failure only becomes visible if someone knows the expected physical
+      values, which is precisely the knowledge a generic bridge consumer does not have."
+    - "Scope not established. Only sensor_msgs/JointState was inspected in this session.
+      Because the pattern is emitted by the generator rather than hand-written, every
+      message type with a variable-length array of a primitive is a candidate for the same
+      defect -- LaserScan.ranges and Float64MultiArray.data being the obvious ones -- but
+      that was not verified here and is deliberately not claimed."
+    - "Workaround used. The consumer decodes with struct.unpack when the field comes back as
+      bytes and passes numeric input through unchanged, so the code stays correct if the
+      generator is fixed."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu
+      path: hakoniwa_pdu/pdu_msgs/sensor_msgs/pdu_conv_JointState.py
+      revision: "1.4.3"
+  runtime_evidence:
+    - description: >-
+        External contributor's native Windows 11 x86_64 environment, CPython 3.12.7,
+        hakoniwa-pdu 1.4.3 from PyPI, 2026-07-31. 1222 received JointState PDUs decoded with
+        pdu_to_py_JointState returned name correctly as four joint-name strings while
+        position, velocity and effort were byte lists of length 32. Reinterpreting the same
+        bytes as little-endian float64 produced the sender's known values, including
+        effort = [0.1, 0.2, 0.3, 0.4].
+  expert_input: []
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: partially_verified
+  required:
+    - Determine how many generated types are affected. The generator emits this shape, so
+      the question is which message definitions contain a variable-length array of a
+      primitive, not whether JointState is special. Only JointState was read in this
+      session.
+    - Confirm whether the intended contract is that a caller receives numbers or receives
+      bytes and unpacks them. If bytes are intentional, the string field's behavior is the
+      inconsistency and the asymmetry should be documented; if numbers are intended, the
+      generator needs the same binToArrayValues call for primitives.
+    - Check whether the C, C++, C# and Godot generated outputs share the omission or whether
+      it is Python-specific. Not examined.
+  notes:
+    - The mechanism is established by reading the generated source and by recovering the
+      expected physical values from the same bytes. The breadth across other types and
+      other target languages is not.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: true
+  recipes: []
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-pdu
+      kind: test
+      path: hakoniwa_pdu/pdu_msgs
+      mode: detect-only
+      notes:
+        - A round-trip test that writes known float values into a primitive varray and
+          asserts the read-back equals those numbers, rather than asserting the field is
+          non-empty, would fail today and would keep the generator honest. Asserting
+          non-emptiness is exactly the check that passes on raw bytes.
+
+promotion_rationale:
+  - The asymmetry between string and primitive varrays is a property of the generator, so it
+    belongs to the owning repository, and the guardrail has to compare values rather than
+    lengths to have any detection power.
+  - component_asset_guide is proposed because any asset or bridge author consuming a
+    generated Python converter needs to know that a non-empty numeric array is not evidence
+    of a correct decode until upstream resolves this.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Diagnosis and consumer-side workaround only; no upstream issue filed, since issue
+      filing for implementation work is owned by the upstream maintainers.
