@@ -1,0 +1,130 @@
+id: pdu-endpoint-pypi-python-layer-skews-from-locally-built-ffi
+title: The documented Windows install flow pairs the PyPI hakoniwa-pdu-endpoint Python layer with a locally built cffi extension, and the two disagree on a cdecl type so recv_next raises TypeError
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+
+summary: >
+  On Windows the documented way to get a working hakoniwa-pdu-endpoint Python binding is to
+  pip install the package and then copy a locally built `_c_endpoint_ffi*.pyd` and
+  `hakoniwa_pdu_endpoint.dll` into the installed package directory, which is what
+  install-python-win.ps1 does. That pairing is only safe when the PyPI Python layer and the
+  locally built extension come from the same generation. Measured here they did not: the
+  extension built from the current repository declares the recv_next timestamp parameter as
+  `uint64_t *`, while the PyPI `c_endpoint.py` allocates `ffi.new("unsigned long long*")`.
+  cffi treats those as distinct types, so the first `recv_next()` call fails with
+  `TypeError: initializer for ctype 'uint64_t *' must be a pointer to same type, not cdata
+  'unsigned long long *'`. Import succeeds and the endpoint opens, starts and reaches
+  post_start, so the mismatch only surfaces at the first receive.
+
+observation:
+  context: >
+    Standing up the Windows peer of a Tobas-to-Hakoniwa PDU bridge on native Windows 11
+    x86_64, CPython 3.12.7, using a hakoniwa-pdu-endpoint checkout already built with
+    HAKO_PDU_ENDPOINT_ENABLE_HAKONIWA_CORE=ON, 2026-07-30/31.
+  details:
+    - "What was installed. `pip install hakoniwa-pdu-endpoint` provided the Python layer, and
+      the locally built `_c_endpoint_ffi.cp312-win_amd64.pyd` plus
+      `hakoniwa_pdu_endpoint.dll` were copied next to it, mirroring what
+      install-python-win.ps1 performs."
+    - "Failure. `Endpoint.open()`, `start()` and `post_start()` all succeeded and the PDU
+      definition loaded, so the binding looked healthy. The first `recv_next()` raised
+      `TypeError: initializer for ctype 'uint64_t *' must be a pointer to same type, not
+      cdata 'unsigned long long *'` from c_endpoint.py."
+    - "Both sides read directly. The generated extension source declares
+      `_cffi_d_hako_pdu_endpoint_recv_next(hako_pdu_endpoint_handle_t *, void *, size_t,
+      hako_pdu_resolved_key_t *, uint64_t *, size_t *)`. The PyPI c_endpoint.py at line 384
+      allocates `out_timestamp_ns = ffi.new(\"unsigned long long*\")`. The repository's own
+      python/hakoniwa_pdu_endpoint/c_endpoint.py at line 526 allocates
+      `ffi.new(\"uint64_t*\")`, which matches the extension."
+    - "Resolution used. Import the repository's Python layer together with the extension
+      built from that same tree, instead of the PyPI Python layer. With the versions aligned,
+      recv_next works and the endpoint delivered 1222 PDUs in one run."
+    - "Why the install flow makes this likely rather than unlikely. The flow deliberately
+      mixes a released Python layer with a freshly built extension, so any cdecl change
+      between the released version and the checkout produces exactly this class of error.
+      Nothing in the flow compares the two generations or warns."
+    - "Related but distinct from the DLL search problem. Independently of this skew, the
+      extension does not resolve its own sibling DLLs on Windows, so importing it requires
+      explicitly adding both the package directory and the Hakoniwa Core bin directory via
+      os.add_dll_directory. Without those two calls the import fails with 'DLL load failed
+      while importing _c_endpoint_ffi' before any of the above is reachable. That gap
+      reproduced in this configuration."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      path: python/hakoniwa_pdu_endpoint/c_endpoint.py
+      revision: f2d7bc0
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      path: install-python-win.ps1
+      revision: f2d7bc0
+  runtime_evidence:
+    - description: >-
+        External contributor's native Windows 11 x86_64 environment, CPython 3.12.7,
+        2026-07-30/31. PyPI Python layer plus locally built extension - import OK, open OK,
+        start OK, post_start OK, first recv_next raised the cdecl TypeError quoted above.
+        Repository Python layer plus the same extension - recv_next worked and one run
+        received 1222 JointState PDUs. The DLL search gap reproduced in the same
+        configuration and required two explicit os.add_dll_directory calls.
+  expert_input: []
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - Determine the intended pairing rule. Either the released wheel should ship a matching
+      prebuilt extension for the platform, or the install flow should verify that the
+      extension and the Python layer come from the same revision and refuse otherwise.
+    - Establish whether a version or ABI marker exists that a caller could check before the
+      first call. Nothing obvious was found, which is why the failure lands at recv_next
+      rather than at import.
+    - Only the recv_next signature was found to disagree. Whether other entry points have
+      the same skew between the released layer and current main was not audited.
+  notes:
+    - Both sides of the mismatch were read in source and the failure and the fix were each
+      reproduced once, on one machine, with one Python version.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      kind: doctor
+      path: install-python-win.ps1
+      mode: detect-only
+      notes:
+        - The install flow knows both the installed package version and the checkout it
+          built the extension from, so it can compare them and fail with an actionable
+          message instead of producing a combination that imports cleanly and breaks on the
+          first receive.
+
+promotion_rationale:
+  - The defect is in the interaction the install flow itself creates, so it belongs to the
+    owning repository rather than to any Recipe.
+  - A detect-only check at install time is proposed rather than a runtime guard, because by
+    the time recv_next raises, the caller has already been told the endpoint started
+    successfully.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Diagnosis and workaround only; no upstream issue filed, since issue filing for
+      implementation work is owned by the upstream maintainers.
+    - The workaround is to import the repository's own Python layer alongside the extension
+      built from the same tree. It is a local arrangement, not a proposed upstream change.
