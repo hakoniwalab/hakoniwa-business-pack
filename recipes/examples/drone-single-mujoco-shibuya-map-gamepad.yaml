@@ -1,0 +1,541 @@
+id: drone-single-mujoco-shibuya-map-gamepad
+title: Human-operated Hakoniwa Drone Shibuya MuJoCo and Map Viewer Demo
+recipe_version: 0.4
+
+goal:
+  user_request: PS5コントローラで渋谷のMuJoCo環境を飛行し、PLATEAU 3DビューとLeaflet地図で同時に確認したい
+  description: >
+    Extend the existing single-drone gamepad Recipe with the calibrated Shibuya
+    MuJoCo collision world from Drone Core and Hakoniwa Map Viewer. Business Pack
+    materializes an RC-enabled copy and a browser bundle without modifying owner
+    repositories. hakoniwa-envsim is intentionally excluded.
+
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - The existing gamepad Recipe already provides PS5 control, Launcher lifecycle, DroneVisualStatePublisher, WebBridge, and Foundation integration.
+    - Drone Core already owns drone_config_0.json and drone.xml for the Shibuya MuJoCo world.
+    - drone.xml contains both the drone model and Shibuya building collision geometry.
+    - Map Viewer already combines Leaflet and Three.js and can select a Recipe-generated viewer configuration.
+
+validation:
+  status: partially_verified
+  verified_at: 2026-07-31
+  summary: >
+    Source assets and design boundaries were inspected. Runtime materialization,
+    browser bundling, collision behavior, and full end-to-end execution remain
+    for Codex and operator validation.
+  steps:
+    - id: source_asset_contract
+      status: verified
+      evidence:
+        - source: hakoniwa-drone-core/config/drone/mujoco-shibuya-api-1
+          date: 2026-07-31
+      notes:
+        - drone.xml is the complete MuJoCo world and must be copied byte-for-byte.
+    - id: transformation_contract
+      status: verified
+      evidence:
+        - source: design-review
+          date: 2026-07-31
+      notes:
+        - Only four JSON paths may change in generated drone_config_0.json.
+    - id: coordinate_contract
+      status: verified
+      evidence:
+        - source: user-design-confirmation
+          date: 2026-07-31
+      notes:
+        - Preserve the existing Drone Core location and Map Viewer origin independently.
+        - Do not reconcile the longitude values in this phase.
+    - id: generated_runtime
+      status: not_tested
+      evidence: []
+      notes:
+        - Codex will implement configure, doctor, tests, Launcher generation, and browser materialization.
+    - id: end_to_end
+      status: not_tested
+      evidence: []
+      notes:
+        - Verify PS5 flight, collision, MuJoCo rendering, Three.js rendering, Leaflet tracking, reset, and cleanup.
+
+constraints:
+  - single-pc
+  - native
+  - human-operated-gamepad
+  - mujoco-native-viewer
+  - mujoco-shibuya-collision-world
+  - map-viewer-browser
+  - threejs-shibuya-view
+  - leaflet-map
+  - shared-memory-pdu
+  - shared-foundation-python-venv
+  - no-px4
+  - no-envsim
+  - no-drone-core-modification
+  - no-map-viewer-source-modification
+  - preserve-calibrated-coordinate-values
+  - business-pack-owned-materialization
+  - business-pack-owned-launcher
+
+target_environment:
+  required_for: executable-demo
+  status: specified
+  os: macOS | Linux | Windows
+  os_version: current-supported-host
+  architecture: host-native
+  execution_mode: native
+  runtimes:
+    - name: MuJoCo
+      required: true
+      version: Drone-Core-compatible
+      path: hakoniwa-drone-core/vendor/mujoco
+    - name: Python
+      required: true
+      version: "3.12"
+      path: work/foundation/install/python
+    - name: Browser
+      required: true
+      version: current
+      path: system-default
+  hakoniwa:
+    install_prefix: work/foundation/install
+    components_built:
+      - hakoniwa-core-pro
+      - hakoniwa-pdu-python
+      - hakoniwa-pdu-bridge-core
+  notes:
+    - Reuse the platform adapters and Foundation Python contract from drone-single-mujoco-threejs-gamepad.
+    - TCP ports 8000 and 8765 must be available.
+
+execution_environment:
+  required_for: executable-demo
+  status: specified
+  os: host-native
+  os_version: current-supported-host
+  architecture: host-native
+  execution_mode: native
+  gui:
+    required: true
+    status: required
+  shared_memory:
+    required: true
+    access: local-host
+  devices:
+    - name: PS5 controller
+      required: true
+      available: user-confirmed
+      mapping: hakoniwa-drone-core/drone_api/rc/rc_config/ps4-control.json
+  python:
+    environment: foundation-venv
+    path: work/foundation/install/python
+    version: "3.12"
+    hakopy_available: required
+    hakoniwa_pdu_available: required
+    interpreter_override: forbidden
+  hakoniwa:
+    install_prefix: work/foundation/install
+    hako_cmd_access: required
+  notes:
+    - The Shibuya PLATEAU GLB is an explicit Recipe input until a machine-readable release manifest exists.
+    - hakoniwa-envsim must not be declared, configured, or launched.
+
+agency_boundary:
+  agent_actions:
+    - id: materialize_runtime
+      description: Copy source assets, apply the allowlisted JSON transformation, materialize Map Viewer, and generate Launcher and portal.
+      autonomous: true
+      preconditions:
+        - user_requested_execution
+        - shibuya_glb_path_supplied
+    - id: verify_materialization
+      description: Record hashes, validate the allowlisted diff, and check coordinate invariants.
+      autonomous: true
+      preconditions:
+        - materialize_runtime
+  human_decisions:
+    - id: approve_coordinate_change
+      description: Approve any future change to the calibrated coordinate values.
+      required_before:
+        - modify_coordinate_contract
+  human_actions:
+    - id: provide_shibuya_glb
+      description: Provide the existing Shibuya PLATEAU GLB path.
+      confirmation_required: true
+      required_before:
+        - materialize_runtime
+    - id: start_runtime
+      description: Start the generated Launcher.
+      confirmation_required: true
+      required_before:
+        - operate_gamepad
+    - id: operate_gamepad
+      description: Operate the PS5 controller and validate flight and collision behavior.
+      confirmation_required: true
+      required_before: []
+    - id: stop_runtime
+      description: Terminate the owned Launcher session.
+      confirmation_required: true
+      required_before: []
+  required_permissions:
+    - id: hakoniwa_drone_license
+      description: Confirm the required Hakoniwa Drone Core or PRO usage entitlement.
+      status: required
+      required_before:
+        - start_runtime
+
+components:
+  - id: hakoniwa-drone-core
+    roles:
+      - physics_runtime
+      - simulation_core
+    purpose: Own the calibrated Shibuya MuJoCo world, Drone runtime, visual-state publisher, and RC application.
+  - id: hakoniwa-core-pro
+    roles:
+      - simulation_core
+      - time_sync
+    purpose: Provide shared-memory PDU space, lifecycle, and hako-cmd.
+  - id: hakoniwa-pdu-python
+    roles:
+      - language_binding
+      - control_plane
+    purpose: Provide Foundation Python and Launcher background lifecycle.
+  - id: hakoniwa-pdu-bridge-core
+    roles:
+      - bridge
+      - communication_infrastructure
+    purpose: Bridge DroneVisualStateArray from shared memory to WebSocket.
+  - id: hakoniwa-map-viewer
+    roles:
+      - visualizer
+      - monitor
+      - integration_boundary
+      - visualization_asset_source
+    purpose: Present the live drone on Leaflet and the embedded Three.js Shibuya scene.
+  - id: hakoniwa-threejs-drone
+    roles:
+      - visualizer
+    purpose: Render the drone and PLATEAU Shibuya GLB inside Map Viewer.
+
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      shared_memory: true
+      hako_cmd: true
+      python_binding: true
+  hakoniwa-pdu-python:
+    version:
+      min: 1.6.5
+    capabilities:
+      hako_launcher: true
+      launcher_background_lifecycle: true
+      shm_backend: true
+  hakoniwa-pdu-bridge-core:
+    capabilities:
+      hakoniwa_app: true
+      web_bridge: true
+      web_bridge_fleets_config_format: true
+
+connections:
+  - from: hakoniwa-pdu-python
+    to: hakoniwa-drone-core
+    interface: python-and-pdu
+    data:
+      - Launcher lifecycle
+      - GameControllerOperation
+    contract:
+      status: partially_verified
+      requires:
+        - work/foundation/install/python
+        - rc-custom.py
+        - ps4-control.json
+      validation_notes:
+        - Reuse the parent gamepad Recipe contract.
+  - from: hakoniwa-drone-core
+    to: hakoniwa-pdu-bridge-core
+    interface: shared-memory-pdu
+    data:
+      - DroneVisualStateArray
+    contract:
+      status: partially_verified
+      requires:
+        - generated Shibuya gamepad config
+        - matching visual-state publisher configuration
+      validation_notes:
+        - The state path is inherited; the generated Shibuya config remains untested.
+  - from: hakoniwa-pdu-bridge-core
+    to: hakoniwa-map-viewer
+    interface: websocket
+    data:
+      - DroneVisualStateArray
+    contract:
+      status: partially_verified
+      requires:
+        - TCP port 8765
+        - wireVersion v2
+        - generated Shibuya fleets viewer configuration
+      validation_notes:
+        - Component checks exist; the integrated Recipe remains untested.
+  - from: hakoniwa-map-viewer
+    to: hakoniwa-threejs-drone
+    interface: public-browser-api
+    data:
+      - viewer configuration
+      - scene configuration
+      - drone visual state
+    contract:
+      status: partially_verified
+      requires:
+        - generated browser bundle
+        - Shibuya PLATEAU GLB
+      validation_notes:
+        - Materialize configuration without changing source repositories.
+
+data_flow:
+  - source: PS5 controller
+    path:
+      - pygame joystick events
+      - rc-custom.py
+      - GameControllerOperation PDU
+      - RadioController
+      - Hakoniwa Drone service
+    destination: MuJoCo Shibuya drone dynamics
+  - source: Hakoniwa Drone service
+    path:
+      - DroneVisualStatePublisher
+      - DroneVisualStateArray
+      - WebBridge
+      - WebSocket
+      - Hakoniwa Map Viewer
+    destination: Leaflet map and Three.js Shibuya view
+
+time_model:
+  owner: hakoniwa-core-pro
+  policy: shared-memory-simulation-time
+  requirements:
+    - Preserve simulation.timeStep 0.003 from drone_config_0.json.
+    - Preserve the MuJoCo XML timestep 0.003.
+    - The gamepad controller starts after hako-cmd start.
+
+artifact_sets:
+  foundation:
+    status: partially_verified
+    owner: work/foundation
+    artifacts:
+      - work/foundation/install
+      - work/foundation/install/python
+      - work/foundation/config/cpp_core_config.json
+      - work/foundation/runtime/mmap
+      - work/foundation/install/share/hakoniwa/receipts
+  recipe_runtime:
+    status: not_tested
+    owner: work/recipes/drone-single-mujoco-shibuya-map-gamepad
+    artifacts:
+      - index.html
+      - config/launcher.json
+      - config/drone/mujoco-shibuya-gamepad-1/drone_config_0.json
+      - config/drone/mujoco-shibuya-gamepad-1/drone.xml
+      - config/controller/param-gamepad-mixer-mujoco-shibuya.txt
+      - config/pdudef
+      - config/assets/visual_state_publisher
+      - config/assets/web_bridge_fleets
+      - web/map-viewer
+      - runtime/launcher-session.json
+      - validation/materialization.json
+      - logs
+
+artifacts:
+  generated:
+    - path: work/recipes/drone-single-mujoco-shibuya-map-gamepad/config/drone/mujoco-shibuya-gamepad-1/drone_config_0.json
+      owner: hakoniwa-business-pack
+      purpose: RC-enabled copy of the calibrated Shibuya configuration.
+      contract:
+        source: hakoniwa-drone-core/config/drone/mujoco-shibuya-api-1/drone_config_0.json
+        allowed_changes:
+          - components.droneDynamics.mujoco.modelPath
+          - controller.moduleDirectory
+          - controller.moduleName
+          - controller.paramFilePath
+        all_other_values: preserve
+    - path: work/recipes/drone-single-mujoco-shibuya-map-gamepad/config/controller/param-gamepad-mixer-mujoco-shibuya.txt
+      owner: hakoniwa-business-pack
+      purpose: Initial byte-for-byte copy of the calibrated Shibuya controller parameters.
+    - path: work/recipes/drone-single-mujoco-shibuya-map-gamepad/web/map-viewer
+      owner: hakoniwa-business-pack
+      purpose: Map Viewer bundle, Recipe-specific configs, and supplied GLB.
+    - path: work/recipes/drone-single-mujoco-shibuya-map-gamepad/validation/materialization.json
+      owner: hakoniwa-business-pack
+      purpose: Hashes, allowlisted JSON diff, coordinate invariants, and GLB provenance.
+  reused:
+    - path: hakoniwa-drone-core/config/drone/mujoco-shibuya-api-1/drone.xml
+      owner: hakoniwa-drone-core
+      purpose: Complete MuJoCo drone and Shibuya collision world; copy byte-for-byte.
+    - path: hakoniwa-drone-core/drone_api/rc/rc-custom.py
+      owner: hakoniwa-drone-core
+    - path: hakoniwa-drone-core/drone_api/rc/rc_config/ps4-control.json
+      owner: hakoniwa-drone-core
+    - path: 13113_shibuya-ku_pref_2023_citygml_2_op.glb
+      owner: external-recipe-input
+      purpose: Existing PLATEAU visual asset; not used for MuJoCo collision.
+
+coordinate_contract:
+  policy: preserve-existing-calibration
+  automatic_normalization: forbidden
+  mujoco_simulation_location:
+    source: hakoniwa-drone-core/config/drone/mujoco-shibuya-api-1/drone_config_0.json
+    latitude: 35.6625
+    longitude: 139.69375
+    altitude: 15.4
+    mutation: forbidden-without-human-approval
+  map_viewer_origin:
+    source: hakoniwa-map-viewer/src/client/src/ui.js
+    latitude: 35.6625
+    longitude: 139.70625
+    mutation: forbidden-without-human-approval
+  notes:
+    - The longitude values are intentionally not reconciled in this phase.
+    - Tests must fail if generated artifacts silently change either value.
+
+implementation_plan:
+  owner: codex-with-operator
+  steps:
+    - Extract reusable gamepad runtime helpers without changing the parent Recipe.
+    - Copy the complete Shibuya source directory and patch only the four allowlisted JSON paths.
+    - Assert that the generated drone.xml hash equals the source hash.
+    - Generate the Map Viewer bundle and Shibuya fleets configuration.
+    - Require an explicit Shibuya GLB input and record its hash and source.
+    - Generate Launcher, portal, configure, doctor, and tests.
+    - Validate the no-envsim boundary and coordinate invariants.
+    - Perform live macOS validation before upgrading validation status.
+
+acceptance_criteria:
+  - configure creates the declared workspace without modifying source repositories.
+  - generated drone.xml is byte-for-byte identical to the Drone Core source.
+  - generated drone_config_0.json differs only at the four allowlisted JSON paths.
+  - generated controller uses RadioController and the Recipe-owned parameter file.
+  - MuJoCo location remains latitude 35.6625, longitude 139.69375, altitude 15.4.
+  - Map Viewer origin remains latitude 35.6625, longitude 139.70625.
+  - no generated dependency, config, Launcher asset, or command references hakoniwa-envsim.
+  - Launcher includes Drone service, visual-state publisher, WebBridge, RC controller, and Map Viewer HTTP server.
+  - PS5 operation moves the same drone in MuJoCo, Three.js, and Leaflet.
+  - Shibuya MuJoCo collision is observable and recorded.
+  - cleanup leaves no owned background process.
+
+missing_pieces:
+  - Codex implementation of materialization, browser bundling, Launcher, portal, and tests.
+  - Machine-readable release asset and checksum contract for the Shibuya GLB.
+  - Live coordinate alignment and collision validation.
+  - Native Linux validation.
+  - Native Windows validation.
+
+demo:
+  profiles:
+    - id: human-gamepad-shibuya-map
+      launcher: work/recipes/drone-single-mujoco-shibuya-map-gamepad/config/launcher.json
+      description: Fly one drone in the Shibuya MuJoCo collision world and show it in Leaflet and Three.js.
+  prerequisites:
+    - command: python tools/foundation.py doctor --recipe recipes/examples/drone-single-mujoco-shibuya-map-gamepad.yaml
+      expected: Foundation SATISFIED
+    - command: python tools/drone_shibuya_gamepad.py configure --shibuya-glb <path>
+      expected: MuJoCo assets, Map Viewer bundle, portal, validation record, and Launcher generated.
+  steps:
+    - id: configure
+      command: python tools/drone_shibuya_gamepad.py configure --shibuya-glb <path>
+      status: not_tested
+      expected:
+        - Source assets are copied and hashes recorded.
+        - Only the allowlisted JSON paths are changed.
+    - id: start
+      command: python tools/drone_shibuya_gamepad.py start
+      status: not_tested
+      expected:
+        - All runtime assets start in one owned Launcher session.
+    - id: open_viewer
+      command: python tools/drone_shibuya_gamepad.py open-viewer
+      status: not_tested
+      expected:
+        - The browser displays Leaflet and the Shibuya Three.js scene.
+    - id: validate_flight
+      command: human operates the PS5 controller
+      status: not_tested
+      expected:
+        - MuJoCo, Three.js, and Leaflet show the same drone motion.
+        - Collision with the Shibuya MuJoCo geometry is observable.
+    - id: stop
+      command: python tools/drone_shibuya_gamepad.py stop
+      status: not_tested
+      expected:
+        - Launcher terminates all owned processes cleanly.
+  cleanup:
+    owner: hakoniwa-launcher
+    provider: hakoniwa-pdu-python
+    mode: background
+    target: work/recipes/drone-single-mujoco-shibuya-map-gamepad/runtime/launcher-session.json
+    trigger: python tools/drone_shibuya_gamepad.py stop
+    expected_behavior:
+      - Launcher invokes its normal termination path.
+      - Only assets owned by this Recipe session are terminated.
+    verification_checks:
+      - Confirm no Launcher-managed asset remains.
+      - Confirm no process is listening on TCP port 8000.
+      - Confirm no process is listening on TCP port 8765.
+      - Inspect the Launcher session log.
+    cautions:
+      - Do not use OS-specific broad process cleanup.
+      - Do not treat hako-cmd stop as process termination.
+      - Do not modify Drone Core source assets during cleanup.
+
+expected_result: >
+  A human can operate one Hakoniwa Drone with the PS5 controller inside the
+  calibrated Shibuya MuJoCo collision world while the same state is shown in
+  Hakoniwa Map Viewer as both a Three.js PLATEAU scene and a Leaflet map.
+  Business Pack owns the generated configuration, browser bundle, Launcher,
+  portal, and validation record. Existing coordinate values remain unchanged,
+  source repositories remain unmodified, and hakoniwa-envsim is absent.
+
+source_catalogs:
+  - component_id: hakoniwa-drone-core
+    purpose: Shibuya MuJoCo world, Drone runtime, RC application, mapping, and visual-state publisher.
+  - component_id: hakoniwa-core-pro
+    purpose: Shared-memory Core, lifecycle, Python binding, and hako-cmd.
+  - component_id: hakoniwa-pdu-python
+    purpose: Foundation Python, Launcher, SHM backend, and background lifecycle.
+  - component_id: hakoniwa-pdu-bridge-core
+    purpose: Shared-memory to WebSocket bridge.
+  - component_id: hakoniwa-map-viewer
+    purpose: Integrated Leaflet and Three.js monitor.
+  - component_id: hakoniwa-threejs-drone
+    purpose: Drone and PLATEAU rendering.
+
+source_artifacts:
+  - repository: toppers/hakoniwa-drone-core
+    path: config/drone/mujoco-shibuya-api-1/drone_config_0.json
+    relation: calibrated-source-config-and-transformation-input
+  - repository: toppers/hakoniwa-drone-core
+    path: config/drone/mujoco-shibuya-api-1/drone.xml
+    relation: byte-for-byte-reused-collision-world
+  - repository: toppers/hakoniwa-drone-core
+    path: config/controller/param-api-mixer-mujoco-shibuya.txt
+    relation: calibrated-controller-parameter-source
+  - repository: toppers/hakoniwa-drone-core
+    path: drone_api/rc/rc-custom.py
+    relation: reused-runtime-artifact
+  - repository: toppers/hakoniwa-drone-core
+    path: drone_api/rc/rc_config/ps4-control.json
+    relation: reused-runtime-artifact
+  - repository: hakoniwalab/hakoniwa-map-viewer
+    path: src/client/src/ui.js
+    relation: map-origin-and-threejs-integration-source
+  - repository: hakoniwalab/hakoniwa-threejs-drone
+    path: config/drone_config-compact-dji-1.json
+    relation: shibuya-scene-transform-reference
+  - repository: hakoniwalab/hakoniwa-threejs-drone
+    path: config/viewer-config-fleets.json
+    relation: fleets-viewer-configuration-reference
+  - repository: hakoniwalab/hakoniwa-business-pack
+    path: recipes/examples/drone-single-mujoco-threejs-gamepad.yaml
+    relation: parent-gamepad-runtime-contract
+  - repository: hakoniwalab/hakoniwa-business-pack
+    path: tools/drone_gamepad_exhibition.py
+    relation: parent-generator-and-operator-interface
