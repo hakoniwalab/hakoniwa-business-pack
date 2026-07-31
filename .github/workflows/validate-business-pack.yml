@@ -33,8 +33,13 @@ jobs:
       - name: Test Foundation schemas
         run: ruby foundation/tools/test_validation.rb
 
-      - name: Test Foundation inspector and Recipe configurator
-        run: python -m unittest tools/test_foundation.py tools/test_drone_threejs.py -v
+      - name: Test Foundation inspector and Recipe configurators
+        run: >-
+          python -m unittest
+          tools/test_foundation.py
+          tools/test_drone_threejs.py
+          tools/test_drone_gamepad_exhibition.py
+          -v
 
       - name: Validate usecases
         run: ruby usecases/tools/validate_usecases.rb
