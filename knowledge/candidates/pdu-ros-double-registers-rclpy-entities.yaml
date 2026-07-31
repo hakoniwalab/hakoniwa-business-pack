@@ -1,0 +1,112 @@
+id: pdu-ros-double-registers-rclpy-entities
+title: hakoniwa-pdu-ros reused rclpy internal entity lists and registered publishers and subscriptions twice
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - interface_contract
+  - validation_rule
+
+summary: >
+  rclpy Node owns internal _publishers and _subscriptions collections and
+  create_publisher() / create_subscription() register returned entities there automatically.
+  HakoniwaRosBridgeNode originally replaced those internal collections and manually appended
+  the same returned entities again. Message delivery still worked, but destroy_node() later
+  processed duplicate subscriptions and attempted to remove an already-removed QoS event
+  waitable, raising ValueError. The fix is to leave rclpy-owned collections untouched and
+  never append entities returned by Node creation methods manually.
+
+observation:
+  context: >
+    Running the Docker native ROS 2 Jazzy / CycloneDDS integration suite introduced by
+    hakoniwalab/hakoniwa-pdu-ros#4 on 2026-07-31 after the array.array and binding QoS fixes.
+  details:
+    - "All three native QoS cases reached their expected receive or incompatibility condition, then failed during bridge.destroy_node()."
+    - "rclpy Node.create_subscription() had already inserted the subscription into Node._subscriptions, and HakoniwaRosBridgeNode appended the same object a second time."
+    - "The first destruction removed the subscription QoS event waitable; the duplicate entry then raised ValueError: list.remove(x): x not in list."
+    - "Repeated rosout warnings about the hakoniwa_pdu_ros_bridge node name were a secondary effect of the previous node failing to clean up."
+    - "The same ownership mistake existed for publishers through Node._publishers, even though the observed failure was on subscription cleanup."
+    - "After removing the replacement lists and manual appends, the native suite completed with 6 passed in 0.26 seconds."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      path: hakoniwa_pdu_ros/bridge_node.py
+      revision: e0737d85fc7a06463ef26f759976422def0ed9f3
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      path: hakoniwa_pdu_ros/bridge_node.py
+      revision: 56758a4e9efb8da7abd9e486dbbbf896b967a9c1
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      path: test/test_bridge_qos.py
+      revision: 5e65cca66ca900621fbfd5754a0f20ca32c61caf
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      path: test/native/test_native_qos.py
+      revision: 78386ef97323040f845757a52f2d6310197e0470
+  runtime_evidence:
+    - description: >-
+        Maintainer Docker run before the fix showed three QoS tests failing only during
+        destroy_node with ValueError from rclpy Node.destroy_subscription while removing a
+        duplicate event waitable.
+    - description: >-
+        Maintainer Docker rerun after PR #7 completed all mapping and QoS tests with
+        6 passed in 0.26 seconds and no repeated-node rosout cleanup warning.
+  expert_input: []
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required: []
+  notes:
+    - The defect was reproduced with real rclpy on ROS 2 Jazzy rather than fake Node classes.
+    - Unit regression coverage now asserts that bridge setup does not mutate an rclpy-owned subscription collection.
+
+tracking:
+  implementation_status: resolved
+  issues:
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      number: 4
+      relation: validation
+      status: closed
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      kind: test
+      path: test/test_bridge_qos.py
+      mode: detect-only
+      notes:
+        - Asserts that bridge binding setup does not append to the rclpy-owned subscription collection.
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      kind: test
+      path: test/native/test_native_qos.py
+      mode: detect-only
+      notes:
+        - Exercises real node destruction after each compatible and incompatible QoS graph case.
+
+promotion_rationale:
+  - This is an implementation ownership pitfall rather than a user-facing capability, so it remains a resolved Knowledge Candidate instead of being added to the Catalog interface description.
+  - The reusable rule is executable: subclasses must not replace or manually mutate rclpy Node entity collections.
+
+resolution:
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      issue: 4
+      pull_request: 7
+      revision: 78386ef97323040f845757a52f2d6310197e0470
+  verified: true
+  promoted_to: []
+  executable_guardrails:
+    - hakoniwalab/hakoniwa-pdu-ros:test/test_bridge_qos.py
+    - hakoniwalab/hakoniwa-pdu-ros:test/native/test_native_qos.py
+  notes:
+    - PR #7 removed duplicate rclpy entity registration for both publishers and subscriptions.
+    - The full Docker native suite passed after the fix, proving message delivery, QoS diagnosis, and process cleanup in the same run.
