@@ -283,6 +283,23 @@ missing_pieces:
 
 demo:
   objective: What the minimal demo should prove.
+  readiness:
+    lifecycle_state:
+      source: launcher-session
+      required: RUNNING
+      sufficient: false
+    checks:
+      - id: demo-ready-signal
+        kind: log | tcp | http | websocket | pdu | process | human_observation
+        target: Concrete port, URL, log path, PDU, process, or GUI.
+        expected: Observable condition that must be true.
+    operator_handoff:
+      background: true
+      explain_command_return: true
+      next_actions:
+        - open-viewer
+        - status
+        - stop
   steps:
     - order: 1
       id: demo-step-id

@@ -363,6 +363,62 @@ def launcher_control_command(python: Path, command: str, session: Path) -> list[
     ]
 
 
+def start_launcher_and_verify(
+    python: Path,
+    launcher: Path,
+    session: Path,
+    env: dict[str, str],
+    *,
+    stabilization_sec: float = 2.0,
+) -> int:
+    rc = _run(launcher_start_command(python, launcher, session), env)
+    if rc != 0:
+        return rc
+
+    # The background command returns after the control endpoint becomes ready.
+    # Give the asset watcher a short window to surface failures that occur
+    # immediately after hako-cmd start, then verify through the public session
+    # control contract instead of inspecting or killing a recorded PID.
+    time.sleep(stabilization_sec)
+    status_command = launcher_control_command(python, "status", session)
+    print(f"+ {subprocess.list2cmdline(status_command)}")
+    try:
+        completed = subprocess.run(
+            status_command,
+            env=env,
+            text=True,
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f"[NG] Launcher status verification failed: {exc}", file=sys.stderr)
+        completed = None
+
+    if completed is not None:
+        if completed.stdout:
+            print(completed.stdout, end="")
+        if completed.stderr:
+            print(completed.stderr, end="", file=sys.stderr)
+
+    state = None
+    if completed is not None and completed.returncode == 0:
+        try:
+            lines = [line for line in completed.stdout.splitlines() if line.strip()]
+            state = json.loads(lines[-1]).get("state")
+        except (IndexError, json.JSONDecodeError, AttributeError):
+            pass
+
+    if state != "RUNNING":
+        print(
+            "[NG] Launcher did not remain RUNNING after startup. "
+            f"Inspect {session} and {session}.log.",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
 def reset_commands(hako_cmd: Path) -> list[list[str]]:
     return [
         [str(hako_cmd), "stop"],
@@ -621,8 +677,10 @@ def start(drone_root: Path, viewer_root: Path, overrides: dict[str, Path | None]
     launcher = _required(paths.recipe_config / "launcher.json", "Generated Launcher")
     session = session_file(paths)
     session.parent.mkdir(parents=True, exist_ok=True)
-    return _run(
-        launcher_start_command(runtime.foundation_python, launcher, session),
+    return start_launcher_and_verify(
+        runtime.foundation_python,
+        launcher,
+        session,
         runtime_environment(paths, runtime),
     )
 

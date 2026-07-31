@@ -484,6 +484,41 @@ browser request arrives. Prefer active readiness checks:
 - the expected bridge endpoint accepts a browser or client connection;
 - downstream PDU, service, or visual-state logs show changing data.
 
+### Launcher lifecycle state and Demo readiness
+
+Distinguish a background Launcher session state from a Demo that is ready for
+the operator:
+
+```text
+Launcher session RUNNING
+  = the control endpoint responds and the Launcher lifecycle is still active
+
+Demo Ready
+  = the Recipe-required assets, simulation, ports, Bridge, Viewer, and PDU data
+    flow are usable
+```
+
+An exit code of `0` from `hako_launcher_ctl status` alone proves neither that
+the JSON `state` is `RUNNING` nor that the Demo is ready. Parse the response
+state and then run the Recipe-specific active readiness checks. The Launcher
+main process may remain alive even when managed assets have exited and the
+expected HTTP server or Bridge port is absent.
+
+When a background `start` command returns after readiness checks, its operator
+handoff must state:
+
+- that the Demo continues running in the background after command return;
+- which GUI, behavior, ports, or data flow the operator should confirm;
+- the next command that opens the viewer;
+- the session status command;
+- the normal stop command;
+- the session file and log locations.
+
+A fixed `delay_sec` may be a temporary ordering measure for a slow model load,
+but it is not readiness evidence. Prefer conditions tied directly to the
+contract, such as asset registration, `WAIT START` / `WAIT RUNNING`, HTTP
+responses, socket listeners, Bridge connectivity, or PDU updates.
+
 Launcher timing is expressed through `activation_timing`:
 
 ```text

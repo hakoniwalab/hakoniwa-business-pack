@@ -399,6 +399,37 @@ Launcherが終了しないという理由だけで、Launcherベースのデモ�
 - 想定したBridge endpointがbrowserまたはclient connectionを受け付ける。
 - downstreamのPDU、Service、visual-state logでデータ変化が確認できる。
 
+### Launcher lifecycle stateとDemo readiness
+
+background Launcherのsession stateと、ユーザーが利用できるDemoのready状態を区別してください。
+
+```text
+Launcher session RUNNING
+  = control endpointが応答し、Launcher lifecycleが継続している
+
+Demo Ready
+  = Recipeが必要とするasset、simulation、port、Bridge、Viewer、PDU data flowが利用可能
+```
+
+`hako_launcher_ctl status`が終了コード`0`を返したことだけでは、`state`が`RUNNING`
+であることも、Demoがreadyであることも証明できません。応答JSONの`state`を確認し、
+さらにRecipe固有のactive readiness checkを実行してください。Launcher main processが
+生存していても、管理assetが終了し、HTTP serverやBridge portが存在しない場合があります。
+
+background `start` commandがready確認後に呼び出し元へ復帰する場合、出力は次を明示します。
+
+- commandの復帰後もDemoがbackgroundで動作中であること
+- ユーザーが確認するGUI、動作、port、data flow
+- viewerを開く次のcommand
+- session statusの確認command
+- 正常終了command
+- session fileとlogの場所
+
+固定の`delay_sec`は、重いmodel loadなどに対する暫定的な順序調整には使用できますが、
+readinessの証拠ではありません。可能なら、asset登録、`WAIT START` / `WAIT RUNNING`、
+HTTP応答、socket listener、Bridge接続、PDU更新など、対象の契約に直接対応する条件を
+待ってください。
+
 Launcherの起動タイミングは `activation_timing` で表現します。
 
 ```text

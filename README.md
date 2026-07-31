@@ -315,6 +315,36 @@ Recipeには、単なるコンポーネント一覧だけでなく、次のよ�
 - 必要な追加開発
 - 最小デモの作り方
 
+### Recipeの操作ガイドを生成する
+
+一般ユーザーはRecipe YAMLを直接読み解く必要はありません。利用したいRecipeを
+指定すると、目的、構成、Foundation状態、必要なコマンド、人の操作、停止方法を
+まとめた`index.html`を生成できます。
+
+```bash
+python3.12 tools/recipe.py guide --recipe recipes/examples/<recipe-id>.yaml
+```
+
+生成先はRecipe IDから一意に決まります。
+
+```text
+work/recipes/<recipe-id>/index.html
+```
+
+既定ブラウザで同時に開く場合は`--open`を付けます。
+
+```bash
+python3.12 tools/recipe.py guide \
+  --recipe recipes/examples/<recipe-id>.yaml \
+  --open
+```
+
+このコマンドは説明ページを生成するだけで、Recipe内のコマンドを実行しません。
+Foundationが未準備の場合もページは生成され、必要な`doctor`、`plan`、`build`や
+Recipe固有の`configure`以降の手順をページ内で確認できます。
+Recipe固有の`configure`は、同じ`index.html`を解決済みパスや生成物を含む
+実行ガイドへ更新する場合があります。
+
 ---
 
 ## Runtime Primer

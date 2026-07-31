@@ -86,6 +86,35 @@ Use the existing Recipe to recover:
 Prefer adapting an existing Recipe over rediscovering execution steps from source
 repositories.
 
+## Generate The Human-Facing Recipe Guide
+
+The common user entry point is a generated workspace guide. Pass any Recipe YAML
+to the generic guide command:
+
+```bash
+python3.12 tools/recipe.py guide --recipe recipes/examples/<recipe-id>.yaml
+```
+
+This always writes:
+
+```text
+work/recipes/<recipe-id>/index.html
+```
+
+Use `--open` to open it in the default browser. Guide generation is read-only
+with respect to the declared Recipe operations: it does not execute `configure`,
+`build`, `start`, or cleanup commands. The page projects the Recipe goal,
+components, feasibility, validation, current Foundation inspection, declared
+Demo commands, Agency Boundary, artifacts, and missing pieces into a human-facing
+workflow.
+
+Foundation may be `MISSING`, `INCOMPATIBLE`, or `UNKNOWN`; this does not block
+guide generation. The generated page is the handoff point. Follow its commands
+to prepare Foundation and run the Recipe-specific workflow.
+Recipe-specific `configure` implementations may enrich the same `index.html`
+with resolved paths and generated resources while preserving it as the common
+human-facing entry point.
+
 ## Target Environment Requirement
 
 A Recipe can describe a platform-neutral composition, but an executable Demo or
@@ -382,6 +411,29 @@ an object along the motion path.
 Launcher startup or exit alone is not proof that the intended behavior occurred.
 
 If observability requires human action, model it as an explicit gate.
+
+### Background Launcher Readiness And Operator Handoff
+
+For a background Launcher Recipe, keep these states separate:
+
+```text
+Launcher session RUNNING != Demo Ready
+```
+
+The session state proves that the lifecycle control surface is available. Demo
+readiness must be declared from the behavior the Recipe needs, for example:
+
+- simulator log reaches `WAIT RUNNING`;
+- a native Viewer reports that its window/thread started;
+- HTTP and WebSocket ports accept connections;
+- a Bridge accepts its downstream connection;
+- expected PDU or visual-state data changes.
+
+When useful, record these conditions under `demo.readiness`. Treat a fixed
+startup delay as an implementation note, not as the success signal. A
+background `start` step must also hand control back to the operator explicitly:
+state that the Demo continues running, identify what to observe, and print the
+viewer, status, and stop commands plus session/log locations.
 
 ## Multi-Process Mirror Pattern
 

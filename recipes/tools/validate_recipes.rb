@@ -74,6 +74,55 @@ def validate_cleanup(value, label:)
   errors
 end
 
+def validate_readiness(value, label:)
+  return [] if value.nil?
+  return ["#{label}: demo.readiness must be a non-empty mapping"] unless value.is_a?(Hash) && !value.empty?
+
+  errors = []
+  lifecycle = value["lifecycle_state"]
+  unless lifecycle.is_a?(Hash)
+    errors << "#{label}: demo.readiness.lifecycle_state must be a mapping"
+  else
+    %w[source required].each do |field|
+      errors << "#{label}: demo.readiness.lifecycle_state.#{field} must be a non-empty string" unless non_empty_string?(lifecycle[field])
+    end
+    unless lifecycle["sufficient"] == true || lifecycle["sufficient"] == false
+      errors << "#{label}: demo.readiness.lifecycle_state.sufficient must be boolean"
+    end
+  end
+
+  checks = value["checks"]
+  unless checks.is_a?(Array) && !checks.empty?
+    errors << "#{label}: demo.readiness.checks must be a non-empty list"
+  else
+    checks.each_with_index do |check, index|
+      unless check.is_a?(Hash)
+        errors << "#{label}: demo.readiness.checks[#{index}] must be a mapping"
+        next
+      end
+      %w[id kind target expected].each do |field|
+        errors << "#{label}: demo.readiness.checks[#{index}].#{field} must be a non-empty string" unless non_empty_string?(check[field])
+      end
+    end
+  end
+
+  handoff = value["operator_handoff"]
+  unless handoff.is_a?(Hash)
+    errors << "#{label}: demo.readiness.operator_handoff must be a mapping"
+  else
+    %w[background explain_command_return].each do |field|
+      unless handoff[field] == true || handoff[field] == false
+        errors << "#{label}: demo.readiness.operator_handoff.#{field} must be boolean"
+      end
+    end
+    actions = handoff["next_actions"]
+    unless actions.is_a?(Array) && !actions.empty? && actions.all? { |item| non_empty_string?(item) }
+      errors << "#{label}: demo.readiness.operator_handoff.next_actions must be a non-empty string list"
+    end
+  end
+  errors
+end
+
 ROOT = File.expand_path("../..", __dir__)
 CATALOG_DIR = File.join(ROOT, "catalog")
 RECIPE_DIRS = [File.join(ROOT, "recipes", "examples")]
@@ -190,6 +239,7 @@ recipe_paths.each do |path|
   end
 
   demo = data["demo"] || {}
+  errors.concat(validate_readiness(demo["readiness"], label: label))
   cleanup = demo["cleanup"]
   if launcher_managed_recipe?(data) && cleanup.nil?
     errors << "#{label}: long-running launcher Recipe must define demo.cleanup"

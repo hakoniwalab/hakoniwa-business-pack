@@ -50,10 +50,18 @@ validation:
         - Preserve the existing Drone Core location and Map Viewer origin independently.
         - Do not reconcile the longitude values in this phase.
     - id: generated_runtime
-      status: not_tested
-      evidence: []
+      status: verified
+      evidence:
+        - source: tools/test_drone_shibuya_gamepad.py
+          date: 2026-07-31
+        - source: work/recipes/drone-single-mujoco-shibuya-map-gamepad/validation/materialization.json
+          date: 2026-07-31
       notes:
-        - Codex will implement configure, doctor, tests, Launcher generation, and browser materialization.
+        - Unit tests verify materialization, the four-path JSON allowlist, byte-identical MuJoCo XML and controller parameters, GLB provenance, coordinates, no-envsim, Launcher topology, and session-file cleanup commands.
+        - Foundation doctor is SATISFIED for the three required Foundation components.
+        - macOS configure downloaded the real v0.0.1 PLATEAU GLB into the Recipe workspace and verified its declared SHA-256.
+        - The generated browser path reuses the Recipe-local GLB through a hard link on the verified macOS workspace.
+        - Human-operated runtime validation remains blocked until a gamepad is connected.
     - id: end_to_end
       status: not_tested
       evidence: []
@@ -138,8 +146,21 @@ execution_environment:
     install_prefix: work/foundation/install
     hako_cmd_access: required
   notes:
-    - The Shibuya PLATEAU GLB is an explicit Recipe input until a machine-readable release manifest exists.
+    - The Shibuya PLATEAU GLB is pinned to the hakoniwa-map-viewer v0.0.1 Release.
+    - "Release: https://github.com/hakoniwalab/hakoniwa-map-viewer/releases/tag/v0.0.1"
+    - "Asset: https://github.com/hakoniwalab/hakoniwa-map-viewer/releases/download/v0.0.1/13113_shibuya-ku_pref_2023_citygml_2_op.glb"
+    - "SHA-256: 2860f6db77f7d39af3320ca4e6650cd0e29082e5dfb5e081df6d810b0b172e9e"
+    - configure downloads the pinned Asset into the Recipe workspace; --shibuya-glb remains available for an offline copy of the same Asset.
     - hakoniwa-envsim must not be declared, configured, or launched.
+
+runtime_dependencies:
+  python:
+    interpreter: work/foundation/install/python
+    requirements: recipes/requirements/drone-single-mujoco-threejs-gamepad.txt
+    packages:
+      - name: pygame
+        version: 2.6.1
+        purpose: Read PS4/PS5 controller events from rc-custom.py.
 
 agency_boundary:
   agent_actions:
@@ -148,7 +169,6 @@ agency_boundary:
       autonomous: true
       preconditions:
         - user_requested_execution
-        - shibuya_glb_path_supplied
     - id: verify_materialization
       description: Record hashes, validate the allowlisted diff, and check coordinate invariants.
       autonomous: true
@@ -160,13 +180,8 @@ agency_boundary:
       required_before:
         - modify_coordinate_contract
   human_actions:
-    - id: provide_shibuya_glb
-      description: Provide the existing Shibuya PLATEAU GLB path.
-      confirmation_required: true
-      required_before:
-        - materialize_runtime
     - id: start_runtime
-      description: Start the generated Launcher.
+      description: Start the generated Launcher, wait for Demo readiness, and hand the background session back to the operator.
       confirmation_required: true
       required_before:
         - operate_gamepad
@@ -340,6 +355,7 @@ artifact_sets:
       - config/pdudef
       - config/assets/visual_state_publisher
       - config/assets/web_bridge_fleets
+      - assets/13113_shibuya-ku_pref_2023_citygml_2_op.glb
       - web/map-viewer
       - runtime/launcher-session.json
       - validation/materialization.json
@@ -363,7 +379,12 @@ artifacts:
       purpose: Initial byte-for-byte copy of the calibrated Shibuya controller parameters.
     - path: work/recipes/drone-single-mujoco-shibuya-map-gamepad/web/map-viewer
       owner: hakoniwa-business-pack
-      purpose: Map Viewer bundle, Recipe-specific configs, and supplied GLB.
+      purpose: Map Viewer bundle, Recipe-specific configs, and a browser-visible link or copy of the pinned GLB.
+    - path: work/recipes/drone-single-mujoco-shibuya-map-gamepad/assets/13113_shibuya-ku_pref_2023_citygml_2_op.glb
+      owner: hakoniwa-business-pack
+      purpose: Recipe-local distribution of the pinned hakoniwa-map-viewer v0.0.1 Release Asset.
+      source: https://github.com/hakoniwalab/hakoniwa-map-viewer/releases/download/v0.0.1/13113_shibuya-ku_pref_2023_citygml_2_op.glb
+      sha256: 2860f6db77f7d39af3320ca4e6650cd0e29082e5dfb5e081df6d810b0b172e9e
     - path: work/recipes/drone-single-mujoco-shibuya-map-gamepad/validation/materialization.json
       owner: hakoniwa-business-pack
       purpose: Hashes, allowlisted JSON diff, coordinate invariants, and GLB provenance.
@@ -375,10 +396,6 @@ artifacts:
       owner: hakoniwa-drone-core
     - path: hakoniwa-drone-core/drone_api/rc/rc_config/ps4-control.json
       owner: hakoniwa-drone-core
-    - path: 13113_shibuya-ku_pref_2023_citygml_2_op.glb
-      owner: external-recipe-input
-      purpose: Existing PLATEAU visual asset; not used for MuJoCo collision.
-
 coordinate_contract:
   policy: preserve-existing-calibration
   automatic_normalization: forbidden
@@ -404,7 +421,7 @@ implementation_plan:
     - Copy the complete Shibuya source directory and patch only the four allowlisted JSON paths.
     - Assert that the generated drone.xml hash equals the source hash.
     - Generate the Map Viewer bundle and Shibuya fleets configuration.
-    - Require an explicit Shibuya GLB input and record its hash and source.
+    - Resolve the pinned Shibuya GLB Release Asset into the Recipe workspace, verify its SHA-256, and record its source. Accept --shibuya-glb only as an offline override.
     - Generate Launcher, portal, configure, doctor, and tests.
     - Validate the no-envsim boundary and coordinate invariants.
     - Perform live macOS validation before upgrading validation status.
@@ -423,8 +440,7 @@ acceptance_criteria:
   - cleanup leaves no owned background process.
 
 missing_pieces:
-  - Codex implementation of materialization, browser bundling, Launcher, portal, and tests.
-  - Machine-readable release asset and checksum contract for the Shibuya GLB.
+  - Component-owned machine-readable release manifest; this Recipe currently pins the v0.0.1 URL and SHA-256 directly.
   - Live coordinate alignment and collision validation.
   - Native Linux validation.
   - Native Windows validation.
@@ -437,11 +453,42 @@ demo:
   prerequisites:
     - command: python tools/foundation.py doctor --recipe recipes/examples/drone-single-mujoco-shibuya-map-gamepad.yaml
       expected: Foundation SATISFIED
-    - command: python tools/drone_shibuya_gamepad.py configure --shibuya-glb <path>
+    - command: python tools/drone_shibuya_gamepad.py configure
       expected: MuJoCo assets, Map Viewer bundle, portal, validation record, and Launcher generated.
+  readiness:
+    lifecycle_state:
+      source: work/recipes/drone-single-mujoco-shibuya-map-gamepad/runtime/launcher-session.json
+      required: RUNNING
+      sufficient: false
+    checks:
+      - id: mujoco_viewer_started
+        kind: log
+        target: work/recipes/drone-single-mujoco-shibuya-map-gamepad/logs/drone-service-1.out
+        expected: Contains `Viewer thread started.`
+      - id: simulation_running
+        kind: log
+        target: work/recipes/drone-single-mujoco-shibuya-map-gamepad/logs/drone-service-1.out
+        expected: Contains `WAIT RUNNING`
+      - id: map_viewer_http
+        kind: tcp
+        target: 127.0.0.1:8000
+        expected: TCP connection succeeds.
+      - id: web_bridge_websocket
+        kind: tcp
+        target: 127.0.0.1:8765
+        expected: TCP connection succeeds.
+    operator_handoff:
+      background: true
+      explain_command_return: true
+      next_actions:
+        - open-viewer
+        - status
+        - stop
+      session_file: work/recipes/drone-single-mujoco-shibuya-map-gamepad/runtime/launcher-session.json
+      logs: work/recipes/drone-single-mujoco-shibuya-map-gamepad/logs
   steps:
     - id: configure
-      command: python tools/drone_shibuya_gamepad.py configure --shibuya-glb <path>
+      command: python tools/drone_shibuya_gamepad.py configure
       status: not_tested
       expected:
         - Source assets are copied and hashes recorded.
@@ -451,6 +498,9 @@ demo:
       status: not_tested
       expected:
         - All runtime assets start in one owned Launcher session.
+        - The command prints `[OK] Demo ready` only after MuJoCo, simulation, HTTP port 8000, and WebSocket port 8765 are ready.
+        - The command then returns while the Launcher session continues in the background.
+        - The output tells the operator how to open the viewer, inspect status, and stop the session.
     - id: open_viewer
       command: python tools/drone_shibuya_gamepad.py open-viewer
       status: not_tested
@@ -539,3 +589,9 @@ source_artifacts:
   - repository: hakoniwalab/hakoniwa-business-pack
     path: tools/drone_gamepad_exhibition.py
     relation: parent-generator-and-operator-interface
+  - repository: hakoniwalab/hakoniwa-business-pack
+    path: tools/drone_shibuya_gamepad.py
+    relation: implemented-materializer-and-operator-interface
+  - repository: hakoniwalab/hakoniwa-business-pack
+    path: tools/test_drone_shibuya_gamepad.py
+    relation: generated-runtime-contract-tests

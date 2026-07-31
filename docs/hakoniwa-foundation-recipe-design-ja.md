@@ -878,6 +878,23 @@ Core configとmmapはFoundation側の共通領域を利用します。Recipeの�
 
 これはFoundationのインストール確認とは別の責務です。
 
+background Launcherを利用するRecipeでは、さらに次の3状態を分離します。
+
+```text
+Foundation SATISFIED
+  -> Launcher session RUNNING
+  -> Demo Ready
+```
+
+`Foundation SATISFIED`は再利用可能な基盤が要求を満たすこと、Launcherの`RUNNING`は
+lifecycle controlが応答すること、`Demo Ready`はRecipe固有のasset、simulation、port、
+Viewer、data flowが利用可能であることを意味します。後者をsession stateや固定待機時間
+だけから推測しません。
+
+Recipeは必要に応じて`demo.readiness`へ、lifecycle stateが十分条件かどうか、active
+check、operator handoffを構造化します。background `start`が復帰する場合は、復帰後も
+稼働中であることと、viewer、status、stop、session、logsをユーザーへ引き渡します。
+
 ## 15. 複数構成の将来対応
 
 初期実装では、一つのactive Foundation installを管理します。

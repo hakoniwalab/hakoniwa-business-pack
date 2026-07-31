@@ -105,7 +105,11 @@ def write_recipe_portal(
     environment: Iterable[PortalEnvironment],
     topology: Iterable[str],
     agency_notes: Iterable[str],
+    status_label: str = "Foundation ready",
+    status_tone: str = "ready",
 ) -> Path:
+    if status_tone not in {"ready", "warning", "error"}:
+        raise ValueError(f"unsupported portal status tone: {status_tone}")
     output.parent.mkdir(parents=True, exist_ok=True)
     document = f"""<!doctype html>
 <html lang="ja">
@@ -160,6 +164,8 @@ def write_recipe_portal(
       border-radius: 50%;
       background: #2ca44f;
     }}
+    .status.warning::before {{ background: #d29922; }}
+    .status.error::before {{ background: #cf222e; }}
     .topology {{
       display: flex;
       flex-wrap: wrap;
@@ -255,7 +261,7 @@ def write_recipe_portal(
     <p class="eyebrow">Hakoniwa Business Pack · Generated Recipe Workspace</p>
     <h1>{_escape(title)}</h1>
     <p class="summary">{_escape(summary)}</p>
-    <p class="status">Foundation ready</p>
+    <p class="status {_escape(status_tone)}">{_escape(status_label)}</p>
   </header>
 
   <section>

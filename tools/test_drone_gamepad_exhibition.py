@@ -167,6 +167,79 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
             self.assertEqual(status[-2], "status")
             self.assertEqual(stop[-2], "terminate")
 
+    def test_background_start_is_verified_through_session_control(self) -> None:
+        python = Path("/foundation/python/bin/python3")
+        launcher = Path("/workspace/config/launcher.json")
+        session = Path("/workspace/runtime/launcher-session.json")
+        env = {"PATH": "/foundation/bin"}
+        completed = SimpleNamespace(
+            returncode=0,
+            stdout='{"ok": true, "state": "RUNNING"}\n',
+            stderr="",
+        )
+
+        with (
+            mock.patch.object(recipe, "_run", return_value=0) as run,
+            mock.patch.object(
+                recipe.subprocess, "run", return_value=completed
+            ) as subprocess_run,
+            mock.patch.object(recipe.time, "sleep") as sleep,
+        ):
+            rc = recipe.start_launcher_and_verify(
+                python,
+                launcher,
+                session,
+                env,
+                stabilization_sec=1.25,
+            )
+
+        self.assertEqual(rc, 0)
+        run.assert_called_once_with(
+            recipe.launcher_start_command(python, launcher, session),
+            env,
+        )
+        self.assertEqual(
+            subprocess_run.call_args.args[0],
+            recipe.launcher_control_command(python, "status", session),
+        )
+        sleep.assert_called_once_with(1.25)
+
+    def test_background_start_rejects_terminal_status(self) -> None:
+        completed = SimpleNamespace(
+            returncode=0,
+            stdout='{"ok": true, "state": "TERMINATED"}\n',
+            stderr="",
+        )
+        with (
+            mock.patch.object(recipe, "_run", return_value=0),
+            mock.patch.object(recipe.subprocess, "run", return_value=completed),
+            mock.patch.object(recipe.time, "sleep"),
+        ):
+            rc = recipe.start_launcher_and_verify(
+                Path("/foundation/python"),
+                Path("/workspace/launcher.json"),
+                Path("/workspace/session.json"),
+                {},
+            )
+
+        self.assertEqual(rc, 1)
+
+    def test_background_start_failure_skips_status_verification(self) -> None:
+        with (
+            mock.patch.object(recipe, "_run", return_value=7) as run,
+            mock.patch.object(recipe.time, "sleep") as sleep,
+        ):
+            rc = recipe.start_launcher_and_verify(
+                Path("/foundation/python"),
+                Path("/workspace/launcher.json"),
+                Path("/workspace/session.json"),
+                {},
+            )
+
+        self.assertEqual(rc, 7)
+        self.assertEqual(run.call_count, 1)
+        sleep.assert_not_called()
+
     def test_user_cli_has_no_arbitrary_python_override(self) -> None:
         self.assertNotIn("--python-bin", recipe.parser().format_help())
 

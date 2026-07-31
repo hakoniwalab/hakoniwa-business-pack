@@ -230,6 +230,20 @@ If a required runtime path is unknown, record it in `missing_pieces` and do not 
 
 A Demo is optional validation downstream from a Recipe. Do not make Demo generation a prerequisite for answering the user's requirement.
 
+For a general-user handoff, generate the human-facing workspace guide before
+writing a Recipe-specific README:
+
+```bash
+python3.12 tools/recipe.py guide --recipe recipes/examples/<recipe-id>.yaml
+```
+
+This creates `work/recipes/<recipe-id>/index.html` even when Foundation is not
+yet satisfied. The page is the common handoff point for Foundation status,
+declared setup and runtime commands, Agency Boundary, artifacts, validation, and
+cleanup. Guide generation must not execute commands declared by the Recipe.
+Recipe-specific `configure` may enrich the same page with resolved paths and
+generated resources.
+
 Before executable steps, collect target-environment details when they change commands, feasibility, or Agency Boundary: OS, architecture, execution mode, GUI, SHM access, runtime versions, Python environment, Hakoniwa install prefix, build status, physical devices, and commercial/private availability.
 
 Before local execution of SHM/PDU Recipes, run or ask the user to run:
@@ -251,6 +265,14 @@ Avoid broad cleanup such as killing every Python process. Stop known launcher se
 When a runnable Demo is used to validate a Recipe, it must make intended behavior observable. State success signals, failure signals, required fixtures, automatic controllers or scripted inputs, and the evidence used to distinguish process lifecycle from actual behavior.
 
 Launcher termination or startup alone is not proof that the composition worked.
+
+For a background Launcher, do not equate `session.state == RUNNING` with Demo
+readiness. Parse the session state, then verify the selected Recipe's declared
+runtime signals such as asset registration, simulation state, GUI startup,
+HTTP/WebSocket listeners, Bridge connectivity, and PDU data changes. A
+successful `start` handoff must explicitly tell the user that the Demo remains
+running after the command returns and show the next viewer, status, and stop
+commands together with the session file and logs.
 
 ## Multi-Process Mirror Demos
 
