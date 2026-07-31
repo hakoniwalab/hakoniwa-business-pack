@@ -128,6 +128,16 @@ sources:
         artifact into the venv's site-packages, since no Windows pip-driven
         step wired it in automatically; this is recorded as a separate
         packaging-recipe gap rather than folded into the hakopy pitfall above.
+    - description: >-
+        Business Pack PR #76 introduced tools/workspace.py as a process
+        environment boundary. Post-merge native review on macOS found that the
+        initial doctor rejected the normal symlinked Foundation venv Python and
+        the hakoniwa_pdu namespace package, while interactive Zsh reloaded a
+        persistent PYTHONPATH from .zshrc. A follow-up working-tree fix made
+        doctor accept the installed Foundation, disabled user profiles for
+        supported interactive shells, and added regression coverage. The
+        macOS doctor then reported all three Hakoniwa modules as
+        workspace-owned, and a profile-free Zsh probe kept PYTHONPATH absent.
   expert_input: []
 
 confidence: medium
@@ -160,8 +170,12 @@ validation:
       Layer 2 as fact."
 
 tracking:
-  implementation_status: none
-  issues: []
+  implementation_status: in_progress
+  issues:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      number: 51
+      relation: fix
+      status: open
 
 promotion_targets:
   catalog:
@@ -188,13 +202,21 @@ promotion_rationale:
 
 resolution:
   status: documented
-  fixed_by: []
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      issue: 51
+      pull_request: 76
+      revision: e753e47ddeaed0f070390858ab4ebf1a7670b682
   verified: false
   promoted_to: []
-  executable_guardrails: []
+  executable_guardrails:
+    - tools/workspace.py
+    - tools/test_workspace.py
   notes:
-    - No implementation-issue tracking has been filed for this; issue filing
-      is upstream maintainers' responsibility, not this candidate's.
+    - Issue 51 and PR 76 now track the Business Pack-owned environment
+      boundary. The initial merged implementation required follow-up fixes
+      discovered by native macOS review; keep resolution.verified=false until
+      those changes are merged and Windows verification is complete.
     - The workaround (insert the project's own core-install bin directory at
       the front of sys.path, plus os.add_dll_directory() for the same
       directory, before importing hakopy) is recorded as the practical fix

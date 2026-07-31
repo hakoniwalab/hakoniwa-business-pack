@@ -29,6 +29,7 @@ in order:
 8. `recipes/README.md`
 9. relevant `recipes/examples/*.yaml`
 10. `foundation/README.md` for Foundation-aware local execution
+11. `docs/hakoniwa-workspace-environment-ja.md` for the managed process environment
 
 The documents have different responsibilities:
 
@@ -87,6 +88,10 @@ See [`foundation/README.md`](foundation/README.md) for the Receipt-based reuse
 contract and [`docs/hakoniwa-foundation-recipe-design-ja.md`](docs/hakoniwa-foundation-recipe-design-ja.md)
 for the design. `bash tools/doctor.bash` remains the legacy common preflight for
 Recipes that still explicitly use a system-installed Hakoniwa environment.
+
+Use [`docs/hakoniwa-workspace-environment-ja.md`](docs/hakoniwa-workspace-environment-ja.md)
+to select the Foundation-owned Python, binaries, libraries, and Core
+configuration without inheriting ambient Python discovery state.
 
 ## 箱庭で、何をしたいですか？
 
@@ -375,6 +380,11 @@ FoundationはBusiness Pack配下へクロスプラットフォームにインス
 Core共通設定とmmapを含めて複数Recipeから共有します。インストール済み
 バイナリのbuild情報とRecipe要求を比較して、再利用または必要範囲だけの
 再構築を判断する設計です。
+
+Foundationを実行時のprocess環境として選択する方法は、
+[`docs/hakoniwa-workspace-environment-ja.md`](docs/hakoniwa-workspace-environment-ja.md)
+で説明します。対話shell、activation script、非対話command、module originの
+検証を同じWorkspace Environment契約で扱います。
 
 Foundation componentへ新しい外部機能を追加・公開するときは、
 [`docs/foundation-component-release-checklist-ja.md`](docs/foundation-component-release-checklist-ja.md)

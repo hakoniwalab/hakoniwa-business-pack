@@ -32,6 +32,7 @@ Workspace Environmentは次を設定します。
 - `HAKONIWA_WORKSPACE_ROOT=<business-pack-root>`
 - `HAKONIWA_HOME=<workspace>/work/foundation/install`
 - `HAKO_CONFIG_PATH=<workspace>/work/foundation/config/cpp_core_config.json`
+- `HAKO_PDU_ENDPOINT_RUNTIME_DIRS=<workspace>/work/foundation/install/bin`
 - `VIRTUAL_ENV=<workspace>/work/foundation/install/python`
 - `PYTHONNOUSERSITE=1`
 - Foundation PythonとFoundation `bin`を`PATH`の先頭へ追加
@@ -55,6 +56,9 @@ python tools/workspace.py prepare
 ```
 
 生成物は`work/`配下のローカル成果物であり、Git管理しません。
+Foundation venvが存在する場合は、Windows native Python moduleの依存DLLを
+Foundation `bin`から解決するための`.pth`もvenvへ配置します。Foundation buildより
+前に`prepare`した場合は、build後にもう一度実行してください。
 
 ## 入る・出る
 
@@ -67,6 +71,9 @@ python tools/workspace.py enter
 ```
 
 隔離された子シェルが開きます。`exit`すると元のシェルへ戻ります。親シェルの環境変数は変更されません。
+ambientなPython/path設定が再導入されないよう、子シェルはユーザーprofileを
+読み込まずに起動します。Bash、Zsh、Fish、PowerShell、cmd、および標準的な
+POSIX shellを対象にします。
 
 ### 現在のPOSIXシェルへ適用する
 

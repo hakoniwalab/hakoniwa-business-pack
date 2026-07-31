@@ -46,3 +46,24 @@ jobs:
 
       - name: Validate knowledge candidates
         run: ruby knowledge/tools/validate_candidates.rb
+
+  workspace-cross-platform:
+    name: Workspace Environment (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Test Workspace Environment
+        run: python -m unittest tools/test_workspace.py -v

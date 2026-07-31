@@ -30,6 +30,7 @@ The environment sets:
 - `HAKONIWA_WORKSPACE_ROOT=<business-pack-root>`
 - `HAKONIWA_HOME=<workspace>/work/foundation/install`
 - `HAKO_CONFIG_PATH=<workspace>/work/foundation/config/cpp_core_config.json`
+- `HAKO_PDU_ENDPOINT_RUNTIME_DIRS=<workspace>/work/foundation/install/bin`
 - `VIRTUAL_ENV=<workspace>/work/foundation/install/python`
 - `PYTHONNOUSERSITE=1`
 - Foundation Python and Foundation `bin` at the front of `PATH`
@@ -53,6 +54,10 @@ python tools/workspace.py prepare
 ```
 
 The generated files live under `work/` and are not committed.
+When the Foundation venv exists, `prepare` also installs a `.pth` bootstrap
+that registers Foundation `bin` for dependent DLL resolution by native Windows
+Python modules. If `prepare` runs before the Foundation build, run it again
+after the venv has been created.
 
 ## Enter and leave
 
@@ -63,6 +68,9 @@ python tools/workspace.py enter
 ```
 
 Exit the child shell to return to the original environment. The parent shell is unchanged.
+The child starts without user profiles so persistent Python and path settings
+cannot be reintroduced. Bash, Zsh, Fish, PowerShell, cmd, and standard POSIX
+shells are supported.
 
 ### Current POSIX shell
 
