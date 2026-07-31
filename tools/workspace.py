@@ -84,12 +84,8 @@ def build_environment(
     base: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
     env = dict(os.environ if base is None else base)
-
-    # Ambient Python discovery is intentionally not inherited. The Foundation
-    # venv and its .pth-installed Core binding own Python module selection.
     env.pop("PYTHONPATH", None)
     env.pop("PYTHONHOME", None)
-
     env.update(
         {
             "HAKONIWA_WORKSPACE_ACTIVE": "1",
@@ -105,7 +101,6 @@ def build_environment(
         env.get("PATH"),
         (paths.foundation_python_bin, paths.foundation_bin),
     )
-
     system = platform.system()
     if system == "Linux":
         env["LD_LIBRARY_PATH"] = _prepend_path(
@@ -117,7 +112,6 @@ def build_environment(
             env.get("DYLD_LIBRARY_PATH"),
             (paths.foundation_lib,),
         )
-    # Windows native DLL lookup uses PATH, already handled above.
     return env
 
 
@@ -156,12 +150,7 @@ def _render_posix_activate(paths: WorkspacePaths) -> str:
                 f"_HAKONIWA_OLD_{name}=${{{name}-}}",
             ]
         )
-    lines.extend(
-        [
-            "",
-            "deactivate_hakoniwa() {",
-        ]
-    )
+    lines.extend(["", "deactivate_hakoniwa() {"])
     for name in managed:
         lines.extend(
             [
@@ -184,29 +173,16 @@ def _render_posix_activate(paths: WorkspacePaths) -> str:
             _shell_assignment("HAKONIWA_WORKSPACE_ROOT", str(paths.business_pack_root)),
             _shell_assignment("HAKONIWA_HOME", str(paths.install_prefix)),
             _shell_assignment("HAKO_CONFIG_PATH", str(paths.foundation_config)),
-            _shell_assignment(
-                "HAKO_PDU_ENDPOINT_RUNTIME_DIRS",
-                str(paths.foundation_bin),
-            ),
+            _shell_assignment("HAKO_PDU_ENDPOINT_RUNTIME_DIRS", str(paths.foundation_bin)),
             _shell_assignment("VIRTUAL_ENV", str(paths.foundation_python_root)),
             _shell_assignment("PYTHONNOUSERSITE", "1"),
             f"export PATH={shlex.quote(str(paths.foundation_python_bin))}:{shlex.quote(str(paths.foundation_bin))}:$PATH",
         ]
     )
     if platform.system() == "Linux":
-        lines.extend(
-            _render_posix_optional_path_prepend(
-                "LD_LIBRARY_PATH",
-                paths.foundation_lib,
-            )
-        )
+        lines.extend(_render_posix_optional_path_prepend("LD_LIBRARY_PATH", paths.foundation_lib))
     elif platform.system() == "Darwin":
-        lines.extend(
-            _render_posix_optional_path_prepend(
-                "DYLD_LIBRARY_PATH",
-                paths.foundation_lib,
-            )
-        )
+        lines.extend(_render_posix_optional_path_prepend("DYLD_LIBRARY_PATH", paths.foundation_lib))
     lines.extend(
         [
             "",
@@ -299,10 +275,7 @@ def prepare(paths: WorkspacePaths) -> tuple[Path, Path]:
     paths.foundation_root.mkdir(parents=True, exist_ok=True)
     paths.activate_posix.write_text(_render_posix_activate(paths), encoding="utf-8")
     paths.activate_posix.chmod(paths.activate_posix.stat().st_mode | 0o111)
-    paths.activate_powershell.write_text(
-        _render_powershell_activate(paths),
-        encoding="utf-8",
-    )
+    paths.activate_powershell.write_text(_render_powershell_activate(paths), encoding="utf-8")
     _install_python_bootstrap(paths)
     return paths.activate_posix, paths.activate_powershell
 
@@ -318,9 +291,7 @@ def _foundation_site_package_dirs(
         return [candidate] if candidate.is_dir() else []
     return sorted(
         path
-        for path in (paths.foundation_python_root / "lib").glob(
-            "python*/site-packages"
-        )
+        for path in (paths.foundation_python_root / "lib").glob("python*/site-packages")
         if path.is_dir()
     )
 
@@ -330,12 +301,8 @@ def _install_python_bootstrap(paths: WorkspacePaths) -> list[Path]:
     bootstrap_module = bootstrap_source / "hakoniwa_workspace_bootstrap.py"
     if not bootstrap_module.is_file():
         raise WorkspaceError(f"Workspace Python bootstrap is missing: {bootstrap_module}")
-
     installed: list[Path] = []
-    content = (
-        f"{bootstrap_source}\n"
-        "import hakoniwa_workspace_bootstrap\n"
-    )
+    content = f"{bootstrap_source}\nimport hakoniwa_workspace_bootstrap\n"
     for site_packages in _foundation_site_package_dirs(paths):
         pth_path = site_packages / "hakoniwa_workspace_bootstrap.pth"
         pth_path.write_text(content, encoding="utf-8")
@@ -425,10 +392,7 @@ def _module_origins(value: object) -> list[str]:
     if isinstance(file_origin, str) and file_origin:
         origins.append(file_origin)
     search_locations = value.get("search_locations")
-    if isinstance(search_locations, Sequence) and not isinstance(
-        search_locations,
-        (str, bytes),
-    ):
+    if isinstance(search_locations, Sequence) and not isinstance(search_locations, (str, bytes)):
         origins.extend(
             location
             for location in search_locations
@@ -440,28 +404,20 @@ def _module_origins(value: object) -> list[str]:
 def validate_snapshot(snapshot: Mapping[str, object], paths: WorkspacePaths) -> list[str]:
     errors: list[str] = []
     if not _same_lexical_path(snapshot.get("executable"), paths.foundation_python):
-        errors.append(
-            f"sys.executable is outside Foundation Python: {snapshot.get('executable')}"
-        )
+        errors.append(f"sys.executable is outside Foundation Python: {snapshot.get('executable')}")
     if not _is_under(snapshot.get("prefix"), paths.foundation_python_root):
         errors.append(f"sys.prefix is outside Foundation Python: {snapshot.get('prefix')}")
-
     import_errors = snapshot.get("errors")
     if isinstance(import_errors, Mapping):
         for name, detail in import_errors.items():
             errors.append(f"cannot import {name}: {detail}")
-
     modules = snapshot.get("modules")
-    expected = ("hakopy", "hakoniwa_pdu", "hakoniwa_pdu_endpoint")
-    for name in expected:
+    for name in ("hakopy", "hakoniwa_pdu", "hakoniwa_pdu_endpoint"):
         module_info = modules.get(name) if isinstance(modules, Mapping) else None
         origins = _module_origins(module_info)
-        if not origins or not all(
-            _is_under(origin, paths.foundation_root) for origin in origins
-        ):
+        if not origins or not all(_is_under(origin, paths.foundation_root) for origin in origins):
             errors.append(
-                f"{name} resolved outside Foundation workspace: "
-                f"{origins or 'missing'}"
+                f"{name} resolved outside Foundation workspace: {origins or 'missing'}"
             )
     return errors
 
@@ -478,7 +434,19 @@ def doctor(paths: WorkspacePaths) -> int:
     return 0
 
 
+def _apply_prompt_environment(shell: str, env: dict[str, str]) -> None:
+    name = Path(shell).name.lower()
+    if name in {"zsh", "zsh.exe"}:
+        env["PROMPT"] = "(hako) %n@%m %1~ %# "
+        env["PS1"] = env["PROMPT"]
+    elif name in {"bash", "bash.exe"}:
+        env["PS1"] = r"(hako) \u@\h \W \$ "
+    elif name in {"sh", "sh.exe", "dash", "dash.exe", "ksh", "ksh.exe"}:
+        env["PS1"] = "(hako) $ "
+
+
 def enter(paths: WorkspacePaths) -> int:
+    prepare(paths)
     env = build_environment(paths)
     if os.name == "nt":
         shell = (
@@ -490,26 +458,34 @@ def enter(paths: WorkspacePaths) -> int:
         shell = env.get("SHELL") or shutil.which("bash") or shutil.which("sh")
     if shell is None:
         raise WorkspaceError("No interactive shell was found")
+    _apply_prompt_environment(shell, env)
     command = _interactive_shell_command(shell)
     env.pop("ENV", None)
     env.pop("BASH_ENV", None)
     print(f"Entering Hakoniwa Workspace Environment: {paths.business_pack_root}")
-    print("Exit the child shell to return to the previous environment.")
-    return subprocess.run(command, cwd=paths.business_pack_root, env=env, check=False).returncode
+    print("Use 'exit' to return to the previous environment.")
+    return subprocess.run(
+        command,
+        cwd=paths.business_pack_root,
+        env=env,
+        check=False,
+    ).returncode
 
 
 def _interactive_shell_command(shell: str) -> list[str]:
     name = Path(shell).name.lower()
     if name in {"pwsh", "pwsh.exe", "powershell", "powershell.exe"}:
-        return [shell, "-NoLogo", "-NoProfile", "-NoExit"]
+        prompt = "function global:prompt { '(hako) PS ' + (Get-Location) + '> ' }"
+        return [shell, "-NoLogo", "-NoProfile", "-NoExit", "-Command", prompt]
     if name in {"cmd", "cmd.exe"}:
-        return [shell, "/d"]
+        return [shell, "/d", "/k", "prompt (hako) $P$G"]
     if name in {"bash", "bash.exe"}:
         return [shell, "--noprofile", "--norc", "-i"]
     if name in {"zsh", "zsh.exe"}:
         return [shell, "-f", "-i"]
     if name in {"fish", "fish.exe"}:
-        return [shell, "--no-config", "-i"]
+        prompt = "function fish_prompt; echo -n '(hako) '; prompt_pwd; echo -n '> '; end"
+        return [shell, "--no-config", "-C", prompt, "-i"]
     if name in {"sh", "sh.exe", "dash", "dash.exe", "ksh", "ksh.exe"}:
         return [shell, "-i"]
     raise WorkspaceError(
@@ -523,6 +499,7 @@ def run_command(paths: WorkspacePaths, command: Sequence[str]) -> int:
         values = values[1:]
     if not values:
         raise WorkspaceError("run requires a command after --")
+    prepare(paths)
     return subprocess.run(
         values,
         cwd=paths.business_pack_root,
@@ -564,12 +541,12 @@ def create_parser() -> argparse.ArgumentParser:
         help="Business Pack root (default: repository containing this tool)",
     )
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("prepare", help="generate POSIX and PowerShell activation scripts")
-    sub.add_parser("enter", help="open an isolated child shell")
+    sub.add_parser("prepare", help="regenerate compatibility activation scripts")
+    sub.add_parser("enter", help="prepare and open the standard (hako) child shell")
     sub.add_parser("doctor", help="verify Python and binding origins")
     env_parser = sub.add_parser("env", help="show the managed environment")
     env_parser.add_argument("--json", action="store_true", dest="json_output")
-    run_parser = sub.add_parser("run", help="run one command in the isolated environment")
+    run_parser = sub.add_parser("run", help="prepare and run one isolated command")
     run_parser.add_argument("args", nargs=argparse.REMAINDER)
     return parser
 
