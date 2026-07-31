@@ -10,7 +10,10 @@ from pathlib import Path
 from unittest import mock
 
 WORKSPACE_SCRIPT = Path(__file__).with_name("workspace.py")
-SPEC = importlib.util.spec_from_file_location("business_pack_workspace_enter", WORKSPACE_SCRIPT)
+SPEC = importlib.util.spec_from_file_location(
+    "business_pack_workspace_enter",
+    WORKSPACE_SCRIPT,
+)
 assert SPEC is not None and SPEC.loader is not None
 workspace = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = workspace
@@ -39,6 +42,7 @@ class WorkspaceEnterTest(unittest.TestCase):
         result = mock.Mock(returncode=0)
 
         with (
+            mock.patch.object(workspace.os, "name", "posix"),
             mock.patch.object(
                 workspace,
                 "prepare",
