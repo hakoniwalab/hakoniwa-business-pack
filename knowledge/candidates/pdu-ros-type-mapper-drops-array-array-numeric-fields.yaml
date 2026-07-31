@@ -28,40 +28,13 @@ observation:
     RMW_IMPLEMENTATION=rmw_cyclonedds_cpp, bridging `sensor_msgs/JointState` from Tobas to
     a Hakoniwa PDU channel and decoding it on a native Windows 11 peer, 2026-07-30/31.
   details:
-    - "Symptom. Passing a real rclpy sensor_msgs/JointState through the bridge produced
-      `bytes=448 name=['rotor_0_joint', 'rotor_1_joint'] position=[] velocity=[] effort=[]`.
-      The payload was the right size and the string array survived; only the numeric arrays
-      were empty, and nothing was logged."
-    - "Mechanism. hakoniwa_pdu_ros/type_mapper.py (line 77 before the patch) reads
-      `elif isinstance(src_value, (list, tuple)): setattr(dst, name, _copy_list(...))`.
-      Measured on this machine, `JointState.position` is an `array.array('d', [...])`,
-      so the branch is skipped and the trailing `else` treats the value as a struct and
-      calls _copy_matching_fields on it. array.array exposes no message fields, so the
-      recursion completes having copied nothing."
-    - "Why only the numbers vanish. `JointState.name` is `sequence<string>`, which rclpy
-      keeps as a plain Python list, so it takes the list branch and arrives correctly. Any
-      reader who checks that names came through concludes the bridge works."
-    - "Blast radius, measured field by field. array.array representations that were dropped
-      before the patch and correct after it: JointState.position ([] -> [0.1, 0.2]),
-      LaserScan.ranges ([] -> [1.0, 2.0, 3.0]), Float64MultiArray.data
-      ([] -> [1.5, 2.5, 3.5]). JointState.name (a list) was correct both times. So nearly
-      every type on the README's Verified list loses its numeric payload in a real ROS
-      process."
-    - "Why upstream CI is blind to it. test/test_type_mapper.py calls
-      _install_fake_ros_modules() and asserts against fake message classes whose sequence
-      fields are plain lists. The array.array path never runs, so the suite can pass while
-      the component drops all numeric data against real rclpy."
-    - "Fix. One line, plus `import array`:
-      `elif isinstance(src_value, (list, tuple, array.array)):`. After applying it, every
-      row of the table above round-trips as expected."
-    - "Not fixable from the ROS side. Reassigning `msg.position = list(...)` before sending
-      does not help, because the rclpy setter converts it back to array.array. The change
-      has to be inside type_mapper."
-    - "Confirmed end to end across an OS boundary after the patch. With the patched bridge
-      on WSL and an independent Windows peer decoding the received PDUs, two consecutive
-      runs delivered 1222 and 1185 JointState PDUs, every one with a non-empty position
-      array, values matching the sender's known sin/cos waveform, and effort holding its
-      constant [0.1, 0.2, 0.3, 0.4]."
+    - "Symptom. Passing a real rclpy sensor_msgs/JointState through the bridge produced `bytes=448 name=['rotor_0_joint', 'rotor_1_joint'] position=[] velocity=[] effort=[]`. The payload was the right size and the string array survived; only the numeric arrays were empty, and nothing was logged."
+    - "Mechanism. hakoniwa_pdu_ros/type_mapper.py reads `elif isinstance(src_value, (list, tuple))`. JointState.position is an `array.array('d', [...])`, so it falls through to struct handling and no fields are copied."
+    - "JointState.name is `sequence<string>`, which rclpy keeps as a plain Python list, so it survives while numeric arrays disappear."
+    - "Measured before and after the local patch: JointState.position, LaserScan.ranges and Float64MultiArray.data were empty before and preserved their numeric values after adding array.array to the sequence branch."
+    - "The existing fake ROS test classes use ordinary lists and therefore cannot exercise the real rclpy representation."
+    - "The measured fix is `import array` plus `isinstance(src_value, (list, tuple, array.array))`."
+    - "Two end-to-end runs after the patch delivered 1222 and 1185 JointState PDUs with populated arrays, the expected sin/cos waveform, and effort [0.1, 0.2, 0.3, 0.4]."
 
 sources:
   repositories:
@@ -75,10 +48,8 @@ sources:
     - description: >-
         External contributor's WSL2 Ubuntu 24.04 / ROS 2 Jazzy environment plus a native
         Windows 11 x86_64 peer, 2026-07-30/31. Before the patch, a real rclpy JointState
-        arrived with name populated and position/velocity/effort empty. A field-by-field
-        probe covered JointState.position, LaserScan.ranges and Float64MultiArray.data.
-        After the patch, the same bridge delivered 1222 and 1185 PDUs across two runs with
-        all numeric arrays populated and their element counts equal to the joint-name count.
+        arrived with name populated and position/velocity/effort empty. After the patch,
+        two runs delivered 1222 and 1185 PDUs with the expected numeric values.
   expert_input: []
 
 confidence: high
@@ -88,21 +59,19 @@ contradictions: []
 validation:
   status: verified
   required:
-    - Decide whether numpy.ndarray should be accepted in the same branch. rclpy can be
-      configured to return numpy arrays, and that representation is neither list, tuple nor
-      array.array, so it would fail the same way. Not measured here.
-    - Confirm whether upstream wants a warning when an unrecognized sequence type reaches
-      the final else branch. Silent skipping is what turned a data-loss bug into a
-      partial-success illusion.
-    - Add at least one test that uses real rclpy message types. The fake-class suite is
-      fast but structurally incapable of catching this class of defect.
+    - Decide whether numpy.ndarray should be accepted in the same branch. It was not measured here.
+    - Decide whether an unrecognized sequence-like type should produce a warning or explicit error rather than silent data loss.
+    - Add a test that uses `array.array` or real rclpy message types and compares values rather than non-emptiness.
   notes:
-    - Verified on one machine, one RMW implementation, one Jazzy release, with three field
-      types probed directly plus an end-to-end cross-OS confirmation after the fix.
+    - Verified on one machine, one RMW implementation, and one Jazzy release, with three numeric sequence fields probed plus an end-to-end confirmation.
 
 tracking:
-  implementation_status: none
-  issues: []
+  implementation_status: open
+  issues:
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      number: 2
+      relation: fix
+      status: open
 
 promotion_targets:
   catalog: []
@@ -116,16 +85,11 @@ promotion_targets:
       path: test/test_type_mapper.py
       mode: detect-only
       notes:
-        - A test built on fake message classes cannot observe the representation real rclpy
-          actually uses. One real-rclpy round trip per verified type would have failed
-          before this patch and would keep failing if the branch regresses.
+        - A test built only on fake list-backed fields cannot observe the representation real rclpy uses. Include `array.array` or a real-rclpy round trip and compare element values.
 
 promotion_rationale:
-  - The defect silently destroys the numeric content of the very message types the README
-    advertises as verified, so the correction belongs in the owning repository rather than
-    in a Recipe or a catalog note.
-  - The guardrail is proposed against the test suite because the one-line source fix is
-    trivial while the reason it went unnoticed is structural.
+  - The defect silently destroys numeric content in message types advertised as verified, so the correction belongs in the owning repository.
+  - The guardrail belongs in the component test suite because the source fix is small while the reason it escaped is structural.
 
 resolution:
   status: pending
@@ -134,8 +98,5 @@ resolution:
   promoted_to: []
   executable_guardrails: []
   notes:
-    - Diagnosis, patch and end-to-end confirmation only; no upstream issue filed, since
-      issue filing for implementation work is owned by the upstream maintainers.
-    - The patch lives in the external contributor's workspace as
-      0001-type_mapper-accept-array-array.patch and is applied to a clone before install,
-      so the vendored checkout stays restorable with git apply.
+    - Upstream implementation is tracked by hakoniwalab/hakoniwa-pdu-ros#2.
+    - The external contributor verified a local one-line patch end to end; that patch is evidence, not yet the upstream resolution.
