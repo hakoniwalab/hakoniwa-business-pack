@@ -76,12 +76,26 @@ verifies another version. `hakopy` comes from `hakoniwa-core-pro`; `hakoniwa-pdu
 comes from `pip install hakoniwa-pdu`. Verify both in the same Python 3.12
 environment before running SHM/PDU demos.
 
-Foundation-aware Recipes use the reusable Business Pack-local install:
+Foundation-aware Recipes use an OS-independent child-shell lifecycle. Start
+from the Business Pack root:
 
 ```bash
-python3.12 tools/foundation.py doctor --recipe <recipe.yaml>
-python3.12 tools/foundation.py plan --recipe <recipe.yaml>
-python3.12 tools/foundation.py build --recipe <recipe.yaml>
+python tools/workspace.py enter
+```
+
+Confirm the `(hako)` prompt, then run Foundation and Recipe operations with the
+Workspace-owned `python`:
+
+```bash
+python tools/foundation.py doctor --recipe <recipe.yaml>
+python tools/foundation.py plan --recipe <recipe.yaml>
+python tools/foundation.py build --recipe <recipe.yaml>
+```
+
+After stopping any Recipe-owned Launcher session, leave the child shell with:
+
+```bash
+exit
 ```
 
 See [`foundation/README.md`](foundation/README.md) for the Receipt-based reuse
@@ -91,7 +105,8 @@ Recipes that still explicitly use a system-installed Hakoniwa environment.
 
 Use [`docs/hakoniwa-workspace-environment-ja.md`](docs/hakoniwa-workspace-environment-ja.md)
 to select the Foundation-owned Python, binaries, libraries, and Core
-configuration without inheriting ambient Python discovery state.
+configuration without inheriting ambient Python discovery state. `exit` only
+leaves the Workspace shell; it does not replace a Recipe's `stop` operation.
 
 ## 箱庭で、何をしたいですか？
 

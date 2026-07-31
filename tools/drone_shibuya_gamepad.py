@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import socket
 import shutil
 import subprocess
@@ -64,7 +65,12 @@ MUJOCO_LOCATION = {
     "longitude": 139.69375,
     "altitude": 15.4,
 }
-MAP_ORIGIN = {"latitude": 35.6625, "longitude": 139.70625}
+MAP_VIEWER_DEFAULT_ORIGIN = {"latitude": 35.6625, "longitude": 139.70625}
+MAP_VIEWER_DEFAULT_CENTER = {"latitude": 35.6812, "longitude": 139.7671}
+MAP_ORIGIN = {
+    "latitude": MUJOCO_LOCATION["latitude"],
+    "longitude": MUJOCO_LOCATION["longitude"],
+}
 
 RecipeError = gamepad.RecipeError
 RuntimePaths = gamepad.RuntimePaths
@@ -113,6 +119,73 @@ def _copytree(source: Path, destination: Path) -> None:
             "node_modules",
         ),
     )
+
+
+def _replace_map_origin_assignment(
+    source: str,
+    name: str,
+    expected: float,
+    replacement: float,
+) -> str:
+    pattern = re.compile(
+        rf"(?m)^(\s*let\s+{re.escape(name)}\s*=\s*)"
+        rf"{re.escape(str(expected))}(\s*;)"
+    )
+    updated, count = pattern.subn(
+        rf"\g<1>{replacement}\g<2>",
+        source,
+        count=1,
+    )
+    if count != 1:
+        raise RecipeError(
+            f"Map Viewer {name} assignment does not match the expected "
+            f"default value {expected}"
+        )
+    return updated
+
+
+def _align_map_viewer_origin(client: Path) -> Path:
+    ui_path = _required(client / "src" / "ui.js", "Map Viewer UI")
+    source = ui_path.read_text(encoding="utf-8")
+    default_center = (
+        "const map = L.map('map').setView("
+        f"[{MAP_VIEWER_DEFAULT_CENTER['latitude']}, "
+        f"{MAP_VIEWER_DEFAULT_CENTER['longitude']}], 15);"
+    )
+    aligned_center = (
+        "const map = L.map('map').setView("
+        f"[{MAP_ORIGIN['latitude']}, {MAP_ORIGIN['longitude']}], 15);"
+    )
+    if source.count(default_center) != 1:
+        raise RecipeError(
+            "Map Viewer initial center does not match the expected default "
+            f"{MAP_VIEWER_DEFAULT_CENTER}"
+        )
+    source = source.replace(default_center, aligned_center, 1)
+    source = source.replace(
+        "// 東京駅",
+        "// RecipeでDrone Coreの校正済み原点へ整合",
+        1,
+    )
+    source = _replace_map_origin_assignment(
+        source,
+        "ORIGIN_LAT",
+        MAP_VIEWER_DEFAULT_ORIGIN["latitude"],
+        MAP_ORIGIN["latitude"],
+    )
+    source = _replace_map_origin_assignment(
+        source,
+        "ORIGIN_LON",
+        MAP_VIEWER_DEFAULT_ORIGIN["longitude"],
+        MAP_ORIGIN["longitude"],
+    )
+    source = source.replace(
+        "// zone の原点（仮）",
+        "// RecipeでDrone Coreの校正済み原点へ整合",
+        1,
+    )
+    ui_path.write_text(source, encoding="utf-8")
+    return ui_path
 
 
 def _stage_glb(paths, source: Path | None) -> tuple[Path, str]:
@@ -342,6 +415,7 @@ def _materialize_browser(
     embedded = browser_root / "thirdparty" / "hakoniwa-threejs-drone"
     _copytree(_required(map_viewer_root / "src" / "client", "Map Viewer client"), client)
     _copytree(_required(map_viewer_root / "images", "Map Viewer images"), images)
+    map_ui_path = _align_map_viewer_origin(client)
 
     for relative in ("src", "config", "assets", "thirdparty/hakoniwa-pdu-javascript"):
         _copytree(
@@ -384,6 +458,10 @@ def _materialize_browser(
         shutil.copy2(shibuya_glb, glb_destination)
     return {
         "map_client_source": str(map_viewer_root / "src" / "client"),
+        "map_ui": str(map_ui_path),
+        "map_source_origin": MAP_VIEWER_DEFAULT_ORIGIN,
+        "map_origin": MAP_ORIGIN,
+        "map_initial_center": MAP_ORIGIN,
         "threejs_source": str(threejs_root),
         "viewer_config": str(viewer_path),
         "scene_config": str(scene_path),
@@ -560,14 +638,8 @@ def print_background_handoff(paths, runtime: RuntimePaths) -> None:
     print(f"Logs   : {paths.recipe_logs}")
 
 
-def _display_command(runtime: RuntimePaths, action: str) -> str:
-    return subprocess.list2cmdline(
-        [
-            str(runtime.foundation_python),
-            str(root() / "tools" / "drone_shibuya_gamepad.py"),
-            action,
-        ]
-    )
+def _display_command(_runtime: RuntimePaths, action: str) -> str:
+    return f"python tools/drone_shibuya_gamepad.py {action}"
 
 
 def write_portal(paths, runtime: RuntimePaths, launcher: Path) -> Path:
@@ -617,7 +689,7 @@ def write_portal(paths, runtime: RuntimePaths, launcher: Path) -> Path:
             PortalEnvironment("Launcher", str(launcher)),
             PortalEnvironment("Session", str(session_file(paths))),
             PortalEnvironment("MuJoCo origin", "35.6625, 139.69375, 15.4"),
-            PortalEnvironment("Map origin", "35.6625, 139.70625"),
+            PortalEnvironment("Map origin", "35.6625, 139.69375"),
             PortalEnvironment("Web ports", "8000 / 8765"),
         ),
         agency_notes=(
@@ -671,8 +743,9 @@ def materialize_runtime(
         },
         "coordinate_invariants": {
             "mujoco_simulation_location": MUJOCO_LOCATION,
+            "map_viewer_source_origin": MAP_VIEWER_DEFAULT_ORIGIN,
             "map_viewer_origin": MAP_ORIGIN,
-            "automatic_normalization": False,
+            "map_origin_aligned_to_mujoco": True,
         },
         "launcher": str(launcher),
         "portal": str(portal),
@@ -741,8 +814,12 @@ def validate_materialization(paths, drone_root: Path) -> dict[str, str]:
         paths.recipe_root / "web" / "map-viewer" / "src" / "client" / "src" / "ui.js",
         "Generated Map Viewer UI",
     ).read_text(encoding="utf-8")
+    _assert(
+        "setView([35.6625, 139.69375], 15)" in map_ui,
+        "Map Viewer initial center changed",
+    )
     _assert("let ORIGIN_LAT = 35.6625" in map_ui, "Map Viewer latitude changed")
-    _assert("let ORIGIN_LON = 139.70625" in map_ui, "Map Viewer longitude changed")
+    _assert("let ORIGIN_LON = 139.69375" in map_ui, "Map Viewer longitude changed")
 
     launcher_path = _required(
         paths.recipe_config / "launcher.json", "Generated Launcher"

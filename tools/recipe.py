@@ -107,6 +107,13 @@ def _relative_recipe_path(recipe_path: Path) -> str:
         return str(recipe_path)
 
 
+def _workspace_command(command: str) -> str:
+    for prefix in ("python3.12 ", "python3 "):
+        if command.startswith(prefix):
+            return "python " + command[len(prefix) :]
+    return command
+
+
 def _command_items(data: dict, recipe_path: Path) -> tuple[PortalCommand, ...]:
     demo = _mapping(data.get("demo"))
     raw_items = _list(demo.get("prerequisites")) + _list(demo.get("steps"))
@@ -119,16 +126,13 @@ def _command_items(data: dict, recipe_path: Path) -> tuple[PortalCommand, ...]:
             ("Foundation plan", "plan", "Foundationが未充足の場合に、必要な構築・再利用計画を確認します。"),
             ("Foundation build", "build", "計画されたFoundation componentを構築・インストールします。"),
         ):
-            command = (
-                f"python3.12 tools/foundation.py {action} "
-                f"--recipe {rendered_recipe}"
-            )
+            command = f"python tools/foundation.py {action} --recipe {rendered_recipe}"
             commands.append(PortalCommand(label, command, description))
             seen.add(command)
     for index, item in enumerate(raw_items, start=1):
         if not isinstance(item, dict):
             continue
-        command = _text(item.get("command"))
+        command = _workspace_command(_text(item.get("command")))
         if not command or command in seen:
             continue
         if "tools/foundation.py doctor" in command and commands:

@@ -473,14 +473,8 @@ def _run(command: list[str], env: dict[str, str] | None = None) -> int:
     return subprocess.run(command, env=env, check=False).returncode
 
 
-def _display_command(runtime: RuntimePaths, action: str) -> str:
-    return subprocess.list2cmdline(
-        [
-            str(runtime.foundation_python),
-            str(root() / "tools" / "drone_gamepad_exhibition.py"),
-            action,
-        ]
-    )
+def _display_command(_runtime: RuntimePaths, action: str) -> str:
+    return f"python tools/drone_gamepad_exhibition.py {action}"
 
 
 def write_portal(paths, runtime: RuntimePaths, launcher: Path) -> Path:

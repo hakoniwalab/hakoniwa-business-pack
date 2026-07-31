@@ -28,8 +28,28 @@ class PortalEnvironment:
     value: str
 
 
+WORKSPACE_ENTER_COMMAND = "python tools/workspace.py enter"
+WORKSPACE_EXIT_COMMAND = "exit"
+
+
 def _escape(value: object) -> str:
     return html.escape(str(value), quote=True)
+
+
+def _workspace_commands(commands: Iterable[PortalCommand]) -> tuple[PortalCommand, ...]:
+    return (
+        PortalCommand(
+            "Enter Hakoniwa Workspace",
+            WORKSPACE_ENTER_COMMAND,
+            "隔離された子シェルへ入ります。プロンプト先頭の(hako)を確認してください。",
+        ),
+        *tuple(commands),
+        PortalCommand(
+            "Exit Hakoniwa Workspace",
+            WORKSPACE_EXIT_COMMAND,
+            "Launcherを使用した場合は、先にRecipeのStopを実行してから子シェルを終了します。",
+        ),
+    )
 
 
 def _render_commands(commands: Iterable[PortalCommand]) -> str:
@@ -111,6 +131,7 @@ def write_recipe_portal(
     if status_tone not in {"ready", "warning", "error"}:
         raise ValueError(f"unsupported portal status tone: {status_tone}")
     output.parent.mkdir(parents=True, exist_ok=True)
+    operator_commands = _workspace_commands(commands)
     document = f"""<!doctype html>
 <html lang="ja">
 <head>
@@ -271,7 +292,8 @@ def write_recipe_portal(
 
   <section>
     <h2>Operator workflow</h2>
-    <div class="commands">{_render_commands(commands)}</div>
+    <p>最初にWorkspaceへ入り、表示された操作を上から実行し、Stop後にexitしてください。</p>
+    <div class="commands">{_render_commands(operator_commands)}</div>
   </section>
 
   <section>

@@ -244,6 +244,24 @@ cleanup. Guide generation must not execute commands declared by the Recipe.
 Recipe-specific `configure` may enrich the same page with resolved paths and
 generated resources.
 
+For interactive Foundation-aware Recipe execution, use the OS-independent
+Workspace lifecycle:
+
+```text
+python tools/workspace.py enter
+        ↓
+(hako) doctor / configure / start / status / stop
+        ↓
+exit
+```
+
+Inside the child shell, present commands as `python tools/...`; do not expose
+the absolute Foundation Python path as the normal user contract. Always run the
+Recipe's declared `stop` or Launcher termination operation before `exit`.
+Leaving the child shell restores the parent environment but does not clean up
+background processes. For non-interactive execution, use
+`python tools/workspace.py run -- <command>`.
+
 Before executable steps, collect target-environment details when they change commands, feasibility, or Agency Boundary: OS, architecture, execution mode, GUI, SHM access, runtime versions, Python environment, Hakoniwa install prefix, build status, physical devices, and commercial/private availability.
 
 Before local execution of SHM/PDU Recipes, run or ask the user to run:

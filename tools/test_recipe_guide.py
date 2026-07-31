@@ -59,6 +59,18 @@ class RecipeGuideTest(unittest.TestCase):
             self.assertIn("127.0.0.1:8000", content)
             self.assertIn("startの復帰後もDemoは継続します", content)
             self.assertIn("does not execute local commands", content)
+            self.assertIn("python tools/workspace.py enter", content)
+            self.assertIn("data-copy=\"exit\"", content)
+            self.assertIn("python tools/foundation.py doctor", content)
+            self.assertNotIn("python3.12 tools/foundation.py", content)
+            self.assertLess(
+                content.index("python tools/workspace.py enter"),
+                content.index("python tools/drone_shibuya_gamepad.py configure"),
+            )
+            self.assertLess(
+                content.index("python tools/drone_shibuya_gamepad.py stop"),
+                content.index("data-copy=\"exit\""),
+            )
 
     def test_guide_command_deduplicates_prerequisite_and_demo_operations(self) -> None:
         data = guide.load_recipe(
@@ -77,6 +89,7 @@ class RecipeGuideTest(unittest.TestCase):
         self.assertTrue(any("foundation.py doctor" in value for value in values))
         self.assertTrue(any("foundation.py plan" in value for value in values))
         self.assertTrue(any("foundation.py build" in value for value in values))
+        self.assertTrue(all(not value.startswith("python3.12 ") for value in values))
 
     def test_cli_contract_requires_only_recipe_to_generate_a_guide(self) -> None:
         help_text = guide.parser().format_help()

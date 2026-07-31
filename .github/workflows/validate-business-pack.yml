@@ -39,6 +39,8 @@ jobs:
           tools/test_foundation.py
           tools/test_drone_threejs.py
           tools/test_drone_gamepad_exhibition.py
+          tools/test_drone_shibuya_gamepad.py
+          tools/test_recipe_guide.py
           -v
 
       - name: Validate usecases

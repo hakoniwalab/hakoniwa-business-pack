@@ -108,7 +108,9 @@ class DroneShibuyaGamepadTest(unittest.TestCase):
         map_ui = self.map_root / "src" / "client" / "src" / "ui.js"
         map_ui.parent.mkdir(parents=True, exist_ok=True)
         map_ui.write_text(
-            "let ORIGIN_LAT = 35.6625;\nlet ORIGIN_LON = 139.70625;\n",
+            "const map = L.map('map').setView([35.6812, 139.7671], 15);\n"
+            "let ORIGIN_LAT = 35.6625;\n"
+            "let ORIGIN_LON = 139.70625;\n",
             encoding="utf-8",
         )
         (self.map_root / "src" / "client" / "index.html").write_text(
@@ -308,8 +310,16 @@ class DroneShibuyaGamepadTest(unittest.TestCase):
             portal = (paths.recipe_root / "index.html").read_text(encoding="utf-8")
             self.assertIn("Leaflet + Three.js", portal)
             self.assertIn(recipe.VIEWER_URL.replace("&", "&amp;"), portal)
+            self.assertIn("python tools/workspace.py enter", portal)
+            self.assertIn("python tools/drone_shibuya_gamepad.py start", portal)
+            self.assertIn("python tools/drone_shibuya_gamepad.py stop", portal)
+            self.assertIn("data-copy=\"exit\"", portal)
+            self.assertLess(
+                portal.index("python tools/drone_shibuya_gamepad.py stop"),
+                portal.index("data-copy=\"exit\""),
+            )
 
-    def test_coordinate_contract_is_preserved_without_normalization(self) -> None:
+    def test_map_viewer_origin_is_aligned_to_mujoco_without_source_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             paths, _glb, record_path = self._materialize(temporary)
             record = recipe._load_json(record_path)
@@ -322,13 +332,39 @@ class DroneShibuyaGamepadTest(unittest.TestCase):
                 record["coordinate_invariants"]["map_viewer_origin"],
                 recipe.MAP_ORIGIN,
             )
-            self.assertNotEqual(
+            self.assertEqual(
                 recipe.MUJOCO_LOCATION["longitude"],
                 recipe.MAP_ORIGIN["longitude"],
             )
-            self.assertFalse(
-                record["coordinate_invariants"]["automatic_normalization"]
+            self.assertEqual(
+                record["coordinate_invariants"]["map_viewer_source_origin"],
+                recipe.MAP_VIEWER_DEFAULT_ORIGIN,
             )
+            self.assertTrue(
+                record["coordinate_invariants"]["map_origin_aligned_to_mujoco"]
+            )
+            generated_ui = (
+                paths.recipe_root
+                / "web"
+                / "map-viewer"
+                / "src"
+                / "client"
+                / "src"
+                / "ui.js"
+            ).read_text(encoding="utf-8")
+            source_ui = (
+                self.map_root / "src" / "client" / "src" / "ui.js"
+            ).read_text(encoding="utf-8")
+            self.assertIn(
+                "setView([35.6625, 139.69375], 15)",
+                generated_ui,
+            )
+            self.assertIn("let ORIGIN_LON = 139.69375;", generated_ui)
+            self.assertIn(
+                "setView([35.6812, 139.7671], 15)",
+                source_ui,
+            )
+            self.assertIn("let ORIGIN_LON = 139.70625;", source_ui)
 
     def test_validation_rejects_non_allowlisted_generated_change(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

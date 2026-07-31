@@ -135,6 +135,20 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
             self.assertIn(recipe.VIEWER_URL.replace("&", "&amp;"), content)
             for action in ("doctor", "start", "open-viewer", "status", "reset", "stop"):
                 self.assertIn(action, content)
+                self.assertIn(
+                    f"python tools/drone_gamepad_exhibition.py {action}",
+                    content,
+                )
+            self.assertIn("python tools/workspace.py enter", content)
+            self.assertIn("data-copy=\"exit\"", content)
+            self.assertNotIn(
+                f'data-copy="{runtime.foundation_python}',
+                content,
+            )
+            self.assertLess(
+                content.index("python tools/drone_gamepad_exhibition.py stop"),
+                content.index("data-copy=\"exit\""),
+            )
             self.assertIn("data-copy=", content)
             self.assertIn("does not execute local commands", content)
 

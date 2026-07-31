@@ -115,6 +115,25 @@ Recipe-specific `configure` implementations may enrich the same `index.html`
 with resolved paths and generated resources while preserving it as the common
 human-facing entry point.
 
+The generated guide uses the same OS-independent Workspace lifecycle for every
+Foundation-aware Recipe:
+
+```text
+python tools/workspace.py enter
+        ↓
+(hako) Foundation and Recipe operations
+        ↓
+Recipe stop
+        ↓
+exit
+```
+
+Commands shown between `enter` and `exit` use `python tools/...` and do not
+expose the absolute Foundation Python path. `exit` restores the parent shell; it
+does not terminate Launcher-managed background processes. A running Recipe must
+execute its declared `stop` operation first. CI and other non-interactive
+callers may use `python tools/workspace.py run -- <command>`.
+
 ## Target Environment Requirement
 
 A Recipe can describe a platform-neutral composition, but an executable Demo or
