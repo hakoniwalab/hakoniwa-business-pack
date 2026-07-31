@@ -1,30 +1,31 @@
 id: pdu-ros-binding-has-no-qos-selection
-title: hakoniwa-pdu-ros subscribes with the rclpy default RELIABLE QoS and its binding config cannot change it, so a BEST_EFFORT publisher yields zero messages with no error
-status: candidate
+title: hakoniwa-pdu-ros originally fixed subscriptions to RELIABLE QoS and could not consume BEST_EFFORT publishers
+status: promoted
 
 knowledge_type:
   - known_pitfall
+  - interface_contract
+  - validation_rule
 
 summary: >
-  hakoniwa-pdu-ros's bridge node creates its ROS subscription as
-  `self.create_subscription(msg_cls, binding.topic, _on_msg, 10)`, which uses the rclpy
-  default reliability of RELIABLE. DDS QoS compatibility rules forbid a RELIABLE
-  subscription from matching a BEST_EFFORT publisher, so when the source topic is
-  BEST_EFFORT the bridge never receives anything. There is no error, warning, or diagnostic;
-  the bridge looks healthy and the PDU channel stays empty. The binding configuration has no
-  QoS field, so callers cannot fix the mismatch from configuration. Tobas publishes
-  `joint_states` as BEST_EFFORT, which is how this was found.
+  Before hakoniwa-pdu-ros issue #3 was fixed, a binding could not declare ROS 2 QoS and
+  subscriptions used the rclpy RELIABLE default. A BEST_EFFORT publisher such as Tobas
+  joint_states therefore matched no subscription and produced a silent zero-message run.
+  Bindings can now configure history, depth, reliability, and durability while preserving
+  the previous RELIABLE / VOLATILE / KEEP_LAST depth-10 defaults when qos is omitted.
+  Subscription startup logs expose the resolved profile, and incompatible publisher QoS
+  events produce actionable warnings. Docker-based native CycloneDDS tests verify the
+  compatible, incompatible, and backward-compatible paths.
 
 observation:
   context: >
-    Bridging Tobas's `joint_states` topic on ROS 2 Jazzy / WSL2 Ubuntu 24.04 with
+    Bridging Tobas joint_states on ROS 2 Jazzy / WSL2 Ubuntu 24.04 with
     rmw_cyclonedds_cpp into a Hakoniwa PDU channel, 2026-07-30.
   details:
-    - "Tobas publishes `<ns>/joint_states` with BEST_EFFORT reliability, and the third-party publisher was not modified."
-    - "hakoniwa_pdu_ros/bridge_node.py creates the subscription with a plain depth argument and no QoS profile, so rclpy uses RELIABLE reliability."
-    - "The bridge starts and loads its PDU definition but receives zero messages, with no indication that the cause is QoS incompatibility."
-    - "A temporary relay that subscribed BEST_EFFORT and republished RELIABLE sustained 50 Hz and allowed the unchanged bridge to receive normally."
-    - "The relay proves the cause but is not the intended solution; the binding contract must be able to express the source topic's QoS."
+    - "Tobas published joint_states with BEST_EFFORT reliability while the original bridge subscription used rclpy's RELIABLE default."
+    - "The bridge started successfully but received zero messages and emitted no QoS-specific diagnostic."
+    - "A temporary BEST_EFFORT-to-RELIABLE relay sustained 50 Hz and allowed the unchanged bridge to receive, proving the incompatibility mechanism."
+    - "The relay was evidence only; the durable solution was to make QoS part of the binding contract and diagnose incompatible discovered publishers."
 
 sources:
   repositories:
@@ -32,13 +33,31 @@ sources:
       path: hakoniwa_pdu_ros/bridge_node.py
       revision: 8693f4d82a61765feb990754459427a287347bb3
     - repository: hakoniwalab/hakoniwa-pdu-ros
-      path: config/sample/sample_binding.json
-      revision: 8693f4d82a61765feb990754459427a287347bb3
+      path: hakoniwa_pdu_ros/config_loader.py
+      revision: e896314efa796471bed1b7a72f64eeb6993121ac
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      path: hakoniwa_pdu_ros/qos.py
+      revision: e896314efa796471bed1b7a72f64eeb6993121ac
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      path: hakoniwa_pdu_ros/bridge_node.py
+      revision: e896314efa796471bed1b7a72f64eeb6993121ac
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      path: test/native/test_native_qos.py
+      revision: 216359864291d8f82cbee249743322f18a6725dc
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      path: .github/workflows/native-integration.yml
+      revision: 216359864291d8f82cbee249743322f18a6725dc
   runtime_evidence:
     - description: >-
-        External contributor's WSL2 Ubuntu 24.04 / ROS 2 Jazzy environment, 2026-07-30.
-        Direct subscription to the BEST_EFFORT Tobas topic received 0 messages. A
-        BEST_EFFORT-to-RELIABLE relay sustained 50 Hz and made the bridge receive normally.
+        External contributor WSL2 Ubuntu 24.04 / ROS 2 Jazzy evidence showed zero direct
+        deliveries from a BEST_EFFORT Tobas publisher and successful 50 Hz delivery through
+        a temporary BEST_EFFORT-to-RELIABLE relay.
+    - description: >-
+        Maintainer Docker run on 2026-07-31 used ROS 2 Jazzy and rmw_cyclonedds_cpp. A
+        BEST_EFFORT publisher delivered three JointState messages to a BEST_EFFORT binding;
+        the same publisher produced no PDU and an explicit RELIABILITY diagnostic with a
+        RELIABLE binding; a RELIABLE publisher delivered three messages to a binding with
+        qos omitted.
   expert_input: []
 
 confidence: high
@@ -47,46 +66,73 @@ contradictions: []
 
 validation:
   status: verified
-  required:
-    - Define the binding contract for reliability, durability, history, and depth rather than adding only an isolated reliability flag.
-    - Decide the backward-compatible behavior when QoS is omitted.
-    - Add diagnostics that distinguish an absent publisher from an incompatible discovered publisher.
-    - Re-verify against other RMW implementations when practical.
+  required: []
   notes:
-    - Verified on one machine and one RMW implementation. The compatibility rule is DDS-level, but only rmw_cyclonedds_cpp was measured.
+    - The binding parser validates supported history, depth, reliability, and durability values before startup.
+    - Omitting qos preserves the original RELIABLE, VOLATILE, KEEP_LAST depth-10 behavior.
+    - Native verification currently targets rmw_cyclonedds_cpp; other RMW implementations may differ in event behavior, but that does not leave the original CycloneDDS finding unresolved.
 
 tracking:
-  implementation_status: open
+  implementation_status: resolved
   issues:
     - repository: hakoniwalab/hakoniwa-pdu-ros
       number: 3
       relation: fix
-      status: open
+      status: closed
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      number: 4
+      relation: validation
+      status: closed
 
 promotion_targets:
-  catalog: []
+  catalog:
+    - hakoniwa-pdu-ros
   runtime_primer: false
   base_ecosystem_guide: false
   component_asset_guide: false
   recipes: []
   executable_guardrails:
     - repository: hakoniwalab/hakoniwa-pdu-ros
-      kind: doctor
-      path: hakoniwa_pdu_ros/bridge_node.py
+      kind: test
+      path: test/test_config_loader.py
       mode: detect-only
       notes:
-        - Log the resolved subscription QoS and compare it with discovered publishers so a silent zero-message run becomes an actionable mismatch warning.
+        - Guards defaults, partial QoS configuration, bidirectional expansion, and invalid values.
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      kind: test
+      path: test/native/test_native_qos.py
+      mode: detect-only
+      notes:
+        - Uses real ROS graph discovery and CycloneDDS for positive, incompatible, and backward-compatible QoS cases.
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      kind: ci
+      path: .github/workflows/native-integration.yml
+      mode: detect-only
+      notes:
+        - Runs the Docker native ROS 2 suite for relevant pull-request changes.
 
 promotion_rationale:
-  - The missing capability belongs to the component's binding contract; a Recipe cannot express QoS that the binding schema does not accept.
-  - Runtime diagnosis remains useful even after configuration support is added because users can still choose an incompatible profile.
+  - Binding-level QoS is a public component interface contract and belongs in the hakoniwa-pdu-ros Catalog entry.
+  - QoS incompatibility can recur through configuration even after the feature exists, so startup diagnostics and native graph tests remain necessary guardrails.
 
 resolution:
-  status: pending
-  fixed_by: []
-  verified: false
-  promoted_to: []
-  executable_guardrails: []
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      issue: 3
+      pull_request: null
+      revision: e896314efa796471bed1b7a72f64eeb6993121ac
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      issue: 4
+      pull_request: 5
+      revision: 216359864291d8f82cbee249743322f18a6725dc
+  verified: true
+  promoted_to:
+    - catalog/components/hakoniwa-pdu-ros.yaml
+  executable_guardrails:
+    - hakoniwalab/hakoniwa-pdu-ros:test/test_config_loader.py
+    - hakoniwalab/hakoniwa-pdu-ros:test/native/test_native_qos.py
+    - hakoniwalab/hakoniwa-pdu-ros:.github/workflows/native-integration.yml
   notes:
-    - Upstream implementation is tracked by hakoniwalab/hakoniwa-pdu-ros#3.
-    - The relay used during verification is evidence of the QoS mechanism, not a proposed permanent component.
+    - Upstream issue #3 is closed and bindings can express the QoS required by existing ROS 2 publishers without a relay.
+    - The Docker native integration suite passed 6 tests on 2026-07-31 and verified direct BEST_EFFORT delivery, explicit RELIABILITY mismatch diagnosis, and legacy default compatibility.
