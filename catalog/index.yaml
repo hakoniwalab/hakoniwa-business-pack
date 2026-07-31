@@ -194,6 +194,45 @@ components:
   - robot-sync
   - time-sync
   catalog_path: components/hakoniwa-godot.yaml
+- id: hakoniwa-map-viewer
+  name: Hakoniwa Map Viewer
+  category: visualization
+  secondary_categories:
+  - browser
+  - integration
+  - monitoring
+  - visualization-assets
+  maturity: active
+  distribution: oss
+  summary: Browser-based Hakoniwa Drone monitor that combines a Leaflet map and a
+    Three.js scene to visualize live drone position, attitude, trails, and PLATEAU
+    city context.
+  recipe_roles:
+  - visualizer
+  - monitor
+  - integration_boundary
+  - visualization_asset_source
+  connects_to:
+  - hakoniwa-threejs-drone
+  - hakoniwa-pdu-bridge-core
+  - hakoniwa-drone-core
+  - hakoniwa-envsim
+  tags:
+  - hakoniwa
+  - map-viewer
+  - drone
+  - threejs
+  - leaflet
+  - browser
+  - visualization
+  - monitoring
+  - websocket
+  - pdu
+  - plateau
+  - shibuya
+  - glb
+  - geospatial
+  catalog_path: components/hakoniwa-map-viewer.yaml
 - id: hakoniwa-mbody-registry
   name: Hakoniwa MBody Registry
   category: data-model
