@@ -96,6 +96,29 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
             self.assertIn(str(paths.install_prefix), json.dumps(data))
             self.assertNotIn("/usr/local", json.dumps(data))
 
+    def test_generated_portal_is_recipe_workspace_entry_point(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths, _drone_root, _viewer_root, runtime, launcher = self._generate(root)
+
+            portal = recipe.write_portal(paths, runtime, launcher)
+            content = portal.read_text(encoding="utf-8")
+
+            self.assertEqual(portal, paths.recipe_root / "index.html")
+            self.assertIn("Hakoniwa Drone Gamepad Exhibition", content)
+            self.assertIn("Runtime topology", content)
+            self.assertIn("Operator workflow", content)
+            self.assertIn("Agency boundary", content)
+            self.assertIn(str(runtime.foundation_python), content)
+            self.assertIn("config/launcher.json", content)
+            self.assertIn("runtime/", content)
+            self.assertIn("logs/", content)
+            self.assertIn(recipe.VIEWER_URL.replace("&", "&amp;"), content)
+            for action in ("doctor", "start", "open-viewer", "status", "reset", "stop"):
+                self.assertIn(action, content)
+            self.assertIn("data-copy=", content)
+            self.assertIn("does not execute local commands", content)
+
     def test_operator_commands_use_foundation_python_entry_points(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
