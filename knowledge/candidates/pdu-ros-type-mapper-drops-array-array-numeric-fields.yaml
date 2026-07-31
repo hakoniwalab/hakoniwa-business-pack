@@ -1,40 +1,33 @@
 id: pdu-ros-type-mapper-drops-array-array-numeric-fields
-title: hakoniwa-pdu-ros silently drops every numeric array because rclpy stores sequence<double> as array.array, and its own tests cannot catch it
-status: candidate
+title: hakoniwa-pdu-ros silently dropped numeric primitive sequences because rclpy stores them as array.array
+status: promoted
 
 knowledge_type:
   - known_pitfall
   - validation_rule
 
 summary: >
-  hakoniwa-pdu-ros's type_mapper copies a ROS message field into a generated PDU type by
-  branching on `isinstance(src_value, (list, tuple))`. Real rclpy messages store
-  `sequence<double>` and similar primitive sequences as `array.array`, which is neither a
-  list nor a tuple, so the value falls through to the struct-field branch, recurses into an
-  object that has no fields, and produces nothing. No exception, no log, no warning. A
-  `sensor_msgs/JointState` therefore crosses the bridge with `name` intact
-  (`sequence<string>` IS a plain list in rclpy) and `position`, `velocity` and `effort`
-  empty. The partial survival is what makes it hard to spot. The repository's own
-  `test/test_type_mapper.py` injects fake ROS message classes whose fields are plain
-  Python lists, so the array.array path is never exercised, which means the README's
-  "Verified" list of PointCloud2 / JointState / LaserScan / CameraInfo /
-  Float64MultiArray is verified only against those fakes. The fix measured here is one
-  line plus an import.
+  Before hakoniwa-pdu-ros issue #2 was fixed, type_mapper recognized only list and tuple
+  values as sequences. Real rclpy messages store primitive sequences such as
+  JointState.position, JointState.velocity, JointState.effort, LaserScan.ranges, and
+  Float64MultiArray.data as array.array, so those fields could be silently lost while
+  sequence<string> fields survived. The upstream mapper now accepts array.array and rejects
+  unsupported sequence representations explicitly. Docker-based native ROS 2 Jazzy tests
+  using CycloneDDS verify value-preserving round trips with real rclpy message classes.
 
 observation:
   context: >
     Building the first Tobas (ROS 2 Jazzy) to Hakoniwa PDU bridge prototype named in
     hakoniwa-business-pack's Tobas catalog entry, on WSL2 Ubuntu 24.04 with
-    RMW_IMPLEMENTATION=rmw_cyclonedds_cpp, bridging `sensor_msgs/JointState` from Tobas to
+    RMW_IMPLEMENTATION=rmw_cyclonedds_cpp, bridging sensor_msgs/JointState from Tobas to
     a Hakoniwa PDU channel and decoding it on a native Windows 11 peer, 2026-07-30/31.
   details:
-    - "Symptom. Passing a real rclpy sensor_msgs/JointState through the bridge produced `bytes=448 name=['rotor_0_joint', 'rotor_1_joint'] position=[] velocity=[] effort=[]`. The payload was the right size and the string array survived; only the numeric arrays were empty, and nothing was logged."
-    - "Mechanism. hakoniwa_pdu_ros/type_mapper.py reads `elif isinstance(src_value, (list, tuple))`. JointState.position is an `array.array('d', [...])`, so it falls through to struct handling and no fields are copied."
-    - "JointState.name is `sequence<string>`, which rclpy keeps as a plain Python list, so it survives while numeric arrays disappear."
-    - "Measured before and after the local patch: JointState.position, LaserScan.ranges and Float64MultiArray.data were empty before and preserved their numeric values after adding array.array to the sequence branch."
-    - "The existing fake ROS test classes use ordinary lists and therefore cannot exercise the real rclpy representation."
-    - "The measured fix is `import array` plus `isinstance(src_value, (list, tuple, array.array))`."
-    - "Two end-to-end runs after the patch delivered 1222 and 1185 JointState PDUs with populated arrays, the expected sin/cos waveform, and effort [0.1, 0.2, 0.3, 0.4]."
+    - "Symptom. Passing a real rclpy sensor_msgs/JointState through the bridge produced bytes=448 with name populated and position, velocity, and effort empty."
+    - "Mechanism. The original mapper checked isinstance(src_value, (list, tuple)); rclpy primitive sequences are array.array and fell through to struct handling."
+    - "JointState.name remained visible because rclpy represents sequence<string> as a normal Python list."
+    - "A local array.array patch restored JointState.position, LaserScan.ranges, and Float64MultiArray.data before the upstream fix was applied."
+    - "Two contributor end-to-end runs after the local patch delivered 1222 and 1185 JointState PDUs with expected numeric values."
+    - "The original fake message tests used list-backed fields and could not observe the real rclpy representation."
 
 sources:
   repositories:
@@ -42,14 +35,26 @@ sources:
       path: hakoniwa_pdu_ros/type_mapper.py
       revision: 8693f4d82a61765feb990754459427a287347bb3
     - repository: hakoniwalab/hakoniwa-pdu-ros
+      path: hakoniwa_pdu_ros/type_mapper.py
+      revision: e0c2720842e84a6ca545f438f649a7b161296a69
+    - repository: hakoniwalab/hakoniwa-pdu-ros
       path: test/test_type_mapper.py
-      revision: 8693f4d82a61765feb990754459427a287347bb3
+      revision: e0c2720842e84a6ca545f438f649a7b161296a69
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      path: test/native/test_native_mapping.py
+      revision: 216359864291d8f82cbee249743322f18a6725dc
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      path: .github/workflows/native-integration.yml
+      revision: 216359864291d8f82cbee249743322f18a6725dc
   runtime_evidence:
     - description: >-
-        External contributor's WSL2 Ubuntu 24.04 / ROS 2 Jazzy environment plus a native
-        Windows 11 x86_64 peer, 2026-07-30/31. Before the patch, a real rclpy JointState
-        arrived with name populated and position/velocity/effort empty. After the patch,
-        two runs delivered 1222 and 1185 PDUs with the expected numeric values.
+        External contributor WSL2 Ubuntu 24.04 / ROS 2 Jazzy evidence showed numeric
+        JointState fields disappearing before the local patch and 1222 / 1185 correct PDU
+        deliveries after it.
+    - description: >-
+        Maintainer Docker run on 2026-07-31 used Ubuntu 24.04, ROS 2 Jazzy, real rclpy
+        message classes, and rmw_cyclonedds_cpp. JointState, LaserScan, and
+        Float64MultiArray native mapping tests passed as part of a six-test suite.
   expert_input: []
 
 confidence: high
@@ -58,23 +63,27 @@ contradictions: []
 
 validation:
   status: verified
-  required:
-    - Decide whether numpy.ndarray should be accepted in the same branch. It was not measured here.
-    - Decide whether an unrecognized sequence-like type should produce a warning or explicit error rather than silent data loss.
-    - Add a test that uses `array.array` or real rclpy message types and compares values rather than non-emptiness.
+  required: []
   notes:
-    - Verified on one machine, one RMW implementation, and one Jazzy release, with three numeric sequence fields probed plus an end-to-end confirmation.
+    - The original failure and local workaround were independently converted into upstream issue #2 and fixed at revision e0c2720842e84a6ca545f438f649a7b161296a69.
+    - Native Docker tests compare actual sequence values after ROS message to PDU binary to ROS message round trips; they do not merely check non-emptiness.
+    - numpy.ndarray remains outside the documented rclpy primitive-sequence contract and is not required to resolve this finding.
 
 tracking:
-  implementation_status: open
+  implementation_status: resolved
   issues:
     - repository: hakoniwalab/hakoniwa-pdu-ros
       number: 2
       relation: fix
-      status: open
+      status: closed
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      number: 4
+      relation: validation
+      status: closed
 
 promotion_targets:
-  catalog: []
+  catalog:
+    - hakoniwa-pdu-ros
   runtime_primer: false
   base_ecosystem_guide: false
   component_asset_guide: false
@@ -85,18 +94,42 @@ promotion_targets:
       path: test/test_type_mapper.py
       mode: detect-only
       notes:
-        - A test built only on fake list-backed fields cannot observe the representation real rclpy uses. Include `array.array` or a real-rclpy round trip and compare element values.
+        - Covers array.array conversion and explicit rejection of unsupported primitive sequence representations.
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      kind: test
+      path: test/native/test_native_mapping.py
+      mode: detect-only
+      notes:
+        - Uses real rclpy JointState, LaserScan, and Float64MultiArray classes and compares values after PDU round trips.
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      kind: ci
+      path: .github/workflows/native-integration.yml
+      mode: detect-only
+      notes:
+        - Runs the Docker native ROS 2 suite for relevant pull-request changes.
 
 promotion_rationale:
-  - The defect silently destroys numeric content in message types advertised as verified, so the correction belongs in the owning repository.
-  - The guardrail belongs in the component test suite because the source fix is small while the reason it escaped is structural.
+  - The corrected mapping behavior and verified coverage are component-specific facts and belong in the hakoniwa-pdu-ros Catalog entry.
+  - The representation mismatch escaped fake tests, so both unit and real-rclpy executable guardrails are necessary.
 
 resolution:
-  status: pending
-  fixed_by: []
-  verified: false
-  promoted_to: []
-  executable_guardrails: []
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      issue: 2
+      pull_request: null
+      revision: e0c2720842e84a6ca545f438f649a7b161296a69
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      issue: 4
+      pull_request: 5
+      revision: 216359864291d8f82cbee249743322f18a6725dc
+  verified: true
+  promoted_to:
+    - catalog/components/hakoniwa-pdu-ros.yaml
+  executable_guardrails:
+    - hakoniwalab/hakoniwa-pdu-ros:test/test_type_mapper.py
+    - hakoniwalab/hakoniwa-pdu-ros:test/native/test_native_mapping.py
+    - hakoniwalab/hakoniwa-pdu-ros:.github/workflows/native-integration.yml
   notes:
-    - Upstream implementation is tracked by hakoniwalab/hakoniwa-pdu-ros#2.
-    - The external contributor verified a local one-line patch end to end; that patch is evidence, not yet the upstream resolution.
+    - Upstream issue #2 is closed and the implementation no longer silently drops real rclpy primitive sequences.
+    - The Docker native integration suite passed 6 tests on 2026-07-31, including value-preserving mapping tests for JointState, LaserScan, and Float64MultiArray.

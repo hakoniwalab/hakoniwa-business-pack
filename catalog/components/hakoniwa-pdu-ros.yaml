@@ -10,8 +10,8 @@ distribution:
   notes:
     - Public OSS Hakoniwa component for runtime PDU <-> ROS 2 topic conversion.
 verification:
-  verified_at: 2026-07-21
-  source_revision: 8693f4d82a61765feb990754459427a287347bb3
+  verified_at: 2026-07-31
+  source_revision: 78386ef97323040f845757a52f2d6310197e0470
   source_ref: main
 summary: Config-driven Python bridge between Hakoniwa PDU data and ROS 2 topics that resolves message mappings at runtime from PDU definitions and binding configuration without per-type bridge code.
 category:
@@ -25,49 +25,91 @@ status:
   maturity: active
   catalog_confidence: high
   notes:
-    - Cataloged from the current README architecture, verified message coverage, configuration contract, and Ubuntu quick start.
+    - Cataloged from the current README and design contract plus Docker-based native ROS 2 Jazzy / CycloneDDS integration tests.
+    - Native verification distinguishes real-rclpy coverage from the broader fake/unit message coverage.
 capabilities:
   - name: Runtime PDU to ROS 2 mapping
     description: Converts received Hakoniwa PDU data into ROS 2 messages and publishes them to configured topics at runtime.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-ros
         path: README.md
-        revision: 8693f4d82a61765feb990754459427a287347bb3
+        revision: 78386ef97323040f845757a52f2d6310197e0470
   - name: Runtime ROS 2 to PDU mapping
     description: Subscribes to ROS 2 topics, converts ROS messages to generated PDU Python types, and sends them through hakoniwa-pdu-endpoint.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-ros
         path: README.md
-        revision: 8693f4d82a61765feb990754459427a287347bb3
+        revision: 78386ef97323040f845757a52f2d6310197e0470
   - name: Configuration-only bridge setup
     description: Uses pdudef.json, endpoint configuration, and a compact binding JSON so new supported message types do not require bridge-side implementation code.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-ros
         path: README.md
-        revision: 8693f4d82a61765feb990754459427a287347bb3
+        revision: 78386ef97323040f845757a52f2d6310197e0470
   - name: Endpoint transport independence
     description: Delegates transport to hakoniwa-pdu-endpoint, allowing the same bridge mapping mechanism to operate across endpoint-supported communication backends.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-ros
         path: README.md
-        revision: 8693f4d82a61765feb990754459427a287347bb3
+        revision: 78386ef97323040f845757a52f2d6310197e0470
   - name: Standard ROS message runtime mapping
-    description: Verified type mapping covers PointCloud2, JointState, LaserScan, CameraInfo, and Float64MultiArray.
+    description: Unit coverage includes PointCloud2, JointState, LaserScan, CameraInfo, and Float64MultiArray. Native Docker tests additionally verify real rclpy primitive-sequence behavior and value-preserving PDU round trips for JointState, LaserScan, and Float64MultiArray.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: test/test_type_mapper.py
+        revision: e0c2720842e84a6ca545f438f649a7b161296a69
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: test/native/test_native_mapping.py
+        revision: 216359864291d8f82cbee249743322f18a6725dc
+  - name: Binding-level ROS 2 QoS configuration
+    description: Each binding can declare history, depth, reliability, and durability. Omitting qos preserves the previous RELIABLE, VOLATILE, KEEP_LAST depth-10 behavior.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: hakoniwa_pdu_ros/config_loader.py
+        revision: e896314efa796471bed1b7a72f64eeb6993121ac
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: hakoniwa_pdu_ros/qos.py
+        revision: e896314efa796471bed1b7a72f64eeb6993121ac
+      - repository: hakoniwalab/hakoniwa-pdu-ros
         path: README.md
-        revision: 8693f4d82a61765feb990754459427a287347bb3
+        revision: e896314efa796471bed1b7a72f64eeb6993121ac
+  - name: QoS mismatch diagnosis
+    description: The bridge logs resolved publisher and subscription QoS at startup and emits an actionable warning when ROS 2 reports an incompatible publisher QoS for a subscription.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: hakoniwa_pdu_ros/bridge_node.py
+        revision: e896314efa796471bed1b7a72f64eeb6993121ac
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: test/native/test_native_qos.py
+        revision: 216359864291d8f82cbee249743322f18a6725dc
+  - name: Docker native ROS 2 integration suite
+    description: A one-command Ubuntu 24.04 / ROS 2 Jazzy / rmw_cyclonedds_cpp Docker suite verifies real message classes, compatible and incompatible QoS paths, backward-compatible defaults, timeouts, and node cleanup.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: test/docker/run_native_tests.sh
+        revision: e0737d85fc7a06463ef26f759976422def0ed9f3
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: test/native/test_native_mapping.py
+        revision: 216359864291d8f82cbee249743322f18a6725dc
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: test/native/test_native_qos.py
+        revision: 78386ef97323040f845757a52f2d6310197e0470
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: .github/workflows/native-integration.yml
+        revision: 216359864291d8f82cbee249743322f18a6725dc
 limitations:
-  - Requires ROS 2 and Python runtime support; the documented quick start targets Ubuntu 24.04 with a ROS 2 distribution such as Jazzy.
+  - Requires ROS 2 and Python runtime support; the documented quick start and native test environment target Ubuntu 24.04 with ROS 2 Jazzy.
   - Binary layout conversion is provided by generated hakoniwa-pdu-python converters; this component does not implement PDU binary layouts itself.
   - Endpoint transport behavior and availability depend on hakoniwa-pdu-endpoint configuration and enabled backends.
   - A PDU type must have compatible generated Python conversion artifacts and field structure for recursive ROS message mapping.
-  - The current verified message list does not imply every ROS 2 message type has been tested.
+  - Unit coverage of a message type is not equivalent to native real-rclpy verification; current native mapping coverage is JointState, LaserScan, and Float64MultiArray.
+  - The native QoS suite uses rmw_cyclonedds_cpp. Other RMW implementations may differ in discovery or incompatible-QoS event behavior.
+  - The current native ROS-to-PDU tests replace the endpoint transport manager with an in-memory capture manager, so they verify ROS graph, QoS, mapping, and generated PDU bytes rather than a specific endpoint backend end to end.
 interfaces:
   inputs:
     - name: Binding config
       kind: config
-      description: Maps Hakoniwa robot/PDU keys to ROS-owned topics and optional directions.
+      description: Maps Hakoniwa robot/PDU keys to ROS-owned topics, optional directions, and optional per-binding ROS 2 QoS.
     - name: PDU definition
       kind: config
       description: pdudef.json supplies PDU type, channel ID, payload size, and message type information.
@@ -87,7 +129,7 @@ interfaces:
   protocols:
     - name: ROS 2 topics
       role: publisher | subscriber
-      notes: Bidirectional topic bridge; one-way direction can be configured per binding.
+      notes: Bidirectional topic bridge; one-way direction and history/depth/reliability/durability QoS can be configured per binding.
     - name: Hakoniwa PDU Endpoint
       role: local | remote
       notes: Endpoint owns PDU cache and transport; representative documented backends include Zenoh, WebSocket, and TCP/UDP.
@@ -121,7 +163,8 @@ platforms:
   supported:
     - Linux
   notes:
-    - The documented quick start targets Ubuntu 24.04 and uses ROS_DISTRO such as jazzy.
+    - The documented quick start and native suite target Ubuntu 24.04 and ROS 2 Jazzy.
+    - The Docker runner can be launched from Docker-capable macOS, Windows, or Linux hosts; the container test baseline is Linux.
 connects_to:
   - component_id: hakoniwa-pdu-endpoint
     direction: uses
@@ -145,19 +188,28 @@ data_contracts:
     source:
       - repository: hakoniwalab/hakoniwa-pdu-ros
         path: README.md
-        revision: 8693f4d82a61765feb990754459427a287347bb3
+        revision: 78386ef97323040f845757a52f2d6310197e0470
+  - name: Binding QoS contract
+    description: A binding may declare history, depth, reliability, and durability. Unsupported fields and values are rejected before startup, while omission preserves the previous defaults.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: DESIGN.md
+        revision: e896314efa796471bed1b7a72f64eeb6993121ac
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: hakoniwa_pdu_ros/config_loader.py
+        revision: e896314efa796471bed1b7a72f64eeb6993121ac
   - name: Default ROS topic ownership contract
     description: By default ROS-owned topics use /<robot>/<pdu>, while PDU-owned mirror topics are published under /pdu/<robot>/<pdu>; the bridge does not subscribe to the /pdu mirror path.
     source:
       - repository: hakoniwalab/hakoniwa-pdu-ros
         path: README.md
-        revision: 8693f4d82a61765feb990754459427a287347bb3
+        revision: 78386ef97323040f845757a52f2d6310197e0470
   - name: Generated converter contract
     description: hakoniwa-pdu-ros maps ROS messages to/from generated pdu_pytype objects while hakoniwa-pdu-python owns pdu_pytype <-> binary conversion.
     source:
       - repository: hakoniwalab/hakoniwa-pdu-ros
         path: README.md
-        revision: 8693f4d82a61765feb990754459427a287347bb3
+        revision: 78386ef97323040f845757a52f2d6310197e0470
 recipe_roles:
   - role: bridge
     description: Bridges ROS 2 topic messages and Hakoniwa PDU data bidirectionally.
@@ -167,6 +219,7 @@ recipe_roles:
     description: Participates in runtime PDU exchange while delegating actual transport to hakoniwa-pdu-endpoint.
 typical_usecases:
   - Connect existing ROS 2 nodes to Hakoniwa PDU without writing per-message bridge code.
+  - Consume BEST_EFFORT sensor topics such as JointState by declaring compatible binding QoS instead of inserting a relay.
   - Publish Hakoniwa sensor or state PDU data into ROS 2 topics.
   - Accept ROS 2 command/value topics and forward them into a Hakoniwa simulation through PDU.
   - Reuse the same PDU/ROS mapping while changing the Endpoint communication backend.
@@ -174,7 +227,7 @@ anti_usecases:
   - Replacing hakoniwa-pdu-endpoint transport or cache infrastructure.
   - Generating PDU binary layouts or generated Python converters by itself.
   - Replacing ROS 2 with a ROS-independent runtime.
-  - Claiming every ROS 2 message type is supported without validation.
+  - Claiming every ROS 2 message type or RMW implementation is natively verified without test evidence.
 demo_candidates:
   - name: Bidirectional PDU and ROS 2 bridge over Zenoh
     description: Run the documented Ubuntu quick start, verify Zenoh -> ROS on /pdu/hakoniwa/drone/pos, then verify ROS -> Zenoh with the sample command publisher.
@@ -186,7 +239,7 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-pdu-ros
         path: README.md
-        revision: 8693f4d82a61765feb990754459427a287347bb3
+        revision: 78386ef97323040f845757a52f2d6310197e0470
 operations:
   build:
     commands:
@@ -197,8 +250,11 @@ operations:
   test:
     commands:
       - python3 -m unittest discover -s test -p 'test_type_mapper.py'
+      - ./test/docker/run_native_tests.sh
     notes:
-      - The documented permanent type-mapping target covers standard ROS message types.
+      - Fast unit tests cover mapper logic and configuration contracts.
+      - The Docker command builds an Ubuntu 24.04 / ROS 2 Jazzy image and runs native real-rclpy mapping and CycloneDDS QoS tests.
+      - The verified maintainer run on 2026-07-31 completed with 6 passed in 0.26 seconds.
   run:
     commands:
       - ros2 run hakoniwa_pdu_ros bridge --config config/sample/sample_binding.json
@@ -207,17 +263,30 @@ operations:
       - The installed config path may differ from the source-tree relative path after colcon build.
 known_gaps:
   - Add a Business Pack Recipe that captures the verified bidirectional ROS 2 bridge flow and its target environment.
-  - Expand runtime validation coverage for additional ROS 2 message types and Endpoint backends.
-  - Record Linux/ROS distribution compatibility beyond the documented Ubuntu 24.04 quick start.
+  - Add native endpoint-backend end-to-end validation instead of replacing the transport manager with an in-memory capture manager.
+  - Extend native mapping coverage to PDU -> ROS and to PointCloud2 / CameraInfo where real-rclpy behavior matters.
+  - Record compatibility evidence for RMW implementations beyond rmw_cyclonedds_cpp.
 source_refs:
   - repository: hakoniwalab/hakoniwa-pdu-ros
     path: README.md
-    revision: 8693f4d82a61765feb990754459427a287347bb3
-    description: Architecture, mapping responsibilities, binding contract, verified message coverage, and Ubuntu quick start.
+    revision: 78386ef97323040f845757a52f2d6310197e0470
+    description: Architecture, mapping responsibilities, binding and QoS contracts, verified message coverage, and Ubuntu quick start.
   - repository: hakoniwalab/hakoniwa-pdu-ros
     path: DESIGN.md
-    revision: 8693f4d82a61765feb990754459427a287347bb3
-    description: Detailed design for runtime ROS message and PDU Python type mapping.
+    revision: 78386ef97323040f845757a52f2d6310197e0470
+    description: Detailed design for runtime ROS message/PDU mapping and binding-level QoS.
+  - repository: hakoniwalab/hakoniwa-pdu-ros
+    path: test/native/test_native_mapping.py
+    revision: 216359864291d8f82cbee249743322f18a6725dc
+    description: Native real-rclpy primitive-sequence and value-preserving PDU round-trip tests.
+  - repository: hakoniwalab/hakoniwa-pdu-ros
+    path: test/native/test_native_qos.py
+    revision: 78386ef97323040f845757a52f2d6310197e0470
+    description: Native CycloneDDS compatible, incompatible, default-QoS, and cleanup tests.
+  - repository: hakoniwalab/hakoniwa-pdu-ros
+    path: test/docker/README.md
+    revision: 216359864291d8f82cbee249743322f18a6725dc
+    description: Docker native integration environment, command, and scope.
 tags:
   - hakoniwa
   - pdu
