@@ -297,6 +297,3 @@ tags:
   - integration
   - runtime-mapping
   - zenoh
-  - qos
-  - cyclonedds
-  - native-test
