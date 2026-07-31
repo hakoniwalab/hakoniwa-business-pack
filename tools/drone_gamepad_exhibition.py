@@ -20,6 +20,12 @@ if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 from platforms.drone_gamepad import current_adapter
+from recipe_portal import (
+    PortalCommand,
+    PortalEnvironment,
+    PortalLink,
+    write_recipe_portal,
+)
 
 RECIPE_ID = "drone-single-mujoco-threejs-gamepad"
 VIEWER_URL = (
@@ -378,18 +384,109 @@ def _run(command: list[str], env: dict[str, str] | None = None) -> int:
     return subprocess.run(command, env=env, check=False).returncode
 
 
+def _display_command(runtime: RuntimePaths, action: str) -> str:
+    return subprocess.list2cmdline(
+        [
+            str(runtime.foundation_python),
+            str(root() / "tools" / "drone_gamepad_exhibition.py"),
+            action,
+        ]
+    )
+
+
+def write_portal(paths, runtime: RuntimePaths, launcher: Path) -> Path:
+    return write_recipe_portal(
+        paths.recipe_root / "index.html",
+        recipe_id=RECIPE_ID,
+        title="Hakoniwa Drone Gamepad Exhibition",
+        summary=(
+            "PS5コントローラでMuJoCo上の箱庭ドローンを操作し、"
+            "同じ動きをThree.jsブラウザビューアへ配信する展示用Recipeです。"
+        ),
+        topology=(
+            "PS5 controller",
+            "rc-custom.py",
+            "GameControllerOperation PDU",
+            "Hakoniwa Drone + MuJoCo",
+            "DroneVisualStatePublisher",
+            "WebBridge",
+            "Three.js",
+        ),
+        commands=(
+            PortalCommand(
+                "Preflight",
+                _display_command(runtime, "doctor"),
+                "Foundation venv、ゲームパッド、ポート、生成物を確認します。",
+            ),
+            PortalCommand(
+                "Start",
+                _display_command(runtime, "start"),
+                "Launcherを背景実行し、MuJoCoとWeb可視化を開始します。",
+            ),
+            PortalCommand(
+                "Open viewer",
+                _display_command(runtime, "open-viewer"),
+                "来場者向けのThree.jsビューアを既定ブラウザで開きます。",
+            ),
+            PortalCommand(
+                "Status",
+                _display_command(runtime, "status"),
+                "Launcherセッションの状態を確認します。",
+            ),
+            PortalCommand(
+                "Reset",
+                _display_command(runtime, "reset"),
+                "参加者交代時にシミュレーションを初期状態へ戻します。",
+            ),
+            PortalCommand(
+                "Stop",
+                _display_command(runtime, "stop"),
+                "Launcherの管理経路を使って全プロセスを終了します。",
+            ),
+        ),
+        links=(
+            PortalLink("Three.js viewer", VIEWER_URL, "実行中のブラウザビューア"),
+            PortalLink("Launcher JSON", "config/launcher.json", "生成された実行トポロジ"),
+            PortalLink("Runtime session", "runtime/", "Launcherのセッション状態"),
+            PortalLink("Logs", "logs/", "各アセットの標準出力・標準エラー"),
+            PortalLink("Validation", "validation/", "Recipeの検証証跡"),
+        ),
+        environment=(
+            PortalEnvironment("Platform", runtime.system_name),
+            PortalEnvironment("Recipe workspace", str(paths.recipe_root)),
+            PortalEnvironment("Foundation install", str(paths.install_prefix)),
+            PortalEnvironment("Foundation Python", str(runtime.foundation_python)),
+            PortalEnvironment("Launcher", str(launcher)),
+            PortalEnvironment("Session", str(session_file(paths))),
+            PortalEnvironment(
+                "Controller mapping",
+                "hakoniwa-drone-core/drone_api/rc/rc_config/ps4-control.json",
+            ),
+            PortalEnvironment("Web ports", "8000 / 8765"),
+        ),
+        agency_notes=(
+            "AIはRecipe設定、Launcher、手順書の生成とdoctorまでを担当します。",
+            "展示のstart・reset・stopはオペレータが実行します。",
+            "PS5コントローラの操作は来場者またはオペレータが行います。",
+            "このHTMLはローカルコマンドを直接実行しません。Copyボタンで手順を引き継ぎます。",
+        ),
+    )
+
+
 def configure(drone_root: Path, viewer_root: Path, overrides: dict[str, Path | None]) -> int:
     foundation, paths, runtime = preflight(drone_root, viewer_root, overrides)
     foundation.prepare_workspace(paths)
     (paths.recipe_root / "runtime").mkdir(parents=True, exist_ok=True)
     copy_recipe_config(drone_root, paths.recipe_config)
     launcher = write_launcher(paths, drone_root, viewer_root, runtime)
+    portal = write_portal(paths, runtime, launcher)
     print(f"Recipe workspace : {paths.recipe_root}")
+    print(f"Recipe portal    : {portal}")
     print(f"Launcher         : {launcher}")
     print(f"Session          : {session_file(paths)}")
     print(f"Foundation Python: {runtime.foundation_python}")
     print(f"Viewer           : {VIEWER_URL}")
-    print("Operator command : python tools/drone_gamepad_exhibition.py start")
+    print(f"Operator command : {_display_command(runtime, 'start')}")
     return 0
 
 
@@ -451,7 +548,11 @@ def doctor(drone_root: Path, viewer_root: Path, overrides: dict[str, Path | None
             runtime.visual_state_publisher.is_file(),
             str(runtime.visual_state_publisher),
         ),
-        ("Foundation Python", runtime.foundation_python.is_file(), str(runtime.foundation_python)),
+        (
+            "Foundation Python",
+            runtime.foundation_python.is_file(),
+            str(runtime.foundation_python),
+        ),
         ("hako-cmd", runtime.hako_cmd.is_file(), str(runtime.hako_cmd)),
         ("WebBridge", runtime.web_bridge.is_file(), str(runtime.web_bridge)),
         ("port 8000", _port_available(8000), "available"),
@@ -465,6 +566,8 @@ def doctor(drone_root: Path, viewer_root: Path, overrides: dict[str, Path | None
     checks.append(("gamepad", controller_ok, controller_detail))
     launcher = paths.recipe_config / "launcher.json"
     checks.append(("generated Launcher", launcher.is_file(), str(launcher)))
+    portal = paths.recipe_root / "index.html"
+    checks.append(("Recipe portal", portal.is_file(), str(portal)))
 
     failed = False
     for name, ok, detail in checks:
