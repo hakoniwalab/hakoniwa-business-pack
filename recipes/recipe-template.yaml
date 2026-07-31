@@ -134,11 +134,24 @@ execution_environment:
   notes:
     - Runtime verification must state these assumptions.
 
+# Optional. Recipe-owned packages installed into an explicitly selected runtime.
+# Foundation component packages remain owned by component Receipts.
+runtime_dependencies:
+  python:
+    interpreter: work/foundation/install/python
+    requirements: recipes/requirements/<recipe-id>.txt
+    packages:
+      - name: package-name
+        version: 1.0.0
+        purpose: Explain why this Recipe needs the package.
+
 # Optional. Add this section when the Recipe uses the reusable local Foundation.
-# Declare only component capabilities or build limits that the Recipe actually needs.
+# Declare only component minimum versions, capabilities, or build limits that the Recipe actually needs.
 # Omit this section for Recipes that intentionally use a legacy/system-installed runtime.
 foundation_requirements:
   hakoniwa-core-pro:
+    version:
+      min: 1.0.0
     capabilities:
       shared_memory: true
       hako_cmd: true

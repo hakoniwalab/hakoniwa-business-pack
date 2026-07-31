@@ -10,8 +10,8 @@ distribution:
   notes:
     - Public OSS Hakoniwa component distributed as hakoniwa-pdu on PyPI.
 verification:
-  verified_at: 2026-07-19
-  source_revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+  verified_at: 2026-07-31
+  source_revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
   source_ref: main
 summary: Python PDU communication library for Hakoniwa, integrating WebSocket topics, WebSocket RPC, SHM backend support, and binary/JSON/Python type conversion.
 category:
@@ -67,6 +67,18 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-pdu-python
         path: src/hakoniwa_pdu/apps/launcher
         revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+  - name: Launcher background lifecycle control
+    description: Available in hakoniwa-pdu 1.6.5 or later; starts a Launcher with an explicit session file and provides OS-independent status and graceful termination through the Launcher control endpoint.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: docs/launcher-background-lifecycle.md
+        revision: 8a800191ad0c7db7b6f66d20572b23eac447a29c
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: src/hakoniwa_pdu/apps/launcher/hako_launcher_control.py
+        revision: 8a800191ad0c7db7b6f66d20572b23eac447a29c
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: pyproject.toml
+        revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
   - name: Launcher schema packaging
     description: Includes launcher JSON schemas as package data in the `hakoniwa-pdu` Python package.
     evidence:
@@ -125,7 +137,7 @@ dependencies:
       notes: Python 3.12 is the expected runtime unless a recipe explicitly verifies another version.
     - name: hakoniwa-pdu package
       type: package
-      notes: Install with pip install hakoniwa-pdu.
+      notes: Install with pip install hakoniwa-pdu. Launcher background lifecycle control requires version 1.6.5 or later.
     - name: hakoniwa-pdu-registry offsets
       type: repository
       notes: Offset definitions are required for binary conversion.

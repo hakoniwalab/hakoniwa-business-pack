@@ -18,6 +18,8 @@ Recipe requirementsの例:
 ```yaml
 foundation_requirements:
   hakoniwa-core-pro:
+    version:
+      min: 1.0.0
     capabilities:
       shared_memory: true
       hako_cmd: true
@@ -30,6 +32,10 @@ foundation_requirements:
       hakoniwa_app: true
       web_bridge: true
 ```
+
+`version.min`は、Receiptの`component.version`に対する下限です。
+機能の有無は`capabilities`で表し、特定リリース以降を必須とする外部契約が
+ある場合だけ、両方を併用します。
 
 Component Receiptの標準配置:
 
@@ -66,6 +72,17 @@ work/foundation/install/python/
 Pythonのminor versionが同じだけでは、native extensionのABI整合を保証できません。
 Foundation orchestratorを実行しているPythonでvenvを作成し、その同じinterpreterを
 Core `hakopy`とEndpoint CFFIのbuildにも使用します。
+
+`pip install`の成功表示だけでは、Foundation更新済みとは判断しません。
+Foundation Pythonの`sys.executable`、`sys.prefix`、`pip show`の`Version`と
+`Location`、必要moduleのsmoke importを確認します。Blender同梱Pythonや別venvへの
+installはFoundationの状態ではありません。
+
+Component buildは、同じbuild directoryに複数世代のinstall候補を残さないでください。
+古い成果物を消す場合も、component自身が所有するpackage patternだけへ限定します。
+version、Capability、Receipt、smoke、Catalog、Recipeを伴うリリース手順は
+[`Foundation Component リリースチェックリスト`](../docs/foundation-component-release-checklist-ja.md)
+を参照してください。
 
 ## Inspectorと構築
 

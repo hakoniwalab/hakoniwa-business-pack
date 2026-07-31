@@ -26,8 +26,11 @@ validation:
   summary: >
     The component topology is based on the existing Drone Core RC/WebBridge
     Launcher and the verified Business Pack Three.js Recipe. PS5 operation with
-    ps4-control.json is confirmed by the user. The new Business Pack-owned
-    generator and complete exhibition lifecycle still require runtime validation.
+    ps4-control.json is confirmed by the user. The Business Pack-owned configure
+    and doctor flow is verified on macOS, including pinned pygame installation
+    and PS5 discovery. The complete exhibition lifecycle still requires runtime
+    validation of actual gamepad flight and browser rendering; Launcher startup,
+    process stability, and graceful shutdown are verified.
   steps:
     - id: ps5_with_ps4_mapping
       status: verified
@@ -37,18 +40,28 @@ validation:
       notes:
         - The existing ps4-control.json mapping operates the PS5 controller; no separate PS5 mapping is required.
     - id: generated_launcher_topology
-      status: not_tested
-      evidence: []
+      status: verified
+      evidence:
+        - source: local macOS Launcher session
+          date: 2026-07-31
       notes:
-        - Unit tests validate the generated topology; live process startup remains to be exercised.
+        - Unit tests validate the generated topology.
+        - Drone service, visual-state publisher, WebBridge, rc-custom.py, and the HTTP server all stabilized in one background Launcher session.
+        - TCP ports 8000 and 8765 were listening while the session remained RUNNING.
+        - Session-file termination completed through Launcher control and left the persisted TERMINATED state.
+        - The Drone service uses the MuJoCo one-drone config and drone-pdudef-1.json consistently with rc-custom.py.
     - id: foundation_python_venv
       status: verified
       evidence:
         - source: Business Pack generator tests
           date: 2026-07-31
+        - source: local macOS configure and doctor
+          date: 2026-07-31
       notes:
         - The generated Launcher uses only work/foundation/install/python for Launcher, gamepad control, and the Three.js HTTP server.
+        - configure installs the pinned Recipe-specific Python requirements into that Foundation venv before generating the runtime.
         - Runtime doctor verifies hakopy, hakoniwa_pdu, and the Launcher import from the same Foundation venv.
+        - Runtime doctor detected one connected gamepad after configure installed pygame 2.6.1.
         - Live exhibition validation is tracked separately by exhibition_end_to_end.
     - id: generated_recipe_portal
       status: verified
@@ -144,6 +157,16 @@ execution_environment:
     - OS-specific executable discovery is isolated under tools/platforms/drone_gamepad.
     - The Foundation Python executable path must be preserved without resolving its venv symlink to a system interpreter.
     - The generated workspace root index.html is the human-facing entry point for this Recipe result.
+    - Recipe-specific Python packages are installed from recipes/requirements/drone-single-mujoco-threejs-gamepad.txt by configure.
+
+runtime_dependencies:
+  python:
+    interpreter: work/foundation/install/python
+    requirements: recipes/requirements/drone-single-mujoco-threejs-gamepad.txt
+    packages:
+      - name: pygame
+        version: 2.6.1
+        purpose: Read PS4/PS5 controller events from rc-custom.py.
 
 agency_boundary:
   agent_actions:
@@ -221,8 +244,11 @@ foundation_requirements:
       hako_cmd: true
       python_binding: true
   hakoniwa-pdu-python:
+    version:
+      min: 1.6.5
     capabilities:
       hako_launcher: true
+      launcher_background_lifecycle: true
       shm_backend: true
   hakoniwa-pdu-bridge-core:
     capabilities:
@@ -321,7 +347,7 @@ artifact_sets:
       - work/foundation/runtime/mmap
       - work/foundation/install/share/hakoniwa/receipts
   recipe_runtime:
-    status: not_tested
+    status: partially_verified
     owner: work/recipes/drone-single-mujoco-threejs-gamepad
     artifacts:
       - index.html
@@ -351,15 +377,20 @@ artifacts:
       owner: hakoniwa-drone-core
     - path: hakoniwa-drone-core/drone_api/rc/rc_config/ps4-control.json
       owner: hakoniwa-drone-core
+    - path: hakoniwa-drone-core/config/drone/mujoco
+      owner: hakoniwa-drone-core
+      purpose: One-drone MuJoCo dynamics configuration compatible with the native viewer.
+    - path: hakoniwa-drone-core/config/pdudef/drone-pdudef-1.json
+      owner: hakoniwa-drone-core
+      purpose: PDU definition used consistently by the Drone service, visual-state publisher, and rc-custom.py.
     - path: work/foundation/install/python
       owner: hakoniwa-pdu-python
       purpose: The only Python environment used by Launcher, gamepad controller, and HTTP server.
 
 missing_pieces:
-  - Live macOS exhibition-machine validation.
+  - Live gamepad flight and browser-rendering validation on the macOS exhibition machine.
   - Native Linux runtime validation.
   - Native Windows runtime validation and confirmation of distributed executable names.
-  - Confirmation that pygame is installed in the shared Foundation venv on the exhibition machine.
 
 demo:
   profiles:
@@ -376,8 +407,9 @@ demo:
   steps:
     - id: configure
       command: python tools/drone_gamepad_exhibition.py configure
-      status: not_tested
+      status: verified
       expected:
+        - Pinned Recipe-specific Python requirements are installed into work/foundation/install/python.
         - index.html is generated at the Recipe workspace root.
         - Launcher JSON is generated under the Recipe workspace.
         - The selected Python is work/foundation/install/python and is not replaced by a system interpreter.
@@ -389,13 +421,13 @@ demo:
         - The page offers command copy controls but does not execute local commands.
     - id: doctor
       command: python tools/drone_gamepad_exhibition.py doctor
-      status: not_tested
+      status: verified
       expected:
         - hakopy, hakoniwa_pdu, and the Launcher import from the same Foundation venv.
         - The PS5 controller is visible through pygame.
     - id: start
       command: python tools/drone_gamepad_exhibition.py start
-      status: not_tested
+      status: verified
       expected:
         - Background Launcher session starts.
         - MuJoCo viewer opens.
@@ -417,12 +449,12 @@ demo:
         - hako-cmd stop, reset, and start complete without terminating the Launcher session.
     - id: status
       command: python tools/drone_gamepad_exhibition.py status
-      status: not_tested
+      status: verified
       expected:
         - Launcher control reports the owned session state.
     - id: stop
       command: python tools/drone_gamepad_exhibition.py stop
-      status: not_tested
+      status: verified
       expected:
         - hako_launcher_ctl terminate invokes LauncherService.terminate.
   cleanup:
@@ -487,3 +519,6 @@ source_artifacts:
   - repository: hakoniwalab/hakoniwa-business-pack
     path: tools/drone_gamepad_exhibition.py
     relation: generator-and-operator-interface
+  - repository: hakoniwalab/hakoniwa-business-pack
+    path: recipes/requirements/drone-single-mujoco-threejs-gamepad.txt
+    relation: pinned-recipe-runtime-dependencies

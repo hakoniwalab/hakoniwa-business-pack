@@ -1,0 +1,117 @@
+id: mujoco-viewer-runtime-config-must-be-semantically-aligned
+title: MuJoCo viewer startup requires semantic alignment across physics, model, robot, and PDU configuration
+status: promoted
+
+knowledge_type:
+  - interface_contract
+  - runtime_rule
+  - known_pitfall
+  - validation_rule
+
+summary: >
+  A Launcher configuration can be structurally valid and all referenced files can
+  exist while the runtime composition is still invalid. When a Drone service is
+  started with `--mujoco-viewer`, the selected physics configuration must actually
+  create a MuJoCo model, the configured model and propeller names must exist in the
+  loaded MJCF, and the Drone service, controller, visual-state publisher, and PDU
+  definition must agree on robot names and PDU assignments. File-existence checks
+  alone do not establish this contract.
+
+observation:
+  context: >
+    Validating the Business Pack Drone Gamepad Exhibition Recipe on macOS after
+    Launcher background lifecycle support and pygame installation had been fixed.
+  details:
+    - The generated Launcher passed structural tests and started the Drone service with `--mujoco-viewer`, but selected `config/drone/fleets/api-current.json`, whose type used `physicsEquation: BodyFrame`.
+    - The native Drone service crashed on the main thread with SIGSEGV in `mj_name2id()` during viewer initialization because no compatible MuJoCo model had been created for that configuration.
+    - The same generated topology used robot name `Drone-1`, while `rc-custom.py` defaults to robot name `Drone`.
+    - Aligning the topology on `config/drone/mujoco`, `config/pdudef/drone-pdudef-1.json`, `visual_state_publisher-1.json`, and `--real-sleep-msec 1` allowed all Launcher assets to stabilize and kept the session RUNNING.
+    - The corrected unit test asserts the complete Drone service argument set and the matching PDU and visual-state configuration, rather than checking only for the presence of `--mujoco-viewer`.
+
+sources:
+  repositories:
+    - repository: toppers/hakoniwa-drone-core
+      path: config/drone/fleets/types/api.json
+      revision: afb9d4f468c4d03188c05a949b73c741534bfd10
+    - repository: toppers/hakoniwa-drone-core
+      path: config/drone/mujoco/drone_config_0.json
+      revision: afb9d4f468c4d03188c05a949b73c741534bfd10
+    - repository: toppers/hakoniwa-drone-core
+      path: drone_api/rc/rc-custom.py
+      revision: afb9d4f468c4d03188c05a949b73c741534bfd10
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/drone_gamepad_exhibition.py
+      revision: working-tree-2026-07-31
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/test_drone_gamepad_exhibition.py
+      revision: working-tree-2026-07-31
+  runtime_evidence:
+    - description: >-
+        macOS 26.5.2 arm64 crash report, 2026-07-31: the Drone service terminated
+        with EXC_BAD_ACCESS / SIGSEGV on the main thread in mj_name2id(), called
+        from viewer_thread(), when the BodyFrame fleet configuration was combined
+        with --mujoco-viewer.
+    - description: >-
+        macOS re-verification, 2026-07-31: after configuration alignment, Drone
+        service, visual-state publisher, WebBridge, rc-custom.py, and the HTTP
+        server all stabilized; Launcher reported RUNNING; ports 8000 and 8765
+        listened; session-file termination produced TERMINATED and released both
+        ports.
+  expert_input: []
+
+confidence: high
+
+contradictions:
+  - target: File-existence-only Recipe preflight
+    existing_claim: Existing configuration files and a present --mujoco-viewer flag are sufficient evidence that the native viewer topology is valid.
+    new_evidence: The files existed and structural tests passed, but the selected physics type did not create the MuJoCo model required by viewer initialization.
+
+validation:
+  status: verified
+  required:
+    - Preserve platform-neutral semantic checks when adding other MuJoCo-based Recipes.
+    - Keep actual gamepad flight and browser rendering as separate behavioral validation from process startup.
+  notes:
+    - Process lifecycle, listener readiness, and graceful cleanup were verified on macOS.
+    - Human gamepad operation and visual acceptance remain Recipe-level human validation.
+
+tracking:
+  implementation_status: resolved
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: true
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - drone-single-mujoco-threejs-gamepad
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      kind: test
+      path: tools/test_drone_gamepad_exhibition.py
+      mode: detect-only
+      notes:
+        - The generated topology test fixes the matching physics, PDU, controller, and visual-state configuration as one contract.
+
+promotion_rationale:
+  - The general rule belongs in the Runtime Primer because it applies to any Recipe that composes a native MuJoCo viewer with simulator and PDU participants.
+  - The concrete file set belongs in the Drone Gamepad Recipe and its generator test.
+  - The owning Drone Core source remains unchanged because the failure came from an invalid composition selected by the Business Pack Recipe.
+
+resolution:
+  status: documented
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      issue: null
+      pull_request: null
+      revision: working-tree-2026-07-31
+  verified: true
+  promoted_to:
+    - docs/hakoniwa-runtime-primer-ja.md
+    - docs/hakoniwa-runtime-primer.md
+    - recipes/examples/drone-single-mujoco-threejs-gamepad.yaml
+  executable_guardrails:
+    - tools/test_drone_gamepad_exhibition.py
+  notes:
+    - The candidate preserves the original crash signature and the semantic reason, while the promoted documents state the reusable runtime rule.

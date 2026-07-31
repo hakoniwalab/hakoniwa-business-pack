@@ -18,8 +18,9 @@ summary: >
   owns platform-specific process-control behavior internally, and `terminate` goes through
   LauncherService.terminate() rather than directly killing a recorded PID. The original
   Windows measurements below remain valuable as the observation that revealed the missing
-  lifecycle surface; the implementation has landed, but native Windows re-verification of
-  the new interface is still pending.
+  lifecycle surface. The interface is part of the formal `hakoniwa-pdu` 1.6.5 contract and
+  has been re-verified through a Business Pack Recipe on macOS; native Windows
+  re-verification of the new interface is still pending.
 
 observation:
   context: >
@@ -102,6 +103,9 @@ sources:
     - repository: hakoniwalab/hakoniwa-pdu-python
       path: src/hakoniwa_pdu/apps/launcher/hako_launcher_ctl.py
       revision: 8a80019
+    - repository: hakoniwalab/hakoniwa-pdu-python
+      path: pyproject.toml
+      revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
   runtime_evidence:
     - description: >-
         External contributor's Windows 11 x86_64 verification environment (native
@@ -115,6 +119,12 @@ sources:
         'graceful' outcome. taskkill exit code was 255 in every refused case. Post-exit
         verification (processes gone, ports released) passed in all five runs, and all
         five configuration verify scripts exited 0.
+    - description: >-
+        Business Pack Drone Gamepad Exhibition Recipe on macOS arm64, 2026-07-31:
+        hakoniwa-pdu 1.6.5 started a caller-owned background session; status reported
+        RUNNING after Drone service, visual-state publisher, WebBridge, controller, and
+        HTTP server stabilized; terminate persisted TERMINATED and ports 8000 and 8765
+        were released.
   expert_input: []
 
 confidence: high
@@ -131,17 +141,21 @@ validation:
       taskkill / CTRL_BREAK / PID-kill knowledge is required by the caller.
   notes:
     - The original observation is verified on one Windows machine. The replacement
-      Launcher lifecycle implementation has Linux CI coverage and maintainer review, but
-      this candidate remains with `resolution.verified` set to false until the contributor
-      repeats the lifecycle test on native Windows.
+      Launcher lifecycle implementation has Linux CI coverage, maintainer review, and
+      macOS Recipe re-verification. This candidate remains with `resolution.verified`
+      set to false until the contributor repeats the lifecycle test on native Windows.
 
 tracking:
-  implementation_status: resolved
+  implementation_status: in_progress
   issues:
     - repository: hakoniwalab/hakoniwa-pdu-python
       number: 45
       relation: fix
       status: closed
+    - repository: hakoniwalab/hakoniwa-pdu-python
+      number: 48
+      relation: follow_up
+      status: open
 
 promotion_targets:
   catalog: []
@@ -174,7 +188,9 @@ resolution:
       pull_request: 47
       revision: 8a80019
   verified: false
-  promoted_to: []
+  promoted_to:
+    - docs/hakoniwa-runtime-primer-ja.md
+    - docs/hakoniwa-runtime-primer.md
   executable_guardrails: []
   notes:
     - The missing lifecycle surface was implemented in pull request 46 and then
@@ -182,4 +198,9 @@ resolution:
       explicit session file, a localhost control endpoint, ownership checks, and
       LauncherService.terminate().
     - Native Windows re-verification is still required before marking this resolution
-      verified and promoting the contract into the Runtime Primer.
+      verified. The caller-facing 1.6.5 session-file contract is documented in the Runtime
+      Primer based on the merged implementation and macOS re-verification; Windows
+      behavior remains explicitly unverified.
+    - >-
+      Issue 48 tracks the follow-up executable contract: Receipt Capability,
+      installed smoke imports, and stale-wheel protection for Foundation reuse.

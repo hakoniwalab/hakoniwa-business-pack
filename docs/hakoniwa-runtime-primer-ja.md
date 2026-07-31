@@ -86,6 +86,12 @@ python3.12 -c "import hakopy; import hakoniwa_pdu"
 python3.12 -m pip show hakoniwa-pdu
 ```
 
+`Successfully installed`という出力だけでは、Foundationが更新された証拠には
+なりません。Blender同梱Python、system Python、pyenv、Homebrew、別venvへ
+installされている可能性があります。Foundation-aware Recipeでは、必ず
+`work/foundation/install/python`のPython実体で`sys.executable`、`sys.prefix`、
+`pip show`の`Version`と`Location`、必要moduleのsmoke importを確認してください。
+
 Python 3.12は、個々のRecipeで毎回発見し直す条件ではなく、箱庭Python
 ワークフローに共通するランタイム契約です。コンポーネントが所有する起動
 wrapperはPython 3.12を明示的に選択し、`HAKO_PYTHON`や`PYTHON_CMD`などの
@@ -207,6 +213,25 @@ runtime participants
 4. すべてのsimulator、controller、bridge、visualizer、external clientで、同じ互換性のある定義ファイルを使用する。
 
 AIがweather、wind、sensor、controllerなどの新しいアセットを提案する場合は、新しいPDUチャネルと、そのチャネルをランタイムPDU定義上のどこに配置するかの両方を明確にしなければなりません。そうでなければ、そのRecipeは概念的な案にとどまり、完全な箱庭システム構成にはなりません。
+
+### 物理・Viewer・PDU設定の意味的整合
+
+設定ファイルが存在し、JSONとして正しく、Launcher schemaを通ることだけでは、
+実行可能な構成であることを証明できません。simulator、native viewer、
+controller、publisher、Bridgeが参照する設定は、意味的にも一致する必要があります。
+
+MuJoCoのnative viewerを使用する構成では、少なくとも次を確認してください。
+
+- viewer optionに対応するphysics設定が、実際にMuJoCo modelを生成する。
+- `modelName`、body名、joint名、propeller名が、読み込むMJCFに存在する。
+- simulatorとcontrollerが同じrobot名を使用する。
+- simulator、controller、visual-state publisher、Bridgeが互換性のある`pdudef`を参照する。
+- visual-state publisherの入力robot数、PDU assignment、出力設定が実際のfleetと一致する。
+
+たとえば、`--mujoco-viewer`を付けたまま`physicsEquation: BodyFrame`の設定を
+渡すと、ファイル存在チェックは通っても、viewer初期化時にMuJoCo modelを参照できず
+失敗する可能性があります。Recipeのdoctorやtestは、個別ファイルの存在だけでなく、
+選択したphysics、model、robot、PDU設定の組合せを一つの契約として検証してください。
 
 ## PDU Registry
 
@@ -336,6 +361,25 @@ APIによっては `conductor_start()` / `conductor_stop()` のような明示�
 python3.12 -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json
 ```
 
+`hakoniwa-pdu` 1.6.5以降では、AIやscriptが長時間動作するLauncherを管理するために、
+呼び出し側が明示したsession fileを使うbackground lifecycleを利用できます。
+
+```bash
+python3.12 -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json \
+  --background work/recipes/<recipe-id>/runtime/launcher-session.json
+
+python3.12 -m hakoniwa_pdu.apps.launcher.hako_launcher_ctl \
+  status work/recipes/<recipe-id>/runtime/launcher-session.json
+
+python3.12 -m hakoniwa_pdu.apps.launcher.hako_launcher_ctl \
+  terminate work/recipes/<recipe-id>/runtime/launcher-session.json
+```
+
+外部契約はPIDではなくsession fileです。`terminate`は記録されたPIDを直接killせず、
+Launcherの正規終了経路`LauncherService.terminate()`を呼びます。Recipeがこの
+機能に依存する場合は、Foundation要求で`version.min: 1.6.5`と
+`launcher_background_lifecycle: true`の両方を宣言してください。
+
 `hakoniwa-pdu` Launcherのモデルでは、次の要素を使用します。
 
 - `name`、`command`、`args`、`cwd`、`stdout`、`stderr`、`env`、`activation_timing`、`depends_on`、`delay_sec`、`start_grace_sec` を持つ `assets[]`。
@@ -389,6 +433,10 @@ POSIXでは、Launcher管理アセットはそれぞれ独立したprocess sessi
 ```text
 対話Launcher terminalを保持している
   -> 同じterminal/sessionへCtrl+Cを送る
+
+明示したbackground session fileを保持している
+  -> hako_launcher_ctl terminate <session-file>
+  -> session stateがTERMINATEDになるまでLauncherの正規終了を待つ
 
 Launcher main PIDだけを保持している（POSIX）
   -> Launcher PIDへSIGINTを送る

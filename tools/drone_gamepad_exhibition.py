@@ -28,11 +28,20 @@ from recipe_portal import (
 )
 
 RECIPE_ID = "drone-single-mujoco-threejs-gamepad"
+RUNTIME_REQUIREMENTS = (
+    Path(__file__).absolute().parents[1]
+    / "recipes"
+    / "requirements"
+    / f"{RECIPE_ID}.txt"
+)
 VIEWER_URL = (
     "http://127.0.0.1:8000/index.html"
     "?viewerConfigPath=/config/viewer-config-fleets.json"
     "&wsUri=ws://127.0.0.1:8765&wireVersion=v2"
 )
+DRONE_CONFIG = "config/drone/mujoco"
+DRONE_PDU_CONFIG = "config/pdudef/drone-pdudef-1.json"
+VISUAL_STATE_CONFIG = "visual_state_publisher-1.json"
 
 
 class RecipeError(RuntimeError):
@@ -256,9 +265,11 @@ def write_launcher(paths, drone_root: Path, viewer_root: Path, runtime: RuntimeP
                 "activation_timing": "before_start",
                 "command": str(runtime.drone_service),
                 "args": [
-                    "config/drone/fleets/api-current.json",
-                    "config/pdudef/drone-pdudef-current.json",
+                    DRONE_CONFIG,
+                    DRONE_PDU_CONFIG,
                     "--mujoco-viewer",
+                    "--real-sleep-msec",
+                    "1",
                 ],
                 "cwd": str(paths.recipe_root),
                 "delay_sec": 2,
@@ -272,7 +283,7 @@ def write_launcher(paths, drone_root: Path, viewer_root: Path, runtime: RuntimeP
                         paths.recipe_config
                         / "assets"
                         / "visual_state_publisher"
-                        / "visual_state_publisher.runtime.json"
+                        / VISUAL_STATE_CONFIG
                     )
                 ],
                 "cwd": str(paths.recipe_root),
@@ -301,7 +312,7 @@ def write_launcher(paths, drone_root: Path, viewer_root: Path, runtime: RuntimeP
                 "command": str(runtime.foundation_python),
                 "args": [
                     str(rc_root / "rc-custom.py"),
-                    str(paths.recipe_config / "pdudef" / "drone-pdudef-current.json"),
+                    str(paths.recipe_root / DRONE_PDU_CONFIG),
                     str(rc_root / "rc_config" / "ps4-control.json"),
                 ],
                 "cwd": str(rc_root),
@@ -377,6 +388,28 @@ def runtime_environment(paths, runtime: RuntimePaths) -> dict[str, str]:
         key = "LD_LIBRARY_PATH"
     env[key] = os.pathsep.join(library_entries + [env.get(key, "")])
     return env
+
+
+def install_runtime_dependencies(python: Path) -> None:
+    requirements = _required(
+        RUNTIME_REQUIREMENTS,
+        "Gamepad Recipe Python requirements",
+    )
+    command = [
+        str(python),
+        "-m",
+        "pip",
+        "install",
+        "--disable-pip-version-check",
+        "--requirement",
+        str(requirements),
+    ]
+    print("+", subprocess.list2cmdline(command))
+    result = subprocess.run(command, check=False)
+    if result.returncode != 0:
+        raise RecipeError(
+            "failed to install gamepad Recipe dependencies into Foundation Python"
+        )
 
 
 def _run(command: list[str], env: dict[str, str] | None = None) -> int:
@@ -475,6 +508,7 @@ def write_portal(paths, runtime: RuntimePaths, launcher: Path) -> Path:
 
 def configure(drone_root: Path, viewer_root: Path, overrides: dict[str, Path | None]) -> int:
     foundation, paths, runtime = preflight(drone_root, viewer_root, overrides)
+    install_runtime_dependencies(runtime.foundation_python)
     foundation.prepare_workspace(paths)
     (paths.recipe_root / "runtime").mkdir(parents=True, exist_ok=True)
     copy_recipe_config(drone_root, paths.recipe_config)
@@ -530,7 +564,10 @@ def _probe_controller(python: Path) -> tuple[bool, str]:
         check=False,
     )
     if result.returncode != 0:
-        return False, result.stderr.strip() or "pygame import/probe failed"
+        detail = result.stderr.strip() or "pygame import/probe failed"
+        if "No module named 'pygame'" in detail:
+            return False, "pygame is missing; rerun the Recipe configure command"
+        return False, detail
     try:
         count = int(result.stdout.strip().splitlines()[-1])
     except (ValueError, IndexError):

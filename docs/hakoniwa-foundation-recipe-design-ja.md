@@ -308,6 +308,11 @@ Python runtimeはRecipeごとに作らず、Foundation install prefix内の共�
 
 `Location`が同じFoundation venv内であることを必須とし、ユーザー環境や`/usr/local`にある別packageを誤認しません。
 
+`pip install`の成功表示だけでは、Foundation venvへinstallされた証拠になりません。
+Blender同梱Python、system Python、pyenv、Homebrew、別venvを区別するため、
+Foundation Pythonの`sys.executable`と`sys.prefix`、`pip show`の`Version`と
+`Location`、必要moduleのsmoke importを一組の検証証拠として扱います。
+
 Coreの`hakopy`とEndpointのCFFI package `hakoniwa_pdu_endpoint`も同じvenvからimportできるようにします。LauncherはこのvenvのPythonを使用するため、Core binding、Endpoint CFFI、PDU Pythonの組合せが一意になります。
 
 ここでの「同じPython」は、`3.12`というminor versionだけでなく、Foundation
@@ -409,9 +414,16 @@ foundation_requirements:
       web_bridge_fleets_config_format: true
 
   hakoniwa-pdu-python:
+    version:
+      min: 1.6.5
     capabilities:
       hako_launcher: true
+      launcher_background_lifecycle: true
 ```
+
+`version.min`は、特定の外部契約を正式に利用できる最小リリースを表します。
+機能の有無はCapabilityで表すため、リリース境界と実機能の両方が必要な場合は
+二つを併用します。
 
 この要求には、通常、次の項目を含めません。
 
@@ -538,6 +550,7 @@ Receiptには、実際に解決された全設定を参照するresolved manifes
 再利用可否は、Receipt内の次のようなフィールドをRecipe要求と直接比較して判定します。
 
 - Platform
+- component versionの下限
 - Capability
 - ABI互換性に影響するbuild limit
 - 依存componentの情報
@@ -549,7 +562,13 @@ Install Contractという別データは生成しません。Component Receipt�
 
 比較処理を概念的に `satisfies(installed, required)` と呼びます。
 
-### 9.1 Capability
+### 9.1 Version
+
+Recipeが`version.min`を宣言した場合、Receiptの`component.version`がその下限以上で
+あることを必要とします。versionは機能そのものの代替ではありません。正式な
+リリース境界を表すために使用し、機能の存在はCapabilityで別に確認します。
+
+### 9.2 Capability
 
 Capabilityは、原則としてインストール済み集合が要求集合を包含すれば充足します。
 
@@ -571,7 +590,7 @@ result:
   SATISFIED
 ```
 
-### 9.2 Capacity
+### 9.3 Capacity
 
 単純な容量値は、意味が明確な場合に限り、インストール値が要求値以上なら充足と判定できます。
 
@@ -586,7 +605,7 @@ installed capacity >= required capacity
 - Recipeが必要とする最低容量
 - インストール済み依存component間のbuild limitの整合
 
-### 9.3 依存componentとの互換性
+### 9.4 依存componentとの互換性
 
 相互にリンクまたは共有メモリ契約を共有するインストール済みcomponentは、ABI互換性に影響するbuild limitが依存先と整合している必要があります。ABI contractという独立データは作らず、Receiptの`build_limits`と`dependencies`に必要な値を記録します。
 
@@ -610,7 +629,7 @@ Coreの代表的なbuild limitは次のとおりです。
 
 これらのどれがABI互換性へ影響するかは、Core側の実装契約として確定する必要があります。比較結果は、どの項目のrequired、installed、dependency情報が一致しないかを示します。
 
-### 9.4 比較対象外の例
+### 9.5 比較対象外の例
 
 次の設定は、通常、ReceiptとRecipe要求の比較対象外です。
 

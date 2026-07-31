@@ -76,7 +76,16 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
                     "threejs-viewer-webserver",
                 ],
             )
-            self.assertIn("--mujoco-viewer", assets["drone-service-1"]["args"])
+            self.assertEqual(
+                assets["drone-service-1"]["args"],
+                [
+                    recipe.DRONE_CONFIG,
+                    recipe.DRONE_PDU_CONFIG,
+                    "--mujoco-viewer",
+                    "--real-sleep-msec",
+                    "1",
+                ],
+            )
             self.assertEqual(
                 assets["remote-controller"]["command"], str(runtime.foundation_python)
             )
@@ -91,6 +100,16 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
             self.assertTrue(
                 assets["remote-controller"]["args"][2].endswith(
                     "rc_config/ps4-control.json"
+                )
+            )
+            self.assertTrue(
+                assets["remote-controller"]["args"][1].endswith(
+                    "config/pdudef/drone-pdudef-1.json"
+                )
+            )
+            self.assertTrue(
+                assets["visual-state-publisher"]["args"][0].endswith(
+                    "visual_state_publisher-1.json"
                 )
             )
             self.assertIn(str(paths.install_prefix), json.dumps(data))
@@ -189,6 +208,32 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
             self.assertIn("import hakoniwa_pdu", command[-1])
             self.assertIn("hako_launcher", command[-1])
 
+    def test_runtime_dependencies_install_into_foundation_python(self) -> None:
+        foundation_python = Path("/foundation/python/bin/python")
+        completed = SimpleNamespace(returncode=0)
+        with (
+            mock.patch.object(recipe, "_required", return_value=recipe.RUNTIME_REQUIREMENTS),
+            mock.patch.object(recipe.subprocess, "run", return_value=completed) as run,
+        ):
+            recipe.install_runtime_dependencies(foundation_python)
+
+        command = run.call_args.args[0]
+        self.assertEqual(command[0], str(foundation_python))
+        self.assertIn("--requirement", command)
+        self.assertEqual(command[-1], str(recipe.RUNTIME_REQUIREMENTS))
+
+    def test_missing_pygame_tells_operator_to_rerun_configure(self) -> None:
+        completed = SimpleNamespace(
+            returncode=1,
+            stdout="",
+            stderr="ModuleNotFoundError: No module named 'pygame'",
+        )
+        with mock.patch.object(recipe.subprocess, "run", return_value=completed):
+            ok, detail = recipe._probe_controller(Path("/foundation/python"))
+
+        self.assertFalse(ok)
+        self.assertIn("rerun the Recipe configure command", detail)
+
     def test_reset_keeps_platform_shells_out_of_user_contract(self) -> None:
         commands = recipe.reset_commands(Path("/foundation/bin/hako-cmd"))
         self.assertEqual(
@@ -213,6 +258,7 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
         self.assertIn("index.html", content)
         self.assertIn("human_actions:", content)
         self.assertIn("operate_gamepad", content)
+        self.assertIn("recipes/requirements/drone-single-mujoco-threejs-gamepad.txt", content)
 
 
 if __name__ == "__main__":

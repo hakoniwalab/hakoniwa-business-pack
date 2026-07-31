@@ -5,7 +5,8 @@ require "set"
 
 module FoundationValidation
   IDENTIFIER = /\A[a-z][a-z0-9_]*\z/.freeze
-  REQUIREMENT_FIELDS = Set.new(%w[capabilities build_limits]).freeze
+  DOTTED_NUMERIC_VERSION = /\A\d+(?:\.\d+)*\z/.freeze
+  REQUIREMENT_FIELDS = Set.new(%w[version capabilities build_limits]).freeze
   RECEIPT_FIELDS = Set.new(%w[
     schema_version
     component
@@ -41,11 +42,13 @@ module FoundationValidation
       unknown = requirement.keys.to_set - REQUIREMENT_FIELDS
       errors << "#{path} has unknown fields: #{unknown.to_a.sort.join(', ')}" unless unknown.empty?
 
+      version = requirement["version"]
       capabilities = requirement["capabilities"]
       build_limits = requirement["build_limits"]
-      if capabilities.nil? && build_limits.nil?
-        errors << "#{path} must define capabilities or build_limits"
+      if version.nil? && capabilities.nil? && build_limits.nil?
+        errors << "#{path} must define version, capabilities, or build_limits"
       end
+      errors.concat(validate_required_version(version, "#{path}.version")) unless version.nil?
       errors.concat(validate_required_capabilities(capabilities, "#{path}.capabilities")) unless capabilities.nil?
       errors.concat(validate_required_build_limits(build_limits, "#{path}.build_limits")) unless build_limits.nil?
     end
@@ -92,6 +95,16 @@ module FoundationValidation
     end
 
     errors
+  end
+
+  def validate_required_version(value, path)
+    unless value.is_a?(Hash) && value.keys == ["min"]
+      return ["#{path} must contain only min"]
+    end
+    minimum = value["min"]
+    return [] if minimum.is_a?(String) && DOTTED_NUMERIC_VERSION.match?(minimum)
+
+    ["#{path}.min must be a dotted numeric version"]
   end
 
   def validate_required_capabilities(value, path)

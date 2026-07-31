@@ -122,6 +122,38 @@ setup phase, and keep ports, processes, producers, browser state, and user gates
 in the Recipe runtime preflight. `bash tools/doctor.bash` remains available to
 Recipes that still explicitly use the legacy system install.
 
+## Recipe-Specific Python Dependencies
+
+Foundation-aware Python Recipes use the shared interpreter under
+`work/foundation/install/python`. Keep two ownership classes distinct:
+
+- Foundation component packages are installed by the owning component's
+  `hako.py` flow and are represented by Component Receipts.
+- Recipe-specific packages, such as a gamepad library used only by one Demo, are
+  pinned in a Recipe-owned requirements file and installed idempotently by that
+  Recipe's `configure` operation.
+
+Record the relationship explicitly:
+
+```yaml
+runtime_dependencies:
+  python:
+    interpreter: work/foundation/install/python
+    requirements: recipes/requirements/<recipe-id>.txt
+    packages:
+      - name: example-package
+        version: 1.2.3
+        purpose: Describe why this Recipe needs it.
+```
+
+The Recipe doctor should import the package through the exact Foundation
+interpreter. Do not use a successful install into system Python, Blender Python,
+pyenv, Homebrew, or another venv as readiness evidence.
+
+Because the Foundation venv is shared, do not silently change a pinned package
+when two Recipes require incompatible versions. Report the conflict and define a
+new environment/profile policy before changing the common Foundation contract.
+
 ## Feasibility, Validation, And Connection Contracts
 
 `feasibility` describes whether the Catalog supports a credible system design. It

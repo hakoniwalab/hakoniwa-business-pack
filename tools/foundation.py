@@ -193,6 +193,8 @@ def load_foundation_requirements(path: Path) -> dict[str, dict]:
             limit = None
         elif indent == 6 and component and section == "capabilities":
             result[component][section][key] = _scalar(value)
+        elif indent == 6 and component and section == "version":
+            result[component][section][key] = _scalar(value)
         elif indent == 6 and component and section == "build_limits":
             limit = key
             result[component][section][limit] = {}
@@ -208,6 +210,26 @@ def load_foundation_requirements(path: Path) -> dict[str, dict]:
     if not result:
         raise FoundationError(f"foundation_requirements is empty: {path}")
     return result
+
+
+def _numeric_version(value: object) -> tuple[int, ...] | None:
+    if not isinstance(value, str):
+        return None
+    parts = value.split(".")
+    if not parts or any(not part.isdigit() for part in parts):
+        return None
+    return tuple(int(part) for part in parts)
+
+
+def _version_at_least(installed: object, minimum: object) -> bool:
+    installed_parts = _numeric_version(installed)
+    minimum_parts = _numeric_version(minimum)
+    if installed_parts is None or minimum_parts is None:
+        return False
+    width = max(len(installed_parts), len(minimum_parts))
+    return installed_parts + (0,) * (width - len(installed_parts)) >= (
+        minimum_parts + (0,) * (width - len(minimum_parts))
+    )
 
 
 def load_receipt(path: Path) -> dict:
@@ -374,6 +396,14 @@ def evaluate_component(
                 component_id,
                 receipt.get("component", {}).get("id"),
             )
+        )
+    minimum_version = required.get("version", {}).get("min")
+    installed_version = receipt.get("component", {}).get("version")
+    if minimum_version is not None and not _version_at_least(
+        installed_version, minimum_version
+    ):
+        reasons.append(
+            _reason("component.version.min", minimum_version, installed_version)
         )
     os_name, architecture = _host_contract()
     for field, expected in (("os", os_name), ("architecture", architecture)):

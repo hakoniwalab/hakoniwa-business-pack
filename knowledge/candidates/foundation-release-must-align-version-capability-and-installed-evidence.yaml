@@ -1,0 +1,140 @@
+id: foundation-release-must-align-version-capability-and-installed-evidence
+title: Foundation component releases must align version, Capability, Receipt, installed smoke, Catalog, and Recipe requirements
+status: promoted
+
+knowledge_type:
+  - architectural_principle
+  - usage_pattern
+  - known_pitfall
+  - validation_rule
+
+summary: >
+  A Foundation component feature is not safely reusable merely because its source
+  was merged or `pip install` printed success. The formal minimum release,
+  installed Capability, Component Receipt, exact interpreter and install location,
+  smoke result, Catalog evidence, and consuming Recipe requirements must describe
+  the same state. Build output must also be unambiguous so a stale package from an
+  older version cannot be installed accidentally.
+
+observation:
+  context: >
+    Updating the Drone Gamepad Exhibition Recipe to use the Launcher background
+    lifecycle introduced in hakoniwa-pdu 1.6.5.
+  details:
+    - The Launcher implementation was present in source while package metadata still reported 1.6.4, so source capability and formal release identity temporarily differed.
+    - An existing Foundation venv still contained hakoniwa-pdu 1.6.4 even after a separate pip invocation successfully installed 1.6.5 into Blender's bundled Python.
+    - Before `version.min` support was added, a Recipe could require a Capability but could not express that the public contract began at version 1.6.5.
+    - The PDU Python build directory contained wheels from multiple versions, making an install candidate ambiguous until stale owner-package wheels were removed before build.
+    - After the Recipe required both version 1.6.5 and `launcher_background_lifecycle`, Foundation doctor rejected the 1.6.4 Receipt, planned only PDU Python, rebuilt and smoked 1.6.5, and then reported SATISFIED.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu-python
+      path: pyproject.toml
+      revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
+    - repository: hakoniwalab/hakoniwa-pdu-python
+      path: tools/hako.py
+      revision: working-tree-2026-07-31
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/foundation.py
+      revision: working-tree-2026-07-31
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: recipes/examples/drone-single-mujoco-threejs-gamepad.yaml
+      revision: working-tree-2026-07-31
+  runtime_evidence:
+    - description: >-
+        Foundation doctor reported hakoniwa-pdu-python INCOMPATIBLE with
+        component.version.min required 1.6.5 and installed 1.6.4. Foundation plan
+        selected only hakoniwa-pdu-python. After build/install/smoke, Foundation
+        pip show reported version 1.6.5 under work/foundation/install/python and
+        all Recipe Foundation requirements reported SATISFIED.
+    - description: >-
+        A separate successful pip installation reported an update command under
+        /Applications/Blender.app/.../python3.10, proving that successful package
+        installation in one interpreter is not evidence about the Foundation venv.
+  expert_input:
+    - source: Hakoniwa maintainer
+      statement: Launcher background lifecycle must be documented as requiring hakoniwa-pdu 1.6.5 or later, and the Catalog revision must be updated with the package release.
+
+confidence: high
+
+contradictions:
+  - target: Source-revision-only reuse assumption
+    existing_claim: A merged feature or successful pip install is enough to treat the Foundation component as updated.
+    new_evidence: Package version, interpreter location, Receipt Capability, and consuming Recipe requirements can each remain stale independently.
+
+validation:
+  status: verified
+  required:
+    - Keep owner-repository CI and native-platform verification current for each future release.
+    - Close and re-verify the PDU Python follow-up after Issue 48 changes are committed.
+  notes:
+    - Version comparison, Recipe validation, Catalog validation, and the 1.6.4-to-1.6.5 Foundation transition were exercised locally.
+
+tracking:
+  implementation_status: in_progress
+  issues:
+    - repository: hakoniwalab/hakoniwa-pdu-python
+      number: 48
+      relation: follow_up
+      status: open
+
+promotion_targets:
+  catalog:
+    - hakoniwa-pdu-python
+  runtime_primer: true
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - drone-single-mujoco-threejs-gamepad
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      kind: validator
+      path: foundation/tools/validation.rb
+      mode: detect-only
+      notes:
+        - Validates the `version.min` requirement shape.
+    - repository: hakoniwalab/hakoniwa-business-pack
+      kind: test
+      path: tools/test_foundation.py
+      mode: detect-only
+      notes:
+        - Verifies numeric minimum-version comparison and INCOMPATIBLE/SATISFIED outcomes.
+    - repository: hakoniwalab/hakoniwa-pdu-python
+      kind: test
+      path: tools/test_hako.py
+      mode: detect-only
+      notes:
+        - Issue 48 tracks Receipt Capability, smoke imports, and stale-wheel cleanup tests.
+
+promotion_rationale:
+  - The cross-repository release sequence belongs in a maintainer checklist.
+  - Exact Python environment identity and the distinction between lifecycle and behavioral validation belong in the Runtime Primer.
+  - Component-specific capability and release evidence belong in the PDU Python Catalog entry.
+  - Machine-detectable parts are guarded by Foundation validators and component-owned tests.
+
+resolution:
+  status: documented
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-pdu-python
+      issue: 48
+      pull_request: null
+      revision: null
+    - repository: hakoniwalab/hakoniwa-business-pack
+      issue: null
+      pull_request: null
+      revision: working-tree-2026-07-31
+  verified: false
+  promoted_to:
+    - docs/foundation-component-release-checklist-ja.md
+    - docs/foundation-component-release-checklist.md
+    - docs/hakoniwa-runtime-primer-ja.md
+    - docs/hakoniwa-runtime-primer.md
+    - foundation/README.md
+    - catalog/components/hakoniwa-pdu-python.yaml
+    - recipes/examples/drone-single-mujoco-threejs-gamepad.yaml
+  executable_guardrails:
+    - foundation/tools/validation.rb
+    - tools/test_foundation.py
+  notes:
+    - Documentation and Business Pack guards are in place. Resolution remains unverified until Issue 48 is committed and re-verified in the owner repository.

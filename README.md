@@ -346,6 +346,11 @@ Core共通設定とmmapを含めて複数Recipeから共有します。インス
 バイナリのbuild情報とRecipe要求を比較して、再利用または必要範囲だけの
 再構築を判断する設計です。
 
+Foundation componentへ新しい外部機能を追加・公開するときは、
+[`docs/foundation-component-release-checklist-ja.md`](docs/foundation-component-release-checklist-ja.md)
+に従い、version、Capability、Receipt、smoke、Catalog、Recipeを一つの
+リリース契約として更新します。
+
 ### Demo Recording Runbook
 
 [`docs/demo-recording-runbook-ja.md`](docs/demo-recording-runbook-ja.md) は、

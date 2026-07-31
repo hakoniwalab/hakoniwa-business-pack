@@ -117,6 +117,13 @@ python3.12 -c "import hakopy; import hakoniwa_pdu"
 python3.12 -m pip show hakoniwa-pdu
 ```
 
+A `Successfully installed` message alone does not prove that the Foundation was
+updated. The package may be in Blender's bundled Python, system Python, pyenv,
+Homebrew, or another venv. For a Foundation-aware Recipe, use the interpreter
+under `work/foundation/install/python` to verify `sys.executable`, `sys.prefix`,
+the `Version` and `Location` from `pip show`, and smoke imports for the required
+modules.
+
 Python 3.12 is a common Hakoniwa runtime contract, not a condition that should
 be rediscovered independently in each Recipe. Component-owned launch wrappers
 for Hakoniwa Python workflows should select Python 3.12 explicitly, honor a
@@ -256,6 +263,29 @@ If an AI proposes a new asset, such as a weather, wind, sensor, or controller
 asset, it must identify both the new PDU channels and where those channels live
 in the runtime PDU definition. Otherwise the Recipe is only conceptual, not a
 complete Hakoniwa composition.
+
+### Semantic alignment of physics, viewer, and PDU configuration
+
+Existing files, valid JSON, and a Launcher-schema pass do not prove that a
+composition is executable. Configuration used by the simulator, native viewer,
+controller, publisher, and Bridge must also agree semantically.
+
+For a native MuJoCo viewer composition, verify at least:
+
+- the physics configuration selected with the viewer option actually creates a
+  MuJoCo model;
+- `modelName`, body, joint, and propeller names exist in the loaded MJCF;
+- simulator and controller use the same robot name;
+- simulator, controller, visual-state publisher, and Bridge refer to compatible
+  `pdudef` assignments;
+- visual-state publisher robot counts, input assignments, and output settings
+  match the actual fleet.
+
+For example, combining `--mujoco-viewer` with a configuration whose
+`physicsEquation` is `BodyFrame` can pass file checks but fail when viewer
+initialization attempts to access a MuJoCo model that was never created. Recipe
+doctors and tests should validate the selected physics, model, robot, and PDU
+configuration as one contract rather than checking each file independently.
 
 Details about PDU schema generation, language bindings, fixed-offset converters,
 CDR converters, and Registry capabilities are intentionally kept in the
@@ -405,6 +435,26 @@ package, from the `hakoniwa-pdu-python` repository. It is invoked with:
 python3.12 -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json
 ```
 
+`hakoniwa-pdu` 1.6.5 and later provide a caller-owned session-file lifecycle for
+AI and scripts that manage a long-running Launcher:
+
+```bash
+python3.12 -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json \
+  --background work/recipes/<recipe-id>/runtime/launcher-session.json
+
+python3.12 -m hakoniwa_pdu.apps.launcher.hako_launcher_ctl \
+  status work/recipes/<recipe-id>/runtime/launcher-session.json
+
+python3.12 -m hakoniwa_pdu.apps.launcher.hako_launcher_ctl \
+  terminate work/recipes/<recipe-id>/runtime/launcher-session.json
+```
+
+The caller-facing contract is the session file, not a PID. `terminate` does not
+directly kill the recorded PID; it invokes the Launcher's normal
+`LauncherService.terminate()` path. A Recipe that depends on this interface
+should require both `version.min: 1.6.5` and
+`launcher_background_lifecycle: true`.
+
 The `hakoniwa-pdu` launcher model uses:
 
 - `assets[]` with `name`, `command`, `args`, `cwd`, `stdout`, `stderr`, `env`,
@@ -483,6 +533,10 @@ Use this normal shutdown order:
 ```text
 interactive launcher terminal available
   -> send Ctrl+C to that terminal/session
+
+explicit background session file available
+  -> hako_launcher_ctl terminate <session-file>
+  -> wait for the normal Launcher path to persist state TERMINATED
 
 only the launcher main PID is available on POSIX
   -> send SIGINT to that launcher PID

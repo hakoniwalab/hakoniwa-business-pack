@@ -14,6 +14,9 @@ class FoundationValidationTest < Minitest::Test
   def test_valid_requirements
     requirements = {
       "hakoniwa-core-pro" => {
+        "version" => {
+          "min" => "1.6.5"
+        },
         "capabilities" => {
           "shared_memory" => true,
           "hako_cmd" => true
@@ -29,6 +32,22 @@ class FoundationValidationTest < Minitest::Test
       label: "recipe.yaml",
       catalog_ids: CATALOG_IDS
     )
+  end
+
+  def test_requirements_reject_invalid_minimum_version
+    requirements = {
+      "hakoniwa-core-pro" => {
+        "version" => {"min" => "latest"}
+      }
+    }
+
+    errors = FoundationValidation.validate_requirements(
+      requirements,
+      label: "recipe.yaml",
+      catalog_ids: CATALOG_IDS
+    )
+
+    assert errors.any? { |error| error.include?("dotted numeric version") }
   end
 
   def test_requirements_reject_unknown_component_and_field

@@ -140,6 +140,7 @@ class FoundationInspectorTest(unittest.TestCase):
         capabilities: str = "  available: true\n",
         build_limits: str = "{}",
         dependencies: str = "{}",
+        version: str = "1.0.0",
         platform_os: str | None = None,
         artifact: str = "lib/component.marker",
         create_artifact: bool = True,
@@ -164,7 +165,7 @@ class FoundationInspectorTest(unittest.TestCase):
             "schema_version: 1\n"
             "component:\n"
             f"  id: {component}\n"
-            '  version: "1.0.0"\n'
+            f'  version: "{version}"\n'
             '  source_revision: "revision-current"\n'
             "platform:\n"
             f'  os: "{platform_os or os_name}"\n'
@@ -196,6 +197,38 @@ class FoundationInspectorTest(unittest.TestCase):
 
         self.assertEqual(result["status"], "SATISFIED")
         self.assertEqual(result["components"][0]["reasons"], [])
+
+    def test_minimum_component_version_is_enforced(self) -> None:
+        self.write_recipe(
+            "  component-a:\n"
+            "    version:\n"
+            "      min: 1.6.5\n"
+            "    capabilities:\n"
+            "      available: true\n"
+        )
+        self.write_receipt("component-a", version="1.6.4")
+
+        result = foundation.inspect_foundation(self.recipe, self.prefix)
+
+        self.assertEqual(result["status"], "INCOMPATIBLE")
+        reason = result["components"][0]["reasons"][0]
+        self.assertEqual(reason["field"], "component.version.min")
+        self.assertEqual(reason["required"], "1.6.5")
+        self.assertEqual(reason["installed"], "1.6.4")
+
+    def test_minimum_component_version_accepts_newer_numeric_version(self) -> None:
+        self.write_recipe(
+            "  component-a:\n"
+            "    version:\n"
+            "      min: 1.6.5\n"
+            "    capabilities:\n"
+            "      available: true\n"
+        )
+        self.write_receipt("component-a", version="1.6.10")
+
+        result = foundation.inspect_foundation(self.recipe, self.prefix)
+
+        self.assertEqual(result["status"], "SATISFIED")
 
     def test_missing_when_neither_receipt_nor_known_artifact_exists(self) -> None:
         self.write_recipe(

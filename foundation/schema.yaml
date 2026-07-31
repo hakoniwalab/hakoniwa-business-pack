@@ -5,8 +5,15 @@ foundation_requirements:
   type: mapping
   component_key: catalog_component_id
   allowed_component_fields:
+    - version
     - capabilities
     - build_limits
+  version:
+    type: mapping
+    required_fields:
+      - min
+    min:
+      type: dotted_numeric_version
   capabilities:
     type: mapping
     key_format: snake_case
