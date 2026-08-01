@@ -542,10 +542,12 @@ components:
   - rpc
   - control-plane
   - integration
+  - language-binding
   maturity: active
   distribution: oss
-  summary: C++ request-response layer for Hakoniwa control-plane RPC built on endpoint
-    topology and PDU definitions.
+  summary: Hakoniwa-native request-response layer built on endpoint topology and generated
+    PDU service definitions, with C++ APIs and Python CFFI clients supporting typed
+    synchronous and asynchronous calls.
   recipe_roles:
   - control_plane
   - communication_infrastructure
@@ -553,6 +555,8 @@ components:
   connects_to:
   - hakoniwa-pdu-endpoint
   - hakoniwa-pdu-registry
+  - hakoniwa-pdu-python
+  - hakoniwa-pdu-ros
   - hakoniwa-conductor-light
   - hakoniwa-conductor-pro
   tags:
@@ -561,6 +565,10 @@ components:
   - rpc
   - endpoint
   - cplusplus
+  - python
+  - cffi
+  - async
+  - future
   - control-plane
   catalog_path: components/hakoniwa-pdu-rpc.yaml
 - id: hakoniwa-robot-arm-pack

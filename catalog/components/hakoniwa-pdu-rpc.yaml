@@ -10,81 +10,114 @@ distribution:
   notes:
     - Public OSS Hakoniwa component.
 verification:
-  verified_at: 2026-07-27
-  source_revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
+  verified_at: 2026-08-01
+  source_revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
   source_ref: main
-summary: C++ request-response layer for Hakoniwa control-plane RPC built on endpoint topology and PDU definitions.
+summary: Hakoniwa-native request-response layer built on endpoint topology and generated PDU service definitions, with C++ APIs and Python CFFI clients supporting typed synchronous and asynchronous calls.
 category:
   primary: communication
   secondary:
     - rpc
     - control-plane
     - integration
+    - language-binding
 status:
   maturity: active
   catalog_confidence: high
   notes:
-    - Catalog refreshed after standalone CMake package modernization, four-platform CI, reviewed RPC contract tests, legacy-test retirement, and README convergence.
+    - Catalog refreshed after Python CFFI integration, Registry-generated service auto-wiring, and the ROS-independent asynchronous client API were merged.
     - Scope is intentionally narrower than a general RPC framework.
 capabilities:
   - name: PDU-native request-response
-    description: Provides RPC semantics aligned with Hakoniwa PDU channels, endpoint configuration, and generated service types.
+    description: Provides RPC semantics aligned with Hakoniwa PDU channels, endpoint configuration, generated service types, explicit timeout notification, and protocol-level cancellation.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: README.md
-        revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
   - name: Config-driven service topology
     description: Defines services, clients, endpoints, request/response channels, and timeout behavior in JSON.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
-        path: README.md
-        revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
+        path: config/schema/service-schema.json
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
+  - name: Python CFFI client binding
+    description: Exposes the native RPC client lifecycle to Python while returning ordinary Python bytes instead of leaking native PDU buffer ownership.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: python/hakoniwa_pdu_rpc/cffi_api.py
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: python/test_cffi_basic.py
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
+  - name: Registry-generated typed service auto-wiring
+    description: Resolves generated request and response packet classes and converters by service naming convention, preferring the installed hakoniwa-pdu package layout and falling back to the Registry source-tree layout.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: python/hakoniwa_pdu_rpc/auto_wire.py
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: python/test_cffi_registry_auto_wire.py
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
+  - name: ROS-independent asynchronous Python API
+    description: RpcClient.call_async returns RpcFuture and drives the existing timeout, cancellation, and response/cancel race state machine in a background worker without depending on rclpy or asyncio.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: python/hakoniwa_pdu_rpc/client.py
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: python/hakoniwa_pdu_rpc/future.py
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: python/test_cffi_async_api.py
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
   - name: Installed CMake package contract
     description: Exports a consumable CMake package with preferred target hakoniwa_pdu_rpc::rpc and compatibility target hakoniwa_pdu_rpc::hakoniwa_pdu_rpc.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: CMakeLists.txt
-        revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: cmake/hakoniwa_pdu_rpcConfig.cmake.in
-        revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
   - name: Core-free Endpoint package dependency
     description: Standalone PDU-RPC consumes the installed hakoniwa-pdu-endpoint CMake package rather than directly requiring Hakoniwa Core.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: CMakeLists.txt
-        revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
-  - name: Cross-platform build driver
-    description: tools/hako.py provides a single entry point for doctor, build, test, install, and package-consumer verification across supported platforms.
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
+  - name: Cross-platform build and validation
+    description: tools/hako.py and CI cover doctor, build, lifecycle tests, Python CFFI integration, installation, and package-consumer verification across supported platforms.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: tools/hako.py
-        revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
   - name: Reviewed RPC lifecycle contracts
     description: Focused tests cover basic round trip and reuse, timeout=0 infinite wait, timeout followed by explicit cancel, and the normal-response/cancel race.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: docs/test-contract.md
-        revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: test/rpc_basic_contract_test.cpp
-        revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: test/rpc_infinite_wait_contract_test.cpp
-        revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: test/rpc_timeout_cancel_contract_test.cpp
-        revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: test/rpc_cancel_race_contract_test.cpp
-        revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
 limitations:
   - Not a general-purpose RPC framework like gRPC.
   - Not a dynamic service mesh with discovery, auth, tracing, and streaming semantics.
-  - Primarily targeted at C++ Hakoniwa-native control-plane integration.
-  - Requires endpoint and registry alignment; mismatched endpoint IDs, node names, PDU sizes, or channels fail at config/runtime boundaries.
+  - Native C++ integration is explicitly polled; the Python high-level asynchronous adapter uses a background worker.
+  - One Python RpcClient instance currently permits one in-flight request because the native client exposes one shared response queue. Independent concurrent requests require separate client instances.
+  - Requires endpoint and registry alignment; mismatched endpoint IDs, node names, PDU sizes, generated package layouts, or channels fail at import, config, or runtime boundaries.
   - Timeout does not mean the endpoint is immediately reusable. A caller that observes timeout must explicitly cancel or otherwise resolve the in-flight request before starting a new RPC.
   - The RPC state machine does not infer peer death from timeout alone; a higher layer owns policy for a permanently unavailable server.
+  - A ROS 2 service bridge is not provided by this repository. hakoniwa-pdu-ros owns ROS message/body mapping and executor integration.
 interfaces:
   inputs:
     - name: Service configuration
@@ -95,7 +128,10 @@ interfaces:
       description: Endpoint mappings reused from hakoniwa-pdu-endpoint.
     - name: Generated service PDU types
       kind: api
-      description: Request and response packet types generated from service definitions.
+      description: Request and response packet types and converters generated from service definitions.
+    - name: Python request packet or bytes
+      kind: api
+      description: Python callers may use raw PDU bytes or Registry-generated typed request packets through TypedRpcClient.
     - name: Explicit cancel request
       kind: api
       description: Caller-controlled cancellation request for an in-flight RPC after timeout or another cancellation decision.
@@ -105,7 +141,10 @@ interfaces:
       description: Normal or cancellation response payloads sent over endpoint transports.
     - name: Client events
       kind: api
-      description: Poll events distinguish normal response, timeout, cancel completion, and no-event states without collapsing timeout into implicit cancellation.
+      description: Native poll events distinguish normal response, timeout, cancel completion, and no-event states without collapsing timeout into implicit cancellation.
+    - name: RpcFuture
+      kind: api
+      description: ROS-independent Python completion handle supporting result, exception, done callback, and protocol-level cancel operations.
   protocols:
     - name: Endpoint transports
       role: client | server
@@ -132,21 +171,24 @@ dependencies:
       notes: Required installed CMake package for endpoint topology and transport I/O.
     - name: hakoniwa-pdu-registry
       type: repository
-      notes: Source submodule provides generated public request/response PDU headers that are installed with the package.
+      notes: Provides generated request/response service packet definitions and source-tree converters used by integration tests.
   optional:
-    - name: Python 3
+    - name: Python 3.12 or later
       type: runtime
-      notes: Used by tools/hako.py and config validation.
+      notes: Required for the Python CFFI client, typed auto-wire API, async API, tools/hako.py, and config validation.
+    - name: hakoniwa-pdu
+      type: package
+      notes: Installed Python package layout preferred by typed service auto-discovery and shared with hakoniwa-pdu-ros.
     - name: GoogleTest
       type: library
-      notes: Used for contract tests; CMake can fetch GoogleTest when no package target is already available.
+      notes: Used for native contract tests; CMake can fetch GoogleTest when no package target is already available.
 platforms:
   supported:
     - macOS
     - Linux
     - Windows
   notes:
-    - Standalone package/build/test workflows are exercised in CI on Ubuntu x64, Ubuntu ARM64, macOS, and Windows x64.
+    - Standalone package/build/test workflows and Python CFFI integration are exercised in CI on Ubuntu x64, Ubuntu ARM64, macOS, and Windows x64.
     - tools/hako.py normalizes the build and package-consumer workflow across platforms.
 connects_to:
   - component_id: hakoniwa-pdu-endpoint
@@ -155,8 +197,16 @@ connects_to:
     notes: All RPC transport is delegated through endpoints.
   - component_id: hakoniwa-pdu-registry
     direction: uses
-    interface: generated request/response PDU types
-    notes: Registry provides service packet types and size definitions.
+    interface: generated request/response PDU types and Python converters
+    notes: Registry provides service packet types, size definitions, and source-tree conversion modules.
+  - component_id: hakoniwa-pdu-python
+    direction: related
+    interface: installed hakoniwa_pdu.pdu_msgs package layout
+    notes: Typed auto-wiring prefers the installed generated PDU package layout used by Python applications.
+  - component_id: hakoniwa-pdu-ros
+    direction: used_by
+    interface: Python typed RPC and RpcFuture adapter boundary
+    notes: PDU-RPC supplies ROS-independent request lifecycle and completion; PDU-ROS is expected to own ROS service mapping, callback groups, and executor integration.
   - component_id: hakoniwa-conductor-light
     direction: used_by
     interface: RPC client/server transport
@@ -171,42 +221,60 @@ data_contracts:
     source:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: config/schema/service-schema.json
-        revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
+  - name: Generated service auto-wire convention
+    description: Service type names resolve RequestPacket and ResponsePacket classes and converter functions from the installed hakoniwa_pdu.pdu_msgs.hako_srv_msgs package or the Registry source-tree fallback package.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: python/hakoniwa_pdu_rpc/auto_wire.py
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
+  - name: Python asynchronous request lifecycle
+    description: call_async returns immediately, one worker drives the existing terminal state machine, and RpcFuture reports completion without introducing a ROS or asyncio dependency.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: python/hakoniwa_pdu_rpc/client.py
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: python/hakoniwa_pdu_rpc/future.py
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
   - name: Timeout/cancel lifecycle
     description: Timeout leaves the client request running. The caller explicitly cancels, moving the client into cancelling; either a matching normal response or cancel response may resolve the request. A late cancel reaching an already-idle server is harmless.
     source:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: docs/test-contract.md
-        revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: test/rpc_timeout_cancel_contract_test.cpp
-        revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: test/rpc_cancel_race_contract_test.cpp
-        revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
   - name: Infinite-wait lifecycle
     description: timeout=0 means there is no RPC timeout deadline; the request remains in flight until a response or explicit higher-level decision resolves it.
     source:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: test/rpc_infinite_wait_contract_test.cpp
-        revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
 recipe_roles:
   - role: control_plane
     description: Adds deterministic RPC calls for simulation control or service requests.
   - role: communication_infrastructure
     description: Reuses endpoint transport while imposing request-response semantics.
   - role: integration_boundary
-    description: Bridges service-style control code to PDU-native Hakoniwa topology.
+    description: Bridges native or Python service-style control code to PDU-native Hakoniwa topology.
 typical_usecases:
   - Hakoniwa-native C++ control-plane services.
+  - Python request-response clients using raw PDU bytes or Registry-generated service packets.
+  - ROS 2 or GUI adapters that need a non-blocking RPC completion handle without placing ROS or GUI dependencies in the RPC layer.
   - Request/response operations that must follow endpoint topology and PDU binary contracts.
-  - Deterministic or tick-driven integration loops where hidden scheduler behavior is undesirable.
+  - Deterministic or tick-driven native integration loops where hidden scheduler behavior is undesirable.
   - Reusable installed CMake package consumption from other Hakoniwa components.
   - Control-plane clients that must distinguish timeout observation from explicit cancellation and preserve race-safe endpoint reuse.
 anti_usecases:
   - Public web APIs across many languages.
   - Streaming RPC workloads.
   - Dynamic service discovery, auth, tracing, or full service mesh requirements.
+  - Multiple concurrent calls through one Python RpcClient instance.
   - Callers that assume timeout automatically aborts an RPC and immediately resets the client to idle.
 demo_candidates:
   - name: AddTwoInts RPC pair
@@ -218,10 +286,24 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: examples/rpc_server.cpp
-        revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: examples/rpc_client.cpp
-        revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
+  - name: Python typed async client
+    description: Load a Registry-generated service wire, issue a non-blocking Python call, and bridge RpcFuture completion into an application callback or executor.
+    required_components:
+      - hakoniwa-pdu-rpc
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-pdu-registry
+      - hakoniwa-pdu-python
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: python/test_cffi_registry_auto_wire.py
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: python/test_cffi_async_api.py
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
   - name: RPC contract suite
     description: Run the reviewed focused contract tests for basic calls, infinite wait, timeout/cancel, and cancel/normal-response race behavior.
     required_components:
@@ -229,7 +311,7 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: docs/test-contract.md
-        revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
+        revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
 operations:
   build:
     commands:
@@ -246,7 +328,8 @@ operations:
       - python tools/hako.py test
       - python tools/hako.py package-test
     notes:
-      - test runs the four reviewed RPC contract targets.
+      - test runs the four reviewed native RPC contract targets.
+      - Python CFFI, Registry auto-wire, and async API tests run in the Python integration workflow.
       - package-test builds, installs, then configures a downstream consumer with find_package(hakoniwa_pdu_rpc REQUIRED).
   run:
     commands:
@@ -255,6 +338,7 @@ operations:
       - build/examples/hakoniwa_pdu_rpc_client 1000000
     notes:
       - Server should start before client for the bundled interactive example.
+      - Python callers must set HAKO_PDU_RPC_LIBRARY or pass the native library path explicitly.
 runtime_checks:
   - id: build-readiness
     kind: doctor
@@ -300,45 +384,47 @@ runtime_checks:
       - Verifies install/export/find_package consumption through the downstream package consumer.
 known_gaps:
   - Catalog does not list every schema field and validation rule.
-  - Cross-language RPC support beyond C++ should not be assumed.
+  - Python server-side typed and asynchronous convenience APIs should not be assumed from the current client-focused implementation.
+  - A completed hakoniwa-pdu-ros service bridge has not yet been verified; only the reusable RPC-side async and typed boundaries are present.
+  - Broad cross-language client support beyond the reviewed C++ and Python surfaces should not be assumed.
   - PDU-RPC deliberately does not define a general peer-failure/HA policy; higher layers decide what a permanently unavailable server means for their simulation.
 source_refs:
   - repository: hakoniwalab/hakoniwa-pdu-rpc
     path: README.md
-    revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
+    revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
     description: Main overview, package/build workflow, supported platforms, timeout semantics, and public usage guidance.
   - repository: hakoniwalab/hakoniwa-pdu-rpc
+    path: python/hakoniwa_pdu_rpc/client.py
+    revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
+    description: Python high-level synchronous and asynchronous client lifecycle.
+  - repository: hakoniwalab/hakoniwa-pdu-rpc
+    path: python/hakoniwa_pdu_rpc/future.py
+    revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
+    description: ROS-independent RpcFuture completion and protocol-level cancellation handle.
+  - repository: hakoniwalab/hakoniwa-pdu-rpc
+    path: python/hakoniwa_pdu_rpc/auto_wire.py
+    revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
+    description: Registry-generated service packet and converter discovery contract.
+  - repository: hakoniwalab/hakoniwa-pdu-rpc
     path: docs/test-contract.md
-    revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
+    revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
     description: Reviewed test ownership, timeout/cancel contract, race semantics, and test-audit policy.
   - repository: hakoniwalab/hakoniwa-pdu-rpc
     path: tools/hako.py
-    revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
+    revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
     description: Cross-platform doctor/build/test/install/package-test entry point.
   - repository: hakoniwalab/hakoniwa-pdu-rpc
     path: CMakeLists.txt
-    revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
+    revision: 2e8d385c831799c8968e4c1a58586879b82f60d0
     description: Installed Endpoint dependency resolution and exported CMake package contract.
-  - repository: hakoniwalab/hakoniwa-pdu-rpc
-    path: test/rpc_basic_contract_test.cpp
-    revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
-    description: Basic round trip and endpoint reuse contract.
-  - repository: hakoniwalab/hakoniwa-pdu-rpc
-    path: test/rpc_infinite_wait_contract_test.cpp
-    revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
-    description: timeout=0 infinite-wait contract.
-  - repository: hakoniwalab/hakoniwa-pdu-rpc
-    path: test/rpc_timeout_cancel_contract_test.cpp
-    revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
-    description: Timeout notification, explicit cancellation, terminal cancel completion, and endpoint reuse contract.
-  - repository: hakoniwalab/hakoniwa-pdu-rpc
-    path: test/rpc_cancel_race_contract_test.cpp
-    revision: f2f739462e0e26cf45b55b694a49f5e002a05a41
-    description: Normal response wins after explicit cancel and late cancel remains harmless.
 tags:
   - hakoniwa
   - pdu
   - rpc
   - endpoint
   - cplusplus
+  - python
+  - cffi
+  - async
+  - future
   - control-plane
