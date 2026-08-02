@@ -1,6 +1,6 @@
 id: ros2-service-add-two-ints-host-docker
 title: Cross-platform ROS 2 Service to host Hakoniwa RPC AddTwoInts Demo
-recipe_version: 0.4
+recipe_version: 0.5
 
 goal:
   user_request: macOS、Windows、Linuxで同じ操作体系を使い、Docker内のROS 2からhost上のAddTwoInts RPC Serverを呼びたい
@@ -8,8 +8,10 @@ goal:
     Define the smallest Business Pack integration contract for the completed
     hakoniwa-pdu-ros Service Server Bridge. A host Python RpcMuxServer accepts
     PDU-RPC TCP sessions while a ROS 2 Jazzy container runs the Service Bridge
-    and ros2 service call. This Recipe is the source of truth for user inputs,
-    generated values, lifecycle, evidence, and gaps Codex must implement.
+    and ros2 service call. Host-native and Linux-container artifacts are built,
+    installed, received, and validated independently. This Recipe is the source
+    of truth for user inputs, generated values, lifecycle, evidence, and gaps
+    Codex must implement.
 
 feasibility:
   status: feasible
@@ -17,12 +19,16 @@ feasibility:
   rationale:
     - hakoniwa-pdu-ros already verifies AddTwoInts over real TCP, including concurrency, BUSY, timeout/cancel, conversion errors, and shutdown.
     - hakoniwa-pdu-rpc already provides typed async clients and Python RpcMuxServer.
-    - Remaining work is component-operation normalization and Business Pack orchestration, not a new protocol.
+    - Host and container need the same logical Service model but different platform artifacts and installation evidence.
+    - Remaining work is install-contract completion and Business Pack orchestration, not a new protocol.
 
 validation:
   status: not_tested
   verified_at: null
-  summary: Upstream component contracts are verified, but this Business Pack host/Docker Recipe has not run on a target host OS.
+  summary: >
+    Upstream component contracts are verified, but the host Foundation install,
+    Linux container image, cross-domain config generation, network exposure
+    policy, and cross-platform Business Pack execution have not been validated.
   steps:
     - id: upstream_components
       status: verified
@@ -31,9 +37,23 @@ validation:
           date: 2026-08-02
         - source: hakoniwalab/hakoniwa-pdu-rpc#42
           date: 2026-08-02
-    - id: component_operations
+      notes:
+        - Service Bridge, typed async client, and RpcMuxServer are implemented upstream.
+    - id: host_foundation_install
+      status: blocked
+      evidence: []
+      notes:
+        - Current PDU-RPC install and Receipt cover native/CMake artifacts but not the hakoniwa_pdu_rpc Python package or the required Python capabilities.
+    - id: container_image_contract
       status: not_tested
       evidence: []
+      notes:
+        - Linux PDU-ROS, Endpoint, RPC, and hakoniwa-pdu artifacts must be built or installed inside the image and must not reuse host-native binaries.
+    - id: core_free_python_conversion
+      status: not_tested
+      evidence: []
+      notes:
+        - AddTwoInts packet conversion must work without hakopy, hako-cmd, shared memory, or hakoniwa-core-pro.
     - id: recipe_materialization
       status: not_tested
       evidence: []
@@ -52,13 +72,16 @@ constraints:
   - ros2-jazzy-in-docker
   - pdu-rpc-tcp-only-across-boundary
   - tcp-mux-server
-  - one-resolved-service-model
+  - one-logical-service-model
+  - separate-host-and-container-artifacts
   - no-cross-boundary-ros-dds
   - no-cross-boundary-shared-memory
+  - core-free-pdu-conversion
   - no-gui-requirement
   - business-pack-owned-runtime-artifacts
   - same-user-operations-on-macos-windows-linux
   - bounded-readiness-and-cleanup
+  - explicit-non-loopback-listen-approval
 
 target_environment:
   required_for: executable-demo
@@ -81,48 +104,88 @@ target_environment:
       version: jazzy
       path: docker-image
   network:
-    host_listener_address: auto
-    default_port: 54010
     container_host_alias: host.docker.internal
+    compose_extra_hosts:
+      - host.docker.internal:host-gateway
+    default_port: 54010
+    default_scope: docker-to-host
   notes:
-    - Docker Desktop uses host.docker.internal.
-    - Linux adds host.docker.internal:host-gateway.
-    - Any listener exposure beyond the Docker-reachable interface requires an explicit user decision.
+    - The container always uses host.docker.internal; the generated Compose or run spec declares the same host-gateway alias on every host OS.
+    - The Recipe validates the alias from inside the container before starting the Service Bridge.
+    - A non-loopback or wildcard host bind is never silently approved.
 
 execution_environment:
   required_for: executable-demo
   status: specified
-  host:
-    processes:
-      - add-two-ints-rpc-mux-server
-    shared_memory_required: false
-    gui_required: false
-  container:
-    base: Ubuntu 24.04 / ROS 2 Jazzy
-    processes:
-      - HakoniwaRosServiceServerNode
-      - ros2-service-client
+  domains:
+    host:
+      platform: host-native
+      processes:
+        - add-two-ints-rpc-mux-server
+      shared_memory_required: false
+      gui_required: false
+      install_root: work/foundation/install
+      python: work/foundation/install/python
+    container:
+      platform: linux
+      base: Ubuntu 24.04 / ROS 2 Jazzy
+      processes:
+        - HakoniwaRosServiceServerNode
+        - ros2-service-client
+      install_root: image-local
+      host_artifact_reuse: forbidden
   boundary:
     allowed:
       - PDU-RPC TCP
     forbidden_requirements:
       - ROS DDS discovery across host and container
       - Hakoniwa shared memory across host and container
+      - host-native library mounted as a Linux runtime library
       - host GUI forwarding
+
+contract_decisions:
+  - id: execution_domain_split
+    decision: Host Foundation and ROS container use independent dependency and Receipt domains.
+    implications:
+      - foundation_requirements describes host-native components only.
+      - container_requirements describes Linux image components only.
+      - A host Receipt cannot satisfy a container requirement even when the component ID is the same.
+  - id: pdu_rpc_install_definition
+    decision: PDU-RPC is installed for Python use only when its native library and Python package are both installed into the same Foundation prefix and Python environment.
+    required_receipt_capabilities:
+      - rpc_client
+      - rpc_server
+      - python_rpc_mux_server
+      - typed_async_client
+      - shared_native_library
+      - python_package
+  - id: core_free_pdu_python
+    decision: Generated packet types, offsets, and binary conversion form a Core-free profile; hakopy, hako-cmd, SHM, and Core are separate optional capabilities.
+    forbidden_for_this_recipe:
+      - hakopy
+      - hako-cmd
+      - shared-memory-backend
+      - hakoniwa-core-pro
+  - id: network_exposure
+    decision: The Recipe owns address resolution, but the user owns approval of any non-loopback or wildcard host bind.
+    implications:
+      - auto may select a Docker-reachable address but cannot bypass approval.
+      - start refuses a non-loopback or wildcard bind unless approval is recorded.
+      - actual bind address, container alias resolution, and exposure warning are validation evidence.
 
 components:
   - id: hakoniwa-pdu-ros
     roles: [bridge, integration_boundary]
-    purpose: Expose a ROS Service Server backed by typed Hakoniwa RPC clients.
+    purpose: Run inside the Linux container and expose a ROS Service Server backed by typed Hakoniwa RPC clients.
   - id: hakoniwa-pdu-rpc
     roles: [control_plane, communication_infrastructure]
-    purpose: Provide typed async clients, RpcMuxServer, correlation, timeout, cancel, and tcp_mux.
+    purpose: Provide host-native RpcMuxServer plus Linux-container typed async clients, correlation, timeout, cancel, and tcp_mux.
   - id: hakoniwa-pdu-endpoint
     roles: [communication_infrastructure]
-    purpose: Provide the TCP transport below PDU-RPC.
+    purpose: Provide platform-specific TCP transport below PDU-RPC in both execution domains.
   - id: hakoniwa-pdu-python
     roles: [language_binding]
-    purpose: Provide generated AddTwoInts packet types and converters.
+    purpose: Provide Core-free generated AddTwoInts packet types, offsets, and converters in both Python environments.
   - id: hakoniwa-pdu-registry
     roles: [data_model]
     purpose: Own generated Service definitions and offsets.
@@ -130,21 +193,86 @@ components:
 foundation_requirements:
   hakoniwa-pdu-rpc:
     capabilities:
+      rpc_server: true
       python_rpc_mux_server: true
-      typed_async_client: true
       shared_native_library: true
+      python_package: true
   hakoniwa-pdu-endpoint:
     capabilities:
       tcp_mux: true
       core_free_runtime: true
-  hakoniwa-pdu-python:
-    capabilities:
-      generated_add_two_ints_service: true
-  hakoniwa-pdu-ros:
-    capabilities:
-      ros_service_server_bridge: true
-      service_config_generator: true
-      rpc_client_pool: true
+
+host_python_requirements:
+  interpreter: work/foundation/install/python
+  packages:
+    - component_id: hakoniwa-pdu-rpc
+      distribution: hakoniwa-pdu-rpc
+      import: hakoniwa_pdu_rpc
+      installed_by: hakoniwa-pdu-rpc-install
+      receipt_capabilities:
+        - python_rpc_mux_server
+        - python_package
+    - component_id: hakoniwa-pdu-python
+      distribution: hakoniwa-pdu
+      import: hakoniwa_pdu
+      profile: core-free-conversion
+      required_capabilities:
+        - generated_service_types
+        - offset_binary_conversion
+        - core_free_runtime
+  forbidden_import_requirements:
+    - hakopy
+
+container_requirements:
+  platform: linux
+  ros2:
+    distribution: jazzy
+  components:
+    hakoniwa-pdu-ros:
+      capabilities:
+        ros_service_server_bridge: true
+        service_config_generator: true
+        rpc_client_pool: true
+    hakoniwa-pdu-rpc:
+      capabilities:
+        typed_async_client: true
+        shared_native_library: true
+        python_package: true
+    hakoniwa-pdu-endpoint:
+      capabilities:
+        tcp_client: true
+        core_free_runtime: true
+    hakoniwa-pdu-python:
+      capabilities:
+        generated_service_types: true
+        offset_binary_conversion: true
+        core_free_runtime: true
+  forbidden_host_reuse:
+    - host-native shared libraries
+    - host-native CMake packages
+    - host Component Receipts
+
+install_contract:
+  hakoniwa-pdu-rpc-host:
+    prefix: work/foundation/install
+    python: work/foundation/install/python
+    required_artifacts:
+      - shared native library loadable by HAKO_PDU_RPC_LIBRARY
+      - importable hakoniwa_pdu_rpc Python package
+      - Component Receipt listing both native and Python artifacts
+  hakoniwa-pdu-python-host:
+    python: work/foundation/install/python
+    required_artifacts:
+      - importable hakoniwa_pdu package
+      - generated hako_srv_msgs/AddTwoInts packet classes and converters
+      - AddTwoInts offset metadata
+    excluded_artifacts:
+      - hakopy
+      - hako-cmd
+      - Hakoniwa Core runtime
+  container:
+    ownership: docker-image
+    requirement: Build or install Linux variants independently from host Foundation.
 
 user_inputs:
   service_profile:
@@ -157,27 +285,35 @@ user_inputs:
       max_clients: 4
       timeout_msec: 3000
   transport:
-    listen_address:
+    network_scope:
+      type: enum
+      values: [docker-to-host, lan]
+      default: docker-to-host
+    bind_address:
       default: auto
-      user_decision: required-if-network-exposure-is-needed
+      user_decision: optional-override
+    approve_non_loopback_bind:
+      type: boolean
+      default: false
+      user_decision: required-when-resolved-bind-is-non-loopback-or-wildcard
     port:
       default: 54010
       user_decision: may-accept-default-if-available
-    container_host:
-      default: auto
   runtime:
     ros_distro: jazzy
     startup_timeout_sec: 30
     workspace: work/recipes/ros2-service-add-two-ints-host-docker
 
 automatically_resolved:
-  - host OS and Docker host-access strategy
-  - Linux host-gateway option
+  - host OS and Docker invocation strategy
+  - common host.docker.internal alias and host-gateway mapping
+  - Docker-reachable candidate bind address
   - RPC client names and channel IDs
   - maxClients expansion
   - rpc-server-services.json and rpc-client-services.json
   - host-rpc-endpoints.json and container-rpc-endpoints.json
-  - Docker mounts, startup order, readiness probes, stop order, and residual checks
+  - Linux container build/install paths
+  - startup order, readiness probes, stop order, and residual checks
 
 forbidden_user_inputs:
   - individual RPC client names
@@ -185,6 +321,7 @@ forbidden_user_inputs:
   - mux connection IDs or RPC request IDs
   - generated service config bodies
   - OS-specific Docker host-gateway flags
+  - reusing a host native library inside the Linux container
 
 connections:
   - from: hakoniwa-pdu-ros
@@ -194,21 +331,21 @@ connections:
     contract:
       status: partially_verified
       requires:
-        - TypedRpcClient.call_async
-        - Python RpcMuxServer
+        - Linux TypedRpcClient.call_async
+        - host Python RpcMuxServer
         - matching generated client names and channels
         - separate host and container Endpoint configs
       validation_notes:
-        - Component contracts are verified upstream; Business Pack materialization is not tested.
+        - Component contracts are verified upstream; cross-domain Business Pack materialization is not tested.
   - from: hakoniwa-pdu-rpc
     to: hakoniwa-pdu-endpoint
     interface: tcp-mux-transport
     data: [accepted sessions, request frames, response frames]
     contract:
       status: partially_verified
-      requires: [tcp_mux, Core-free Endpoint runtime]
+      requires: [host tcp_mux server, Linux TCP clients, Core-free Endpoint runtime]
       validation_notes:
-        - Native mux is verified; Recipe-generated physical configs are not tested.
+        - Native mux is verified upstream; platform-specific Recipe installs and physical configs are not tested.
   - from: hakoniwa-pdu-ros
     to: hakoniwa-pdu-python
     interface: generated-service-types
@@ -226,10 +363,10 @@ connections:
 
 data_flow:
   - source: ROS 2 client inside Docker
-    path: [/add_two_ints, Service Bridge, TypedRpcClient pool, PDU-RPC TCP, host RpcMuxServer]
+    path: [/add_two_ints, Service Bridge, Linux TypedRpcClient pool, PDU-RPC TCP, host RpcMuxServer]
     destination: host AddTwoInts handler
   - source: host AddTwoInts handler
-    path: [correlated RPC response, rclpy Future, ROS Service response]
+    path: [correlated RPC response, Linux TypedRpcClient completion, rclpy Future, ROS Service response]
     destination: ROS 2 client inside Docker
 
 time_model:
@@ -239,6 +376,23 @@ time_model:
     - Service Binding timeout_msec is the Bridge-owned deadline.
     - Business Pack does not duplicate request IDs, timeout, cancel, or terminal cleanup.
     - Readiness and smoke checks use bounded wall-clock timeouts.
+
+network_contract:
+  container_alias: host.docker.internal
+  generated_extra_hosts:
+    - host.docker.internal:host-gateway
+  bind_resolution:
+    preferred: Docker-reachable least-exposed address
+    wildcard_addresses: [0.0.0.0, "::"]
+    approval_required:
+      - resolved address is non-loopback
+      - resolved address is wildcard
+      - network_scope is lan
+  enforcement:
+    - configure records the candidate address and exposure class.
+    - doctor checks container-to-host alias resolution and port availability.
+    - start refuses when approval is required but absent.
+    - evidence records actual bind address, alias resolution, port, and warning state.
 
 configuration_contract:
   build_manifest:
@@ -251,18 +405,30 @@ configuration_contract:
     owner: hakoniwa-business-pack
   invariants:
     - hako.py --config never means Service Binding.
-    - Endpoint configs are generated per execution domain.
+    - Service Binding is shared logically across domains; physical Endpoint configs are domain-specific.
+    - Host and container builds have distinct platform receipts and cannot satisfy each other.
     - Generated runtime files live under work/recipes, not Foundation.
 
 artifact_sets:
   foundation:
-    status: partially_verified
+    status: blocked
     owner: work/foundation
     artifacts:
       - work/foundation/install/python
       - work/foundation/install/lib
       - work/foundation/install/share/hakoniwa/offset
       - work/foundation/install/share/hakoniwa/receipts
+    notes:
+      - Host-only. Blocked until PDU-RPC native plus Python install and Receipt capabilities are implemented.
+  container_image:
+    status: not_tested
+    owner: recipe-docker-image
+    artifacts:
+      - Linux hakoniwa-pdu-ros package
+      - Linux hakoniwa-pdu-rpc native library and Python package
+      - Linux hakoniwa-pdu-endpoint native library and Python binding
+      - hakoniwa-pdu generated types and offsets
+      - ROS 2 Jazzy runtime
   recipe_runtime:
     status: not_tested
     owner: work/recipes/ros2-service-add-two-ints-host-docker
@@ -284,16 +450,16 @@ artifacts:
       purpose: Host RPC Server service config generated from the resolved Service Binding.
     - path: work/recipes/ros2-service-add-two-ints-host-docker/config/service/rpc-client-services.json
       owner: hakoniwa-business-pack
-      purpose: Container Service Bridge client config generated from the same model.
+      purpose: Container Service Bridge client config generated from the same logical model.
     - path: work/recipes/ros2-service-add-two-ints-host-docker/config/service/host-rpc-endpoints.json
       owner: hakoniwa-business-pack
-      purpose: Host tcp_mux listener config.
+      purpose: Host-native tcp_mux listener config with an approved bind address.
     - path: work/recipes/ros2-service-add-two-ints-host-docker/config/service/container-rpc-endpoints.json
       owner: hakoniwa-business-pack
-      purpose: Container TCP client config resolved for the host OS.
+      purpose: Linux-container TCP client config using host.docker.internal.
     - path: work/recipes/ros2-service-add-two-ints-host-docker/validation/evidence.json
       owner: hakoniwa-business-pack
-      purpose: Revisions, environment, hashes, call result, and cleanup evidence.
+      purpose: Domain revisions, Receipts, environment, hashes, network decision, call result, and cleanup evidence.
   reused:
     - path: hakoniwa-pdu-ros/config/service/add_two_ints.json
       owner: hakoniwa-pdu-ros
@@ -303,35 +469,46 @@ implementation_plan:
   owner: codex-with-operator
   rules:
     - Treat this Recipe and Catalog as the source of truth.
+    - Classify differences as contract inconsistency, implementation gap, validation gap, or implementation choice.
     - Do not move generated values into user inputs for implementation convenience.
     - Keep RPC lifecycle in hakoniwa-pdu-rpc, Service mapping in hakoniwa-pdu-ros, and OS/Docker differences in Business Pack.
-    - Record a gap before proposing a contract change.
+    - Do not use a host Receipt as evidence for a Linux container artifact.
+    - Do not introduce Core to satisfy packet conversion.
+    - Record a contract inconsistency before proposing a semantic change.
   steps:
-    - Inspect source revisions and produce a gap report.
-    - Implement the minimal hakoniwa-pdu-ros hako.py contract in its owner repository.
-    - Implement Recipe materialization and platform adapters in Business Pack.
+    - Implement PDU-RPC host install so native and Python artifacts share one Foundation prefix and Receipt.
+    - Define the Core-free hakoniwa-pdu conversion profile and install evidence.
+    - Implement the Linux container dependency build/install independently from host Foundation.
+    - Implement Recipe materialization and the common host.docker.internal network contract.
     - Generate host and container configs from one Service Binding.
     - Run a=20, b=22 and verify sum=42.
-    - Verify bounded readiness and clean shutdown.
+    - Verify bounded readiness, approval enforcement, and clean shutdown.
     - Update feasibility, validation, evidence, revisions, and remaining gaps from measured results.
 
 acceptance_criteria:
-  - Catalog exposes implemented Service Bridge capabilities without claiming unimplemented hako.py operations.
+  - foundation planning contains no hakoniwa-pdu-ros host component.
+  - Host Foundation and Linux container dependencies are reported independently.
+  - PDU-RPC host Receipt reports native library, Python package, python_rpc_mux_server, shared_native_library, and python_package capabilities.
+  - work/foundation/install/python imports hakoniwa_pdu_rpc and hakoniwa_pdu.
+  - AddTwoInts conversion works without hakopy, hako-cmd, SHM, or hakoniwa-core-pro.
+  - The Linux container uses independently built or installed Linux Endpoint, RPC, PDU-ROS, and hakoniwa-pdu artifacts.
   - The same Business Pack operation vocabulary is used on macOS, Windows, and Linux.
-  - hakoniwa-pdu-ros provides Business Pack-compliant doctor, configure, build, test, install, and smoke operations.
   - hako.py --config selects a build manifest and --binding selects the Service Binding.
   - One Service Binding generates matching server/client service configs and separate host/container Endpoint configs.
-  - Docker host access is resolved without user-authored OS-specific flags.
+  - The container always addresses the host as host.docker.internal and the generated run spec declares host-gateway mapping.
+  - start refuses an unapproved non-loopback or wildcard bind.
   - Only PDU-RPC TCP crosses the boundary.
   - ros2 service list and type report /add_two_ints and example_interfaces/srv/AddTwoInts.
   - Calling a=20, b=22 returns sum=42 and records correlated evidence.
   - stop leaves no Recipe-owned process, container, session, or listener.
-  - Validation records exact revisions, host OS, Docker, ROS distro, config hashes, request, response, and cleanup.
+  - Validation records exact host and container revisions, platform Receipts, Docker, ROS distro, config hashes, bind decision, request, response, and cleanup.
 
 missing_pieces:
-  - Business Pack-compliant hakoniwa-pdu-ros hako.py and build manifest.
-  - Recipe materializer and platform-specific Docker host adapters.
-  - Generated host/container Endpoint config contract.
+  - PDU-RPC Foundation install of hakoniwa_pdu_rpc Python package and expanded Receipt capabilities/artifacts.
+  - Core-free hakoniwa-pdu conversion install profile and evidence contract.
+  - Linux container dependency build/install contract for PDU-ROS, Endpoint, RPC, and hakoniwa-pdu.
+  - Business Pack Recipe materializer and common host.docker.internal adapter.
+  - Non-loopback bind approval enforcement and evidence.
   - Automated readiness, smoke, shutdown, and residual-resource checks.
   - macOS, Windows, and Linux runtime evidence.
 
@@ -341,7 +518,9 @@ demo:
       description: Call a host RpcMuxServer from a ROS 2 Jazzy Service Client in Docker.
   prerequisites:
     - command: python tools/foundation.py doctor --recipe recipes/examples/ros2-service-add-two-ints-host-docker.yaml
-      expected: Requirements are SATISFIED or a precise gap plan is emitted.
+      expected: Host-native requirements are SATISFIED or a precise host-only gap plan is emitted.
+    - command: python tools/ros2_service_add_two_ints.py doctor --domain container
+      expected: Linux image requirements are SATISFIED or a precise container-only gap plan is emitted.
   readiness:
     lifecycle_state:
       source: work/recipes/ros2-service-add-two-ints-host-docker/runtime/session.json
@@ -350,8 +529,12 @@ demo:
     checks:
       - id: host_rpc_listener
         kind: tcp
-        target: configured-host:configured-port
+        target: approved-bind-address:configured-port
         expected: TCP connection succeeds.
+      - id: container_host_alias
+        kind: command
+        target: container resolves host.docker.internal
+        expected: Alias resolves to a host-reachable address.
       - id: ros_service_visible
         kind: command
         target: ros2 service list
@@ -364,15 +547,20 @@ demo:
     - id: configure
       command: python tools/ros2_service_add_two_ints.py configure
       status: not_tested
-      expected: [Recipe workspace and generated configs exist.]
+      expected:
+        - Recipe workspace and generated configs exist.
+        - Candidate bind address and approval requirement are printed and recorded.
     - id: doctor
       command: python tools/ros2_service_add_two_ints.py doctor
       status: not_tested
-      expected: [Dependencies, port, config consistency, and image readiness pass.]
+      expected:
+        - Host Receipt, Python imports, container image dependencies, alias, port, and config consistency are checked separately.
     - id: start
       command: python tools/ros2_service_add_two_ints.py start
       status: not_tested
-      expected: [Host listener is ready before the ROS container starts.]
+      expected:
+        - Start refuses when non-loopback approval is required but absent.
+        - Host listener is ready before the ROS container starts.
     - id: smoke
       command: python tools/ros2_service_add_two_ints.py smoke --a 20 --b 22
       status: not_tested
@@ -380,7 +568,7 @@ demo:
     - id: status
       command: python tools/ros2_service_add_two_ints.py status
       status: not_tested
-      expected: [Host, container, listener, and Service readiness are reported.]
+      expected: [Host, container, listener, alias, and Service readiness are reported.]
     - id: stop
       command: python tools/ros2_service_add_two_ints.py stop
       status: not_tested
@@ -399,22 +587,25 @@ demo:
     cautions:
       - Do not use broad kill, taskkill, pkill, or unrelated container cleanup.
       - Do not treat a stopped ROS Service as proof that the host listener stopped.
+      - Do not silently broaden host network exposure during restart.
 
 expected_result: >
   On macOS, Windows, and Linux, the user selects one Recipe and uses the same
   configure, doctor, start, smoke, status, and stop vocabulary. Business Pack
-  resolves Docker host access, generates RPC and Endpoint configs, verifies
-  20 + 22 = 42 through ROS 2 and Hakoniwa RPC, records evidence, and cleans up.
+  installs host-native RPC artifacts and Linux-container Bridge artifacts in
+  separate domains, resolves a common host.docker.internal path, requires
+  approval before non-loopback exposure, verifies 20 + 22 = 42 through ROS 2
+  and Hakoniwa RPC, records evidence, and cleans up all owned resources.
 
 source_catalogs:
   - component_id: hakoniwa-pdu-ros
-    purpose: Service Bridge, Service Binding, config generation, and executor integration.
+    purpose: Container Service Bridge, Service Binding, config generation, and executor integration.
   - component_id: hakoniwa-pdu-rpc
-    purpose: Typed async RPC, RpcMuxServer, tcp_mux, timeout, cancel, and correlation.
+    purpose: Host RpcMuxServer, container typed async RPC, tcp_mux, timeout, cancel, and correlation.
   - component_id: hakoniwa-pdu-endpoint
-    purpose: TCP mux transport.
+    purpose: Platform-specific TCP transport in both domains.
   - component_id: hakoniwa-pdu-python
-    purpose: Generated AddTwoInts packet types and converters.
+    purpose: Core-free generated AddTwoInts packet types, offsets, and converters.
   - component_id: hakoniwa-pdu-registry
     purpose: Service definitions and offsets.
 
@@ -427,10 +618,16 @@ source_artifacts:
     relation: resolved-config-generator
   - repository: hakoniwalab/hakoniwa-pdu-ros
     path: hakoniwa_pdu_ros/service_server_node.py
-    relation: service-runtime
+    relation: container-service-runtime
   - repository: hakoniwalab/hakoniwa-pdu-ros
     path: examples/service/README.md
     relation: upstream-demo-reference
   - repository: hakoniwalab/hakoniwa-pdu-rpc
     path: python/hakoniwa_pdu_rpc/mux_server.py
     relation: host-mux-server-api
+  - repository: hakoniwalab/hakoniwa-pdu-rpc
+    path: tools/hako.py
+    relation: current-native-install-and-receipt-gap
+  - repository: hakoniwalab/hakoniwa-pdu-python
+    path: pyproject.toml
+    relation: core-free-python-package-boundary

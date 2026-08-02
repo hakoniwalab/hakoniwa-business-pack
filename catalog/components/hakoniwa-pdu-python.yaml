@@ -10,88 +10,74 @@ distribution:
   notes:
     - Public OSS Hakoniwa component distributed as hakoniwa-pdu on PyPI.
 verification:
-  verified_at: 2026-07-31
+  verified_at: 2026-08-02
   source_revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
   source_ref: main
-summary: Python PDU communication library for Hakoniwa, integrating WebSocket topics, WebSocket RPC, SHM backend support, and binary/JSON/Python type conversion.
+summary: Python PDU package providing generated type and offset-based binary conversion independently of Hakoniwa Core, with optional WebSocket, shared-memory, RPC, and Launcher runtime capabilities.
 category:
   primary: language-binding
   secondary:
     - integration
     - rpc
     - browser
-
 status:
   maturity: active
   catalog_confidence: high
   notes:
-    - Cataloged from README features, install, quick starts, and project structure.
-
+    - Core-free packet conversion and Core-dependent runtime integration are separate capability profiles.
+    - The package does not install hakopy, hako-cmd, or Hakoniwa Core by itself.
 capabilities:
   - name: Python PDU communication
     description: Provides Python APIs for Hakoniwa PDU topic and RPC communication.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-python
         path: README.md
-        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+        revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
+  - name: Core-free generated PDU types and binary conversion
+    description: Generated Python packet classes, offset metadata, and binary/JSON/Python conversion can be used without importing hakopy or running Hakoniwa Core.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: README.md
+        revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: pyproject.toml
+        revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
   - name: WebSocket topic and RPC support
     description: Runs Pub/Sub topics and RPC over WebSocket with ready-to-run Twist and AddTwoInts examples.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-python
         path: README.md
-        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
-  - name: Binary/JSON/Python conversion
-    description: Converts between binary PDU payloads, JSON, and Python types using offset definitions.
-    evidence:
-      - repository: hakoniwalab/hakoniwa-pdu-python
-        path: README.md
-        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+        revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
   - name: SHM backend
-    description: Supports high-speed shared-memory communication paths and async shared SHM RPC runtime.
+    description: Supports high-speed shared-memory communication paths and async shared SHM RPC runtime when a compatible Hakoniwa runtime is available.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-python
         path: README.md
-        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+        revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
   - name: Event-driven and polling APIs
     description: Supports registering PDU handlers or polling internal buffers.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-python
         path: README.md
-        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
-  - name: Hakoniwa launcher application
-    description: Provides the installed launcher entrypoint `python -m hakoniwa_pdu.apps.launcher.hako_launcher` for orchestrating multiple Hakoniwa assets from a JSON file.
+        revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
+  - name: Hakoniwa Launcher application
+    description: Provides the installed hako_launcher entry point for orchestrating multiple Hakoniwa assets from JSON.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-python
-        path: README.md
-        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
-      - repository: hakoniwalab/hakoniwa-pdu-python
         path: src/hakoniwa_pdu/apps/launcher
-        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+        revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
   - name: Launcher background lifecycle control
-    description: Available in hakoniwa-pdu 1.6.5 or later; starts a Launcher with an explicit session file and provides OS-independent status and graceful termination through the Launcher control endpoint.
+    description: Starts a Launcher with an explicit session file and provides OS-independent status and graceful termination through the Launcher control endpoint.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-python
         path: docs/launcher-background-lifecycle.md
-        revision: 8a800191ad0c7db7b6f66d20572b23eac447a29c
-      - repository: hakoniwalab/hakoniwa-pdu-python
-        path: src/hakoniwa_pdu/apps/launcher/hako_launcher_control.py
-        revision: 8a800191ad0c7db7b6f66d20572b23eac447a29c
-      - repository: hakoniwalab/hakoniwa-pdu-python
-        path: pyproject.toml
         revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
-  - name: Launcher schema packaging
-    description: Includes launcher JSON schemas as package data in the `hakoniwa-pdu` Python package.
-    evidence:
-      - repository: hakoniwalab/hakoniwa-pdu-python
-        path: pyproject.toml
-        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
-
 limitations:
-  - Requires offset files via HAKO_BINARY_PATH or default install path for binary conversion.
+  - Offset files are required for binary conversion and are resolved through HAKO_BINARY_PATH or an installed offset path.
   - WebSocket URI scope must be explicitly configured.
-  - This is a Python-facing library, not the C++ endpoint abstraction.
-  - The launcher requires `hako-cmd` and any simulator commands it invokes to be available in the runtime environment; `hakoniwa-pdu` alone does not install `hakopy` or the Hakoniwa core runtime.
-
+  - This is a Python-facing package, not the C++ Endpoint abstraction.
+  - hakopy, hako-cmd, local shared memory, and simulation lifecycle require a compatible Hakoniwa Core installation; they are not prerequisites for generated packet conversion alone.
+  - Current Business Pack Foundation metadata does not yet expose separate core-free-conversion and core-integrated-runtime install profiles or Receipts.
 interfaces:
   inputs:
     - name: PDU config
@@ -115,11 +101,11 @@ interfaces:
       description: Binary payloads sent over WebSocket or SHM backends.
   protocols:
     - name: WebSocket
-      role: client | server
+      role: client
       notes: Used for remote topics and RPC examples.
     - name: Shared Memory
       role: local
-      notes: Used for high-speed local backend and shared RPC runtime.
+      notes: Optional Core-integrated local backend.
   configuration:
     - path: examples/pdu_config.json
       description: Example PDU config.
@@ -128,38 +114,36 @@ interfaces:
     - path: docs/rpc/async_shared_runtime.md
       description: Shared SHM RPC runtime design notes.
     - path: src/hakoniwa_pdu/apps/launcher/schemas/launcher.schema.json
-      description: Launcher JSON schema for assets, activation_timing, dependencies, environment operations, logs, and notifications.
-
+      description: Launcher JSON schema.
 dependencies:
   required:
     - name: Python
       type: runtime
-      notes: Python 3.12 is the expected runtime unless a recipe explicitly verifies another version.
+      notes: Python 3.12 is the expected runtime unless a Recipe verifies another version.
     - name: hakoniwa-pdu package
       type: package
-      notes: Install with pip install hakoniwa-pdu. Launcher background lifecycle control requires version 1.6.5 or later.
+      notes: Install with pip install hakoniwa-pdu.
     - name: hakoniwa-pdu-registry offsets
       type: repository
-      notes: Offset definitions are required for binary conversion.
+      notes: Offset definitions and generated types are required for conversion.
   optional:
     - name: hakoniwa-core-pro
       type: repository
-      notes: Required when Python 3.12 workflows need hakopy, hako-cmd, and the local Hakoniwa SHM runtime.
+      notes: Required only for hakopy, hako-cmd, local SHM runtime, and Core-integrated Launcher workflows.
     - name: WebSocket bridge/server
       type: runtime
       notes: Required for WebSocket examples.
     - name: Hakoniwa SHM runtime
       type: runtime
       notes: Required for SHM backend.
-
 platforms:
   supported:
     - macOS
     - Linux
     - Windows
   notes:
-    - Python 3.12 is the expected runtime for Hakoniwa recipes using this package unless another version is explicitly verified.
-
+    - Python 3.12 is the expected runtime for Hakoniwa Recipes using this package unless another version is explicitly verified.
+    - Python package artifacts remain platform-independent only where they contain no host-native extension; native dependencies are validated separately.
 connects_to:
   - component_id: hakoniwa-pdu-registry
     direction: uses
@@ -171,134 +155,119 @@ connects_to:
     notes: Python clients can communicate through WebSocket bridge paths.
   - component_id: hakoniwa-pdu-endpoint
     direction: related
-    interface: PDU semantics / SHM backend
-    notes: Separate Python-oriented stack that shares PDU concepts with endpoint.
+    interface: PDU semantics / optional native transport integration
+    notes: Separate Python-oriented stack that shares generated PDU contracts with Endpoint.
   - component_id: hakoniwa-core-pro
     direction: related
-    interface: hako-cmd / hakopy / SHM runtime
-    notes: SHM demos and launcher-managed Hakoniwa assets often require core-pro installation; hakopy must be available in the same Python 3.12 environment as hakoniwa-pdu when both are used.
+    interface: optional hako-cmd / hakopy / SHM runtime
+    notes: Core is optional for packet conversion and required for Core-integrated runtime capabilities.
   - component_id: hakoniwa-mujoco-robots
     direction: used_by
     interface: Python controllers and visualizers
     notes: MuJoCo robot samples use Python controllers and visualizers over Hakoniwa PDU.
-
 data_contracts:
   - name: Compact PDU config
     description: paths plus robots[].pdutypes_id format is the recommended PDU config style.
     source:
       - repository: hakoniwalab/hakoniwa-pdu-python
         path: README.md
-        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+        revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
   - name: Offset-based binary conversion
-    description: HAKO_BINARY_PATH points to offset files used to convert binary PDU payloads.
+    description: HAKO_BINARY_PATH or an installed offset path supplies definitions used to convert binary PDU payloads without requiring Core runtime state.
     source:
       - repository: hakoniwalab/hakoniwa-pdu-python
         path: README.md
-        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+        revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
   - name: Launcher JSON contract
-    description: The launcher uses assets[], activation_timing, depends_on, delays, environment operations, log paths, immediate/serve modes, and abort-on-asset-exit monitoring.
+    description: The Launcher uses assets, activation timing, dependencies, environment operations, log paths, and lifecycle monitoring.
     source:
       - repository: hakoniwalab/hakoniwa-pdu-python
-        path: README.md
-        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
-      - repository: hakoniwalab/hakoniwa-pdu-python
-        path: src/hakoniwa_pdu/apps/launcher/model.py
-        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
-
+        path: src/hakoniwa_pdu/apps/launcher
+        revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
 recipe_roles:
   - role: language_binding
-    description: Provides Python access to Hakoniwa PDU topics and RPC.
+    description: Provides Python access to generated Hakoniwa PDU types and communication APIs.
   - role: communication_infrastructure
-    description: Supplies WebSocket and SHM communication managers.
+    description: Supplies optional WebSocket and SHM communication managers.
   - role: control_plane
-    description: Supports Python RPC client/server workflows and launcher-managed demo lifecycle.
-
+    description: Supports Python RPC and Launcher-managed demo lifecycle.
 typical_usecases:
+  - Convert generated service or topic PDU packets without installing Hakoniwa Core.
   - Build Python controllers, visualizers, or tools for Hakoniwa simulations.
   - Run WebSocket topic or RPC demos.
-  - Convert PDU binary data into Python types for analysis.
-  - Use shared SHM RPC for high fan-out Python clients.
-  - Launch multi-process Hakoniwa demos from Python with hako_launcher.
-
+  - Use shared SHM RPC when a Core runtime is intentionally present.
+  - Launch multi-process Hakoniwa demos from Python.
 anti_usecases:
-  - C++ endpoint integration.
+  - C++ Endpoint integration.
   - Browser or Node.js clients.
   - PDU type generation.
-  - Providing `hakopy` or installing the Hakoniwa core runtime by itself.
-
+  - Treating packet conversion as requiring hakopy or Core.
+  - Assuming the package installs Hakoniwa Core by itself.
 demo_candidates:
-  - name: WebSocket Twist topic
-    description: Run remote_publisher and remote_subscriber with examples/pdu_config.json and service.json.
+  - name: Core-free AddTwoInts packet conversion
+    description: Import generated AddTwoInts packet classes, encode and decode request/response bodies from offsets, and verify no hakopy import or Core process is required.
     required_components:
       - hakoniwa-pdu-python
+      - hakoniwa-pdu-registry
     source_examples:
       - repository: hakoniwalab/hakoniwa-pdu-python
-        path: examples/topic/websocket
-        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
+        path: README.md
+        revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
   - name: WebSocket AddTwoInts RPC
-    description: Run remote_rpc_server and remote_rpc_client and verify response 3.
+    description: Run remote RPC server and client and verify the response.
     required_components:
       - hakoniwa-pdu-python
     source_examples:
       - repository: hakoniwalab/hakoniwa-pdu-python
         path: examples/rpc/websocket
-        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
-  - name: Hakoniwa launcher smoke run
-    description: Run `python -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json` with a known-good Recipe launcher file and verify asset ordering, hako-cmd start, logs, and cleanup.
+        revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
+  - name: Hakoniwa Launcher smoke run
+    description: Run hako_launcher with a known-good Recipe and verify ordering, hako-cmd start, logs, and cleanup.
     required_components:
       - hakoniwa-pdu-python
       - hakoniwa-core-pro
     source_examples:
       - repository: hakoniwalab/hakoniwa-pdu-python
-        path: README.md
-        revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
-
+        path: src/hakoniwa_pdu/apps/launcher
+        revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
 operations:
   build:
     commands:
       - pip install hakoniwa-pdu
     notes:
       - Set HAKO_BINARY_PATH when using custom offset files.
-      - Use the same Python 3.12 interpreter for `hakoniwa-pdu` and any required `hakopy` import checks.
+      - hakopy is not required for the core-free conversion profile.
   test:
     commands: []
-    notes: GitHub Actions test badge exists; exact local command should be cataloged.
+    notes: Exact local core-free and Core-integrated test commands should be cataloged separately.
   run:
     commands:
+      - python -c "import hakoniwa_pdu"
       - python -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json
-      - python3.12 -c "import hakopy; import hakoniwa_pdu"
-      - python examples/topic/websocket/remote_publisher.py --uri ws://localhost:8080 --pdu-config examples/pdu_config.json --service-config examples/service.json
-      - python examples/topic/websocket/remote_subscriber.py --uri ws://localhost:8080 --pdu-config examples/pdu_config.json --service-config examples/service.json
     notes:
-      - Requires a matching WebSocket communication peer.
-      - Launcher runs require hako-cmd and the referenced asset commands to be available.
-
+      - Launcher runs require hako-cmd and referenced asset commands.
 known_gaps:
-  - Need to catalog package metadata and exact test command.
-  - Need to map app-specific Python modules such as drone subpackages.
-
+  - Define Business Pack install profiles and Receipt capabilities for core_free_runtime, generated_service_types, offset_binary_conversion, and optional core_integrated_runtime.
+  - Add an exact local core-free AddTwoInts conversion test command.
+  - Map app-specific Python modules such as drone subpackages.
 source_refs:
   - repository: hakoniwalab/hakoniwa-pdu-python
     path: README.md
-    revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
-    description: Main features, installation, quick starts, event handling, project structure, and SHM RPC runtime.
-  - repository: hakoniwalab/hakoniwa-pdu-python
-    path: docs/rpc/async_shared_runtime.md
-    revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
-    description: Shared SHM RPC runtime.
-  - repository: hakoniwalab/hakoniwa-pdu-python
-    path: src/hakoniwa_pdu/apps/launcher
-    revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
-    description: Hakoniwa launcher implementation installed by the hakoniwa-pdu Python package.
+    revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
+    description: Features, installation, quick starts, event handling, conversion, and project structure.
   - repository: hakoniwalab/hakoniwa-pdu-python
     path: pyproject.toml
-    revision: 7d4583b59ae36b27c3857e719fc52f486c4c83b2
-    description: Package metadata showing hakoniwa-pdu distribution name and launcher schema package data.
-
+    revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
+    description: Python package metadata and package data.
+  - repository: hakoniwalab/hakoniwa-pdu-python
+    path: docs/rpc/async_shared_runtime.md
+    revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
+    description: Optional shared-memory RPC runtime.
 tags:
   - hakoniwa
   - python
   - pdu
+  - core-free
   - websocket
   - shm
   - rpc
