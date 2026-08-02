@@ -1,0 +1,25 @@
+name: Export Generated Catalog Index
+
+on:
+  pull_request:
+    paths:
+      - 'catalog/**'
+      - '.github/workflows/export-generated-index.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+      - run: ruby catalog/tools/generate_index.rb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: generated-catalog-index
+          path: catalog/index.yaml
+          if-no-files-found: error
