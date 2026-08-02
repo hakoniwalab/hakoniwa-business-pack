@@ -445,8 +445,9 @@ components:
   - browser
   maturity: active
   distribution: oss
-  summary: Python PDU communication library for Hakoniwa, integrating WebSocket topics,
-    WebSocket RPC, SHM backend support, and binary/JSON/Python type conversion.
+  summary: Python PDU package providing generated type and offset-based binary conversion
+    independently of Hakoniwa Core, with optional WebSocket, shared-memory, RPC, and
+    Launcher runtime capabilities.
   recipe_roles:
   - language_binding
   - communication_infrastructure
@@ -461,6 +462,7 @@ components:
   - hakoniwa
   - python
   - pdu
+  - core-free
   - websocket
   - shm
   - rpc
@@ -512,15 +514,16 @@ components:
   - language-binding
   maturity: active
   distribution: oss
-  summary: Config-driven Python bridge between Hakoniwa PDU data and ROS 2 topics
-    that resolves message mappings at runtime from PDU definitions and binding configuration
-    without per-type bridge code.
+  summary: Config-driven Python integration for bidirectional Hakoniwa PDU and ROS
+    2 Topic mapping plus ROS 2 Service Server to Hakoniwa PDU-RPC bridging, without
+    application-specific bridge code for supported generated types.
   recipe_roles:
   - bridge
   - integration_boundary
   - communication_infrastructure
   connects_to:
   - hakoniwa-pdu-endpoint
+  - hakoniwa-pdu-rpc
   - hakoniwa-pdu-python
   - hakoniwa-pdu-registry
   - hakoniwa-core-pro
@@ -528,12 +531,12 @@ components:
   - hakoniwa
   - pdu
   - ros2
+  - service
   - bridge
   - endpoint
+  - rpc
   - python
   - integration
-  - runtime-mapping
-  - zenoh
   catalog_path: components/hakoniwa-pdu-ros.yaml
 - id: hakoniwa-pdu-rpc
   name: Hakoniwa PDU RPC
@@ -545,9 +548,9 @@ components:
   - language-binding
   maturity: active
   distribution: oss
-  summary: Hakoniwa-native request-response layer built on endpoint topology and generated
-    PDU service definitions, with C++ APIs and Python CFFI clients supporting typed
-    synchronous and asynchronous calls.
+  summary: Hakoniwa-native request-response layer built on Endpoint topology and generated
+    PDU service definitions, with C++ APIs, Python CFFI typed clients, asynchronous
+    futures, and native-backed Python TCP mux servers.
   recipe_roles:
   - control_plane
   - communication_infrastructure
@@ -569,6 +572,7 @@ components:
   - cffi
   - async
   - future
+  - tcp-mux
   - control-plane
   catalog_path: components/hakoniwa-pdu-rpc.yaml
 - id: hakoniwa-robot-arm-pack
