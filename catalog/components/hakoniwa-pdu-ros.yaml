@@ -8,7 +8,7 @@ repository:
 distribution:
   channel: oss
   notes:
-    - Public OSS Hakoniwa component for runtime PDU <-> ROS 2 Topic conversion and ROS 2 Service Server bridging.
+    - Public OSS Hakoniwa component for ROS 2 Topic and Service integration.
 verification:
   verified_at: 2026-08-02
   source_revision: 00e96da7797686a80826e2e266f56f16520a68a7
@@ -83,7 +83,7 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-pdu-ros
         path: test/native/add_two_ints_rpc_fixture.py
         revision: 00e96da7797686a80826e2e266f56f16520a68a7
-      - repository: hakoniwalab/hakoniwalab-pdu-ros
+      - repository: hakoniwalab/hakoniwa-pdu-ros
         path: test/native/test_native_rpc_add_two_ints.py
         revision: 00e96da7797686a80826e2e266f56f16520a68a7
   - name: Docker native Topic and Service suite
@@ -92,18 +92,14 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-pdu-ros
         path: test/docker/run_native_tests.sh
         revision: 00e96da7797686a80826e2e266f56f16520a68a7
-      - repository: hakoniwalab/hakoniwa-pdu-ros
-        path: examples/service/README.md
-        revision: 00e96da7797686a80826e2e266f56f16520a68a7
 limitations:
   - Native execution requires Linux, Python, and ROS 2; verified Service tests use Ubuntu 24.04 and ROS 2 Jazzy.
   - Generated hakoniwa-pdu converters own binary layout; this component owns mapping and wiring.
   - Topic transport depends on hakoniwa-pdu-endpoint; Service lifecycle and tcp_mux depend on hakoniwa-pdu-rpc.
   - Current Service direction is ROS Service Client -> Service Server Bridge -> Hakoniwa RPC Server; reverse direction is not implemented.
   - One RpcClient handles one in-flight request; concurrency comes from max_clients and overflow is rejected without queueing.
-  - Variable-length heap E2E and explicit encoded-capacity overflow rejection remain follow-up work.
   - Business Pack-compliant doctor/configure/build/test/install/smoke operations are not implemented yet.
-  - Cross-platform macOS, Windows, and Linux host/Docker Recipe evidence is not recorded yet.
+  - Cross-platform host/Docker Recipe evidence is not recorded yet.
 interfaces:
   inputs:
     - name: Topic Binding config
@@ -112,25 +108,19 @@ interfaces:
     - name: Topic Endpoint config
       kind: config
       description: Selects hakoniwa-pdu-endpoint transport.
-    - name: ROS 2 Topic messages
-      kind: api
-      description: Messages received by Topic Bridge subscriptions.
     - name: Service Binding config
       kind: config
       description: Maps ROS Services to Hakoniwa RPC Services and declares endpoints, max_clients, timeout, and heap.
-    - name: Service RPC Endpoint config
-      kind: config
-      description: Defines physical RPC client transport; environment-specific addresses belong to the Recipe.
-    - name: ROS 2 Service requests
+    - name: ROS 2 Topic or Service input
       kind: api
-      description: Requests converted into generated PDU request bodies.
+      description: ROS messages and Service requests accepted by the corresponding Bridge node.
   outputs:
     - name: ROS 2 Topic messages
       kind: api
       description: Messages published from Hakoniwa PDU data.
     - name: Hakoniwa PDU payloads
       kind: pdu
-      description: Topic data sent through Endpoint.
+      description: Topic or RPC payloads sent through Endpoint and PDU-RPC.
     - name: ROS 2 Service responses
       kind: api
       description: Responses converted from terminal Hakoniwa RPC results.
@@ -154,8 +144,6 @@ interfaces:
       description: Canonical Service Binding schema.
     - path: config/service/add_two_ints.json
       description: AddTwoInts Service Binding example.
-    - path: examples/service/README.md
-      description: Manual three-process Service demo.
 dependencies:
   required:
     - name: ROS 2
@@ -175,7 +163,7 @@ dependencies:
       notes: Defines and generates Topic and Service artifacts and offsets.
     - name: hakoniwa-pdu-rpc
       type: repository
-      notes: Provides typed async RPC, Python RpcMuxServer, shared native loading, correlation, timeout/cancel, and tcp_mux.
+      notes: Provides typed async RPC, Python RpcMuxServer, correlation, timeout/cancel, and tcp_mux.
   optional:
     - name: Zenoh backend
       type: runtime
@@ -207,25 +195,6 @@ connects_to:
     direction: related
     interface: Hakoniwa runtime / PDU environment
     notes: Typical Assets participate in Core while the Bridge is an integration component.
-data_contracts:
-  - name: Topic Binding contract
-    description: Maps PDU identity to ROS Topic ownership, direction, and QoS.
-    source:
-      - repository: hakoniwalab/hakoniwa-pdu-ros
-        path: README.md
-        revision: 00e96da7797686a80826e2e266f56f16520a68a7
-  - name: Service Binding contract
-    description: Defines ROS/Hakoniwa Service identity, endpoints, max_clients, timeout, and heap.
-    source:
-      - repository: hakoniwalab/hakoniwa-pdu-ros
-        path: schema/service-binding.schema.json
-        revision: 00e96da7797686a80826e2e266f56f16520a68a7
-  - name: Deterministic Service config generation
-    description: Generates names, channel IDs, maxClients, and matching server/client configs from one model.
-    source:
-      - repository: hakoniwalab/hakoniwa-pdu-ros
-        path: hakoniwa_pdu_ros/service_config_generator.py
-        revision: 00e96da7797686a80826e2e266f56f16520a68a7
 recipe_roles:
   - role: bridge
     description: Bridges ROS Topics to PDU and ROS Services to RPC.
@@ -242,19 +211,7 @@ anti_usecases:
   - Replacing Endpoint transport, PDU-RPC state management, or generated converters.
   - Calling an external ROS Service from a Hakoniwa Asset using the current Server Bridge.
   - Queueing unbounded Service requests when the pool is full.
-  - Claiming cross-platform Business Pack execution without Recipe evidence.
 demo_candidates:
-  - name: Bidirectional PDU and ROS 2 bridge over Zenoh
-    description: Run the documented Ubuntu Topic quick start.
-    required_components:
-      - hakoniwa-pdu-ros
-      - hakoniwa-pdu-endpoint
-      - hakoniwa-pdu-python
-      - hakoniwa-pdu-registry
-    source_examples:
-      - repository: hakoniwalab/hakoniwa-pdu-ros
-        path: README.md
-        revision: 00e96da7797686a80826e2e266f56f16520a68a7
   - name: AddTwoInts ROS 2 Service Server Bridge
     description: Start RpcMuxServer and Service Bridge, call /add_two_ints, and verify the sum response.
     required_components:
@@ -279,21 +236,17 @@ operations:
       - bash test/docker/run_native_tests.sh
     notes:
       - The pytest command is the ROS-independent suite used for the recorded 56-test result.
-      - The Docker command runs the recorded 16 native tests on Ubuntu 24.04 / ROS 2 Jazzy.
+      - The Docker command runs the recorded 16 native tests.
   run:
     commands:
       - ros2 run hakoniwa_pdu_ros bridge --config config/sample/sample_binding.json
       - python3 -m hakoniwa_pdu_ros.generate_service_config --config config/service/add_two_ints.json --output-dir <output-dir>
       - service-server --config config/service/add_two_ints.json --offset-dir <offset-dir> --rpc-library <shared-rpc-library>
-    notes:
-      - Topic and Service Bridges use separate Binding contracts.
-      - Config generation is repository-specific and is not yet a Business Pack hako.py extension.
 known_gaps:
   - Implement a manifest-driven Business Pack hako.py doctor/configure/build/test/install/smoke contract.
   - Keep hako.py --config for build manifests and expose Service Binding through distinct --binding semantics.
-  - Validate an AddTwoInts host/Docker Recipe on macOS, Windows, and Linux with separate host and container artifact domains.
+  - Validate the AddTwoInts host/Docker Recipe with separate host and container artifact domains.
   - Add the follow-on host MuJoCo Asset / Docker ROS 2 Service Recipe.
-  - Add variable-length Service heap-capacity E2E and explicit overflow rejection.
 source_refs:
   - repository: hakoniwalab/hakoniwa-pdu-ros
     path: README.md
@@ -311,9 +264,9 @@ tags:
   - hakoniwa
   - pdu
   - ros2
+  - service
   - bridge
   - endpoint
+  - rpc
   - python
   - integration
-  - runtime-mapping
-  - zenoh
