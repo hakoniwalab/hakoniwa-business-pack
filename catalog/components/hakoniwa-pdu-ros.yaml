@@ -13,7 +13,7 @@ verification:
   verified_at: 2026-08-02
   source_revision: 00e96da7797686a80826e2e266f56f16520a68a7
   source_ref: main
-summary: Config-driven Python bridge between Hakoniwa PDU data and ROS 2 topics that resolves message mappings at runtime from PDU definitions and binding configuration without per-type bridge code.
+summary: Config-driven Python integration for bidirectional Hakoniwa PDU and ROS 2 Topic mapping plus ROS 2 Service Server to Hakoniwa PDU-RPC bridging, without application-specific bridge code for supported generated types.
 category:
   primary: communication
   secondary:
@@ -83,7 +83,7 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-pdu-ros
         path: test/native/add_two_ints_rpc_fixture.py
         revision: 00e96da7797686a80826e2e266f56f16520a68a7
-      - repository: hakoniwalab/hakoniwa-pdu-ros
+      - repository: hakoniwalab/hakoniwalab-pdu-ros
         path: test/native/test_native_rpc_add_two_ints.py
         revision: 00e96da7797686a80826e2e266f56f16520a68a7
   - name: Docker native Topic and Service suite
@@ -191,6 +191,10 @@ connects_to:
     direction: uses
     interface: endpoint cache / communication backend
     notes: Topic and lower-level RPC transport remain in Endpoint.
+  - component_id: hakoniwa-pdu-rpc
+    direction: uses
+    interface: typed asynchronous RPC client / timeout and cancellation / tcp_mux
+    notes: Service Bridge delegates request lifecycle, correlation, cancellation, and physical RPC transport to PDU-RPC.
   - component_id: hakoniwa-pdu-python
     direction: uses
     interface: generated Python PDU types and converters
@@ -271,10 +275,11 @@ operations:
       - A Business Pack-compliant hako.py build manifest is not implemented yet.
   test:
     commands:
-      - python3 -m unittest discover -s test
+      - pytest -q test --ignore=test/native
       - bash test/docker/run_native_tests.sh
     notes:
-      - Final Issue #10 evidence recorded 56 ROS-independent and 16 Docker-native tests.
+      - The pytest command is the ROS-independent suite used for the recorded 56-test result.
+      - The Docker command runs the recorded 16 native tests on Ubuntu 24.04 / ROS 2 Jazzy.
   run:
     commands:
       - ros2 run hakoniwa_pdu_ros bridge --config config/sample/sample_binding.json
@@ -286,7 +291,7 @@ operations:
 known_gaps:
   - Implement a manifest-driven Business Pack hako.py doctor/configure/build/test/install/smoke contract.
   - Keep hako.py --config for build manifests and expose Service Binding through distinct --binding semantics.
-  - Validate an AddTwoInts host/Docker Recipe on macOS, Windows, and Linux.
+  - Validate an AddTwoInts host/Docker Recipe on macOS, Windows, and Linux with separate host and container artifact domains.
   - Add the follow-on host MuJoCo Asset / Docker ROS 2 Service Recipe.
   - Add variable-length Service heap-capacity E2E and explicit overflow rejection.
 source_refs:
