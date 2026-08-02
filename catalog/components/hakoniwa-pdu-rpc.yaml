@@ -11,7 +11,7 @@ distribution:
     - Public OSS Hakoniwa component.
 verification:
   verified_at: 2026-08-02
-  source_revision: 10eb9c8e7664691816796427b2cff68b61c13433
+  source_revision: 3436ae40c124f7f2112a951e383abd4fc2e42041
   source_ref: main
 summary: Hakoniwa-native request-response layer built on Endpoint topology and generated PDU service definitions, with C++ APIs, Python CFFI typed clients, asynchronous futures, and native-backed Python TCP mux servers.
 category:
@@ -26,6 +26,7 @@ status:
   catalog_confidence: high
   notes:
     - Catalog includes the merged native TCP mux server and Python RpcMuxServer APIs.
+    - Local Foundation installation can attest native and Python surfaces in one Receipt when --python-venv is selected.
     - Runtime capabilities and Foundation installation evidence are intentionally distinguished.
     - Scope is narrower than a general RPC framework.
 capabilities:
@@ -98,6 +99,15 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: cmake/hakoniwa_pdu_rpcConfig.cmake.in
         revision: 10eb9c8e7664691816796427b2cff68b61c13433
+  - name: Foundation native plus Python install contract
+    description: tools/hako.py install optionally installs hakoniwa_pdu_rpc and packaged schemas into a selected Foundation venv and records native libraries, Python package, schemas, typed async, and mux capabilities in one Component Receipt.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: tools/hako.py
+        revision: 3436ae40c124f7f2112a951e383abd4fc2e42041
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: pyproject.toml
+        revision: 3436ae40c124f7f2112a951e383abd4fc2e42041
   - name: Core-free Endpoint package dependency
     description: Standalone PDU-RPC consumes the installed hakoniwa-pdu-endpoint CMake package rather than directly requiring Hakoniwa Core.
     evidence:
@@ -125,8 +135,8 @@ limitations:
   - Timeout does not make the Endpoint immediately reusable. A caller must cancel or otherwise resolve the request.
   - The RPC state machine does not infer permanent peer failure from timeout alone.
   - A ROS 2 Service Bridge is owned by hakoniwa-pdu-ros, not this repository.
-  - The current tools/hako.py install and Component Receipt cover native and CMake artifacts. They do not install or attest the hakoniwa_pdu_rpc Python package.
-  - Current Receipt capabilities are rpc_client, rpc_server, and cmake_package; Python mux, typed async client, shared native library, and Python package capabilities are not yet attested.
+  - Python package installation is opt-in through --python-venv; omitting it intentionally retains the native/CMake-only install behavior.
+  - The selected Python venv must live below the shared Foundation install prefix so every attested artifact remains inside that Foundation.
 interfaces:
   inputs:
     - name: Service configuration
@@ -318,10 +328,10 @@ operations:
       - python tools/hako.py doctor
       - python tools/hako.py configure --dry-run
       - python tools/hako.py build
-      - python tools/hako.py install
+      - python tools/hako.py install --python-venv <foundation-prefix>/python
     notes:
       - tools/hako.py is the recommended cross-platform native build entry point.
-      - Current install does not install the Python package into the selected Foundation Python environment.
+      - Omit --python-venv when only the backward-compatible native/CMake install surface is required.
   test:
     commands:
       - python tools/hako.py test
@@ -356,10 +366,7 @@ runtime_checks:
     working_directory: repository
     output: text
 known_gaps:
-  - Extend tools/hako.py install to install hakoniwa_pdu_rpc into the selected Foundation Python environment.
-  - Extend the Component Receipt with python_rpc_mux_server, typed_async_client, shared_native_library, and python_package capabilities.
-  - Record the installed Python package path and shared native library as Receipt artifacts.
-  - Verify that Foundation doctor imports hakoniwa_pdu_rpc from the declared Foundation interpreter and loads the library from the same install prefix.
+  - Windows and Linux host Foundation installation still require platform-specific integration evidence for the optional Python install surface.
   - Broad cross-language client support and general peer-failure or high-availability policy remain out of scope.
 source_refs:
   - repository: hakoniwalab/hakoniwa-pdu-rpc
@@ -380,8 +387,8 @@ source_refs:
     description: Accepted connection lifecycle and exact response routing contract.
   - repository: hakoniwalab/hakoniwa-pdu-rpc
     path: tools/hako.py
-    revision: 10eb9c8e7664691816796427b2cff68b61c13433
-    description: Current native install and Component Receipt implementation.
+    revision: 3436ae40c124f7f2112a951e383abd4fc2e42041
+    description: Native and optional Foundation Python installation plus Component Receipt implementation.
 tags:
   - hakoniwa
   - pdu

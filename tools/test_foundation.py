@@ -321,6 +321,29 @@ class FoundationInspectorTest(unittest.TestCase):
         self.assertIn("platform.os", fields)
         self.assertIn("artifacts.lib/component.marker", fields)
 
+    def test_false_capability_requires_installed_false(self) -> None:
+        self.write_recipe(
+            "  component-a:\n"
+            "    capabilities:\n"
+            "      optional_feature: false\n"
+        )
+        self.write_receipt(
+            "component-a",
+            capabilities="  optional_feature: true\n",
+        )
+
+        result = foundation.inspect_foundation(self.recipe, self.prefix)
+
+        self.assertEqual(result["status"], "INCOMPATIBLE")
+        self.assertEqual(
+            result["components"][0]["reasons"][0],
+            {
+                "field": "capabilities.optional_feature",
+                "required": False,
+                "installed": True,
+            },
+        )
+
     def test_dependency_receipt_mismatch_is_incompatible(self) -> None:
         self.write_recipe(
             "  component-a:\n"
@@ -404,6 +427,24 @@ class FoundationInspectorTest(unittest.TestCase):
                 "hakoniwa-pdu-bridge-core",
             ],
         )
+
+    def test_core_free_endpoint_narrows_optional_core_dependency(self) -> None:
+        requirements = {
+            "hakoniwa-pdu-endpoint": {
+                "capabilities": {
+                    "tcp": True,
+                    "hakoniwa_core": False,
+                }
+            }
+        }
+
+        order = foundation.dependency_order(
+            ["hakoniwa-pdu-endpoint"],
+            self.build_catalog(),
+            requirements,
+        )
+
+        self.assertEqual(order, ["hakoniwa-pdu-endpoint"])
 
     def test_plan_has_no_actions_when_foundation_is_satisfied(self) -> None:
         self.write_recipe(
@@ -557,6 +598,51 @@ class FoundationInspectorTest(unittest.TestCase):
         content = manifest.read_text(encoding="utf-8")
         self.assertIn(f'hakoniwa_core_root: "{paths.install_prefix}"', content)
         self.assertIn("  python: true", content)
+
+    def test_core_free_endpoint_manifest_disables_core_and_python(self) -> None:
+        paths = foundation.resolve_workspace(self.root, "test")
+        source = self.root / "hakoniwa-pdu-endpoint"
+        hako = source / "tools" / "hako.py"
+        hako.parent.mkdir(parents=True)
+        hako.write_text("# test\n", encoding="utf-8")
+
+        commands = foundation.component_commands(
+            "hakoniwa-pdu-endpoint",
+            source,
+            ["doctor", "build", "install"],
+            paths,
+            {
+                "capabilities": {
+                    "tcp": True,
+                    "hakoniwa_core": False,
+                }
+            },
+        )
+
+        manifest = paths.foundation_build / "hakoniwa-pdu-endpoint.yaml"
+        content = manifest.read_text(encoding="utf-8")
+        self.assertIn("  hakoniwa_core: false", content)
+        self.assertIn("  python: false", content)
+        self.assertIn('  hakoniwa_core_root: ""', content)
+        self.assertTrue(all("--python-venv" not in command for command in commands))
+
+    def test_rpc_commands_install_python_into_foundation_venv(self) -> None:
+        paths = foundation.resolve_workspace(self.root, "test")
+        source = self.root / "hakoniwa-pdu-rpc"
+        hako = source / "tools" / "hako.py"
+        hako.parent.mkdir(parents=True)
+        hako.write_text("# test\n", encoding="utf-8")
+
+        commands = foundation.component_commands(
+            "hakoniwa-pdu-rpc",
+            source,
+            ["doctor", "build", "install"],
+            paths,
+        )
+
+        for command in commands:
+            index = command.index("--python-venv") + 1
+            self.assertEqual(command[index], str(paths.foundation_python))
 
 
 if __name__ == "__main__":

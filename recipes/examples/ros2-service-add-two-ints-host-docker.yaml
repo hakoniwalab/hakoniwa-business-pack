@@ -1,6 +1,6 @@
 id: ros2-service-add-two-ints-host-docker
 title: Cross-platform ROS 2 Service to host Hakoniwa RPC AddTwoInts Demo
-recipe_version: 0.5
+recipe_version: 0.6
 
 goal:
   user_request: macOS、Windows、Linuxで同じ操作体系を使い、Docker内のROS 2からhost上のAddTwoInts RPC Serverを呼びたい
@@ -15,7 +15,7 @@ goal:
 
 feasibility:
   status: feasible
-  confidence: medium
+  confidence: high
   rationale:
     - hakoniwa-pdu-ros already verifies AddTwoInts over real TCP, including concurrency, BUSY, timeout/cancel, conversion errors, and shutdown.
     - hakoniwa-pdu-rpc already provides typed async clients and Python RpcMuxServer.
@@ -23,12 +23,14 @@ feasibility:
     - Remaining work is install-contract completion and Business Pack orchestration, not a new protocol.
 
 validation:
-  status: not_tested
-  verified_at: null
+  status: partially_verified
+  verified_at: 2026-08-02
   summary: >
-    Upstream component contracts are verified, but the host Foundation install,
-    Linux container image, cross-domain config generation, network exposure
-    policy, and cross-platform Business Pack execution have not been validated.
+    macOS arm64 host plus Linux arm64 ROS 2 Jazzy container was verified end to
+    end. The host Foundation was reused without Core, the container built its
+    own Linux artifacts, ROS 2 reported /add_two_ints, 20 + 22 returned 42, and
+    normal stop left TERMINATED session records with no owned listener or
+    process. Native Windows and Linux host runs remain unverified.
   steps:
     - id: upstream_components
       status: verified
@@ -40,26 +42,38 @@ validation:
       notes:
         - Service Bridge, typed async client, and RpcMuxServer are implemented upstream.
     - id: host_foundation_install
-      status: blocked
-      evidence: []
+      status: verified
+      evidence:
+        - path: work/foundation/install/share/hakoniwa/receipts/hakoniwa-pdu-rpc.yaml
+          date: 2026-08-02
+        - path: work/foundation/install/share/hakoniwa/receipts/hakoniwa-pdu-endpoint.yaml
+          date: 2026-08-02
       notes:
-        - Current PDU-RPC install and Receipt cover native/CMake artifacts but not the hakoniwa_pdu_rpc Python package or the required Python capabilities.
+        - PDU-RPC Receipt contains native, CMake, Python package, packaged schema, and mux capabilities.
     - id: container_image_contract
-      status: not_tested
-      evidence: []
+      status: verified
+      evidence:
+        - path: work/recipes/ros2-service-add-two-ints-host-docker/validation/evidence.json
+          date: 2026-08-02
       notes:
-        - Linux PDU-ROS, Endpoint, RPC, and hakoniwa-pdu artifacts must be built or installed inside the image and must not reuse host-native binaries.
+        - Linux Endpoint and RPC are built in-image; PDU Python and PDU ROS are installed into the image-local Foundation Python.
     - id: core_free_python_conversion
-      status: not_tested
-      evidence: []
+      status: verified
+      evidence:
+        - path: work/recipes/ros2-service-add-two-ints-host-docker/validation/evidence.json
+          date: 2026-08-02
       notes:
-        - AddTwoInts packet conversion must work without hakopy, hako-cmd, shared memory, or hakoniwa-core-pro.
+        - Foundation planning resolved only Endpoint and RPC; AddTwoInts completed without Core or hakopy.
     - id: recipe_materialization
-      status: not_tested
-      evidence: []
+      status: verified
+      evidence:
+        - path: tools/ros2_service_add_two_ints.py
+          date: 2026-08-02
     - id: macos_end_to_end
-      status: not_tested
-      evidence: []
+      status: verified
+      evidence:
+        - path: work/recipes/ros2-service-add-two-ints-host-docker/validation/evidence.json
+          date: 2026-08-02
     - id: windows_end_to_end
       status: not_tested
       evidence: []
@@ -194,13 +208,14 @@ foundation_requirements:
   hakoniwa-pdu-rpc:
     capabilities:
       rpc_server: true
+      tcp_mux: true
       python_rpc_mux_server: true
       shared_native_library: true
       python_package: true
   hakoniwa-pdu-endpoint:
     capabilities:
-      tcp_mux: true
-      core_free_runtime: true
+      tcp: true
+      hakoniwa_core: false
 
 host_python_requirements:
   interpreter: work/foundation/install/python
@@ -411,7 +426,7 @@ configuration_contract:
 
 artifact_sets:
   foundation:
-    status: blocked
+    status: verified
     owner: work/foundation
     artifacts:
       - work/foundation/install/python
@@ -419,9 +434,9 @@ artifact_sets:
       - work/foundation/install/share/hakoniwa/offset
       - work/foundation/install/share/hakoniwa/receipts
     notes:
-      - Host-only. Blocked until PDU-RPC native plus Python install and Receipt capabilities are implemented.
+      - Host-only. Native and Python PDU-RPC artifacts are recorded by one Component Receipt.
   container_image:
-    status: not_tested
+    status: verified
     owner: recipe-docker-image
     artifacts:
       - Linux hakoniwa-pdu-ros package
@@ -430,7 +445,7 @@ artifact_sets:
       - hakoniwa-pdu generated types and offsets
       - ROS 2 Jazzy runtime
   recipe_runtime:
-    status: not_tested
+    status: verified
     owner: work/recipes/ros2-service-add-two-ints-host-docker
     artifacts:
       - config/service/service-binding.json
@@ -500,17 +515,13 @@ acceptance_criteria:
   - Only PDU-RPC TCP crosses the boundary.
   - ros2 service list and type report /add_two_ints and example_interfaces/srv/AddTwoInts.
   - Calling a=20, b=22 returns sum=42 and records correlated evidence.
-  - stop leaves no Recipe-owned process, container, session, or listener.
+  - stop leaves no Recipe-owned process, container, or listener and retains TERMINATED session records for inspection.
   - Validation records exact host and container revisions, platform Receipts, Docker, ROS distro, config hashes, bind decision, request, response, and cleanup.
 
 missing_pieces:
-  - PDU-RPC Foundation install of hakoniwa_pdu_rpc Python package and expanded Receipt capabilities/artifacts.
-  - Core-free hakoniwa-pdu conversion install profile and evidence contract.
-  - Linux container dependency build/install contract for PDU-ROS, Endpoint, RPC, and hakoniwa-pdu.
-  - Business Pack Recipe materializer and common host.docker.internal adapter.
-  - Non-loopback bind approval enforcement and evidence.
-  - Automated readiness, smoke, shutdown, and residual-resource checks.
-  - macOS, Windows, and Linux runtime evidence.
+  - Native Windows host runtime evidence.
+  - Native Linux host runtime evidence.
+  - CI execution of the host-plus-Docker E2E on supported host platforms.
 
 demo:
   profiles:
@@ -519,8 +530,6 @@ demo:
   prerequisites:
     - command: python tools/foundation.py doctor --recipe recipes/examples/ros2-service-add-two-ints-host-docker.yaml
       expected: Host-native requirements are SATISFIED or a precise host-only gap plan is emitted.
-    - command: python tools/ros2_service_add_two_ints.py doctor --domain container
-      expected: Linux image requirements are SATISFIED or a precise container-only gap plan is emitted.
   readiness:
     lifecycle_state:
       source: work/recipes/ros2-service-add-two-ints-host-docker/runtime/session.json
@@ -546,33 +555,39 @@ demo:
   steps:
     - id: configure
       command: python tools/ros2_service_add_two_ints.py configure
-      status: not_tested
+      status: verified
       expected:
         - Recipe workspace and generated configs exist.
         - Candidate bind address and approval requirement are printed and recorded.
+    - id: build
+      command: python tools/ros2_service_add_two_ints.py build
+      status: verified
+      expected:
+        - Host Foundation requirements are reused or installed locally.
+        - A Linux ROS 2 image is built without reusing host-native libraries.
     - id: doctor
       command: python tools/ros2_service_add_two_ints.py doctor
-      status: not_tested
+      status: verified
       expected:
         - Host Receipt, Python imports, container image dependencies, alias, port, and config consistency are checked separately.
     - id: start
-      command: python tools/ros2_service_add_two_ints.py start
-      status: not_tested
+      command: python tools/ros2_service_add_two_ints.py start --approve-non-loopback-bind
+      status: verified
       expected:
         - Start refuses when non-loopback approval is required but absent.
         - Host listener is ready before the ROS container starts.
     - id: smoke
       command: python tools/ros2_service_add_two_ints.py smoke --a 20 --b 22
-      status: not_tested
+      status: verified
       expected: [ROS Service returns sum=42 within the timeout.]
     - id: status
       command: python tools/ros2_service_add_two_ints.py status
-      status: not_tested
+      status: verified
       expected: [Host, container, listener, alias, and Service readiness are reported.]
     - id: stop
       command: python tools/ros2_service_add_two_ints.py stop
-      status: not_tested
-      expected: [No Recipe-owned process, container, session, or listener remains.]
+      status: verified
+      expected: [No Recipe-owned process, container, or listener remains; TERMINATED session records remain for inspection.]
   cleanup:
     owner: hakoniwa-business-pack
     mode: explicit-owned-sessions

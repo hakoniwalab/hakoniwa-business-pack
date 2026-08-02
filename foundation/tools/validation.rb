@@ -112,7 +112,7 @@ module FoundationValidation
 
     value.each_with_object([]) do |(key, enabled), errors|
       errors << "#{path}.#{key} has invalid capability name" unless identifier?(key)
-      errors << "#{path}.#{key} must be true" unless enabled == true
+      errors << "#{path}.#{key} must be boolean" unless enabled == true || enabled == false
     end
   end
 

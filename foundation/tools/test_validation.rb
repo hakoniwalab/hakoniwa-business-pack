@@ -68,7 +68,7 @@ class FoundationValidationTest < Minitest::Test
     assert errors.any? { |error| error.include?("unknown fields: install_dir") }
   end
 
-  def test_requirements_reject_false_capability_and_invalid_limit
+  def test_requirements_accept_false_capability_and_reject_invalid_limit
     requirements = {
       "hakoniwa-core-pro" => {
         "capabilities" => {"shared_memory" => false},
@@ -82,7 +82,7 @@ class FoundationValidationTest < Minitest::Test
       catalog_ids: CATALOG_IDS
     )
 
-    assert errors.any? { |error| error.include?("shared_memory must be true") }
+    refute errors.any? { |error| error.include?("shared_memory") }
     assert errors.any? { |error| error.include?("min must be a positive integer") }
   end
 

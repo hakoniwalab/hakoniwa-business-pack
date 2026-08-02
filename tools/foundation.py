@@ -417,9 +417,9 @@ def evaluate_component(
         )
     for capability, enabled in required.get("capabilities", {}).items():
         installed = receipt.get("capabilities", {}).get(capability)
-        if enabled is True and installed is not True:
+        if isinstance(enabled, bool) and installed is not enabled:
             reasons.append(
-                _reason(f"capabilities.{capability}", True, installed)
+                _reason(f"capabilities.{capability}", enabled, installed)
             )
     for limit, constraint in required.get("build_limits", {}).items():
         minimum = constraint.get("min")
@@ -582,7 +582,9 @@ def load_build_catalog(path: Path) -> dict[str, dict]:
 
 
 def dependency_order(
-    requested: list[str], components: dict[str, dict]
+    requested: list[str],
+    components: dict[str, dict],
+    requirements: dict[str, dict] | None = None,
 ) -> list[str]:
     unknown = sorted(set(requested) - set(components))
     if unknown:
@@ -592,6 +594,25 @@ def dependency_order(
     result: list[str] = []
     visiting: set[str] = set()
     visited: set[str] = set()
+    requirements = requirements or {}
+
+    def dependencies_for(component_id: str) -> list[str]:
+        dependencies = list(components[component_id]["dependencies"])
+        required_capabilities = requirements.get(component_id, {}).get(
+            "capabilities", {}
+        )
+        # Endpoint's native default is Core-free. The legacy Foundation adapter
+        # keeps Core integration for existing Recipes, while an explicit
+        # Core-free requirement narrows this optional dependency. A reusable
+        # Catalog/Recipe profile resolver is tracked by Business Pack #87.
+        if component_id == "hakoniwa-pdu-endpoint" and (
+            required_capabilities.get("core_free_runtime") is True
+            or required_capabilities.get("hakoniwa_core") is False
+        ):
+            dependencies = [
+                item for item in dependencies if item != "hakoniwa-core-pro"
+            ]
+        return dependencies
 
     def visit(component_id: str) -> None:
         if component_id in visiting:
@@ -601,7 +622,7 @@ def dependency_order(
         if component_id in visited:
             return
         visiting.add(component_id)
-        for dependency in components[component_id]["dependencies"]:
+        for dependency in dependencies_for(component_id):
             visit(dependency)
         visiting.remove(component_id)
         visited.add(component_id)
@@ -621,7 +642,15 @@ def create_build_plan(
 ) -> dict:
     force = force or set()
     requirements = load_foundation_requirements(recipe)
-    order = dependency_order(list(requirements), components)
+    order = dependency_order(list(requirements), components, requirements)
+    resolved_dependencies = {
+        component_id: [
+            dependency
+            for dependency in components[component_id]["dependencies"]
+            if dependency in order
+        ]
+        for component_id in order
+    }
     invalid_force = sorted(force - set(order))
     if invalid_force:
         raise FoundationError(
@@ -672,7 +701,7 @@ def create_build_plan(
                 continue
             if any(
                 dependency in rebuild
-                for dependency in components[component_id]["dependencies"]
+                for dependency in resolved_dependencies[component_id]
             ):
                 rebuild.add(component_id)
                 changed = True
@@ -685,7 +714,7 @@ def create_build_plan(
         source = (business_pack_root / entry["source"]).resolve()
         dependency_rebuilds = [
             dependency
-            for dependency in entry["dependencies"]
+            for dependency in resolved_dependencies[component_id]
             if dependency in rebuild
         ]
         if component_id in force:
@@ -700,6 +729,7 @@ def create_build_plan(
                 "reason": reason,
                 "source": str(source),
                 "operations": entry["operations"],
+                "requirements": requirements.get(component_id, {}),
             }
         )
     return {
@@ -711,6 +741,7 @@ def create_build_plan(
             else ("NEEDS_BUILD" if actions else "SATISFIED")
         ),
         "dependency_order": order,
+        "resolved_dependencies": resolved_dependencies,
         "blocked": blocked,
         "actions": actions,
         "inspection": {
@@ -725,14 +756,25 @@ def _yaml_string(value: Path | str) -> str:
 
 
 def write_component_manifest(
-    component_id: str, paths: WorkspacePaths
+    component_id: str,
+    paths: WorkspacePaths,
+    required: dict | None = None,
 ) -> Path | None:
     build_dir = paths.foundation_build / component_id
     manifest = paths.foundation_build / f"{component_id}.yaml"
     prefix = paths.install_prefix
+    required_capabilities = (required or {}).get("capabilities", {})
     if component_id == "hakoniwa-core-pro":
         return None
     if component_id == "hakoniwa-pdu-endpoint":
+        core_free = (
+            required_capabilities.get("core_free_runtime") is True
+            or required_capabilities.get("hakoniwa_core") is False
+        )
+        core_enabled = not core_free
+        python_enabled = required_capabilities.get(
+            "python_binding", core_enabled
+        )
         content = f"""version: 1
 
 build:
@@ -742,10 +784,10 @@ build:
   parallel: 0
 
 bindings:
-  python: true
+  python: {str(bool(python_enabled)).lower()}
 
 features:
-  hakoniwa_core: true
+  hakoniwa_core: {str(core_enabled).lower()}
   zenoh: false
   mqtt: false
 
@@ -754,10 +796,10 @@ validation:
   examples: false
   tools: false
   benchmarks: false
-  python_import: true
+  python_import: {str(bool(python_enabled)).lower()}
 
 paths:
-  hakoniwa_core_root: {_yaml_string(prefix)}
+  hakoniwa_core_root: {_yaml_string(prefix) if core_enabled else '""'}
   vcpkg_root: ""
 """
     elif component_id == "hakoniwa-pdu-rpc":
@@ -820,11 +862,12 @@ def component_commands(
     source: Path,
     operations: list[str],
     paths: WorkspacePaths,
+    required: dict | None = None,
 ) -> list[list[str]]:
     hako = source / "tools" / "hako.py"
     if not hako.is_file():
         raise FoundationError(f"{component_id}: hako.py not found: {hako}")
-    manifest = write_component_manifest(component_id, paths)
+    manifest = write_component_manifest(component_id, paths, required)
     python = sys.executable
     build_dir = paths.foundation_build / component_id
     commands: list[list[str]] = []
@@ -870,6 +913,16 @@ def component_commands(
                 str(paths.install_prefix),
             ]
             if component_id == "hakoniwa-pdu-endpoint":
+                capabilities = (required or {}).get("capabilities", {})
+                core_free = (
+                    capabilities.get("core_free_runtime") is True
+                    or capabilities.get("hakoniwa_core") is False
+                )
+                if capabilities.get("python_binding", not core_free):
+                    command.extend(
+                        ["--python-venv", str(paths.foundation_python)]
+                    )
+            if component_id == "hakoniwa-pdu-rpc":
                 command.extend(
                     ["--python-venv", str(paths.foundation_python)]
                 )
@@ -885,6 +938,19 @@ def execute_build_plan(plan: dict, paths: WorkspacePaths) -> dict:
             + ", ".join(plan["blocked"])
         )
     prepare_workspace(paths)
+    if any(
+        action["component"] == "hakoniwa-pdu-rpc"
+        for action in plan["actions"]
+    ) and not (
+        paths.foundation_python
+        / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+    ).is_file():
+        if sys.version_info < (3, 12):
+            raise FoundationError("Python 3.12 or newer is required")
+        subprocess.run(
+            [sys.executable, "-m", "venv", str(paths.foundation_python)],
+            check=True,
+        )
     for action in plan["actions"]:
         source = Path(action["source"])
         for command in component_commands(
@@ -892,6 +958,7 @@ def execute_build_plan(plan: dict, paths: WorkspacePaths) -> dict:
             source,
             action["operations"],
             paths,
+            action.get("requirements"),
         ):
             print(f"> {subprocess.list2cmdline(command)}", flush=True)
             result = subprocess.run(command, cwd=source, check=False)

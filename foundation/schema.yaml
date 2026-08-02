@@ -17,7 +17,10 @@ foundation_requirements:
   capabilities:
     type: mapping
     key_format: snake_case
-    required_value: true
+    value_type: boolean
+    semantics:
+      true: capability must be enabled
+      false: capability must be disabled
   build_limits:
     type: mapping
     key_format: snake_case

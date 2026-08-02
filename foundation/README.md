@@ -34,8 +34,10 @@ foundation_requirements:
 ```
 
 `version.min`は、Receiptの`component.version`に対する下限です。
-機能の有無は`capabilities`で表し、特定リリース以降を必須とする外部契約が
-ある場合だけ、両方を併用します。
+機能の有無は`capabilities`で表します。`true`は機能が有効であること、
+`false`は機能が無効であることを要求します。例えばCore-free構成では
+`hakoniwa_core: false`を指定できます。特定リリース以降を必須とする外部契約が
+ある場合だけ、`version.min`も併用します。
 
 Component Receiptの標準配置:
 
