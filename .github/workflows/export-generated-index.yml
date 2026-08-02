@@ -1,25 +1,34 @@
-name: Export Generated Catalog Index
+name: Commit Generated Catalog Index
 
 on:
-  pull_request:
-    paths:
-      - 'catalog/**'
-      - '.github/workflows/export-generated-index.yml'
+  push:
+    branches:
+      - agent/refine-add-two-ints-runtime-contract
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  export:
+  generate:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: agent/refine-add-two-ints-runtime-contract
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.2'
       - run: ruby catalog/tools/generate_index.rb
-      - uses: actions/upload-artifact@v4
-        with:
-          name: generated-catalog-index
-          path: catalog/index.yaml
-          if-no-files-found: error
+      - name: Commit generated index
+        shell: bash
+        run: |
+          if git diff --quiet -- catalog/index.yaml; then
+            echo 'catalog/index.yaml is already current'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add catalog/index.yaml
+          git commit -m 'docs: regenerate catalog index'
+          git push origin HEAD:agent/refine-add-two-ints-runtime-contract
