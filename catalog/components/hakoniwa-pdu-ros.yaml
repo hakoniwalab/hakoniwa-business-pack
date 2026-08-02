@@ -8,10 +8,10 @@ repository:
 distribution:
   channel: oss
   notes:
-    - Public OSS Hakoniwa component for runtime PDU <-> ROS 2 topic conversion.
+    - Public OSS Hakoniwa component for runtime PDU <-> ROS 2 Topic conversion and ROS 2 Service Server bridging.
 verification:
-  verified_at: 2026-07-31
-  source_revision: 78386ef97323040f845757a52f2d6310197e0470
+  verified_at: 2026-08-02
+  source_revision: 00e96da7797686a80826e2e266f56f16520a68a7
   source_ref: main
 summary: Config-driven Python bridge between Hakoniwa PDU data and ROS 2 topics that resolves message mappings at runtime from PDU definitions and binding configuration without per-type bridge code.
 category:
@@ -25,212 +25,223 @@ status:
   maturity: active
   catalog_confidence: high
   notes:
-    - Cataloged from the current README and design contract plus Docker-based native ROS 2 Jazzy / CycloneDDS integration tests.
-    - Native verification distinguishes real-rclpy coverage from the broader fake/unit message coverage.
+    - Topic Bridge evidence comes from source contracts and Docker-native ROS 2 Jazzy tests.
+    - Service Bridge evidence comes from completed Issue #10, real-TCP tests, and the manual AddTwoInts walkthrough.
+    - Business Pack hako.py normalization and cross-platform host/Docker validation remain integration work.
 capabilities:
-  - name: Runtime PDU to ROS 2 mapping
-    description: Converts received Hakoniwa PDU data into ROS 2 messages and publishes them to configured topics at runtime.
+  - name: Configuration-driven ROS 2 Topic Bridge
+    description: Maps Hakoniwa PDU data and ROS 2 messages bidirectionally without per-type bridge implementation code.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-ros
         path: README.md
-        revision: 78386ef97323040f845757a52f2d6310197e0470
-  - name: Runtime ROS 2 to PDU mapping
-    description: Subscribes to ROS 2 topics, converts ROS messages to generated PDU Python types, and sends them through hakoniwa-pdu-endpoint.
-    evidence:
-      - repository: hakoniwalab/hakoniwa-pdu-ros
-        path: README.md
-        revision: 78386ef97323040f845757a52f2d6310197e0470
-  - name: Configuration-only bridge setup
-    description: Uses pdudef.json, endpoint configuration, and a compact binding JSON so new supported message types do not require bridge-side implementation code.
-    evidence:
-      - repository: hakoniwalab/hakoniwa-pdu-ros
-        path: README.md
-        revision: 78386ef97323040f845757a52f2d6310197e0470
-  - name: Endpoint transport independence
-    description: Delegates transport to hakoniwa-pdu-endpoint, allowing the same bridge mapping mechanism to operate across endpoint-supported communication backends.
-    evidence:
-      - repository: hakoniwalab/hakoniwa-pdu-ros
-        path: README.md
-        revision: 78386ef97323040f845757a52f2d6310197e0470
-  - name: Standard ROS message runtime mapping
-    description: Unit coverage includes PointCloud2, JointState, LaserScan, CameraInfo, and Float64MultiArray. Native Docker tests additionally verify real rclpy primitive-sequence behavior and value-preserving PDU round trips for JointState, LaserScan, and Float64MultiArray.
-    evidence:
-      - repository: hakoniwalab/hakoniwa-pdu-ros
-        path: test/test_type_mapper.py
-        revision: e0c2720842e84a6ca545f438f649a7b161296a69
-      - repository: hakoniwalab/hakoniwa-pdu-ros
-        path: test/native/test_native_mapping.py
-        revision: 216359864291d8f82cbee249743322f18a6725dc
-  - name: Binding-level ROS 2 QoS configuration
-    description: Each binding can declare history, depth, reliability, and durability. Omitting qos preserves the previous RELIABLE, VOLATILE, KEEP_LAST depth-10 behavior.
+        revision: 00e96da7797686a80826e2e266f56f16520a68a7
+  - name: Runtime Topic type mapping and QoS
+    description: Resolves generated PDU types, recursively maps standard ROS messages, supports binding-level QoS, and reports incompatibility.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-ros
         path: hakoniwa_pdu_ros/config_loader.py
-        revision: e896314efa796471bed1b7a72f64eeb6993121ac
+        revision: 00e96da7797686a80826e2e266f56f16520a68a7
       - repository: hakoniwalab/hakoniwa-pdu-ros
-        path: hakoniwa_pdu_ros/qos.py
-        revision: e896314efa796471bed1b7a72f64eeb6993121ac
-      - repository: hakoniwalab/hakoniwa-pdu-ros
-        path: README.md
-        revision: e896314efa796471bed1b7a72f64eeb6993121ac
-  - name: QoS mismatch diagnosis
-    description: The bridge logs resolved publisher and subscription QoS at startup and emits an actionable warning when ROS 2 reports an incompatible publisher QoS for a subscription.
+        path: test/native/test_native_mapping.py
+        revision: 00e96da7797686a80826e2e266f56f16520a68a7
+  - name: ROS 2 Service Server Bridge
+    description: Exposes configured ROS Service Servers backed by typed Hakoniwa RPC clients while service logic stays in the Hakoniwa Asset.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-ros
-        path: hakoniwa_pdu_ros/bridge_node.py
-        revision: e896314efa796471bed1b7a72f64eeb6993121ac
+        path: hakoniwa_pdu_ros/service_server_node.py
+        revision: 00e96da7797686a80826e2e266f56f16520a68a7
       - repository: hakoniwalab/hakoniwa-pdu-ros
-        path: test/native/test_native_qos.py
-        revision: 216359864291d8f82cbee249743322f18a6725dc
-  - name: Docker native ROS 2 integration suite
-    description: A one-command Ubuntu 24.04 / ROS 2 Jazzy / rmw_cyclonedds_cpp Docker suite verifies real message classes, compatible and incompatible QoS paths, backward-compatible defaults, timeouts, and node cleanup.
+        path: docs/spec-server.md
+        revision: 00e96da7797686a80826e2e266f56f16520a68a7
+  - name: Independent Service Binding and deterministic config generation
+    description: Defines ROS/Hakoniwa Service identity, endpoints, max_clients, timeout, and heap, then generates matching RPC Server and Client configs from one model.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: schema/service-binding.schema.json
+        revision: 00e96da7797686a80826e2e266f56f16520a68a7
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: hakoniwa_pdu_ros/service_config_generator.py
+        revision: 00e96da7797686a80826e2e266f56f16520a68a7
+  - name: Asynchronous per-service RPC client pool
+    description: Uses max_clients TypedRpcClient instances, bridges call_async into rclpy Futures, and rejects overflow as BUSY without queueing.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: hakoniwa_pdu_ros/service_client_pool.py
+        revision: 00e96da7797686a80826e2e266f56f16520a68a7
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: hakoniwa_pdu_ros/service_server_node.py
+        revision: 00e96da7797686a80826e2e266f56f16520a68a7
+  - name: Service deadline and shutdown lifecycle
+    description: Uses PDU-RPC cancellation, rejects late results after the Bridge deadline, and closes active calls after terminal cleanup.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: test/native/test_native_service_server_node.py
+        revision: 00e96da7797686a80826e2e266f56f16520a68a7
+  - name: Python RpcMuxServer fixture over real TCP
+    description: Uses hakoniwa-pdu-rpc RpcMuxServer and tcp_mux so independent Bridge clients share one listener with request correlation.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: test/native/add_two_ints_rpc_fixture.py
+        revision: 00e96da7797686a80826e2e266f56f16520a68a7
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: test/native/test_native_rpc_add_two_ints.py
+        revision: 00e96da7797686a80826e2e266f56f16520a68a7
+  - name: Docker native Topic and Service suite
+    description: Ubuntu 24.04 / ROS 2 Jazzy tests cover Topic mapping/QoS and AddTwoInts normal, parallel, BUSY, timeout, conversion-error, shutdown, and cleanup paths.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-ros
         path: test/docker/run_native_tests.sh
-        revision: e0737d85fc7a06463ef26f759976422def0ed9f3
+        revision: 00e96da7797686a80826e2e266f56f16520a68a7
       - repository: hakoniwalab/hakoniwa-pdu-ros
-        path: test/native/test_native_mapping.py
-        revision: 216359864291d8f82cbee249743322f18a6725dc
-      - repository: hakoniwalab/hakoniwa-pdu-ros
-        path: test/native/test_native_qos.py
-        revision: 78386ef97323040f845757a52f2d6310197e0470
-      - repository: hakoniwalab/hakoniwa-pdu-ros
-        path: .github/workflows/native-integration.yml
-        revision: 216359864291d8f82cbee249743322f18a6725dc
+        path: examples/service/README.md
+        revision: 00e96da7797686a80826e2e266f56f16520a68a7
 limitations:
-  - Requires ROS 2 and Python runtime support; the documented quick start and native test environment target Ubuntu 24.04 with ROS 2 Jazzy.
-  - Binary layout conversion is provided by generated hakoniwa-pdu-python converters; this component does not implement PDU binary layouts itself.
-  - Endpoint transport behavior and availability depend on hakoniwa-pdu-endpoint configuration and enabled backends.
-  - A PDU type must have compatible generated Python conversion artifacts and field structure for recursive ROS message mapping.
-  - Unit coverage of a message type is not equivalent to native real-rclpy verification; current native mapping coverage is JointState, LaserScan, and Float64MultiArray.
-  - The native QoS suite uses rmw_cyclonedds_cpp. Other RMW implementations may differ in discovery or incompatible-QoS event behavior.
-  - The current native ROS-to-PDU tests replace the endpoint transport manager with an in-memory capture manager, so they verify ROS graph, QoS, mapping, and generated PDU bytes rather than a specific endpoint backend end to end.
+  - Native execution requires Linux, Python, and ROS 2; verified Service tests use Ubuntu 24.04 and ROS 2 Jazzy.
+  - Generated hakoniwa-pdu converters own binary layout; this component owns mapping and wiring.
+  - Topic transport depends on hakoniwa-pdu-endpoint; Service lifecycle and tcp_mux depend on hakoniwa-pdu-rpc.
+  - Current Service direction is ROS Service Client -> Service Server Bridge -> Hakoniwa RPC Server; reverse direction is not implemented.
+  - One RpcClient handles one in-flight request; concurrency comes from max_clients and overflow is rejected without queueing.
+  - Variable-length heap E2E and explicit encoded-capacity overflow rejection remain follow-up work.
+  - Business Pack-compliant doctor/configure/build/test/install/smoke operations are not implemented yet.
+  - Cross-platform macOS, Windows, and Linux host/Docker Recipe evidence is not recorded yet.
 interfaces:
   inputs:
-    - name: Binding config
+    - name: Topic Binding config
       kind: config
-      description: Maps Hakoniwa robot/PDU keys to ROS-owned topics, optional directions, and optional per-binding ROS 2 QoS.
-    - name: PDU definition
+      description: Maps PDU keys to ROS topics, directions, and optional QoS.
+    - name: Topic Endpoint config
       kind: config
-      description: pdudef.json supplies PDU type, channel ID, payload size, and message type information.
-    - name: Endpoint config
-      kind: config
-      description: Selects and configures the hakoniwa-pdu-endpoint communication backend.
-    - name: ROS 2 topic messages
+      description: Selects hakoniwa-pdu-endpoint transport.
+    - name: ROS 2 Topic messages
       kind: api
-      description: ROS messages received by bridge subscriptions for ROS -> PDU transfer.
+      description: Messages received by Topic Bridge subscriptions.
+    - name: Service Binding config
+      kind: config
+      description: Maps ROS Services to Hakoniwa RPC Services and declares endpoints, max_clients, timeout, and heap.
+    - name: Service RPC Endpoint config
+      kind: config
+      description: Defines physical RPC client transport; environment-specific addresses belong to the Recipe.
+    - name: ROS 2 Service requests
+      kind: api
+      description: Requests converted into generated PDU request bodies.
   outputs:
-    - name: ROS 2 topic messages
+    - name: ROS 2 Topic messages
       kind: api
-      description: ROS messages published from PDU data on bridge-owned /pdu topic paths by default.
+      description: Messages published from Hakoniwa PDU data.
     - name: Hakoniwa PDU payloads
       kind: pdu
-      description: PDU data sent through hakoniwa-pdu-endpoint after ROS message conversion.
+      description: Topic data sent through Endpoint.
+    - name: ROS 2 Service responses
+      kind: api
+      description: Responses converted from terminal Hakoniwa RPC results.
+    - name: Generated PDU-RPC service configs
+      kind: config
+      description: Matching server/client configs generated from one Service Binding.
   protocols:
     - name: ROS 2 topics
-      role: publisher | subscriber
-      notes: Bidirectional topic bridge; one-way direction and history/depth/reliability/durability QoS can be configured per binding.
-    - name: Hakoniwa PDU Endpoint
-      role: local | remote
-      notes: Endpoint owns PDU cache and transport; representative documented backends include Zenoh, WebSocket, and TCP/UDP.
+      role: pubsub
+      notes: Bidirectional or one-way Topic Bridge.
+    - name: ROS 2 services
+      role: server
+      notes: ROS Service Servers backed by Hakoniwa RPC Clients.
+    - name: Hakoniwa PDU-RPC
+      role: client
+      notes: PDU-RPC owns IDs, timeout, cancellation, correlation, and tcp_mux.
   configuration:
     - path: config/sample/sample_binding.json
-      description: Example binding between PDU keys and ROS topics.
-    - path: config/sample/endpoint_zenoh.json
-      description: Representative Zenoh endpoint configuration used by the quick start.
+      description: Topic Binding example.
+    - path: schema/service-binding.schema.json
+      description: Canonical Service Binding schema.
+    - path: config/service/add_two_ints.json
+      description: AddTwoInts Service Binding example.
+    - path: examples/service/README.md
+      description: Manual three-process Service demo.
 dependencies:
   required:
     - name: ROS 2
       type: runtime
-      notes: Required for message types, topic publication/subscription, colcon build, and ros2 run.
+      notes: Provides messages, Services, rclpy, colcon, and ros2 commands.
     - name: Python
       type: runtime
-      notes: Runtime implementation and generated PDU Python converters are Python-based.
+      notes: Hosts Bridge, converters, and RPC bindings.
     - name: hakoniwa-pdu-endpoint
       type: repository
-      notes: Provides PDU cache, communication transport, receive events, and send/receive APIs.
+      notes: Provides Topic and lower-level RPC transport.
     - name: hakoniwa-pdu-python
       type: package
-      notes: Provides generated PDU Python types and binary conversion used by the bridge.
+      notes: Provides generated PDU Python types and converters.
     - name: hakoniwa-pdu-registry
       type: repository
-      notes: Defines/generates the PDU type artifacts consumed by hakoniwa-pdu-python and the runtime bridge.
+      notes: Defines and generates Topic and Service artifacts and offsets.
+    - name: hakoniwa-pdu-rpc
+      type: repository
+      notes: Provides typed async RPC, Python RpcMuxServer, shared native loading, correlation, timeout/cancel, and tcp_mux.
   optional:
     - name: Zenoh backend
       type: runtime
-      notes: Used by the documented sample configuration; other endpoint communication backends may be selected instead.
+      notes: Used by the Topic quick start.
 platforms:
   supported:
     - Linux
   notes:
-    - The documented quick start and native suite target Ubuntu 24.04 and ROS 2 Jazzy.
-    - The Docker runner can be launched from Docker-capable macOS, Windows, or Linux hosts; the container test baseline is Linux.
+    - Native Bridge runtime targets Ubuntu 24.04 / ROS 2 Jazzy.
+    - Docker-capable macOS, Windows, and Linux hosts are candidates for Business Pack Recipes.
 connects_to:
   - component_id: hakoniwa-pdu-endpoint
     direction: uses
     interface: endpoint cache / communication backend
-    notes: Transport and PDU send/receive responsibilities remain in the Endpoint layer.
+    notes: Topic and lower-level RPC transport remain in Endpoint.
   - component_id: hakoniwa-pdu-python
     direction: uses
-    interface: generated Python PDU types and binary converters
-    notes: PDU binary layout responsibility remains in hakoniwa-pdu-python.
+    interface: generated Python PDU types and converters
+    notes: Binary layout stays in generated converters.
   - component_id: hakoniwa-pdu-registry
     direction: uses
-    interface: PDU definitions and generated type conventions
-    notes: Runtime recursive field mapping assumes the generated converter/type structure defined by the Registry toolchain.
+    interface: PDU definitions and generated conventions
+    notes: Mapping depends on Registry artifacts and offsets.
   - component_id: hakoniwa-core-pro
     direction: related
     interface: Hakoniwa runtime / PDU environment
-    notes: Typical simulation-side PDU producers and consumers participate in the Hakoniwa runtime, but the bridge itself is specifically an Endpoint-layer ROS integration component.
+    notes: Typical Assets participate in Core while the Bridge is an integration component.
 data_contracts:
-  - name: PDU to ROS binding contract
-    description: A binding identifies robot_name and pdu_name and optionally direction/topic; PDU type, channel ID, and payload size are resolved from pdudef.json.
+  - name: Topic Binding contract
+    description: Maps PDU identity to ROS Topic ownership, direction, and QoS.
     source:
       - repository: hakoniwalab/hakoniwa-pdu-ros
         path: README.md
-        revision: 78386ef97323040f845757a52f2d6310197e0470
-  - name: Binding QoS contract
-    description: A binding may declare history, depth, reliability, and durability. Unsupported fields and values are rejected before startup, while omission preserves the previous defaults.
+        revision: 00e96da7797686a80826e2e266f56f16520a68a7
+  - name: Service Binding contract
+    description: Defines ROS/Hakoniwa Service identity, endpoints, max_clients, timeout, and heap.
     source:
       - repository: hakoniwalab/hakoniwa-pdu-ros
-        path: DESIGN.md
-        revision: e896314efa796471bed1b7a72f64eeb6993121ac
-      - repository: hakoniwalab/hakoniwa-pdu-ros
-        path: hakoniwa_pdu_ros/config_loader.py
-        revision: e896314efa796471bed1b7a72f64eeb6993121ac
-  - name: Default ROS topic ownership contract
-    description: By default ROS-owned topics use /<robot>/<pdu>, while PDU-owned mirror topics are published under /pdu/<robot>/<pdu>; the bridge does not subscribe to the /pdu mirror path.
+        path: schema/service-binding.schema.json
+        revision: 00e96da7797686a80826e2e266f56f16520a68a7
+  - name: Deterministic Service config generation
+    description: Generates names, channel IDs, maxClients, and matching server/client configs from one model.
     source:
       - repository: hakoniwalab/hakoniwa-pdu-ros
-        path: README.md
-        revision: 78386ef97323040f845757a52f2d6310197e0470
-  - name: Generated converter contract
-    description: hakoniwa-pdu-ros maps ROS messages to/from generated pdu_pytype objects while hakoniwa-pdu-python owns pdu_pytype <-> binary conversion.
-    source:
-      - repository: hakoniwalab/hakoniwa-pdu-ros
-        path: README.md
-        revision: 78386ef97323040f845757a52f2d6310197e0470
+        path: hakoniwa_pdu_ros/service_config_generator.py
+        revision: 00e96da7797686a80826e2e266f56f16520a68a7
 recipe_roles:
   - role: bridge
-    description: Bridges ROS 2 topic messages and Hakoniwa PDU data bidirectionally.
+    description: Bridges ROS Topics to PDU and ROS Services to RPC.
   - role: integration_boundary
-    description: Defines a configuration-driven boundary between existing ROS 2 nodes and Hakoniwa PDU systems.
+    description: Defines configuration-driven ROS/Hakoniwa boundaries.
   - role: communication_infrastructure
-    description: Participates in runtime PDU exchange while delegating actual transport to hakoniwa-pdu-endpoint.
+    description: Participates in exchange while delegating transport and RPC state.
 typical_usecases:
-  - Connect existing ROS 2 nodes to Hakoniwa PDU without writing per-message bridge code.
-  - Consume BEST_EFFORT sensor topics such as JointState by declaring compatible binding QoS instead of inserting a relay.
-  - Publish Hakoniwa sensor or state PDU data into ROS 2 topics.
-  - Accept ROS 2 command/value topics and forward them into a Hakoniwa simulation through PDU.
-  - Reuse the same PDU/ROS mapping while changing the Endpoint communication backend.
+  - Connect ROS 2 Topics to Hakoniwa PDU without per-message bridge code.
+  - Expose a Hakoniwa Asset RPC operation as a ROS 2 Service Server.
+  - Provide bounded Service concurrency with a generated max_clients pool.
+  - Run ROS 2 in Docker while calling a host Hakoniwa RPC Server over TCP.
 anti_usecases:
-  - Replacing hakoniwa-pdu-endpoint transport or cache infrastructure.
-  - Generating PDU binary layouts or generated Python converters by itself.
-  - Replacing ROS 2 with a ROS-independent runtime.
-  - Claiming every ROS 2 message type or RMW implementation is natively verified without test evidence.
+  - Replacing Endpoint transport, PDU-RPC state management, or generated converters.
+  - Calling an external ROS Service from a Hakoniwa Asset using the current Server Bridge.
+  - Queueing unbounded Service requests when the pool is full.
+  - Claiming cross-platform Business Pack execution without Recipe evidence.
 demo_candidates:
   - name: Bidirectional PDU and ROS 2 bridge over Zenoh
-    description: Run the documented Ubuntu quick start, verify Zenoh -> ROS on /pdu/hakoniwa/drone/pos, then verify ROS -> Zenoh with the sample command publisher.
+    description: Run the documented Ubuntu Topic quick start.
     required_components:
       - hakoniwa-pdu-ros
       - hakoniwa-pdu-endpoint
@@ -239,54 +250,58 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-pdu-ros
         path: README.md
-        revision: 78386ef97323040f845757a52f2d6310197e0470
+        revision: 00e96da7797686a80826e2e266f56f16520a68a7
+  - name: AddTwoInts ROS 2 Service Server Bridge
+    description: Start RpcMuxServer and Service Bridge, call /add_two_ints, and verify the sum response.
+    required_components:
+      - hakoniwa-pdu-ros
+      - hakoniwa-pdu-rpc
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-pdu-python
+      - hakoniwa-pdu-registry
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: examples/service/README.md
+        revision: 00e96da7797686a80826e2e266f56f16520a68a7
 operations:
   build:
     commands:
       - colcon build
     notes:
-      - Source the selected ROS 2 distribution and Python PDU virtual environment first.
-      - Build hakoniwa-pdu-endpoint with the communication backend required by the endpoint configuration.
+      - A Business Pack-compliant hako.py build manifest is not implemented yet.
   test:
     commands:
-      - python3 -m unittest discover -s test -p 'test_type_mapper.py'
-      - ./test/docker/run_native_tests.sh
+      - python3 -m unittest discover -s test
+      - bash test/docker/run_native_tests.sh
     notes:
-      - Fast unit tests cover mapper logic and configuration contracts.
-      - The Docker command builds an Ubuntu 24.04 / ROS 2 Jazzy image and runs native real-rclpy mapping and CycloneDDS QoS tests.
-      - The verified maintainer run on 2026-07-31 completed with 6 passed in 0.26 seconds.
+      - Final Issue #10 evidence recorded 56 ROS-independent and 16 Docker-native tests.
   run:
     commands:
       - ros2 run hakoniwa_pdu_ros bridge --config config/sample/sample_binding.json
+      - python3 -m hakoniwa_pdu_ros.generate_service_config --config config/service/add_two_ints.json --output-dir <output-dir>
+      - service-server --config config/service/add_two_ints.json --offset-dir <offset-dir> --rpc-library <shared-rpc-library>
     notes:
-      - Resolve HAKONIWA_PDU_ENDPOINT_PYTHON_PATH when developing against a local Endpoint build.
-      - The installed config path may differ from the source-tree relative path after colcon build.
+      - Topic and Service Bridges use separate Binding contracts.
+      - Config generation is repository-specific and is not yet a Business Pack hako.py extension.
 known_gaps:
-  - Add a Business Pack Recipe that captures the verified bidirectional ROS 2 bridge flow and its target environment.
-  - Add native endpoint-backend end-to-end validation instead of replacing the transport manager with an in-memory capture manager.
-  - Extend native mapping coverage to PDU -> ROS and to PointCloud2 / CameraInfo where real-rclpy behavior matters.
-  - Record compatibility evidence for RMW implementations beyond rmw_cyclonedds_cpp.
+  - Implement a manifest-driven Business Pack hako.py doctor/configure/build/test/install/smoke contract.
+  - Keep hako.py --config for build manifests and expose Service Binding through distinct --binding semantics.
+  - Validate an AddTwoInts host/Docker Recipe on macOS, Windows, and Linux.
+  - Add the follow-on host MuJoCo Asset / Docker ROS 2 Service Recipe.
+  - Add variable-length Service heap-capacity E2E and explicit overflow rejection.
 source_refs:
   - repository: hakoniwalab/hakoniwa-pdu-ros
     path: README.md
-    revision: 78386ef97323040f845757a52f2d6310197e0470
-    description: Architecture, mapping responsibilities, binding and QoS contracts, verified message coverage, and Ubuntu quick start.
+    revision: 00e96da7797686a80826e2e266f56f16520a68a7
+    description: Topic and Service architecture, configs, commands, and tests.
   - repository: hakoniwalab/hakoniwa-pdu-ros
-    path: DESIGN.md
-    revision: 78386ef97323040f845757a52f2d6310197e0470
-    description: Detailed design for runtime ROS message/PDU mapping and binding-level QoS.
+    path: docs/spec-server.md
+    revision: 00e96da7797686a80826e2e266f56f16520a68a7
+    description: Service Bridge responsibilities and contracts.
   - repository: hakoniwalab/hakoniwa-pdu-ros
-    path: test/native/test_native_mapping.py
-    revision: 216359864291d8f82cbee249743322f18a6725dc
-    description: Native real-rclpy primitive-sequence and value-preserving PDU round-trip tests.
-  - repository: hakoniwalab/hakoniwa-pdu-ros
-    path: test/native/test_native_qos.py
-    revision: 78386ef97323040f845757a52f2d6310197e0470
-    description: Native CycloneDDS compatible, incompatible, default-QoS, and cleanup tests.
-  - repository: hakoniwalab/hakoniwa-pdu-ros
-    path: test/docker/README.md
-    revision: 216359864291d8f82cbee249743322f18a6725dc
-    description: Docker native integration environment, command, and scope.
+    path: examples/service/README.md
+    revision: 00e96da7797686a80826e2e266f56f16520a68a7
+    description: Manual AddTwoInts walkthrough.
 tags:
   - hakoniwa
   - pdu
