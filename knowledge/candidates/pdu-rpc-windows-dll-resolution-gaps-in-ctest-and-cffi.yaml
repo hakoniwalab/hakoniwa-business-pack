@@ -105,7 +105,7 @@ validation:
       applied in isolation so the two causes stay distinguishable.
 
 tracking:
-  implementation_status: none
+  implementation_status: open
   issues:
     - repository: hakoniwalab/hakoniwa-pdu-rpc
       number: 62
@@ -122,6 +122,13 @@ promotion_targets:
   executable_guardrails: []
 
 promotion_rationale:
+  - >-
+    On executable guardrails: no guardrail is proposed, deliberately. Both gaps
+    are fixed at the source -- one CMake test property and one
+    os.add_dll_directory call in the package -- after which there is no residual
+    condition for a check to detect. A guardrail here would only assert that the
+    fix is present, which the existing Windows CI job already does once the
+    workflow stops compensating by hand.
   - Anyone standing up the Recipe's host side on Windows hits both gaps before any RPC
     call is attempted, so this belongs with the runtime and component guidance rather
     than in a Recipe's own steps.

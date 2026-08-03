@@ -166,7 +166,7 @@ validation:
       by a single-variable change (port only) flipping four tests from fail to pass.
 
 tracking:
-  implementation_status: none
+  implementation_status: open
   issues:
     - repository: hakoniwalab/hakoniwa-pdu-endpoint
       number: 62
@@ -183,6 +183,15 @@ promotion_targets:
   executable_guardrails: []
 
 promotion_rationale:
+  - >-
+    On executable guardrails: this one is genuinely checkable, and a doctor-style
+    probe is proposed rather than declined. Before a Recipe claims a fixed port,
+    a check can read the platform's dynamic range (netsh on Windows,
+    net.ipv4.ip_local_port_range on Linux) and fail if the declared port falls
+    inside it, then attempt a bind to catch the case where it is already taken.
+    executable_guardrails is left empty only because the guardrail belongs to
+    whichever surface upstream picks -- foundation doctor, the recipe validator,
+    or the component's own test setup -- and that choice is upstream's.
   - Any Recipe that declares a fixed TCP port needs to know that on Windows the
     49152-65535 band is not safe to claim. That is a runtime rule, not a component
     detail.
