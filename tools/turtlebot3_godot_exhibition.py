@@ -22,6 +22,12 @@ from recipe_portal import PortalCommand, PortalEnvironment, PortalLink, write_re
 
 
 RECIPE_ID = "mujoco-turtlebot3-godot"
+RUNTIME_REQUIREMENTS = (
+    Path(__file__).absolute().parents[1]
+    / "recipes"
+    / "requirements"
+    / f"{RECIPE_ID}.txt"
+)
 PROFILES = ("gamepad", "route")
 CODEC_PACKAGES = "geometry_msgs;sensor_msgs"
 AXIS_COUNT = 6
@@ -239,7 +245,7 @@ PROJECT_GODOT = """[application]\nconfig/name=\"Hakoniwa TurtleBot3 Godot Exhibi
 
 MAIN_SCENE = """[gd_scene load_steps=3 format=3]\n\n[ext_resource type=\"PackedScene\" path=\"res://assets/TurtleBot3.generated.tscn\" id=\"1_tb3\"]\n[ext_resource type=\"Script\" path=\"res://monitor.gd\" id=\"2_monitor\"]\n\n[node name=\"Main\" type=\"Node3D\"]\nscript = ExtResource(\"2_monitor\")\n\n[node name=\"TurtleBot3\" parent=\".\" instance=ExtResource(\"1_tb3\")]\n\n[node name=\"Camera3D\" type=\"Camera3D\" parent=\".\"]\ntransform = Transform3D(0.707107, -0.301511, 0.639602, 0, 0.904534, 0.426401, -0.707107, -0.301511, 0.639602, 2.8, 1.7, 2.8)\ncurrent = true\n"""
 
-MONITOR_GD = """extends Node3D\n\nvar _last_position := Vector3.ZERO\nvar _elapsed := 0.0\n\nfunc _ready() -> void:\n    print(\"TB3_GODOT_PROJECT_READY\")\n\nfunc _process(delta: float) -> void:\n    _elapsed += delta\n    if _elapsed < 1.0:\n        return\n    _elapsed = 0.0\n    var body := get_node_or_null(\"TurtleBot3/RosToGodot\") as Node3D\n    if body == null:\n        return\n    var pos := body.position\n    if pos.distance_to(_last_position) > 0.0001:\n        print(\"TB3_GODOT_POSE position=\", pos)\n        _last_position = pos\n"""
+MONITOR_GD = """extends Node3D\n\nvar _last_position := Vector3.ZERO\nvar _elapsed := 0.0\n\nfunc _ready() -> void:\n    print(\"TB3_GODOT_PROJECT_READY\")\n    var sim_node := get_node_or_null(\"TurtleBot3/HakoniwaSimNode\")\n    if sim_node == null:\n        push_error(\"TB3_GODOT_SYNC_ERROR HakoniwaSimNode not found\")\n        return\n    sim_node.simulation_ready.connect(_on_simulation_ready)\n\nfunc _on_simulation_ready() -> void:\n    print(\"TB3_GODOT_SYNC_READY\")\n\nfunc _process(delta: float) -> void:\n    _elapsed += delta\n    if _elapsed < 1.0:\n        return\n    _elapsed = 0.0\n    var body := get_node_or_null(\"TurtleBot3/RosToGodot\") as Node3D\n    if body == null:\n        return\n    var pos := body.position\n    if pos.distance_to(_last_position) > 0.0001:\n        print(\"TB3_GODOT_POSE position=\", pos)\n        _last_position = pos\n"""
 
 
 def write_project_files(paths) -> None:
@@ -403,8 +409,25 @@ def write_portal(paths, runtime: RuntimePaths) -> Path:
     )
 
 
+def install_runtime_dependencies(python: Path) -> None:
+    requirements = required(RUNTIME_REQUIREMENTS, "TurtleBot3 exhibition Python requirements")
+    command = [
+        str(python),
+        "-m",
+        "pip",
+        "install",
+        "--disable-pip-version-check",
+        "--requirement",
+        str(requirements),
+    ]
+    rc = run(command)
+    if rc:
+        raise RecipeError("failed to install TurtleBot3 exhibition dependencies into Foundation Python")
+
+
 def configure(mujoco_root: Path, mbody_root: Path, godot_root: Path, godot_binary: Path | None) -> int:
     foundation, paths, runtime = preflight(mujoco_root, godot_binary)
+    install_runtime_dependencies(runtime.foundation_python)
     foundation.prepare_workspace(paths)
     for directory in (paths.recipe_root / "runtime", paths.recipe_root / "project", paths.recipe_root / "src"):
         directory.mkdir(parents=True, exist_ok=True)
@@ -464,7 +487,10 @@ def probe_python(runtime: RuntimePaths, venv_root: Path) -> tuple[bool, str]:
     code = "import json,pathlib,sys; import hakopy,hakoniwa_pdu,hakoniwa_pdu_endpoint,pygame; print(json.dumps({'prefix':str(pathlib.Path(sys.prefix).absolute()),'pygame':pygame.version.ver}))"
     result = subprocess.run([str(runtime.foundation_python), "-c", code], capture_output=True, text=True, check=False)
     if result.returncode:
-        return False, result.stderr.strip() or "Foundation imports failed"
+        detail = result.stderr.strip() or "Foundation imports failed"
+        if "No module named 'pygame'" in detail:
+            return False, "pygame is missing; rerun the Recipe configure command"
+        return False, detail
     return True, result.stdout.strip().splitlines()[-1]
 
 
@@ -534,7 +560,7 @@ def start(mujoco_root: Path, godot_binary: Path | None, profile: str) -> int:
         controller_log = paths.recipe_logs / f"tb3-{profile}.out"
         controller = controller_log.read_text(encoding="utf-8", errors="replace") if controller_log.is_file() else ""
         controller_ready = "TB3_GAMEPAD_READY" in controller if profile == "gamepad" else "TB3 route demo start" in controller
-        if state == "RUNNING" and "TB3 endpoint started successfully" in plant and "TB3_GODOT_PROJECT_READY" in godot and controller_ready:
+        if state == "RUNNING" and "TB3 endpoint started successfully" in plant and "TB3_GODOT_SYNC_READY" in godot and controller_ready:
             ready = True
             break
         if state != "RUNNING":
@@ -542,6 +568,10 @@ def start(mujoco_root: Path, godot_binary: Path | None, profile: str) -> int:
         time.sleep(0.5)
     if not ready:
         print(f"[NG] TB3 {profile} runtime is not ready; state={state}, logs={paths.recipe_logs}", file=sys.stderr)
+        cleanup = launcher_control_command(runtime.foundation_python, "terminate", session)
+        cleanup_rc = run(cleanup, env=env)
+        if cleanup_rc:
+            print(f"[WARN] Launcher cleanup failed with rc={cleanup_rc}; inspect {session}", file=sys.stderr)
         return 1
     print("TurtleBot3 MuJoCo + Godot Demo remains running in the background.")
     print(f"Next: {display('status')} | {display('stop')}")
