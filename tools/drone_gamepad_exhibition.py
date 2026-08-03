@@ -301,7 +301,6 @@ def write_launcher(paths, drone_root: Path, viewer_root: Path, runtime: RuntimeP
                     "web_bridge_fleets_node1",
                     "--delta-time-step-usec",
                     "20000",
-                    "--enable-ondemand",
                 ],
                 "cwd": str(paths.recipe_root),
                 "depends_on": ["visual-state-publisher"],

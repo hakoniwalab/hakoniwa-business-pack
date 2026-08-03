@@ -250,6 +250,11 @@ foundation_requirements:
       hako_launcher: true
       launcher_background_lifecycle: true
       shm_backend: true
+  hakoniwa-pdu-endpoint:
+    capabilities:
+      hakoniwa_core: true
+      core_callback: true
+      websocket: true
   hakoniwa-pdu-bridge-core:
     capabilities:
       hakoniwa_app: true

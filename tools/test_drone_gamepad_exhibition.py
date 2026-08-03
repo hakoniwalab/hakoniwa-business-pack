@@ -346,6 +346,8 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
         self.assertIn("human_actions:", content)
         self.assertIn("operate_gamepad", content)
         self.assertIn("recipes/requirements/drone-single-mujoco-threejs-gamepad.txt", content)
+        self.assertIn("hakoniwa-pdu-endpoint:", content)
+        self.assertIn("core_callback: true", content)
 
 
 if __name__ == "__main__":
