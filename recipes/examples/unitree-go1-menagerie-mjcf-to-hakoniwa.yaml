@@ -751,6 +751,9 @@ demo:
     expected_behavior:
       - LauncherService.terminate stops only the plant and sender it owns.
       - The session file remains inspectable with state TERMINATED.
+    verification_checks:
+      - python tools/unitree_go1_demo.py status reports TERMINATED.
+      - No Recipe-owned Go1 plant or sender remains after normal termination.
     cautions:
       - Do not use kill -9, broad process-name cleanup, or hako-cmd stop as process termination.
 
