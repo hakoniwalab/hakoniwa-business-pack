@@ -1,0 +1,216 @@
+id: pdu-rpc-fixed-ports-fall-inside-windows-dynamic-port-range
+title: The PDU-RPC test and Recipe ports sit inside the Windows dynamic port range, so an unrelated outbound connection can steal them and the bind failure reports success
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - runtime_rule
+  - validation_rule
+
+summary: >
+  hakoniwa-pdu-rpc's contract tests bind fixed ports 54001 (basic/infinite-wait/
+  timeout-cancel/cancel-race) and 54011 (mux server), and the Business Pack Recipe
+  ros2-service-add-two-ints-host-docker declares default_port 54010. On Windows the
+  default TCP dynamic port range is 49152-65535, so all three are eligible to be
+  handed out as ephemeral source ports for ordinary outbound connections made by any
+  process on the machine. When that happens the bind fails with WSAEADDRINUSE and the
+  whole test binary fails at setup, which reads as "PDU-RPC is broken on Windows"
+  rather than "the port was taken". Measured on 2026-08-03: all of 54001, 54010, and
+  54011 were simultaneously unavailable on an ordinary desktop session, with 54001
+  held by a browser-class connection to a remote :443. Rebinding to 24001/24011,
+  outside the dynamic range, made all four contract tests pass unchanged.
+  The failure is made much harder to diagnose by a second defect: the bind error is
+  printed as "Failed to bind socket: <the OS text for error code 0>" -- on a Japanese
+  Windows, "この操作を正しく終了しました。", i.e. ERROR_SUCCESS. The real Winsock
+  error (10048) is never shown. A reader sees a socket failure whose message says the
+  operation succeeded. The cause is ordering, not the wrong API: comm_tcp.cpp calls
+  raw_close() first and reads last_socket_error() afterwards, and closesocket()
+  overwrites the thread's Winsock error in between.
+
+observation:
+  context: >
+    First native Windows attempt at the host side of the upstream Recipe
+    ros2-service-add-two-ints-host-docker, on Windows 11 Pro x86_64, 2026-08-03,
+    against hakoniwa-pdu-rpc 3c96784 and hakoniwa-pdu-endpoint 5e45af8, both built
+    and installed through their own tools/hako.py.
+  details:
+    - "The range is not a guess. `netsh int ipv4 show dynamicport tcp` reports start
+      port 49152, number of ports 16384, i.e. 49152-65535. 54001, 54010, and 54011 are
+      all inside it."
+    - "All three ports were actually taken at the same moment, not merely eligible.
+      A bind probe on 2026-08-03 returned WinError 10048 for 54001, 54010, and 54011,
+      while 24001 and 24011 bound immediately. `netstat -ano` showed 54001 held as the
+      local port of an ESTABLISHED connection to a remote :443, i.e. an ordinary
+      outbound session, not another Hakoniwa process."
+    - "Causality was established by changing only the port. The four contract tests
+      (basic, infinite_wait, timeout_cancel, cancel_race) were run against a copy of
+      test/configs with 54001 rewritten to 24001 and 54011 to 24011, and nothing else
+      changed. All four exited 0. Against the original configs all four failed at
+      RpcRuntime::start()."
+    - "The diagnostic is actively misleading. The failing path prints
+      'Failed to bind socket: ' followed by the localized text for error code 0
+      (ERROR_SUCCESS), then 'Failed to open PDU Comm: 3'."
+    - "CORRECTED 2026-08-03 after an adversarial review by Codex, which read the
+      source and refuted this candidate's first explanation. The original text here
+      claimed the code reads errno or GetLastError() instead of WSAGetLastError().
+      That is wrong: hakoniwa-pdu-endpoint/src/socket_portability_win.cpp:49 defines
+      last_socket_error() as exactly WSAGetLastError(). The real defect is ordering.
+      In src/comm_tcp.cpp:157 the bind-failure branch calls raw_close() first and only
+      then evaluates socket_error_message(last_socket_error()), and closesocket()
+      resets the calling thread's Winsock error in between, so the code reports
+      whatever the successful close left behind -- zero. src/comm_tcp_mux.cpp:435 has
+      the same shape. The fix is to capture the error into a local before any cleanup,
+      not to change which API is called. This is adjacent to, but not the same as,
+      the Winsock-versus-POSIX normalization upstream did for timeouts in
+      hakoniwa-pdu-endpoint pull request 57."
+    - "Scope note. This is not a Hakoniwa-specific bug in the sense of wrong protocol
+      logic; any fixed port in 49152-65535 is exposed on Windows. It matters here
+      because the affected ports are baked into upstream's own test fixtures and into
+      a Business Pack Recipe's declared default, so the first Windows run of either
+      fails for a reason unrelated to what is being tested."
+    - "Why upstream CI does not see it. A CI runner is a short-lived machine with
+      almost no outbound traffic, so the ephemeral pool is nearly empty and a fixed
+      port in that range is very unlikely to be taken. The failure needs a real
+      desktop with a browser and background services, which is exactly the
+      environment a customer demo runs in."
+    - "The Windows firewall turns this into a deadlock rather than an inconvenience,
+      measured 2026-08-03 while wiring the Recipe's ROS 2 side to WSL instead of
+      Docker. Inbound connections from WSL to a Windows listener are blocked by
+      default: a probe from WSL to 172.22.0.1:24010, with a Windows process listening
+      on 0.0.0.0:24010, timed out. What does get through is whatever has an explicit
+      inbound rule, and this machine has exactly one relevant rule, 'hakoniwa-pdu-
+      endpoint TCP 54001 (WSL)', created earlier by a human. So the only WSL-reachable
+      port is 54001 -- and 54001 is precisely the port the ephemeral range keeps
+      stealing. At the time of measurement it was held in a long-lived ESTABLISHED
+      session by a resident application (RemoteDesktopCompanion, pid 48684, to a
+      remote :443), which will not release it on its own. Moving to a port outside
+      49152-65535 fixes the collision but needs a new inbound firewall rule, and
+      creating one is a security-settings change that an agent must not make. The two
+      constraints therefore close on each other: the reachable port is unusable and
+      the usable port is unreachable."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      path: test/configs/tcp_server_inout_comm.json
+      revision: 3c96784
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      path: test/configs/tcp_mux_server_inout_comm.json
+      revision: 3c96784
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: recipes/examples/ros2-service-add-two-ints-host-docker.yaml
+      revision: d4d6558
+  runtime_evidence:
+    - description: >-
+        External contributor's Windows 11 Pro x86_64 native environment, 2026-08-03.
+        `netsh int ipv4 show dynamicport tcp` = 49152 + 16384. Bind probe: 54001,
+        54010, 54011 all WinError 10048; 24001, 24011 free. Four contract tests failed
+        at start() on the original ports and all four exited 0 after rebinding to
+        24001/24011 with no other change.
+  expert_input: []
+
+confidence: high
+
+contradictions:
+  - target: hakoniwa-pdu-rpc README
+    existing_claim: >-
+      "Cross-platform build and contract-test coverage on Linux x64, Linux ARM64,
+      macOS, and Windows x64."
+    new_evidence: >-
+      The build is genuinely fine on Windows x64 and the tests do pass once the port
+      is free, but running them as shipped on a normal Windows desktop fails at setup.
+      The claim holds for CI and does not hold for a developer machine.
+
+agency_boundary:
+  human_decisions:
+    - Adding an inbound Windows firewall rule for a port outside the dynamic range is
+      a security-settings change and must be performed by a human, not the agent.
+    - Reserving the port with `netsh int ipv4 add excludedportrange` is likewise a
+      system configuration change requiring a human, and on an already-bound port it
+      also needs a reboot.
+  blocked_here:
+    - >-
+      Superseded on the same day. The ROS 2 leg first appeared blocked by this, but
+      the deadlock was dissolved without any firewall change by reversing the TCP
+      role so the Windows side dials out; see
+      pdu-rpc-tcp-role-reversal-works-but-client-pool-cannot-listen. The Recipe then
+      ran end to end. Three firewall changes made while diagnosing (an inbound rule,
+      a Hyper-V rule, and DefaultInboundAction Allow) were all reverted afterwards,
+      and the end-to-end call still returned 42, which proves the working topology
+      does not depend on them.
+    - >-
+      What remains true is the port constraint itself: a fixed port in 49152-65535 is
+      unsafe to claim on Windows regardless of direction, and the listening side --
+      whichever it is -- must avoid that range.
+
+validation:
+  status: verified
+  required:
+    - Decide the upstream fix. Options are moving the fixtures and the Recipe default
+      below 49152, binding port 0 and discovering the assigned port, or documenting a
+      Windows prerequisite. Only the first two remove the failure mode.
+    - For the Windows + WSL topology specifically, whichever port upstream picks must
+      then be paired with a documented one-time human step to open it inbound, because
+      the firewall rule cannot be created by the agent that runs the Recipe.
+    - Fix the bind diagnostic separately from the port choice. Even with a good port,
+      any future bind failure on Windows will print a success message.
+    - >-
+      Not measured on Linux or macOS, but do not describe this as Windows-specific.
+      The adversarial review flagged that framing as over-generalised in the wrong
+      direction: the typical Linux ephemeral range 32768-60999 contains all three
+      ports, and modern macOS also uses the IANA dynamic range, so the exposure is
+      cross-platform. Windows is merely where a busy desktop made it fire. Reproducing
+      it on Linux remains open.
+  notes:
+    - Verified by direct measurement of the port range, of the three ports' state, and
+      by a single-variable change (port only) flipping four tests from fail to pass.
+
+tracking:
+  implementation_status: open
+  issues:
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      number: 62
+      relation: fix
+      status: open
+
+promotion_targets:
+  catalog: []
+  runtime_primer: true
+  base_ecosystem_guide: false
+  component_asset_guide: true
+  recipes:
+    - ros2-service-add-two-ints-host-docker
+  executable_guardrails: []
+
+promotion_rationale:
+  - >-
+    On executable guardrails: this one is genuinely checkable, and a doctor-style
+    probe is proposed rather than declined. Before a Recipe claims a fixed port,
+    a check can read the platform's dynamic range (netsh on Windows,
+    net.ipv4.ip_local_port_range on Linux) and fail if the declared port falls
+    inside it, then attempt a bind to catch the case where it is already taken.
+    executable_guardrails is left empty only because the guardrail belongs to
+    whichever surface upstream picks -- foundation doctor, the recipe validator,
+    or the component's own test setup -- and that choice is upstream's.
+  - Any Recipe that declares a fixed TCP port needs to know that on Windows the
+    49152-65535 band is not safe to claim. That is a runtime rule, not a component
+    detail.
+  - The Recipe's demo.readiness already defines a host_rpc_listener TCP check; this
+    candidate is the reason that check cannot be replaced by "the process started".
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - >-
+      Reported from an external contributor's first native Windows host attempt at
+      this Recipe. The misleading bind diagnostic described above is filed
+      separately as hakoniwalab/hakoniwa-pdu-endpoint#62; the port choice itself
+      has no issue yet.
+    - >-
+      Reproduced against an unmodified checkout. The ports were changed only in a
+      throwaway copy of test/configs, so the measurement does not depend on any
+      local patch.
