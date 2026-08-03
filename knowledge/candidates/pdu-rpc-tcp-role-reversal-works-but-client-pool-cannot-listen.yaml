@@ -1,0 +1,164 @@
+id: pdu-rpc-tcp-role-reversal-works-but-client-pool-cannot-listen
+title: The PDU-RPC role and the TCP role are separable, so an RPC server can dial out — but a client pool cannot own the listening socket, because every client past the first hits EADDRINUSE
+status: candidate
+
+knowledge_type:
+  - runtime_rule
+  - known_pitfall
+
+summary: >
+  hakoniwa-pdu-rpc decides who listens purely from the endpoint's comm config
+  (`role: server` binds, `role: client` connects), independently of which side is
+  the RPC server. Giving the RPC server a `role: client` comm and the RPC client a
+  `role: server` comm works: upstream's own basic contract test passes 2/2 unchanged
+  against a role-reversed config. This matters on Windows + WSL, where inbound
+  WSL-to-Windows connections are blocked but Windows-to-WSL works over localhost
+  forwarding, so the only viable topology has the Windows-side RPC server dialling
+  out to the ROS 2 side.
+  The reversal has one hard limit. Multiplexing exists only on the server side
+  (RpcMuxServer, `expected_clients`). hakoniwa-pdu-ros builds a pool of
+  `max_clients` independent RPC clients, and in the reversed topology each of them
+  opens its own endpoint and tries to bind the same port, so client 2..N fail with
+  "Failed to bind socket: Address already in use" and the bridge dies at startup.
+  Setting `max_clients: 1` in the service binding makes it work, at the cost of
+  serialising concurrent ROS 2 calls.
+
+observation:
+  context: >
+    Bringing up the upstream Recipe ros2-service-add-two-ints-host-docker with a
+    native Windows host and WSL Ubuntu-24.04 (ROS 2 Jazzy) standing in for the Docker
+    container, 2026-08-03. hakoniwa-pdu-rpc 3c96784 on Windows, 8b609e7 on Linux;
+    hakoniwa-pdu-ros 832a6d1; hakoniwa-pdu-endpoint 5e45af8 on both sides.
+  details:
+    - "The reversal was validated before being relied on. A copy of
+      hakoniwa-pdu-rpc/test/configs was edited so tcp_server_inout_comm.json became
+      role client with a remote, and tcp_client_inout_comm.json became role server
+      with a local bind. Nothing else changed. hakoniwa_pdu_rpc_basic_test then
+      reported '2 tests. PASSED', exit 0. The RPC layer neither knows nor cares which
+      side opened the socket."
+    - "The pool limit is not a configuration subtlety, it is fatal at startup. With
+      the shipped `max_clients: 4`, the bridge logs 'Successfully initialized client
+      for service: Service/Add' once, then 'Failed to bind socket: Address already in
+      use' / 'Failed to open PDU Comm: 3', and raises RpcError('failed to create RPC
+      client') from hakoniwa_pdu_ros/service_client_pool.py. With `max_clients: 1` the
+      same configuration starts and serves."
+    - "End-to-end result with the reversed topology and max_clients 1. The WSL bridge
+      listened on 0.0.0.0:24020 and advertised /add_two_ints; the Windows RPC server
+      connected out to 127.0.0.1:24020 (ESTABLISHED on both sides); three
+      `ros2 service call` invocations returned 20+22=42, 1+2=3, and 100+(-58)=42, and
+      the host logged all three as 'call: client=hakoniwa_pdu_ros_add_0 ...'. A stop
+      request produced session state TERMINATED with exit_code 0 and left zero
+      sockets on 24020."
+    - "The upstream host script is unusable in this topology for one reason only: it
+      hardcodes RpcMuxServer, which always listens. Swapping that single class for
+      RpcServer (whose endpoint-config argument is an endpoints list rather than a
+      single mux endpoint) was the entire change needed. Everything else in
+      tools/ros2_service_add_two_ints_host.py -- the session file, the stop-request
+      protocol, the wire decode/encode, the cancel path -- worked unmodified on
+      Windows."
+    - "Consequence for the Recipe. The Recipe's boundary section allows exactly
+      'PDU-RPC TCP' between the host and the container, and that boundary is what
+      makes the reversal legal: nothing in the contract says which side connects.
+      A Recipe that wants to run on Windows + WSL needs to state the direction as a
+      choice rather than assume host-listens, and to pin max_clients accordingly."
+    - "Confirmed in source by an adversarial review 2026-08-03. Whether a socket binds
+      or connects is decided only by the comm config's role field
+      (hakoniwa-pdu-endpoint/src/comm_tcp.cpp:91 and :128), and RpcServer merely
+      forwards an endpoint config path without pinning a TCP role
+      (hakoniwa-pdu-rpc/src/c_rpc.cpp:177). The pool collision is likewise structural
+      rather than a bug: each RpcClient constructs its own EndpointContainer and
+      opens its own endpoint (c_rpc.cpp:103, endpoint_container.cpp:86), and
+      hakoniwa-pdu-ros/docs/spec-server.md:119 states the intended model outright --
+      max_clients independent clients, one in-flight request each. So max_clients > 1
+      and a single shared listening port are incompatible by design, not by accident."
+    - "Ranking of the fixes, from that review: SO_REUSEPORT-style sharing is the worst
+      option (weak on Windows, and accept distribution would not respect RPC client
+      identity or channel mapping); a distinct port per client works but pushes
+      complexity into the config generator, the Recipe, and firewall policy; genuine
+      client-side multiplexing -- several logical clients over one connection, as the
+      server side already has -- is the only clean answer. max_clients 1 is the
+      correct short-term workaround and is what this workspace used."
+    - "The bridge's supported entry point is a console script, not python -m. The
+      module defines main() with no __main__ guard, so
+      'python3 -m hakoniwa_pdu_ros.service_server_node' imports and exits 0 in
+      silence; hakoniwa-pdu-ros/setup.py:111 registers
+      'service-server = hakoniwa_pdu_ros.service_server_node:main'. This workspace hit
+      the silent exit because it installed with pip --target, which does not generate
+      console scripts. Worth reporting only as a low-priority ergonomics issue -- a
+      __main__ guard, or docs saying the console script is the only entry point."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      path: python/hakoniwa_pdu_rpc/cffi_api.py
+      revision: 8b609e7
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      path: hakoniwa_pdu_ros/service_client_pool.py
+      revision: 832a6d1
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/ros2_service_add_two_ints_host.py
+      revision: d4d6558
+  runtime_evidence:
+    - description: >-
+        External contributor's Windows 11 Pro x86_64 host plus WSL Ubuntu-24.04 with
+        ROS 2 Jazzy, 2026-08-03. Role-reversed upstream contract test 2/2 exit 0.
+        Bridge startup failure with max_clients 4 and success with max_clients 1.
+        Three ROS 2 service calls answered correctly across the boundary, followed by
+        a clean TERMINATED shutdown.
+  expert_input: []
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - Ask upstream whether client-side multiplexing is intended to exist. Without it,
+      the reversed topology cannot serve concurrent ROS 2 requests, which weakens the
+      Recipe's max_clients/BUSY semantics on any host where inbound is blocked.
+    - Confirm whether the Recipe should expose the connection direction as an explicit
+      option rather than assuming the host listens.
+    - Not measured on macOS or Linux hosts; there the normal direction works, so the
+      reversal is untested outside this topology.
+  notes:
+    - Verified by a single-variable check of the reversal itself (contract test,
+      config-only change) before the full bridge was attempted, so the pool failure
+      could not be misread as the reversal being unsupported.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: true
+  base_ecosystem_guide: false
+  component_asset_guide: true
+  recipes:
+    - ros2-service-add-two-ints-host-docker
+  executable_guardrails: []
+
+promotion_rationale:
+  - >-
+    Which side listens is a deployment property, not a protocol property. Saying so in
+    the runtime primer lets a Recipe be placed on a network where only one direction
+    is open.
+  - The max_clients coupling is the kind of thing that reads as a broken component
+    unless it is written down, since the error surfaces as a socket bind failure deep
+    inside client-pool construction.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - >-
+      Reported from an external contributor's Windows + WSL bring-up. No upstream
+      issue filed yet for the reversal or the pool constraint.
+    - >-
+      No component was patched. The reversed host script is a copy of upstream's
+      tools/ros2_service_add_two_ints_host.py with RpcMuxServer swapped for
+      RpcServer, and the configs are throwaway copies kept outside every checkout.

@@ -1,0 +1,147 @@
+id: pdu-rpc-windows-dll-resolution-gaps-in-ctest-and-cffi
+title: On Windows neither the ctest harness nor the CFFI binding makes the PDU-RPC shared libraries findable, so both fail before any RPC logic runs
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - runtime_rule
+
+summary: >
+  Two independent Windows DLL-resolution gaps sit in front of hakoniwa-pdu-rpc, and
+  both look like the library is broken when it is not.
+  First, `python tools/hako.py test` builds the four contract tests into
+  build/test/Release but leaves hakoniwa_pdu_rpc.dll in build/src/Release and
+  hakoniwa_pdu_endpoint.dll in the endpoint install bin/. ctest sets WORKING_DIRECTORY
+  but nothing puts those directories on the search path, so every test exits
+  0xC0000135 (STATUS_DLL_NOT_FOUND) before main() runs. Prepending both directories to
+  PATH makes the tests start.
+  Second, the Python CFFI binding loads the DLL by absolute path from
+  HAKO_PDU_RPC_LIBRARY, but since Python 3.8 Windows no longer consults PATH when
+  resolving an extension's dependent DLLs. hakoniwa_pdu_rpc.dll therefore fails to
+  load with OSError 0x7e (ERROR_MOD_NOT_FOUND) even when its dependency
+  hakoniwa_pdu_endpoint.dll sits in the very same bin/ directory, because nothing
+  calls os.add_dll_directory(). Adding that one call makes all 18 CFFI tests pass.
+
+observation:
+  context: >
+    Native Windows host bring-up of hakoniwa-pdu-rpc 3c96784 against
+    hakoniwa-pdu-endpoint 5e45af8, Windows 11 Pro x86_64, 2026-08-03, both components
+    built and installed through their own tools/hako.py into a shared prefix.
+  details:
+    - "The ctest symptom is unambiguous and uniform: all four of
+      hakoniwa_pdu_rpc_{basic,infinite_wait,timeout_cancel,cancel_race}_test report
+      'Exit code 0xc0000135'. That is STATUS_DLL_NOT_FOUND from the loader, not a test
+      assertion."
+    - "The two failure modes were separated by measurement rather than reasoning.
+      Re-running ctest with build/src/Release and <endpoint-prefix>/bin prepended to
+      PATH changed the result from 0xc0000135 to an ordinary 'Failed', which is the
+      separate port-collision defect recorded in
+      pdu-rpc-fixed-ports-fall-inside-windows-dynamic-port-range. So the DLL gap and
+      the port gap are independent, and fixing either alone still leaves ctest red."
+    - "test/CMakeLists.txt does set WORKING_DIRECTORY on every add_test, which is what
+      makes the relative configs/ paths resolve. The same place could set the DLL
+      search path (for example via set_tests_properties ENVIRONMENT PATH= or by
+      placing the test executables next to the DLL), and does not."
+    - "For CFFI the mechanism is the Python 3.8 change, not a missing file. The DLL
+      named in HAKO_PDU_RPC_LIBRARY is found -- the error is about its dependency.
+      Setting PATH has no effect at all here; only os.add_dll_directory() does."
+    - "CORRECTED 2026-08-03 after an adversarial review by Codex. This candidate first
+      described the missing os.add_dll_directory as a pattern shared with
+      hakoniwa-pdu-endpoint. That is wrong at this revision: endpoint's
+      python/hakoniwa_pdu_endpoint/c_endpoint.py:129 already defines
+      _add_runtime_search_dirs() and calls os.add_dll_directory on the library dir.
+      The gap is specific to hakoniwa-pdu-rpc, whose python/hakoniwa_pdu_rpc/
+      cffi_api.py:99 and mux_server.py:50 both call ffi.dlopen() with nothing else.
+      So the fix has a precedent inside the same organisation to copy."
+    - "Why upstream CI is green is now answered, and it is not a layout difference.
+      hakoniwa-pdu-rpc/.github/workflows/python-cffi-tests.yml prepends the DLL
+      directories to PATH at line 148 and then, at line 159, runs inline Python that
+      calls os.add_dll_directory on each of them before importing. The CI compensates
+      for the missing call in the package. A developer running the documented
+      hako.py flow gets neither, which is exactly the gap measured here."
+    - "Once both gaps are worked around, the component is healthy on Windows: the four
+      C++ contract tests exit 0, and all 18 Python CFFI tests pass, covering the mux
+      server, the typed Service auto-wiring, and the ROS-independent call_async /
+      RpcFuture API."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      path: test/CMakeLists.txt
+      revision: 3c96784
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      path: python/hakoniwa_pdu_rpc
+      revision: 3c96784
+  runtime_evidence:
+    - description: >-
+        External contributor's Windows 11 Pro x86_64 native environment, 2026-08-03.
+        `hako.py test` -> 4/4 exit 0xc0000135. Same ctest with the two DLL directories
+        on PATH -> 4/4 ordinary Failed (port collision). Direct execution with PATH set
+        and free ports -> 4/4 exit 0. CFFI import without os.add_dll_directory ->
+        OSError 0x7e; with a conftest.py calling os.add_dll_directory on the install
+        bin/ -> 18 passed.
+  expert_input: []
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - >-
+      ANSWERED 2026-08-03: upstream CI sets PATH and calls os.add_dll_directory in the
+      workflow itself, so the compensation lives outside the package and a developer
+      following the documented hako.py flow does not get it. The fixture should move
+      into CMake and into the package respectively.
+    - >-
+      Decide whether the CFFI package should call os.add_dll_directory for the
+      directory containing HAKO_PDU_RPC_LIBRARY, the RPC install bin, and the endpoint
+      root bin. Doing it inside the package removes the need for every consumer to
+      know about it, and endpoint's c_endpoint.py already does this.
+    - POSIX is unaffected by both gaps and was not tested.
+  notes:
+    - Verified by measurement on one machine at one revision pair, with each workaround
+      applied in isolation so the two causes stay distinguishable.
+
+tracking:
+  implementation_status: open
+  issues:
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      number: 62
+      relation: fix
+      status: open
+
+promotion_targets:
+  catalog: []
+  runtime_primer: true
+  base_ecosystem_guide: false
+  component_asset_guide: true
+  recipes:
+    - ros2-service-add-two-ints-host-docker
+  executable_guardrails: []
+
+promotion_rationale:
+  - >-
+    On executable guardrails: no guardrail is proposed, deliberately. Both gaps
+    are fixed at the source -- one CMake test property and one
+    os.add_dll_directory call in the package -- after which there is no residual
+    condition for a check to detect. A guardrail here would only assert that the
+    fix is present, which the existing Windows CI job already does once the
+    workflow stops compensating by hand.
+  - Anyone standing up the Recipe's host side on Windows hits both gaps before any RPC
+    call is attempted, so this belongs with the runtime and component guidance rather
+    than in a Recipe's own steps.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - >-
+      Filed upstream as hakoniwalab/hakoniwa-pdu-rpc#62, which covers the CFFI gap
+      and mentions the ctest path gap as an adjacent item. Both were worked around
+      externally -- an os.add_dll_directory call injected at interpreter start, and
+      an explicit PATH for the C++ tests -- without patching either component.
