@@ -494,13 +494,6 @@ demo:
       description: Controller-free fallback that runs a scripted figure-eight route.
       launcher: work/recipes/mujoco-turtlebot3-godot/config/launcher-route.json
 
-  prerequisites:
-    - id: enter_workspace
-      action: Enter the isolated Hakoniwa Workspace shell before running Foundation or Recipe commands.
-      command: python tools/workspace.py enter
-      expected:
-        - The shell prompt begins with (hako).
-
   steps:
     - id: configure_recipe
       order: 1
