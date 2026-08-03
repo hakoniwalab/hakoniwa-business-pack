@@ -210,6 +210,55 @@ components:
       - time_sync
     purpose: Provide Hakoniwa runtime, hako-cmd lifecycle control, shared memory, and simulation time base.
 
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      shared_memory: true
+      hako_cmd: true
+      python_binding: true
+  hakoniwa-pdu-python:
+    version:
+      min: 1.6.5
+    capabilities:
+      hako_launcher: true
+      launcher_background_lifecycle: true
+      shm_backend: true
+  hakoniwa-pdu-endpoint:
+    capabilities:
+      python_binding: true
+      hakoniwa_core: true
+      core_callback: true
+      core_polling: true
+
+recipe_local_requirements:
+  hakoniwa-mujoco-robots:
+    build_entrypoint: tools/hako.py
+    required_artifacts:
+      - tb3_sim_burger
+      - tb3_route_demo.py
+  hakoniwa-godot:
+    build_entrypoint: CMake
+    required_codec_packages:
+      - geometry_msgs
+      - sensor_msgs
+    required_artifacts:
+      - addons/hakoniwa
+      - addons/hakoniwa_msgs
+      - addons/hakoniwa_robot_sync
+  hakoniwa-mbody-registry:
+    role: generated-physics-and-visualization-artifact-source
+    required_artifacts:
+      - TurtleBot3.generated.tscn
+      - GLB parts
+      - robot_sync.profile.json
+      - TurtleBot3 Burger minimal MuJoCo world
+  hakoniwa-pdu-registry:
+    role: generated-PDU-and-Godot-codec-provenance
+    required_artifacts:
+      - geometry_msgs/Twist
+      - sensor_msgs/JointState
+      - hako_msgs/GameControllerOperation
+
 connections:
   - from: hakoniwa-mbody-registry
     to: hakoniwa-mujoco-robots
