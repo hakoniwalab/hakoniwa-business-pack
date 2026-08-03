@@ -55,6 +55,14 @@ class TurtleBot3GodotExhibitionTest(unittest.TestCase):
         self.assertEqual(recipe.apply_deadzone(2.0, 0.08), 1.0)
         self.assertEqual(recipe.apply_deadzone(-2.0, 0.08), -1.0)
 
+    def test_runtime_requirements_pin_pygame(self):
+        self.assertTrue(recipe.RUNTIME_REQUIREMENTS.is_file())
+        self.assertIn("pygame==2.6.1", recipe.RUNTIME_REQUIREMENTS.read_text(encoding="utf-8"))
+
+    def test_godot_ready_marker_waits_for_hakoniwa_sync(self):
+        self.assertIn("simulation_ready.connect", recipe.MONITOR_GD)
+        self.assertIn("TB3_GODOT_SYNC_READY", recipe.MONITOR_GD)
+
     def test_mujoco_build_manifest_is_recipe_owned(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
