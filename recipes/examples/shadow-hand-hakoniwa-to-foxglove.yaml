@@ -1,6 +1,6 @@
 id: shadow-hand-hakoniwa-to-foxglove
 title: Shadow Hand Hakoniwa JointState to Foxglove 3D
-recipe_version: 0.4
+recipe_version: 0.5
 
 goal:
   user_request: 箱庭で動かしている Shadow Hand の関節状態を、Mac 上の Foxglove でリアルタイムに観測・3D 可視化したい。
@@ -38,8 +38,10 @@ validation:
     cdr_stdin_publisher forwarded that CDR through FoxgloveComm to a local
     Foxglove WebSocket server. Foxglove decoded the JointState topic and the 3D
     panel animated a prepared Shadow Robot URDF from the same JointState values.
-    The current component-owned browser launch entrypoint, live 3D motion, and
-    launcher-managed cleanup were re-verified on 2026-07-26.
+    The component-owned foreground launch entrypoint, live 3D motion, and
+    launcher-managed cleanup were re-verified on 2026-07-26. The normalized
+    Business Pack workspace, shared Foundation, background session lifecycle,
+    and Foxglove 3D rendering were re-verified on 2026-08-04.
   steps:
     - id: shadow_hand_base_plant
       status: verified
@@ -168,14 +170,30 @@ validation:
           path: config/manifests
           revision: local-working-tree-2026-07-26
       notes:
+        - This step preserves historical evidence for the pre-Foundation workflow; it is not the current operator contract.
         - Demo application binaries are built locally: the Foxglove publisher uses the Core-free base Endpoint target, while the Bridge and Python sender use the explicit core_callback variant.
         - Endpoint and Bridge are resolved through integration-owned hakoniwa-build manifests and tools/hako.py; raw CMake is not their cross-platform user-facing build contract.
         - Manifest doctor and configure --dry-run resolved macos-arm64 correctly, and clean manifest-owned build directories produced the Core-free package, Core-enabled callback package, Python 3.12 FFI, and Hakoniwa Bridge application.
         - The Bridge manifest resolver propagates both the Endpoint and non-default Core install prefixes through CMAKE_PREFIX_PATH so Endpoint's find_dependency(hakoniwa-core) resolves the same Core selected by the manifest.
-        - Separate Core-free and Core-enabled Endpoint packages are isolated under hakoniwa-pdu-foxglove/work/install by default; Hakoniwa Core keeps its normal /usr/local/hakoniwa prefix unless HAKONIWA_CORE_ROOT is explicitly changed.
+        - The historical run isolated Core-free and Core-enabled Endpoint packages under hakoniwa-pdu-foxglove/work/install; the normalized Recipe replaces both with one shared Foundation Endpoint installation.
         - Both Endpoint packages, Foxglove tests, Bridge, and the MuJoCo Shadow Hand target built successfully on macOS arm64; the manifest-built local Python FFI loaded the explicit core_callback dylib when both Core and Endpoint library directories were propagated.
         - The final manifest-built composition was visually re-verified on 2026-07-26: all five launcher assets stabilized, hako-cmd start exited with 0, 24-joint 908-byte CDR frames were published, port 8766 had an established browser connection, and the user confirmed correct hand motion.
         - The final local-Core verification used an isolated HAKO_CONFIG_PATH/mmap directory so shared-memory files created by an older Core build could not contaminate the run.
+    - id: business_pack_foundation_workspace
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-business-pack
+          path: tools/shadow_hand_foxglove.py
+          revision: local-working-tree-2026-08-04
+        - source: local-macos-foundation-session
+          date: "2026-08-04"
+      notes:
+        - Business Pack now owns the generated Launcher, portal, staged schema/URDF, logs, and session file under work/recipes/shadow-hand-hakoniwa-to-foxglove.
+        - Core, Python Launcher, Endpoint core_callback, and Bridge are reused from work/foundation/install.
+        - Platform-neutral unit tests cover topology generation, workspace staging, the portal, and session-file lifecycle commands.
+        - A live run confirmed five stable assets, repeated 24-joint 908-byte CDR publication, and HTTP 200 with CORS for the staged URDF.
+        - Session-file terminate persisted TERMINATED and released ports 8766 and 8767.
+        - The user confirmed visible Foxglove 3D motion through the normalized workspace on 2026-08-04.
 
 agency_boundary:
   agent_actions:
@@ -191,6 +209,11 @@ agency_boundary:
         - user_requested_execution
     - id: prepare_jointstate_schema
       description: Use the hakoniwa-pdu-registry ROS 2 Jazzy Docker environment to prepare the JointState ros2msg bundle and stage it under hakoniwa-pdu-foxglove/work/schemas/ros2_jazzy.
+      autonomous: true
+      preconditions:
+        - user_requested_execution
+    - id: generate_shadow_hand_workspace
+      description: Copy prepared schema, URDF, and component configs into the Business Pack Recipe workspace and generate its portal and Launcher.
       autonomous: true
       preconditions:
         - user_requested_execution
@@ -222,7 +245,10 @@ constraints:
   - launcher-uses-repository-local-demo-binaries
   - endpoint-and-bridge-build-intent-is-manifest-driven
   - endpoint-linkage-selected-by-runtime-role
-  - demo-endpoint-packages-use-separate-core-free-and-core-enabled-local-prefixes
+  - shared-foundation-endpoint-provides-base-and-core-callback
+  - business-pack-owned-generated-launcher
+  - background-launcher-session-file-lifecycle
+  - recipe-workspace-stages-schema-and-urdf
   - verified-single-pc-macos-arm64
 
 target_environment:
@@ -238,6 +264,7 @@ target_environment:
     - name: Python
       required: true
       version: "3.12"
+      path: work/foundation/install/python
     - name: Foxglove App
       required: true
       version: current-user-installation
@@ -249,14 +276,16 @@ target_environment:
       version: not-required
       notes: sensor_msgs/JointState schema/type conventions are reused without running ROS 2; the schema bundle is prepared separately using the hakoniwa-pdu-registry Jazzy Docker environment.
   hakoniwa:
-    install_prefix: /usr/local/hakoniwa
+    install_prefix: work/foundation/install
     components_built:
       - hakoniwa-core-pro
-      - hakoniwa-mujoco-robots
+      - hakoniwa-pdu-python
       - hakoniwa-pdu-endpoint
-      - hakoniwa-pdu-registry
       - hakoniwa-pdu-bridge-core
+    recipe_local_components:
+      - hakoniwa-mujoco-robots
       - hakoniwa-pdu-foxglove
+      - hakoniwa-pdu-registry
       - hakoniwa-mbody-registry
 
 execution_environment:
@@ -275,14 +304,13 @@ execution_environment:
       - localhost-websocket
       - localhost-http
   filesystem:
-    work_area: hakoniwa-pdu-foxglove/work
+    foundation_area: work/foundation
+    recipe_area: work/recipes/shadow-hand-hakoniwa-to-foxglove
     notes:
-      - work/install/endpoint-core-free is the default local install prefix for the Core-free Endpoint package consumed by Foxglove.
-      - work/install/endpoint-core is the default local install prefix for the Core-enabled Endpoint package and its core_callback shared library.
-      - work/build/endpoint-core-free and work/build/endpoint-core are separate CMake build directories so cached library resolution cannot mix the variants.
-      - Upstream Shadow Robot source and generated visualization artifacts are kept as local work inputs/outputs.
-      - The JointState ros2msg bundle is copied from the hakoniwa-pdu-registry ROS 2 Jazzy Docker preparation flow into work/schemas/ros2_jazzy/sensor_msgs/msg/JointState.bundle.msg.
-      - work/ remains local and is intentionally excluded from the public repository and Docker build context.
+      - Core, Python Launcher, Endpoint, and Bridge are reused from the shared Foundation install prefix.
+      - One Core-aware Endpoint installation provides the base Endpoint and core_callback artifacts required by this composition.
+      - The generated Launcher, copied configs, staged schema, staged URDF, logs, and session state belong to the Recipe workspace.
+      - Upstream preparation remains component-owned; configure copies the resulting schema and URDF into the Recipe workspace without mutating the source repositories.
 
 components:
   - id: hakoniwa-mujoco-robots
@@ -295,6 +323,11 @@ components:
       - simulation_core
       - time_sync
     purpose: Coordinate Hakoniwa lifecycle and simulation time.
+  - id: hakoniwa-pdu-python
+    roles:
+      - language_binding
+      - control_plane
+    purpose: Provide the shared Foundation Python environment and OS-independent background Launcher session lifecycle.
   - id: hakoniwa-pdu-endpoint
     roles:
       - communication_infrastructure
@@ -322,6 +355,31 @@ components:
       - asset_generator
       - visualization_asset_source
     purpose: Expand the upstream ROS-origin Shadow Robot xacro without requiring a ROS installation.
+
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      shared_memory: true
+      hako_cmd: true
+      python_binding: true
+  hakoniwa-pdu-python:
+    version:
+      min: 1.6.5
+    capabilities:
+      hako_launcher: true
+      launcher_background_lifecycle: true
+      shm_backend: true
+  hakoniwa-pdu-endpoint:
+    capabilities:
+      python_binding: true
+      hakoniwa_core: true
+      core_callback: true
+      tcp: true
+      websocket: true
+  hakoniwa-pdu-bridge-core:
+    capabilities:
+      hakoniwa_app: true
+      web_bridge: true
 
 connections:
   - from: hakoniwa-mujoco-robots
@@ -392,8 +450,8 @@ data_flow:
     JointState-compatible state. Native PDU bytes are bridged to TCP, decoded to
     a typed JointState, encoded to complete CDR, and published through
     FoxgloveComm. The JointState ros2msg bundle is prepared separately using the
-    hakoniwa-pdu-registry ROS 2 Jazzy Docker environment and staged under the
-    Foxglove work directory. Separately, the upstream Shadow Robot xacro is
+    hakoniwa-pdu-registry ROS 2 Jazzy Docker environment and staged into the
+    Business Pack Recipe workspace. Separately, the upstream Shadow Robot xacro is
     expanded without ROS and prepared as a Foxglove visualization URDF.
     Foxglove joins the paths by decoding the CDR with the staged schema and
     applying the live JointState values to matching URDF joint names.
@@ -412,7 +470,7 @@ data_flow:
   schema_path:
     - hakoniwa-pdu-registry ROS 2 Jazzy Docker environment
     - sensor_msgs/msg/JointState ros2msg schema preparation
-    - copy to hakoniwa-pdu-foxglove/work/schemas/ros2_jazzy/sensor_msgs/msg/JointState.bundle.msg
+    - copy to work/recipes/shadow-hand-hakoniwa-to-foxglove/assets/schemas/ros2_jazzy/sensor_msgs/msg/JointState.bundle.msg
     - Foxglove RawChannel schema configuration
   visualization_path:
     - shadow-robot/sr_common sr_hand.urdf.xacro
@@ -449,30 +507,28 @@ artifact_sets:
     artifacts:
       - sensor_msgs/JointState native PDU converter
       - sensor_msgs/JointState CDR converter
-      - work/schemas/ros2_jazzy/sensor_msgs/msg/JointState.bundle.msg
+      - work/recipes/shadow-hand-hakoniwa-to-foxglove/assets/schemas/ros2_jazzy/sensor_msgs/msg/JointState.bundle.msg
   runtime_artifacts:
     description: Verified SHM-to-TCP-to-CDR-to-Foxglove runtime chain.
     status: verified
     artifacts:
       - hakoniwa-pdu-foxglove/config/shadow_hand_bridge
-      - hakoniwa-pdu-foxglove/config/manifests/endpoint-core-free.yaml
-      - hakoniwa-pdu-foxglove/config/manifests/endpoint-core-callback.yaml
-      - hakoniwa-pdu-foxglove/config/manifests/bridge-shadow-hand.yaml
+      - work/foundation/install/lib/libhakoniwa_pdu_endpoint
+      - work/foundation/install/lib/libhakoniwa_pdu_endpoint_core_callback
+      - work/foundation/install/bin/hakoniwa-pdu-web-bridge
       - hakoniwa-pdu-foxglove/config/shadow_hand/endpoint_foxglove_jointstate.json
       - hakoniwa-pdu-foxglove/examples/shadow-hand-jointstate-to-foxglove
       - hakoniwa-pdu-foxglove/examples/cdr-stdin-publisher
-      - hakoniwa-pdu-foxglove/launch/shadow-hand-foxglove-smoke.launch.json
-      - hakoniwa-pdu-foxglove/tools/launch.bash
-      - hakoniwa-pdu-foxglove/launch/shadow-hand-foxglove-browser.launch.json
-      - hakoniwa-pdu-foxglove/work/install/endpoint-core/lib/libhakoniwa_pdu_endpoint_core_callback.dylib
+      - work/recipes/shadow-hand-hakoniwa-to-foxglove/config/launcher.json
+      - work/recipes/shadow-hand-hakoniwa-to-foxglove/runtime/launcher-session.json
   visualization_artifacts:
     description: Local Shadow Robot source plus generated Foxglove-ready URDF/mesh artifacts.
     status: verified
     artifacts:
       - work/shadow_hand_source_urdf/sr_common/sr_description/robots/sr_hand.urdf.xacro
-      - work/urdf/shadow_hand/shadow_hand_right.urdf
-      - work/urdf/shadow_hand/sr_description/meshes
-      - hakoniwa-pdu-foxglove/launch/shadow-hand-foxglove-browser.launch.json
+      - work/recipes/shadow-hand-hakoniwa-to-foxglove/assets/urdf/shadow_hand/shadow_hand_right.urdf
+      - work/recipes/shadow-hand-hakoniwa-to-foxglove/assets/urdf/shadow_hand/sr_description/meshes
+      - work/recipes/shadow-hand-hakoniwa-to-foxglove/index.html
 
 artifacts:
   - name: Shadow Hand JointState PDU
@@ -487,7 +543,7 @@ artifacts:
     producer: hakoniwa-pdu-registry
     consumer:
       - hakoniwa-pdu-foxglove
-    path: hakoniwa-pdu-foxglove/work/schemas/ros2_jazzy/sensor_msgs/msg/JointState.bundle.msg
+    path: work/recipes/shadow-hand-hakoniwa-to-foxglove/assets/schemas/ros2_jazzy/sensor_msgs/msg/JointState.bundle.msg
   - name: Shadow Hand SHM-to-TCP bridge config
     kind: config
     producer: hakoniwa-pdu-foxglove
@@ -518,7 +574,7 @@ artifacts:
     producer: hakoniwa-pdu-foxglove
     consumer:
       - Foxglove App
-    path: hakoniwa-pdu-foxglove/work/urdf/shadow_hand/shadow_hand_right.urdf
+    path: work/recipes/shadow-hand-hakoniwa-to-foxglove/assets/urdf/shadow_hand/shadow_hand_right.urdf
 
 missing_pieces:
   - Optional future simplification: replace the current bridge-core/TCP process boundary with a direct multi-threaded SHM-to-CDR-to-Foxglove process if the additional runtime complexity is justified.
@@ -532,58 +588,60 @@ demo:
     Mac, using Hakoniwa JointState as the live contract and without requiring a
     ROS 2 runtime.
   profiles:
-    - id: smoke
-      launcher: hakoniwa-pdu-foxglove/launch/shadow-hand-foxglove-smoke.launch.json
-      purpose: Bounded, headless transport and CDR publication validation.
-    - id: browser
-      launcher: hakoniwa-pdu-foxglove/launch/shadow-hand-foxglove-browser.launch.json
-      purpose: Interactive MuJoCo and Foxglove 3D end-to-end validation.
+    - id: foundation-browser
+      launcher: work/recipes/shadow-hand-hakoniwa-to-foxglove/config/launcher.json
+      purpose: Interactive MuJoCo and Foxglove 3D validation using the shared Foundation and a Business Pack-owned background session.
       notes:
         - The bounded hand-motion sender is configured for 120 seconds.
+  prerequisites:
+    - command: python tools/foundation.py doctor --recipe recipes/examples/shadow-hand-hakoniwa-to-foxglove.yaml
+      expected: Foundation SATISFIED
+    - command: python tools/shadow_hand_foxglove.py configure
+      expected: Recipe workspace, copied runtime inputs, portal, and Launcher generated.
+    - command: python tools/shadow_hand_foxglove.py doctor
+      expected: Foundation, local Hand/CDR artifacts, schema, URDF, ports, and generated files are ready.
   steps:
-    - order: 1
-      id: prepare_jointstate_schema
-      component: hakoniwa-pdu-registry
-      action: Prepare the sensor_msgs/msg/JointState ros2msg bundle in the registry ROS 2 Jazzy Docker environment and copy it to hakoniwa-pdu-foxglove/work/schemas/ros2_jazzy/sensor_msgs/msg/JointState.bundle.msg.
-      agency: agent_action
-    - order: 2
-      id: fetch_shadow_robot_visualization
-      component: hakoniwa-mbody-registry
-      action: Clone shadow-robot/sr_common noetic-devel under work/shadow_hand_source_urdf.
-      agency: agent_action
-    - order: 3
-      id: expand_shadow_robot_xacro
-      component: hakoniwa-mbody-registry
-      action: Expand sr_hand.urdf.xacro with explicit --package sr_description=PATH and E3M5/right/all/pst arguments.
-      agency: agent_action
-    - order: 4
-      id: prepare_foxglove_urdf
-      component: hakoniwa-pdu-foxglove
-      action: Rewrite package://sr_description mesh URIs and set rh_world_joint root rpy to -1.5707963267948966 0 -1.5707963267948966.
-      agency: agent_action
-    - order: 5
-      id: build_local_shadow_hand_demo_binaries
-      component: hakoniwa-pdu-foxglove
-      action: >
-        Follow the README manifest-first local-build procedure. Resolve and
-        build Endpoint from endpoint-core-free.yaml and
-        endpoint-core-callback.yaml, install the resulting packages under
-        separate work/install prefixes, and resolve/build Bridge from
-        bridge-shadow-hand.yaml. Build cdr_stdin_publisher against the
-        Core-free base target, the Bridge against core_callback, and the
-        sibling MuJoCo Shadow Hand asset locally. Keep Hakoniwa Core at
-        /usr/local/hakoniwa unless HAKONIWA_CORE_ROOT is explicitly set.
-      agency: agent_action
-    - order: 6
-      id: launch_shadow_hand_foxglove_browser_composition
-      component: hakoniwa-pdu-foxglove
-      action: From the hakoniwa-pdu-foxglove repository root, run bash tools/launch.bash launch/shadow-hand-foxglove-browser.launch.json. The wrapper first verifies the repository-local MuJoCo, Bridge, Foxglove publisher, and core_callback Endpoint artifacts. The composition then starts the Shadow Hand plant, local URDF server, JointState-to-CDR publisher, SHM-to-TCP bridge, bounded hand-motion sender, and hako-cmd start.
-      agency: agent_action
-    - order: 7
-      id: configure_foxglove_3d
-      component: hakoniwa-pdu-foxglove
-      action: Open https://app.foxglove.dev, connect to ws://localhost:8766, load shadow_hand_right.urdf, select Joint states mode and /hakoniwa/ShadowHandAsset/joint_states, and enable Ignore COLLADA <up_axis>.
-      agency: human_action
+    - id: configure
+      command: python tools/shadow_hand_foxglove.py configure
+      status: verified
+      expected:
+        - Inputs are copied from component-owned work areas into the Recipe workspace.
+        - The schema path is rewritten to the Recipe-owned staged bundle.
+        - index.html and config/launcher.json are generated.
+    - id: doctor
+      command: python tools/shadow_hand_foxglove.py doctor
+      status: verified
+      expected:
+        - Foundation is SATISFIED and its Python imports hakopy, hakoniwa_pdu, and hakoniwa_pdu_endpoint.
+        - Ports 8766 and 8767 are available.
+        - The local MuJoCo Hand and CDR publisher artifacts exist.
+    - id: start
+      command: python tools/shadow_hand_foxglove.py start
+      status: verified
+      expected:
+        - The background Launcher session becomes RUNNING.
+        - MuJoCo opens and all five managed assets remain stable.
+        - The command returns while the Demo continues running.
+    - id: open_foxglove
+      command: python tools/shadow_hand_foxglove.py open-viewer
+      status: verified
+      evidence:
+        - source: user-runtime-confirmation
+          date: "2026-08-04"
+      expected:
+        - Foxglove App opens.
+        - Human connects ws://127.0.0.1:8766.
+        - Human loads http://127.0.0.1:8767/shadow_hand_right.urdf, selects Joint states mode and /hakoniwa/ShadowHandAsset/joint_states, and enables Ignore COLLADA <up_axis>.
+    - id: status
+      command: python tools/shadow_hand_foxglove.py status
+      status: verified
+      expected:
+        - Launcher control reports the owned session state.
+    - id: stop
+      command: python tools/shadow_hand_foxglove.py stop
+      status: verified
+      expected:
+        - LauncherService.terminate completes and the persisted session reports TERMINATED.
   observability:
     success_signals:
       - Shadow Hand moves in MuJoCo.
@@ -596,15 +654,20 @@ demo:
       - Endpoint `No subscribers found` messages can continue because the converter polls with recv_by_name() without registering a receive callback.
       - Treat those messages as callback-dispatch diagnostics, not as evidence that the Foxglove WebSocket is disconnected.
     failure_signals:
-      - JointState.bundle.msg is missing from work/schemas/ros2_jazzy/sensor_msgs/msg.
+      - JointState.bundle.msg is missing from the Recipe workspace assets directory.
       - Native Hakoniwa PDU bytes are sent directly as if they were CDR.
       - Foxglove cannot resolve the bundled JointState schema.
       - DAE mesh segments appear disconnected because Ignore COLLADA <up_axis> is disabled.
       - Whole-hand orientation differs because rh_world_joint preparation is missing.
       - URDF loads but does not move because Joint states mode/topic is not configured.
   cleanup:
-    trigger: Send SIGINT to the foreground Hakoniwa launcher.
+    owner: hakoniwa-launcher
+    provider: hakoniwa-pdu-python
+    mode: background
+    target: work/recipes/shadow-hand-hakoniwa-to-foxglove/runtime/launcher-session.json
+    trigger: python tools/shadow_hand_foxglove.py stop
     expected_behavior:
+      - hako_launcher_ctl terminate invokes the Launcher normal termination path.
       - The launcher terminates only the assets it manages.
       - The Foxglove publisher listener on port 8766 closes.
       - The local URDF server listener on port 8767 closes.
@@ -612,6 +675,8 @@ demo:
       - Confirm the launcher reports state -> TERMINATED.
       - Confirm no process is listening on TCP ports 8766 or 8767.
     cautions:
+      - Do not replace the session-file terminate command with kill, taskkill, or process-group cleanup.
+      - Do not treat hako-cmd stop as Launcher process termination.
       - Do not broadly terminate unrelated Python or browser processes.
 
 expected_result: >
@@ -620,13 +685,18 @@ expected_result: >
   conversion path publishes complete CDR through a local Foxglove WebSocket
   server. Foxglove decodes the JointState topic with the locally staged ros2msg
   schema and animates the upstream Shadow Robot URDF in 3D from the same joint
-  positions, without running ROS 2 and without requiring /tf.
+  positions, without running ROS 2 and without requiring /tf. Business Pack
+  owns the generated workspace, portal, Launcher, logs, and background session,
+  while reusable Core, Python, Endpoint, and Bridge artifacts come from the
+  shared local Foundation.
 
 source_catalogs:
   - component_id: hakoniwa-mujoco-robots
     catalog_path: ../catalog/components/hakoniwa-mujoco-robots.yaml
   - component_id: hakoniwa-core-pro
     catalog_path: ../catalog/components/hakoniwa-core-pro.yaml
+  - component_id: hakoniwa-pdu-python
+    catalog_path: ../catalog/components/hakoniwa-pdu-python.yaml
   - component_id: hakoniwa-pdu-endpoint
     catalog_path: ../catalog/components/hakoniwa-pdu-endpoint.yaml
   - component_id: hakoniwa-pdu-registry
@@ -639,6 +709,10 @@ source_catalogs:
     catalog_path: ../catalog/components/hakoniwa-mbody-registry.yaml
 
 source_artifacts:
+  - repository: hakoniwalab/hakoniwa-business-pack
+    path: tools/shadow_hand_foxglove.py
+    revision: main
+    description: Foundation-aware workspace generator and OS-independent operator lifecycle.
   - repository: hakoniwalab/hakoniwa-business-pack
     path: recipes/examples/shadow-hand-menagerie-mjcf-to-hakoniwa.yaml
     revision: main
