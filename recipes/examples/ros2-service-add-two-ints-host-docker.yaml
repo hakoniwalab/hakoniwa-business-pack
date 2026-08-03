@@ -90,6 +90,11 @@ constraints:
   - separate-host-and-container-artifacts
   - no-cross-boundary-ros-dds
   - no-cross-boundary-shared-memory
+  # tcp-mux-server and one-logical-service-model above describe the default
+  # host_listens direction. host_dials replaces the mux server with a plain
+  # RpcServer and forces max_clients to 1; see user_inputs.transport.direction.
+  - tcp-mux-server-requires-host-listens
+  - host-dials-requires-single-client
   - core-free-pdu-conversion
   - no-gui-requirement
   - business-pack-owned-runtime-artifacts
@@ -123,10 +128,18 @@ target_environment:
       - host.docker.internal:host-gateway
     default_port: 54010
     default_scope: docker-to-host
+    default_direction: host_listens
   notes:
     - The container always uses host.docker.internal; the generated Compose or run spec declares the same host-gateway alias on every host OS.
     - The Recipe validates the alias from inside the container before starting the Service Bridge.
     - A non-loopback or wildcard host bind is never silently approved.
+    - >-
+      Which side opens the listening socket is a deployment property, not a protocol
+      one: hakoniwa-pdu-endpoint decides bind versus connect purely from the comm
+      config's role field, and RpcServer does not pin a TCP role. See
+      user_inputs.transport.direction. The default host_listens is what Docker on
+      macOS and Linux needs; host_dials exists for hosts where inbound connections
+      into the host are blocked, which is the default on Windows with WSL2.
 
 execution_environment:
   required_for: executable-demo
@@ -299,11 +312,47 @@ user_inputs:
       pdu_service_type: hako_srv_msgs/AddTwoInts
       max_clients: 4
       timeout_msec: 3000
+      max_clients_constraint: >-
+        Valid only while transport.direction is host_listens. With host_dials this
+        must be 1, because the ROS 2 side then owns the listening socket and
+        hakoniwa-pdu-ros gives every client in the pool its own endpoint, so clients
+        2..N fail to bind the same port and the bridge dies at startup. Multiplexing
+        exists only on the server side (RpcMuxServer), so there is no way to share one
+        listener across a client pool today.
   transport:
     network_scope:
       type: enum
       values: [docker-to-host, lan]
       default: docker-to-host
+    direction:
+      type: enum
+      values: [host_listens, host_dials]
+      default: host_listens
+      description: >-
+        Which side opens the listening socket. host_listens is the Docker topology:
+        the host runs RpcMuxServer and the container connects in via
+        host.docker.internal. host_dials reverses only the TCP roles, keeping the RPC
+        roles unchanged -- the host-side RPC server connects out to a listener owned by
+        the ROS 2 side -- for hosts where inbound connections are blocked.
+      constraints:
+        - >-
+          host_dials requires service_profile.max_clients == 1. This is a hard
+          constraint, not a tuning preference; any higher value fails at startup with
+          EADDRINUSE.
+        - >-
+          host_dials therefore serialises concurrent ROS 2 service calls. The BUSY
+          semantics that max_clients > 1 provides are unavailable in this direction.
+        - >-
+          host_dials cannot use RpcMuxServer, which always listens. The host process
+          must use RpcServer with an endpoints list whose comm has role client.
+      verified_on:
+        - >-
+          host_dials measured on Windows 11 Pro x86_64 with WSL2 + ROS 2 Jazzy standing
+          in for the container, 2026-08-03: /add_two_ints returned 20+22=42, 1+2=3 and
+          100+(-58)=42, then a stop request left TERMINATED exit 0 with no sockets
+          remaining. The reversal itself was checked first by running upstream's own
+          hakoniwa_pdu_rpc_basic_test against a role-reversed config, which passed 2/2
+          unchanged.
     bind_address:
       default: auto
       user_decision: optional-override
@@ -540,6 +589,12 @@ demo:
         kind: tcp
         target: approved-bind-address:configured-port
         expected: TCP connection succeeds.
+        applies_when: transport.direction == host_listens
+        inverted_form: >-
+          With host_dials the listener belongs to the ROS 2 side instead, so the
+          equivalent check is that the container-side port accepts a connection and
+          that the host session reports an established outbound connection to it.
+          Checking for a host listener would fail by design in that direction.
       - id: container_host_alias
         kind: command
         target: container resolves host.docker.internal
