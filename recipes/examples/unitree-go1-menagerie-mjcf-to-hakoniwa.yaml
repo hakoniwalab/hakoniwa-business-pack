@@ -1,29 +1,30 @@
 id: unitree-go1-menagerie-mjcf-to-hakoniwa
 title: Unitree Go1 Menagerie MJCF to Hakoniwa MuJoCo Recipe
-recipe_version: 0.1
+recipe_version: 0.2
 
 goal:
   user_request: MuJoCo Menagerie の Unitree Go1 四足歩行ロボット MJCF サンプルを起点に、箱庭 MuJoCo runtime へ接続するレシピを作りたい。
   description: >
     Use the curated Unitree Go1 MJCF model from MuJoCo Menagerie directly
     instead of starting from URDF conversion. Treat the first executable scope
-    as a Step 1 joint I/O smoke sample: load the Go1 scene, map the 12 position
-    actuators, apply home and small bounded joint-position targets, and observe
-    joint/trunk state. Full walking control is a later external-controller
-    integration step, not part of this recipe's first implementation target.
+    as a Step 1 joint I/O smoke sample, then run a Hakoniwa PDU plant with a
+    jump-like Pose Bounce as the main exhibition profile. Keep bounded joint
+    perturbation and experimental creep as regression profiles. Pose Bounce is
+    not called a verified jump until airborne contact behavior is measured.
 
 feasibility:
-  status: partially_feasible
-  confidence: medium
+  status: feasible
+  confidence: high
   rationale:
     - MuJoCo Menagerie provides a curated Unitree Go1 MJCF model and a scene.xml that includes the model with a plane and light.
     - The Go1 MJCF already defines 12 position actuators and a home keyframe, so Step 1 can use joint-position targets rather than gait generation.
     - hakoniwa-mujoco-robots already accepts MuJoCo model XML inputs and contains actuator examples and staged MuJoCo-only validation patterns.
-    - Hakoniwa runtime integration is credible through existing Core/PDU/Endpoint/Python patterns, but a Go1-specific plant asset, PDU schema, and actuator adapter still need implementation.
+    - The Go1-specific Hakoniwa plant, PDU schema, Endpoint configuration, bounded sender, Pose Bounce sender, and experimental creep sender are committed in hakoniwa-mujoco-robots.
     - Walking control is intentionally deferred because actuator availability does not imply a stable gait controller.
 
 validation:
   status: partially_verified
+  verified_at: 2026-08-04
   summary: >
     The Unitree Go1 Menagerie source was inspected, the BSD-3-Clause license
     notice was confirmed, and the model was vendored into
@@ -38,7 +39,11 @@ validation:
     open-loop Python sender has been added and smoke-tested through the same
     PDU contract; its default creep profile is intended as a slow stable-motion
     demo, not a verified walking controller. Walking-controller runtime remains
-    future work.
+    future work. The Foundation-aware Business Pack workspace, Recipe-owned
+    build, Launcher lifecycle, and default Pose Bounce profile were executed on
+    the current macOS exhibition machine. The MuJoCo viewer visibly showed the
+    Go1 jumping. This is visual evidence of the exhibited motion, not a measured
+    airborne-contact result.
   steps:
     - id: inspect_menagerie_go1_scene
       status: verified
@@ -138,7 +143,9 @@ validation:
           revision: local-working-tree-2026-07-22
       notes:
         - pose_bounce_go1.py sends a jump-like home, crouch, extend, recover, settle sequence through the same 12-joint Float64MultiArray command PDU.
-        - The demo is explicitly a posture sequence, not verified jumping or locomotion.
+        - On 2026-08-04, the current Foundation-aware Launcher session ran the profile in the MuJoCo viewer and the user visually confirmed jumping motion.
+        - Runtime logs showed the repeated phases and trunk height increasing from approximately 0.270m to 0.379m and 0.419m during the observed sequence.
+        - The visual result is verified as a jump-like exhibition, but physical airborne contact is not yet instrumented and must not be claimed.
         - Runtime smoke with --cycles 1 showed sender phases home, crouch, extend, recover, settle, and done, with thigh/calf JointState readback.
     - id: go1_walk_pattern_demo
       status: verified
@@ -226,10 +233,10 @@ constraints:
 
 target_environment:
   required_for: executable-demo
-  status: partially_known
-  os: macOS | Linux
-  os_version: unknown
-  architecture: arm64 | x86_64
+  status: specified
+  os: macOS
+  os_version: current-exhibition-machine
+  architecture: arm64
   execution_mode: native
   runtimes:
     - name: MuJoCo
@@ -238,18 +245,20 @@ target_environment:
       path: unknown
     - name: Python
       required: true
-      version: "3"
-      path: unknown
+      version: "3.12"
+      path: work/foundation/install/python
     - name: C++ toolchain
       required: true
       version: unknown
       path: unknown
   hakoniwa:
-    install_prefix: /usr/local/hakoniwa
+    install_prefix: work/foundation/install
     components_built:
       - hakoniwa-core-pro
-      - hakoniwa-mujoco-robots
+      - hakoniwa-pdu-python
       - hakoniwa-pdu-endpoint
+    recipe_local_components:
+      - hakoniwa-mujoco-robots
   notes:
     - Use the Business Pack common preflight before Hakoniwa runtime execution.
     - MuJoCo-only model loading can be checked before Hakoniwa shared-memory runtime is available.
@@ -257,9 +266,9 @@ target_environment:
 execution_environment:
   required_for: executable-demo
   status: partially_known
-  os: macOS | Linux
-  os_version: unknown
-  architecture: arm64 | x86_64
+  os: macOS
+  os_version: current-exhibition-machine
+  architecture: arm64
   execution_mode: native
   gui:
     required: true
@@ -272,11 +281,12 @@ execution_environment:
       required: false
       available: not_required
   python:
-    environment: venv
+    environment: foundation-venv
+    path: work/foundation/install/python
     hakopy_available: required-for-hakoniwa-runtime
   hakoniwa:
-    install_prefix: /usr/local/hakoniwa
-    hako_cmd_access: unknown
+    install_prefix: work/foundation/install
+    hako_cmd_access: required
   notes:
     - First validation should separate MuJoCo-only model behavior from Hakoniwa PDU runtime behavior.
     - A GUI viewer is useful for stance, contact, and actuator-direction inspection.
@@ -372,6 +382,39 @@ components:
       - language_binding
       - control_plane
     purpose: Provide a Python command sender or scripted posture controller for early joint-position input tests.
+
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      shared_memory: true
+      hako_cmd: true
+      python_binding: true
+  hakoniwa-pdu-python:
+    version:
+      min: 1.6.5
+    capabilities:
+      hako_launcher: true
+      launcher_background_lifecycle: true
+      shm_backend: true
+  hakoniwa-pdu-endpoint:
+    capabilities:
+      python_binding: true
+      hakoniwa_core: true
+      core_callback: true
+
+recipe_local_requirements:
+  hakoniwa-mujoco-robots:
+    build_entrypoint: tools/hako.py
+    required_artifacts:
+      - unitree-go1-joint-io-example
+      - unitree-go1-joint-hakoniwa-asset
+      - pose_bounce_go1.py
+      - walk_go1.py
+  hakoniwa-pdu-registry:
+    role: generated-artifact-provenance
+    required_artifacts:
+      - std_msgs/Float64MultiArray converters and offsets
+      - sensor_msgs/JointState converters and offsets
 
 connections:
   - from: hakoniwa-mujoco-robots
@@ -591,8 +634,7 @@ artifacts:
 missing_pieces:
   - Add a CMake/CI verification target or scripted test wrapper for the existing Step 1 MuJoCo-only check.
   - Add an automated Hakoniwa runtime smoke wrapper for the Step 2 plant/sender/start sequence.
-  - Add viewer validation for the Hakoniwa asset mode.
-  - Tune and visually validate pose_bounce_go1.py before using it as a viewer demo.
+  - Add contact instrumentation if the project needs to claim measured airborne jumping rather than a visually verified jump-like exhibition.
   - Tune and visually validate walk_go1.py before using it as a walking demo.
   - Decide whether trunk pose should be published as a separate PDU in addition to joint_states.
   - Decide whether a ROS walking controller is required for the business demo or whether joint I/O is enough for the first recipe.
@@ -600,101 +642,67 @@ missing_pieces:
 
 demo:
   objective: >
-    Prove that a curated Menagerie quadruped MJCF can be used as an MJCF-first
-    robot asset source for Hakoniwa planning. The first executable step should
-    load the Go1 scene, confirm the 12 position-actuator interface, and move a
-    small set of joints through a bounded command. The demo does not claim
-    autonomous walking.
+    Reproduce the current Go1 runtime from a Business Pack-owned workspace. Use
+    Pose Bounce as the visible exhibition profile, while retaining MuJoCo-only
+    joint I/O, bounded PDU perturbation, and experimental creep as regression
+    profiles. Do not claim verified jumping until airborne contact is measured.
+  profiles:
+    - id: pose-bounce
+      default: true
+      launcher: work/recipes/unitree-go1-menagerie-mjcf-to-hakoniwa/config/launcher-pose-bounce.json
+      purpose: Repeated jump-like home/crouch/extend/recover motion with MuJoCo viewer.
+    - id: perturbation
+      launcher: work/recipes/unitree-go1-menagerie-mjcf-to-hakoniwa/config/launcher-perturbation.json
+      purpose: Bounded diagonal-thigh PDU command and JointState regression.
+    - id: creep
+      launcher: work/recipes/unitree-go1-menagerie-mjcf-to-hakoniwa/config/launcher-creep.json
+      purpose: Experimental open-loop motion regression, not a walking-controller claim.
+  prerequisites:
+    - command: python tools/foundation.py doctor --recipe recipes/examples/unitree-go1-menagerie-mjcf-to-hakoniwa.yaml
+      expected: Foundation SATISFIED
+    - command: python tools/unitree_go1_demo.py configure
+      expected: Recipe workspace, staged MJCF/config, portal, build manifest, and three Launchers generated.
+    - command: python tools/unitree_go1_demo.py build
+      expected: Go1 binaries built in the Recipe-owned build directory against the selected Foundation.
+    - command: python tools/unitree_go1_demo.py doctor
+      expected: Foundation runtime, model/LICENSE, Python imports, configs, and binaries are ready.
   steps:
-    - order: 1
-      id: run_common_preflight
-      component: hakoniwa-core-pro
-      action: Check common Hakoniwa runtime assumptions before Hakoniwa execution.
-      command: bash tools/doctor.bash
-      agency: agent_action
-      requires_gates: []
+    - id: configure
+      command: python tools/unitree_go1_demo.py configure
+      status: verified
+    - id: build
+      command: python tools/unitree_go1_demo.py build
+      status: verified
+    - id: doctor
+      command: python tools/unitree_go1_demo.py doctor
+      status: verified
+    - id: step1_joint_io
+      command: python tools/unitree_go1_demo.py step1
+      status: verified
+      expected:
+        - All 12 actuator names are resolved in the stable command order.
+        - Home and bounded perturbation remain finite and the output ends with check ok.
+    - id: start_pose_bounce
+      command: python tools/unitree_go1_demo.py start
+      status: verified
+      expected:
+        - Business Pack starts the Go1 plant and Pose Bounce sender in one background Launcher session.
+        - MuJoCo viewer displays repeated home, crouch, extend, recover, and settle phases.
+        - JointState readback remains continuous and finite.
       evidence:
-        - repository: hakoniwalab/hakoniwa-business-pack
-          path: tools/doctor.bash
-          revision: main
-    - order: 2
-      id: reference_vendored_menagerie_go1
-      component: hakoniwa-mujoco-robots
-      action: Use the vendored MuJoCo Menagerie Unitree Go1 scene.xml, go1.xml, assets, and license from thirdparty/mujoco_menagerie/unitree_go1.
-      command: test -f thirdparty/mujoco_menagerie/unitree_go1/LICENSE
-      agency: agent_action
-      requires_gates:
-        - menagerie_license_compliance
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: thirdparty/mujoco_menagerie/README.md
-          revision: local-working-tree-2026-07-22
-    - order: 3
-      id: mujoco_viewer_smoke
-      component: hakoniwa-mujoco-robots
-      action: Load and visually inspect the Menagerie Go1 scene in MuJoCo.
-      command: python -m mujoco.viewer --mjcf thirdparty/mujoco_menagerie/unitree_go1/scene.xml
-      agency: agent_action
-      requires_gates: []
-      evidence:
-        - repository: google-deepmind/mujoco_menagerie
-          path: README.md
-          revision: main
-    - order: 4
-      id: go1_joint_io_smoke
-      component: hakoniwa-mujoco-robots
-      action: Apply the home keyframe ctrl values and a small scripted joint perturbation to confirm actuator-slot mapping and observable leg motion.
-      command: ./src/cmake-build/examples/actuators/unitree_go1/unitree-go1-joint-io-example --check
-      agency: agent_action
-      requires_gates: []
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: examples/actuators/unitree_go1/unitree-go1-joint-io-example.cpp
-          revision: local-working-tree-2026-07-22
-    - order: 5
-      id: hakoniwa_joint_pdu_smoke
-      component: hakoniwa-pdu-python
-      action: Publish scripted Go1 joint targets to the Hakoniwa plant asset and verify joint/trunk state output after hako-cmd start.
-      command: ./src/cmake-build/examples/actuators/unitree_go1/unitree-go1-joint-hakoniwa-asset --no-viewer; python3 examples/actuators/unitree_go1/send_go1_joint_targets.py --duration-sec 3 --amplitude 0.12; /usr/local/hakoniwa/bin/hako-cmd start
-      agency: agent_action
-      requires_gates: []
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: examples/actuators/unitree_go1/README.md
-          revision: local-working-tree-2026-07-22
-    - order: 6
-      id: go1_pose_bounce_demo
-      component: hakoniwa-pdu-python
-      action: Run a jump-like home/crouch/extend/recover posture sequence through the verified 12-joint PDU contract without claiming jumping.
-      command: ./src/cmake-build/examples/actuators/unitree_go1/unitree-go1-joint-hakoniwa-asset --no-viewer; python3 examples/actuators/unitree_go1/pose_bounce_go1.py --cycles 1; /usr/local/hakoniwa/bin/hako-cmd start
-      agency: agent_action
-      requires_gates: []
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: examples/actuators/unitree_go1/pose_bounce_go1.py
-          revision: local-working-tree-2026-07-22
-    - order: 7
-      id: go1_walk_pattern_demo
-      component: hakoniwa-pdu-python
-      action: Run an experimental open-loop creep joint pattern through the verified 12-joint PDU contract without claiming feedback walking control.
-      command: ./src/cmake-build/examples/actuators/unitree_go1/unitree-go1-joint-hakoniwa-asset --no-viewer; python3 examples/actuators/unitree_go1/walk_go1.py --duration-sec 6; /usr/local/hakoniwa/bin/hako-cmd start
-      agency: agent_action
-      requires_gates: []
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: examples/actuators/unitree_go1/walk_go1.py
-          revision: local-working-tree-2026-07-22
-    - order: 8
-      id: external_walking_controller
-      component: hakoniwa-pdu-python
-      action: Connect a ROS or external gait controller only after Step 1 and Step 2 are verified.
-      agency: human_decision
-      requires_gates:
-        - choose_external_controller
-      evidence:
-        - repository: external
-          path: TBD
-          revision: TBD
+        - On 2026-08-04, Launcher reached RUNNING, the plant and sender entered their running states, and the user visually confirmed jumping motion in MuJoCo.
+    - id: start_perturbation
+      command: python tools/unitree_go1_demo.py start --profile perturbation
+      status: not_tested
+    - id: start_creep
+      command: python tools/unitree_go1_demo.py start --profile creep
+      status: not_tested
+    - id: status
+      command: python tools/unitree_go1_demo.py status
+      status: verified
+    - id: stop
+      command: python tools/unitree_go1_demo.py stop
+      status: verified
   observability:
     success_signals:
       - MuJoCo loads unitree_go1/scene.xml without XML, mesh, or asset errors.
@@ -703,7 +711,8 @@ demo:
       - Applying a small joint-position perturbation changes the intended leg joints without NaN, explosion, or actuator-name mismatch.
       - Joint position, joint velocity, and trunk pose remain finite during the smoke test.
       - In the Hakoniwa stage, joint command PDU updates are reflected in MuJoCo ctrl values and joint state PDU output changes accordingly.
-      - The pose bounce demo logs phase transitions and thigh/calf JointState readback while still avoiding any jumping or walking claim.
+      - The Pose Bounce demo logs phase transitions and thigh/calf JointState readback.
+      - A verified jump claim additionally requires measured all-feet airborne state and stable landing.
       - The walk pattern demo logs warmup, creep, cooldown, and done phases with thigh JointState readback while still avoiding any verified walking-controller claim.
     failure_signals:
       - Missing assets or relative mesh path errors.
@@ -733,6 +742,17 @@ demo:
       - Actuator mapping summary with 12 named actuators.
       - Step 1 joint perturbation summary.
       - PDU send/receive logs for command and state channels.
+  cleanup:
+    owner: hakoniwa-launcher
+    provider: hakoniwa-pdu-python
+    mode: background
+    target: work/recipes/unitree-go1-menagerie-mjcf-to-hakoniwa/runtime/launcher-session.json
+    trigger: python tools/unitree_go1_demo.py stop
+    expected_behavior:
+      - LauncherService.terminate stops only the plant and sender it owns.
+      - The session file remains inspectable with state TERMINATED.
+    cautions:
+      - Do not use kill -9, broad process-name cleanup, or hako-cmd stop as process termination.
 
 expected_result: >
   A reviewer can see why Unitree Go1 should be treated as an MJCF-first
