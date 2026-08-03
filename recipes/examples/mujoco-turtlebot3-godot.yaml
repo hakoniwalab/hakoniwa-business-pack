@@ -1,153 +1,115 @@
 id: mujoco-turtlebot3-godot
-title: MuJoCo TurtleBot3 with Godot Visualization
-recipe_version: 0.1
+title: TurtleBot3 MuJoCo + Godot Gamepad Demo
+recipe_version: 0.2
 
 goal:
-  user_request: ROSを使わず、MuJoCoでTurtleBot3を動かして、Godotで3D表示したい
+  user_request: Drive a TurtleBot3 in MuJoCo with a gamepad and show the same motion in Godot without ROS.
   description: >
-    Simulate TurtleBot3 with MuJoCo and visualize its robot state in Godot using
-    existing Hakoniwa PDU, endpoint, and robot sync artifacts without requiring a
-    ROS runtime.
+    Use a PS5 controller to drive a TurtleBot3 simulated in MuJoCo. Hakoniwa PDU
+    transports the robot base pose and wheel joint state to Godot, so the same
+    motion can be observed in both MuJoCo and Godot. ROS is not required.
 
 feasibility:
   status: feasible
-  confidence: medium
+  confidence: high
   rationale:
-    - hakoniwa-mbody-registry contains TurtleBot3 Burger and Waffle registry sources that generate URDF, MJCF, minimal MuJoCo world, GLB, GLB parts, and PDU definitions.
-    - hakoniwa-mbody-registry also contains a legacy TurtleBot3 Godot reference scene and robot_sync.profile.json that can guide the visualization leg.
-    - hakoniwa-mujoco-robots contains TurtleBot3 MuJoCo simulator targets for the standard TB3 model, MBody Burger, and MBody Waffle, with route-demo control that does not require a joystick.
-    - hakoniwa-godot already contains examples/mujoco config using robot_sync.profile.json and endpoint_shm_poll_with_pdu.json.
-    - The MuJoCo-side and Godot-side TB3 pdutypes define the same robot-state PDU names and types needed for sync.
-    - Composition confidence is medium because the MBody-to-MuJoCo runtime path is partially verified for Burger and Waffle, while the Godot visualization leg is still not end-to-end verified.
+    - hakoniwa-mbody-registry provides the TurtleBot3 Burger physics model, Godot scene, GLB parts, and synchronization profile.
+    - hakoniwa-mujoco-robots provides the TurtleBot3 simulator and the GameControllerOperation command contract.
+    - hakoniwa-pdu-endpoint provides the Core callback profile used by MuJoCo and the Core polling profile used by Godot.
+    - hakoniwa-godot consumes TB3/base_link_pos and TB3/joint_states and applies them to the generated TurtleBot3 scene.
+    - The gamepad, MuJoCo, Hakoniwa shared-memory PDU, and Godot visualization path was manually exercised on macOS arm64 on 2026-08-04.
 
 validation:
   status: partially_verified
   summary: >
-    The TurtleBot3 Burger and Waffle MBody forge paths and MuJoCo runtime demos
-    were tested on macOS arm64. Godot visualization is still not verified
-    end-to-end, so this recipe remains partially verified.
+    The primary TurtleBot3 Burger exhibition path was manually verified on macOS
+    arm64 on 2026-08-04: a PS5 controller moved the MuJoCo robot and Godot showed
+    the synchronized robot motion. The scripted route fallback is also available.
+    A clean Foundation bootstrap and other operating systems remain to be verified.
   steps:
-    - id: mbody_burger_forge
+    - id: mbody_burger_artifacts
       status: verified
       evidence:
         - repository: hakoniwalab/hakoniwa-mbody-registry
           path: bodies/turtlebot3_burger/generated
           revision: local-validation-2026-07-19
       notes:
-        - forge.sh generated TurtleBot3 Burger URDF, MJCF, actuated MJCF, minimal MuJoCo world, GLB, GLB parts, and PDU definitions.
-    - id: mbody_waffle_forge
+        - Burger physics, visualization, and PDU artifacts were generated successfully.
+
+    - id: mujoco_burger_route_demo
       status: verified
       evidence:
-        - repository: hakoniwalab/hakoniwa-mbody-registry
-          path: bodies/turtlebot3_waffle/generated
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: python/tb3_route_demo.py
           revision: local-validation-2026-07-19
       notes:
-        - forge.sh generated TurtleBot3 Waffle URDF, MJCF, actuated MJCF, minimal MuJoCo world, GLB, GLB parts, and PDU definitions.
-        - Waffle physics MJCF generation uses visual discard for MuJoCo compatibility, while GLB generation keeps the visual path.
-    - id: mujoco_burger_runtime_route_demo
+        - The scripted figure-eight route moved the TurtleBot3 without a physical controller.
+
+    - id: turtlebot3_godot_gamepad_e2e
       status: verified
       evidence:
+        - repository: hakoniwalab/hakoniwa-business-pack
+          path: tools/turtlebot3_godot_exhibition.py
+          revision: local-validation-2026-08-04
+        - repository: hakoniwalab/hakoniwa-godot
+          path: examples/mujoco
+          revision: local-validation-2026-08-04
         - repository: hakoniwalab/hakoniwa-mujoco-robots
           path: src/main_for_sample/tb3
-          revision: local-validation-2026-07-19
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: python/tb3_route_demo.py
-          revision: local-validation-2026-07-19
+          revision: local-validation-2026-08-04
       notes:
-        - tb3_sim_burger loaded the MBody Burger asset manifest and moved through joystick-free route-demo PDU commands.
-    - id: mujoco_waffle_runtime_route_demo
-      status: verified
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: src/main_for_sample/tb3
-          revision: local-validation-2026-07-19
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: python/tb3_route_demo.py
-          revision: local-validation-2026-07-19
-      notes:
-        - tb3_sim_waffle loaded the MBody Waffle asset manifest and moved through joystick-free route-demo PDU commands.
-    - id: mujoco_launcher_route_lidar_demo
-      status: verified
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: tb3-mbody-demo-launch.json
-          revision: local-validation-2026-07-19
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: python/tb3_route_demo.py
-          revision: local-validation-2026-07-19
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: python/tb3_lidar_visualizer.py
-          revision: local-validation-2026-07-19
-      notes:
-        - hakoniwa-pdu launcher started tb3_sim_mbody before hako-cmd start, then started the LiDAR visualizer and figure-eight route demo after simulation start.
-        - Waffle completed the launcher-driven route demo with MuJoCo viewer enabled.
-        - Route completion intentionally stops the launcher-managed assets.
-    - id: lidar_obstacle_fixture
-      status: verified
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mbody-registry
-          path: bodies/turtlebot3_burger/config/mujoco_world.yaml
-          revision: local-validation-2026-07-19
-        - repository: hakoniwalab/hakoniwa-mbody-registry
-          path: bodies/turtlebot3_waffle/config/mujoco_world.yaml
-          revision: local-validation-2026-07-19
-      notes:
-        - Demo marker boxes were raised to intersect the TurtleBot3 LiDAR scan plane.
-        - Waffle runtime logs showed nearby LiDAR hits with lidar_min around 0.52 to 0.75 m instead of only far-range returns.
-    - id: joystick_free_motion
-      status: verified
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: python/tb3_route_demo.py
-          revision: local-validation-2026-07-19
-      notes:
-        - tb3_route_demo.py provides direct programmatic motion commands and removes the joystick requirement for the minimal demo.
-    - id: godot_visualization
+        - A PS5 controller sent GameControllerOperation commands to TB3/hako_cmd_game.
+        - MuJoCo displayed TurtleBot3 motion and published TB3/base_link_pos and TB3/joint_states.
+        - Godot loaded the generated TurtleBot3 scene and displayed synchronized motion.
+        - The controller sent a neutral command during shutdown.
+
+    - id: clean_foundation_bootstrap
       status: not_tested
       evidence: []
       notes:
-        - Godot was intentionally out of scope for the first validation pass.
+        - Re-run the complete guide from an empty work directory before claiming clean-machine reproducibility.
 
 constraints:
   - no-ros-runtime
   - single-pc
   - shared-memory-pdu
   - visualization-polling
+  - simulation-only
 
 target_environment:
   required_for: executable-demo
-  status: required
-  os: unknown
+  status: recorded
+  os: macOS
   os_version: unknown
-  architecture: unknown
+  architecture: arm64
   execution_mode: native
   runtimes:
     - name: Godot
       required: true
       version: unknown
-      path: unknown
+      path: auto-discovered or supplied with --godot-bin
     - name: MuJoCo
       required: true
-      version: unknown
-      path: unknown
+      version: repository-managed
+      path: hakoniwa-mujoco-robots
     - name: Python
       required: true
-      version: unknown
-      path: unknown
+      version: "3.12"
+      path: work/foundation/install/python
   hakoniwa:
-    install_prefix: /usr/local/hakoniwa
+    install_prefix: work/foundation/install
     components_built:
       - hakoniwa-core-pro
+      - hakoniwa-pdu-python
       - hakoniwa-pdu-endpoint
-      - hakoniwa-mujoco-robots
-      - hakoniwa-godot
   notes:
-    - This recipe is structurally feasible, but executable runbook commands require target machine details.
-    - Ask for OS, architecture, Godot binary path, MuJoCo installation, and build/install state before claiming runtime verification.
+    - Run all commands inside the Workspace shell created by python tools/workspace.py enter.
+    - The gamepad profile requires a PS5-compatible controller visible to pygame.
+    - The route profile is the controller-free fallback.
 
 execution_environment:
   required_for: executable-demo
-  status: partially_recorded
+  status: verified
   os: macOS
   os_version: unknown
   architecture: arm64
@@ -157,58 +119,108 @@ execution_environment:
     status: available
   shared_memory:
     required: true
-    access: requires-unsandboxed-command
+    access: workspace-native
   devices:
-    - name: joystick
+    - name: PS5-compatible gamepad
+      required: true
+      available: verified-on-2026-08-04
+    - name: gamepad for route profile
       required: false
-      available: unknown
+      available: not-required
   python:
     environment: venv
     hakopy_available: true
   hakoniwa:
-    install_prefix: /usr/local/hakoniwa
-    hako_cmd_access: requires-unsandboxed-command
+    install_prefix: work/foundation/install
+    hako_cmd_access: available-in-workspace
   notes:
-    - hako-cmd and Hakoniwa shared memory require an execution environment where the Hakoniwa master is visible.
-    - tb3_route_demo.py provides a joystick-free command source for reproducible minimal demos.
-    - The validated MuJoCo-only demo used Python 3.12, hakopy, hakoniwa-pdu, MuJoCo viewer, and unsandboxed shared-memory access.
+    - MuJoCo and Godot open GUI windows.
+    - Launcher-managed processes continue running after the start command returns.
+    - Execute the Recipe stop command before leaving the Workspace shell.
+
+agency_boundary:
+  agent_actions:
+    - id: prepare_recipe_workspace
+      description: Generate Recipe-owned configuration, the Godot project, launcher files, and the operator guide.
+      autonomous: true
+      preconditions:
+        - user_requested_execution
+
+    - id: build_simulation_assets
+      description: Build the MuJoCo target and Godot native addon inside the approved local workspace.
+      autonomous: true
+      preconditions:
+        - user_requested_execution
+        - foundation_satisfied
+
+    - id: run_simulation_demo
+      description: Start and inspect the simulation-only MuJoCo and Godot composition.
+      autonomous: true
+      preconditions:
+        - user_requested_execution
+        - recipe_doctor_passed
+
+  human_decisions:
+    - id: confirm_visual_synchronization
+      description: Confirm that the TurtleBot3 motion shown by Godot matches the motion shown by MuJoCo.
+      status: required
+      required_before:
+        - claim_behavior_verified
+
+  human_actions:
+    - id: connect_gamepad
+      description: Connect or pair the PS5-compatible controller before starting the gamepad profile.
+      status: required
+      confirmation_required: true
+      required_before:
+        - start_gamepad_profile
+
+  required_permissions:
+    - id: local_gui_and_shared_memory
+      description: Permit local GUI windows and Hakoniwa shared-memory access.
+      status: required
+      required_before:
+        - start_demo
+
+  notes:
+    - This Recipe controls only a simulated TurtleBot3 and does not actuate real hardware.
 
 components:
   - id: hakoniwa-mbody-registry
     roles:
       - asset_generator
       - visualization_asset_source
-    purpose: Generate and provide TurtleBot3 MJCF, GLB parts, Godot scene, endpoint config, PDU definition, and robot sync profile.
+    purpose: Provide TurtleBot3 Burger physics, GLB parts, the generated Godot scene, and robot synchronization artifacts.
 
   - id: hakoniwa-mujoco-robots
     roles:
       - physics_runtime
       - simulation_core
-    purpose: Run the TurtleBot3 MuJoCo physics simulation and publish robot state PDUs.
+    purpose: Simulate TurtleBot3 physics, consume GameControllerOperation commands, and publish robot state PDUs.
 
   - id: hakoniwa-pdu-endpoint
     roles:
       - communication_infrastructure
       - integration_boundary
-    purpose: Provide SHM poll endpoint configuration and PDU send/receive semantics between MuJoCo and Godot.
+    purpose: Provide Core callback and polling endpoint profiles for MuJoCo and Godot.
 
   - id: hakoniwa-pdu-registry
     roles:
       - data_model
       - registry
-    purpose: Provide canonical PDU type contracts for geometry_msgs/Twist and sensor_msgs/JointState.
+    purpose: Provide canonical GameControllerOperation, pose, and JointState PDU contracts.
 
   - id: hakoniwa-godot
     roles:
       - visualizer
       - integration_boundary
-    purpose: Consume robot_sync.profile.json and endpoint config to update the TurtleBot3 Godot model from PDU state.
+    purpose: Display the generated TurtleBot3 scene and update it from Hakoniwa PDU state.
 
   - id: hakoniwa-core-pro
     roles:
       - simulation_core
       - time_sync
-    purpose: Provide Hakoniwa runtime, hako-cmd lifecycle control, shared memory, and simulation time base.
+    purpose: Provide the Hakoniwa lifecycle, shared memory, and simulation time base.
 
 foundation_requirements:
   hakoniwa-core-pro:
@@ -236,6 +248,8 @@ recipe_local_requirements:
     required_artifacts:
       - tb3_sim_burger
       - tb3_route_demo.py
+      - python/rc_utils/rc_utils.py
+      - python/rc_config/ps4-control.json
   hakoniwa-godot:
     build_entrypoint: CMake
     required_codec_packages:
@@ -265,57 +279,47 @@ connections:
     interface: generated-artifact
     data:
       - turtlebot3_burger.minimal_world.xml
-      - turtlebot3_waffle.minimal_world.xml
-      - turtlebot3_burger.actuated.xml
-      - turtlebot3_waffle.actuated.xml
-      - pdutypes.json
-      - pdu_def.json
+      - PDU definition
     contract:
-      status: partially_verified
+      status: verified
       requires:
-        - mujoco-world-composition
-        - runtime-specific-actuator-settings
-        - asset-manifest-compatible-with-mujoco-robots
+        - TurtleBot3 Burger generated artifacts
+        - MuJoCo-compatible asset manifest
       validation_notes:
-        - MBody generated Burger and Waffle runtime artifacts including minimal MuJoCo worlds and PDU definitions.
-        - MuJoCo Robots loaded Burger and Waffle asset manifests and ran route-demo motion.
-        - This connection is not marked fully verified for the Godot recipe until the generated runtime state is consumed by Godot.
-    notes: MBody-generated runtime artifacts define the physical model and communication contract consumed by MuJoCo-side demos.
+        - The Burger model loaded and moved in the MuJoCo runtime.
+    notes: The generated Burger model and PDU metadata are staged into the Recipe workspace.
 
   - from: hakoniwa-mbody-registry
     to: hakoniwa-godot
     interface: generated-artifact
     data:
       - TurtleBot3.generated.tscn
-      - robot_sync.profile.json
       - GLB parts
+      - robot_sync.profile.json
     contract:
-      status: partially_verified
+      status: verified
       requires:
-        - generated-godot-scene
-        - robot-sync-profile
-        - endpoint-config-compatible-with-runtime
+        - generated Godot scene
+        - robot synchronization profile
       validation_notes:
-        - Burger and Waffle GLB and GLB parts are generated.
-        - Godot runtime consumption was not included in the validation pass.
-    notes: Godot robot sync consumes the generated scene/profile/config artifacts.
+        - Godot loaded the generated TurtleBot3 scene during the 2026-08-04 exhibition run.
+    notes: Visualization artifacts map the PDU state to Godot scene nodes.
 
   - from: hakoniwa-mujoco-robots
     to: hakoniwa-pdu-endpoint
     interface: pdu
     data:
+      - TB3/hako_cmd_game
       - TB3/base_link_pos
       - TB3/joint_states
     contract:
-      status: partially_verified
+      status: verified
       requires:
-        - hakoniwa-shared-memory-access
-        - tb3-pdu-definition
-        - hako-cmd-start
+        - Core callback endpoint profile
+        - Hakoniwa shared-memory access
       validation_notes:
-        - tb3_sim created PDU channels and advanced simulation after hako-cmd start.
-        - State publishing was not consumed by Godot in this validation pass.
-    notes: tb3_sim publishes robot pose and joint states through the TB3 endpoint.
+        - MuJoCo consumed gamepad commands and published pose and wheel joint state.
+    notes: MuJoCo is the command consumer and authoritative physics-state producer.
 
   - from: hakoniwa-pdu-endpoint
     to: hakoniwa-godot
@@ -324,54 +328,49 @@ connections:
       - TB3/base_link_pos
       - TB3/joint_states
     contract:
-      status: not_tested
+      status: verified
       requires:
-        - godot-runtime
-        - shm-poll-endpoint-config
-        - robot-sync-profile-compatible-with-pdu-names
+        - Core polling endpoint profile
+        - endpoint_shm_poll_with_pdu.json
+        - robot_sync.profile.json
       validation_notes:
-        - The PDU-to-Godot connection remains a planned validation step.
-    notes: Godot examples/mujoco uses SHM poll endpoint config and robot_sync.profile.json to receive and apply robot state.
+        - Godot displayed synchronized TurtleBot3 movement during the 2026-08-04 exhibition run.
+    notes: Godot polls the latest pose and wheel state and applies them to the visual model.
 
   - from: hakoniwa-core-pro
     to: hakoniwa-mujoco-robots
     interface: command
     data:
-      - hako-cmd start
+      - lifecycle start
+      - lifecycle stop
+      - simulation time
     contract:
       status: verified
       requires:
-        - hakoniwa-runtime-installed
-        - unsandboxed-shared-memory-access
+        - Foundation Core configuration
+        - Launcher-managed lifecycle
       validation_notes:
-        - hako-cmd start succeeded outside the managed sandbox and created PDU shared memory.
-        - The same command failed inside the sandbox because the Hakoniwa master was not visible.
-    notes: The MuJoCo TurtleBot3 quick start uses hako-cmd to start the simulation.
+        - The Launcher started the simulation and returned an externally controllable background session.
+    notes: The exhibition tool owns the Launcher session and exposes start, status, and stop commands.
 
 data_flow:
   summary: >
-    TurtleBot3 state is produced by the MuJoCo simulator as Hakoniwa PDU data.
-    Godot receives base pose and joint states through an SHM poll endpoint and
-    applies them to the generated TurtleBot3 scene nodes.
+    A PS5 controller or scripted route writes GameControllerOperation commands to
+    TB3/hako_cmd_game. MuJoCo applies those commands to TurtleBot3 and publishes
+    TB3/base_link_pos and TB3/joint_states. Godot polls those PDUs and updates the
+    generated TurtleBot3 visual model.
   steps:
-    - from: hakoniwa-mbody-registry
+    - from: PS5 controller or route script
       to: hakoniwa-mujoco-robots
       data:
-        - MJCF robot model
-        - PDU definition
-      description: Robot body and PDU config artifacts establish the MuJoCo runtime inputs.
-    - from: hakoniwa-mbody-registry
-      to: hakoniwa-godot
-      data:
-        - Godot scene
-        - robot_sync.profile.json
-      description: Generated visual assets and profile map PDU names to Godot node paths.
+        - TB3/hako_cmd_game
+      description: The controller provides forward and turning inputs through GameControllerOperation.
     - from: hakoniwa-mujoco-robots
       to: hakoniwa-godot
       data:
-        - base_link_pos
-        - joint_states
-      description: Runtime state flows as PDU through endpoint SHM poll communication.
+        - TB3/base_link_pos
+        - TB3/joint_states
+      description: The authoritative MuJoCo pose and wheel state are mirrored into the Godot visualization.
 
 time_model:
   mode: visualization-polling
@@ -380,67 +379,55 @@ time_model:
     - hakoniwa-mujoco-robots
     - hakoniwa-godot
   notes:
-    - MuJoCo participates in the Hakoniwa runtime and starts via hako-cmd.
-    - Godot robot sync uses poll behavior and applies latest state in the Godot loop.
-    - Enable HakoniwaSimNode physics time synchronization only if the demo needs Godot physics to advance under Hakoniwa world time.
-    - conductor-light is not required for the minimal visualization path, but can be considered if strict multi-asset virtual-time coordination is needed.
+    - MuJoCo advances as a Hakoniwa simulation asset.
+    - Godot participates in the lifecycle and polls the latest robot state for visualization.
+    - Godot is a synchronized visual consumer, not a second authoritative physics engine in this Demo.
 
 artifact_sets:
   physics_artifacts:
-    description: Inputs consumed by the MuJoCo physics runtime.
-    status: partially_verified
+    description: TurtleBot3 Burger inputs consumed by the MuJoCo runtime.
+    status: verified
     artifacts:
       - turtlebot3_burger.minimal_world.xml
-      - turtlebot3_waffle.minimal_world.xml
-      - turtlebot3_burger.actuated.xml
-      - turtlebot3_waffle.actuated.xml
-      - tb3-mbody-burger-asset.json
-      - tb3-mbody-waffle-asset.json
+      - tb3-burger-asset.json
+      - tb3_sim_burger
     notes:
-      - Burger and Waffle both ran in MuJoCo Robots using MBody-derived asset manifests.
-      - Waffle physics MJCF uses visual discard because some URDF visual meshes are not accepted by the MuJoCo compiler.
-      - This set verifies the physics/runtime path, not the Godot visualization path.
+      - The Burger model is the primary exhibition target.
+
   visualization_artifacts:
-    description: Inputs consumed by Godot or another 3D viewer.
-    status: partially_verified
+    description: TurtleBot3 scene and model parts consumed by Godot.
+    status: verified
     artifacts:
-      - turtlebot3_burger.glb
-      - turtlebot3_waffle.glb
-      - Burger GLB parts
-      - Waffle GLB parts
       - TurtleBot3.generated.tscn
+      - Burger GLB parts
+      - tb3_reference_sync.gd
     notes:
-      - Burger and Waffle GLB generation is verified.
-      - Godot consumption of the generated scene and GLB parts remains not tested in this recipe.
-      - Visualization artifacts may preserve meshes that are discarded from the MuJoCo physics MJCF.
+      - The generated scene was loaded and moved during the manual exhibition run.
+
   pdu_artifacts:
-    description: PDU definitions, endpoint configs, and robot sync profiles.
-    status: partially_verified
+    description: Command, pose, wheel-state, endpoint, and synchronization definitions.
+    status: verified
     artifacts:
-      - pdu_def.json
-      - pdutypes.json
+      - tb3-pdudef-compact.json
       - endpoint_shm_poll_with_pdu.json
       - robot_sync.profile.json
-      - tb3-pdutypes.json
+      - hako_msgs/GameControllerOperation
+      - geometry_msgs/Twist
+      - sensor_msgs/JointState
     notes:
-      - MBody PDU generation is verified for Burger and Waffle.
-      - MuJoCo route demos use Hakoniwa PDU commands.
-      - Godot-side endpoint config and robot sync profile are based on existing reference artifacts and remain not tested against the new Burger/Waffle registry outputs.
+      - MuJoCo uses the callback profile and Godot uses the polling profile.
+
   runtime_artifacts:
-    description: Commands and runtime targets needed to run the minimal demo.
+    description: Generated launchers and operator commands for the exhibition Demo.
     status: partially_verified
     artifacts:
-      - tb3_sim_burger
-      - tb3_sim_waffle
-      - tb3_route_demo.py
-      - tb3_lidar_visualizer.py
-      - tb3-mbody-demo-launch.json
-      - hako-cmd start
+      - launcher-gamepad.json
+      - launcher-route.json
+      - launcher-session.json
+      - tools/turtlebot3_godot_exhibition.py
     notes:
-      - Burger and Waffle route demos are verified without a joystick.
-      - hakoniwa-pdu launcher can start the MuJoCo asset before hako-cmd start and start route/LiDAR assets after simulation start.
-      - The minimal MuJoCo world must contain sensor-visible fixtures; low obstacles below LiDAR scan height are not sufficient validation targets.
-      - Godot launch and sync verification remain future validation steps.
+      - The gamepad profile was manually verified on macOS arm64.
+      - A clean-workspace rebuild remains to be verified.
 
 artifacts:
   - name: turtlebot3_burger.minimal_world.xml
@@ -450,63 +437,6 @@ artifacts:
       - hakoniwa-mujoco-robots
     path: bodies/turtlebot3_burger/generated/turtlebot3_burger.minimal_world.xml
 
-  - name: turtlebot3_waffle.minimal_world.xml
-    kind: mjcf
-    producer: hakoniwa-mbody-registry
-    consumer:
-      - hakoniwa-mujoco-robots
-    path: bodies/turtlebot3_waffle/generated/turtlebot3_waffle.minimal_world.xml
-
-  - name: turtlebot3_burger.actuated.xml
-    kind: mjcf
-    producer: hakoniwa-mbody-registry
-    consumer:
-      - hakoniwa-mujoco-robots
-    path: bodies/turtlebot3_burger/generated/turtlebot3_burger.actuated.xml
-
-  - name: turtlebot3_waffle.actuated.xml
-    kind: mjcf
-    producer: hakoniwa-mbody-registry
-    consumer:
-      - hakoniwa-mujoco-robots
-    path: bodies/turtlebot3_waffle/generated/turtlebot3_waffle.actuated.xml
-
-  - name: tb3-mbody-burger-asset.json
-    kind: source
-    producer: hakoniwa-mujoco-robots
-    consumer:
-      - hakoniwa-mujoco-robots
-    path: config/assets/tb3-mbody-burger-asset.json
-
-  - name: tb3-mbody-waffle-asset.json
-    kind: source
-    producer: hakoniwa-mujoco-robots
-    consumer:
-      - hakoniwa-mujoco-robots
-    path: config/assets/tb3-mbody-waffle-asset.json
-
-  - name: tb3-mbody-demo-launch.json
-    kind: command
-    producer: hakoniwa-mujoco-robots
-    consumer:
-      - hakoniwa-mujoco-robots
-      - hakoniwa-core-pro
-    path: tb3-mbody-demo-launch.json
-
-  - name: tb3_route_demo.py
-    kind: command
-    producer: hakoniwa-mujoco-robots
-    consumer:
-      - hakoniwa-mujoco-robots
-    path: python/tb3_route_demo.py
-
-  - name: tb3_lidar_visualizer.py
-    kind: command
-    producer: hakoniwa-mujoco-robots
-    consumer:
-      - hakoniwa-mujoco-robots
-    path: python/tb3_lidar_visualizer.py
-
   - name: TurtleBot3.generated.tscn
     kind: godot-scene
     producer: hakoniwa-mbody-registry
@@ -514,40 +444,12 @@ artifacts:
       - hakoniwa-godot
     path: bodies/turtlebot3/godot_tb3_reference/TurtleBot3.generated.tscn
 
-  - name: turtlebot3_burger.glb
-    kind: glb
-    producer: hakoniwa-mbody-registry
-    consumer:
-      - hakoniwa-godot
-    path: bodies/turtlebot3_burger/generated/turtlebot3_burger.glb
-
-  - name: turtlebot3_waffle.glb
-    kind: glb
-    producer: hakoniwa-mbody-registry
-    consumer:
-      - hakoniwa-godot
-    path: bodies/turtlebot3_waffle/generated/turtlebot3_waffle.glb
-
-  - name: Burger GLB parts
-    kind: glb
-    producer: hakoniwa-mbody-registry
-    consumer:
-      - hakoniwa-godot
-    path: bodies/turtlebot3_burger/generated/parts
-
-  - name: Waffle GLB parts
-    kind: glb
-    producer: hakoniwa-mbody-registry
-    consumer:
-      - hakoniwa-godot
-    path: bodies/turtlebot3_waffle/generated/parts
-
   - name: robot_sync.profile.json
     kind: profile
-    producer: hakoniwa-mbody-registry
+    producer: hakoniwa-godot
     consumer:
       - hakoniwa-godot
-    path: bodies/turtlebot3/generated/godot/robot_sync.profile.json
+    path: examples/mujoco/config/robot_sync.profile.json
 
   - name: endpoint_shm_poll_with_pdu.json
     kind: endpoint-config
@@ -557,119 +459,177 @@ artifacts:
       - hakoniwa-godot
     path: examples/mujoco/config/endpoint_shm_poll_with_pdu.json
 
-  - name: tb3-pdutypes.json
+  - name: tb3-pdudef-compact.json
     kind: pdu-definition
     producer: hakoniwa-mujoco-robots
     consumer:
-      - hakoniwa-pdu-endpoint
-      - hakoniwa-godot
       - hakoniwa-mujoco-robots
-    path: config/tb3-pdutypes.json
+      - hakoniwa-godot
+    path: config/tb3-pdudef-compact.json
+
+  - name: turtlebot3_godot_exhibition.py
+    kind: command
+    producer: hakoniwa-business-pack
+    consumer:
+      - operator
+    path: tools/turtlebot3_godot_exhibition.py
 
 missing_pieces:
-  - Confirm whether the current Godot examples/mujoco directory is a complete runnable Godot project or a reusable config/assets bundle for another project.
-  - Confirm exact Godot run command for the MuJoCo TurtleBot3 sync scene.
-  - Confirm whether Burger/Waffle-specific robot_sync.profile.json and endpoint config should be generated or adapted from the existing TurtleBot3 reference artifacts.
-  - Validate the demo end-to-end on the target machine after builds are available.
-  - Decide whether LiDAR visualization remains a MuJoCo-side validation aid or becomes part of the user-facing Godot recipe.
+  - Re-run configure, build, doctor, start, status, and stop from an empty work directory to verify clean-machine reproducibility.
+  - Validate the exhibition workflow on Linux and Windows.
+  - Decide whether TurtleBot3 Waffle should become a selectable exhibition profile.
+  - Consolidate the Recipe-specific portal writer with tools/recipe.py so the YAML remains the only user-facing description source after configure.
 
 demo:
-  objective: Display a MuJoCo-simulated TurtleBot3 moving synchronously in Godot using existing TB3 PDU state.
+  objective: >
+    Drive a TurtleBot3 Burger in MuJoCo with a PS5 controller and display the same
+    base pose and wheel motion in Godot through Hakoniwa PDU. Provide a scripted
+    route profile when no controller is available.
+
+  profiles:
+    - id: gamepad
+      description: Default exhibition profile using a connected PS5-compatible controller.
+      launcher: work/recipes/mujoco-turtlebot3-godot/config/launcher-gamepad.json
+    - id: route
+      description: Controller-free fallback that runs a scripted figure-eight route.
+      launcher: work/recipes/mujoco-turtlebot3-godot/config/launcher-route.json
+
   steps:
-    - order: 1
-      component: hakoniwa-mbody-registry
-      action: Verify or regenerate TurtleBot3 Burger physics, visualization, and PDU artifacts.
-      command: ./tools/forge.sh sources/turtlebot3_burger.yaml turtlebot3_description/urdf/turtlebot3_burger.urdf
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mbody-registry
-          path: bodies/turtlebot3_burger/generated
-          revision: local-validation-2026-07-19
+    - id: configure_recipe
+      order: 1
+      component: hakoniwa-business-pack
+      action: Generate Recipe-owned MuJoCo configuration, Godot project files, launcher profiles, and the local operator portal.
+      command: python tools/turtlebot3_godot_exhibition.py configure
+      expected:
+        - work/recipes/mujoco-turtlebot3-godot contains config, project, runtime, logs, and index.html.
 
-    - order: 2
-      component: hakoniwa-mbody-registry
-      action: Verify or regenerate TurtleBot3 Waffle physics, visualization, and PDU artifacts.
-      command: ./tools/forge.sh sources/turtlebot3_waffle.yaml turtlebot3_description/urdf/turtlebot3_waffle.urdf
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mbody-registry
-          path: bodies/turtlebot3_waffle/generated
-          revision: local-validation-2026-07-19
+    - id: build_recipe
+      order: 2
+      component: hakoniwa-business-pack
+      action: Build the TurtleBot3 MuJoCo target and Godot native addon in the Recipe workspace.
+      command: python tools/turtlebot3_godot_exhibition.py build
+      expected:
+        - tb3_sim_burger exists in the Recipe build directory.
+        - The Godot native addon and geometry_msgs and sensor_msgs codecs exist in the generated project.
 
-    - order: 3
-      component: hakoniwa-mujoco-robots
-      action: Start the MBody TurtleBot3 Burger or Waffle MuJoCo simulator.
-      command: ./src/cmake-build/main_for_sample/tb3/tb3_sim_burger
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: src/main_for_sample/tb3
-          revision: local-validation-2026-07-19
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: config/assets/tb3-mbody-burger-asset.json
-          revision: local-validation-2026-07-19
+    - id: doctor_recipe
+      order: 3
+      component: hakoniwa-business-pack
+      action: Verify Foundation imports, endpoint libraries, generated files, Godot, the simulator, and the connected controller.
+      command: python tools/turtlebot3_godot_exhibition.py doctor
+      expected:
+        - All required checks report OK before the gamepad profile is started.
 
-    - order: 4
-      component: hakoniwa-godot
-      action: Start a Godot project that includes the Hakoniwa addon, generated TurtleBot3 scene, robot_sync.profile.json, and endpoint SHM poll config.
-      command: <GODOT_BIN> --path <godot-project-with-examples-mujoco-assets>
-      evidence:
-        - repository: hakoniwalab/hakoniwa-godot
-          path: examples/mujoco
-          revision: 8f5d7d1765b319f107420f8ac4f87b24ab26ae76
+    - id: start_gamepad_profile
+      order: 4
+      component: hakoniwa-business-pack
+      action: Start MuJoCo, Godot, and the PS5 gamepad controller as a background Launcher session.
+      command: python tools/turtlebot3_godot_exhibition.py start
+      expected:
+        - The command returns after the Demo readiness markers are observed.
+        - MuJoCo and Godot remain running in the background.
 
-    - order: 5
-      component: hakoniwa-core-pro
-      action: Start the Hakoniwa simulation.
-      command: hako-cmd start
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: README.md
-          revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+    - id: start_route_profile
+      order: 5
+      component: hakoniwa-business-pack
+      action: Start the scripted route fallback instead of the gamepad profile.
+      command: python tools/turtlebot3_godot_exhibition.py start --profile route
+      expected:
+        - TurtleBot3 follows a figure-eight route without a physical controller.
+      notes: Run this only when no other profile is active.
 
-    - order: 6
-      component: hakoniwa-mujoco-robots
-      action: Drive the simulator with a joystick-free route demo.
-      command: python3.12 python/tb3_route_demo.py --pattern figure8
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: python/tb3_route_demo.py
-          revision: local-validation-2026-07-19
+    - id: check_status
+      order: 6
+      component: hakoniwa-business-pack
+      action: Inspect the active Launcher session.
+      command: python tools/turtlebot3_godot_exhibition.py status
+      expected:
+        - The Launcher session reports RUNNING while the Demo is active.
 
-    - order: 7
-      component: hakoniwa-mujoco-robots
-      action: For MuJoCo-only validation, run the launcher-driven demo with viewer, LiDAR plot, and scripted route.
-      command: HAKO_TB3_MODEL=waffle HAKO_TB3_ROUTE_PATTERN=figure8 HAKO_TB3_ENABLE_VIEWER=1 ./tb3-mbody-demo.bash
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: tb3-mbody-demo-launch.json
-          revision: local-validation-2026-07-19
+    - id: stop_demo
+      order: 7
+      component: hakoniwa-business-pack
+      action: Send a neutral controller command and terminate all Recipe-owned processes through the Launcher control path.
+      command: python tools/turtlebot3_godot_exhibition.py stop
+      expected:
+        - The gamepad worker reports that a neutral command was sent.
+        - MuJoCo, Godot, and controller processes exit through the managed lifecycle.
 
-    - order: 8
-      component: hakoniwa-godot
-      action: Verify that Godot receives TB3/base_link_pos and TB3/joint_states and updates the TurtleBot3 scene.
-      command: ""
-      evidence:
-        - repository: hakoniwalab/hakoniwa-godot
-          path: examples/mujoco/config/robot_sync.profile.json
-          revision: 8f5d7d1765b319f107420f8ac4f87b24ab26ae76
+  readiness:
+    lifecycle_state:
+      source: Launcher session file
+      required: RUNNING
+      sufficient: false
+    checks:
+      - id: mujoco_endpoint_ready
+        kind: log-marker
+        target: tb3-mujoco.out
+        expected: TB3 endpoint started successfully
+      - id: godot_sync_ready
+        kind: log-marker
+        target: tb3-godot.out
+        expected: TB3_GODOT_SYNC_READY
+      - id: controller_ready
+        kind: log-marker
+        target: tb3-gamepad.out or tb3-route.out
+        expected: TB3_GAMEPAD_READY or TB3 route demo start
+      - id: synchronized_motion
+        kind: human-observation
+        target: MuJoCo and Godot windows
+        expected: TurtleBot3 position and turning direction change consistently in both views
+    operator_handoff:
+      background: true
+      explain_command_return: true
+      next_actions:
+        - Move the controller sticks and compare MuJoCo with Godot.
+        - Run python tools/turtlebot3_godot_exhibition.py status.
+        - Run python tools/turtlebot3_godot_exhibition.py stop before exit.
+
   observability:
     success_signals:
-      - MuJoCo viewer shows TurtleBot3 Burger or Waffle moving through a scripted figure-eight route.
-      - LiDAR plot shows nearby scan points while the robot passes marker boxes.
-      - MuJoCo runtime logs contain nonzero lidar_hits and nearby lidar_min values around the demo obstacles.
-      - Route demo logs show completed figure-eight phases and a neutral hold before shutdown.
+      - The PS5 controller moves TurtleBot3 forward, backward, left, and right in MuJoCo.
+      - Godot shows the same base movement and wheel rotation as MuJoCo.
+      - Releasing the sticks stops the robot.
+      - The route profile moves the robot without a controller.
+      - The stop command sends a neutral controller state and terminates the Launcher session.
     failure_signals:
-      - Simulator starts but robot pose does not change after hako-cmd start and route demo launch.
-      - LiDAR ranges remain only at far-range values even when the robot is near demo obstacles.
-      - PDU channels are not created or Python scripts cannot import hakopy/hakoniwa-pdu in the selected Python environment.
+      - The Launcher is RUNNING but TB3_GODOT_SYNC_READY is absent.
+      - MuJoCo moves while the Godot robot remains stationary or moves in the wrong direction.
+      - Godot reports missing codec, endpoint, or robot synchronization resources.
+      - The gamepad worker exits because no controller is detected.
+      - A second start collides with an existing Launcher session.
     fixtures:
-      - Demo marker boxes must intersect the TurtleBot3 LiDAR scan height; obstacles below the scan plane do not validate LiDAR.
-      - MuJoCo viewer requires GUI access; Hakoniwa PDU SHM requires unsandboxed shared-memory access.
+      - A desktop environment capable of showing both MuJoCo and Godot windows.
+      - A connected PS5-compatible controller for the default profile.
     automation:
-      - tb3_route_demo.py provides joystick-free GameControllerOperation commands.
-      - tb3-mbody-demo-launch.json starts the simulator before hako-cmd start and starts route/LiDAR assets after simulation start.
+      - The exhibition tool generates the project, launchers, and local portal.
+      - The Launcher owns MuJoCo, Godot, and the selected controller process.
+      - The route profile provides a controller-free figure-eight fallback.
+
+  cleanup:
+    owner: hakoniwa-business-pack
+    provider: hakoniwa-pdu launcher control
+    mode: managed-session
+    target: work/recipes/mujoco-turtlebot3-godot/runtime/launcher-session.json
+    trigger: operator stop command or failed readiness verification
+    expected_behavior:
+      - Send a neutral GameControllerOperation command before the controller exits.
+      - Terminate only the processes recorded in the Recipe Launcher session.
+      - Return the Hakoniwa lifecycle to a stopped state.
+    verification_checks:
+      - The Launcher status command no longer reports RUNNING.
+      - MuJoCo and Godot windows close.
+      - No Recipe-owned controller process remains active.
+    cautions:
+      - Run the Recipe stop command before using exit to leave the Workspace shell.
+      - Do not use broad kill commands or kill unrelated Python processes.
+      - Do not start the route and gamepad profiles at the same time.
 
 expected_result: >
-  TurtleBot3 simulated in MuJoCo is displayed in Godot, with the generated model
-  following TB3/base_link_pos and TB3/joint_states PDU updates.
+  A user can follow the generated Recipe guide to prepare the local Foundation,
+  build the Demo, drive TurtleBot3 in MuJoCo with a PS5 controller, and observe
+  the same motion in Godot. The Demo can be inspected and stopped through explicit
+  status and stop commands, and ROS is not required.
 
 source_catalogs:
   - component_id: hakoniwa-mbody-registry
@@ -686,58 +646,34 @@ source_catalogs:
     catalog_path: ../catalog/components/hakoniwa-core-pro.yaml
 
 source_artifacts:
+  - repository: hakoniwalab/hakoniwa-business-pack
+    path: tools/turtlebot3_godot_exhibition.py
+    revision: local-validation-2026-08-04
+    description: Recipe-specific configure, build, doctor, start, status, stop, and gamepad workflow.
   - repository: hakoniwalab/hakoniwa-mbody-registry
     path: bodies/turtlebot3_burger/generated/turtlebot3_burger.minimal_world.xml
     revision: local-validation-2026-07-19
-    description: Generated TurtleBot3 Burger MuJoCo minimal world for physics runtime checks.
-  - repository: hakoniwalab/hakoniwa-mbody-registry
-    path: bodies/turtlebot3_waffle/generated/turtlebot3_waffle.minimal_world.xml
-    revision: local-validation-2026-07-19
-    description: Generated TurtleBot3 Waffle MuJoCo minimal world for physics runtime checks.
-  - repository: hakoniwalab/hakoniwa-mbody-registry
-    path: bodies/turtlebot3_burger/generated/turtlebot3_burger.glb
-    revision: local-validation-2026-07-19
-    description: Generated TurtleBot3 Burger GLB for visualization artifacts.
-  - repository: hakoniwalab/hakoniwa-mbody-registry
-    path: bodies/turtlebot3_waffle/generated/turtlebot3_waffle.glb
-    revision: local-validation-2026-07-19
-    description: Generated TurtleBot3 Waffle GLB for visualization artifacts.
+    description: TurtleBot3 Burger MuJoCo world used by the exhibition runtime.
   - repository: hakoniwalab/hakoniwa-mbody-registry
     path: bodies/turtlebot3/godot_tb3_reference/TurtleBot3.generated.tscn
-    revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
-    description: Generated Godot scene.
-  - repository: hakoniwalab/hakoniwa-mbody-registry
-    path: bodies/turtlebot3/generated/godot/robot_sync.profile.json
-    revision: c8649cd93e0ae4b365fc284787f8f103c7e9eaf8
-    description: Generated robot sync profile.
+    revision: local-validation-2026-08-04
+    description: Generated TurtleBot3 Godot scene used by the visualization.
   - repository: hakoniwalab/hakoniwa-godot
     path: examples/mujoco/config/robot_sync.profile.json
-    revision: 8f5d7d1765b319f107420f8ac4f87b24ab26ae76
-    description: Godot example robot sync profile copy.
+    revision: local-validation-2026-08-04
+    description: Maps TB3 pose and wheel state PDUs to Godot scene nodes.
   - repository: hakoniwalab/hakoniwa-godot
     path: examples/mujoco/config/endpoint_shm_poll_with_pdu.json
-    revision: 8f5d7d1765b319f107420f8ac4f87b24ab26ae76
-    description: Godot SHM poll endpoint config.
-  - repository: hakoniwalab/hakoniwa-godot
-    path: examples/mujoco/config/comm/tb3-pdutypes.json
-    revision: 8f5d7d1765b319f107420f8ac4f87b24ab26ae76
-    description: Godot-side TB3 PDU types.
-  - repository: hakoniwalab/hakoniwa-mujoco-robots
-    path: config/tb3-pdutypes.json
-    revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
-    description: MuJoCo-side TB3 PDU types.
-  - repository: hakoniwalab/hakoniwa-mujoco-robots
-    path: config/assets/tb3-mbody-burger-asset.json
-    revision: local-validation-2026-07-19
-    description: MuJoCo Robots asset manifest for the MBody Burger runtime demo.
-  - repository: hakoniwalab/hakoniwa-mujoco-robots
-    path: config/assets/tb3-mbody-waffle-asset.json
-    revision: local-validation-2026-07-19
-    description: MuJoCo Robots asset manifest for the MBody Waffle runtime demo.
+    revision: local-validation-2026-08-04
+    description: Godot shared-memory polling endpoint configuration.
   - repository: hakoniwalab/hakoniwa-mujoco-robots
     path: python/tb3_route_demo.py
-    revision: local-validation-2026-07-19
-    description: Joystick-free TurtleBot3 command source used for reproducible runtime validation.
+    revision: local-validation-2026-08-04
+    description: Scripted GameControllerOperation route fallback.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: python/rc_config/ps4-control.json
+    revision: local-validation-2026-08-04
+    description: PS4 and PS5-compatible stick mapping used by the controller worker.
 
 tags:
   - hakoniwa
@@ -745,6 +681,7 @@ tags:
   - turtlebot3
   - mujoco
   - godot
+  - gamepad
   - pdu
   - robot-sync
   - no-ros-runtime
