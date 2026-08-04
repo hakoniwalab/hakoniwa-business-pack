@@ -36,8 +36,14 @@ RUNTIME_REQUIREMENTS = (
 )
 VIEWER_URL = (
     "http://127.0.0.1:8000/index.html"
-    "?viewerConfigPath=/config/viewer-config-fleets.json"
+    "?viewerConfigPath=/config/viewer-config-disturb.json"
     "&wsUri=ws://127.0.0.1:8765&wireVersion=v2"
+)
+BRIDGE_CONFIG_RELATIVE = (
+    Path("share")
+    / "hakoniwa-pdu-bridge"
+    / "config"
+    / "web_bridge_disturb"
 )
 DRONE_CONFIG = "config/drone/mujoco"
 DRONE_PDU_CONFIG = "config/pdudef/drone-pdudef-1.json"
@@ -81,6 +87,10 @@ def default_source(name: str) -> Path:
 
 def recipe_file() -> Path:
     return root() / "recipes" / "examples" / f"{RECIPE_ID}.yaml"
+
+
+def bridge_config_root(paths) -> Path:
+    return paths.install_prefix / BRIDGE_CONFIG_RELATIVE
 
 
 def _absolute_without_resolving(path: Path) -> Path:
@@ -186,6 +196,7 @@ def preflight(drone_root: Path, viewer_root: Path, overrides: dict[str, Path | N
             "Foundation is not reusable; run tools/foundation.py plan/build first"
         )
 
+    bridge_root = bridge_config_root(paths)
     required = (
         (drone_root / "config", "Drone config"),
         (drone_root / "drone_api" / "rc" / "rc-custom.py", "RC application"),
@@ -195,8 +206,21 @@ def preflight(drone_root: Path, viewer_root: Path, overrides: dict[str, Path | N
         ),
         (viewer_root / "index.html", "Three.js viewer"),
         (
+            viewer_root / "config" / "viewer-config-disturb.json",
+            "Three.js disturbance viewer config",
+        ),
+        (
             paths.foundation_config / "cpp_core_config.json",
             "Foundation Core config",
+        ),
+        (bridge_root, "Bridge Core disturbance config"),
+        (
+            bridge_root / "bridge" / "bridge.json",
+            "Bridge Core disturbance bridge definition",
+        ),
+        (
+            bridge_root / "endpoint" / "endpoint_container.json",
+            "Bridge Core disturbance endpoint definition",
         ),
     )
     for path, label in required:
@@ -214,10 +238,6 @@ def copy_recipe_config(drone_root: Path, recipe_config: Path) -> None:
             "assets/visual_state_publisher",
             recipe_config / "assets" / "visual_state_publisher",
         ),
-        (
-            "assets/web_bridge_fleets",
-            recipe_config / "assets" / "web_bridge_fleets",
-        ),
     )
     source_config = drone_root / "config"
     for relative, destination in mappings:
@@ -232,6 +252,7 @@ def copy_recipe_config(drone_root: Path, recipe_config: Path) -> None:
 
 def write_launcher(paths, drone_root: Path, viewer_root: Path, runtime: RuntimePaths) -> Path:
     rc_root = drone_root / "drone_api" / "rc"
+    bridge_root = bridge_config_root(paths)
     launcher = {
         "version": "0.1",
         "defaults": {
@@ -291,14 +312,16 @@ def write_launcher(paths, drone_root: Path, viewer_root: Path, runtime: RuntimeP
                 "delay_sec": 2,
             },
             {
-                "name": "web-bridge-fleets",
+                "name": "web-bridge-disturb",
                 "activation_timing": "before_start",
                 "command": str(runtime.web_bridge),
                 "args": [
                     "--config-root",
-                    str(paths.recipe_config / "assets" / "web_bridge_fleets"),
+                    str(bridge_root),
+                    "--asset-name",
+                    "WebBridgeDisturb",
                     "--node-name",
-                    "web_bridge_fleets_node1",
+                    "web_bridge_disturb_node1",
                     "--delta-time-step-usec",
                     "20000",
                 ],
@@ -323,7 +346,7 @@ def write_launcher(paths, drone_root: Path, viewer_root: Path, runtime: RuntimeP
                 "command": str(runtime.foundation_python),
                 "args": ["-m", "http.server", "8000"],
                 "cwd": str(viewer_root),
-                "depends_on": ["web-bridge-fleets"],
+                "depends_on": ["web-bridge-disturb"],
             },
         ],
     }
@@ -483,7 +506,8 @@ def write_portal(paths, runtime: RuntimePaths, launcher: Path) -> Path:
         title="Hakoniwa Drone Gamepad Exhibition",
         summary=(
             "PS5コントローラでMuJoCo上の箱庭ドローンを操作し、"
-            "同じ動きをThree.jsブラウザビューアへ配信する展示用Recipeです。"
+            "同じ動きをThree.jsへ配信しながら、ブラウザから風外乱と"
+            "ローター故障を入力できる展示用Recipeです。"
         ),
         topology=(
             "PS5 controller",
@@ -491,8 +515,8 @@ def write_portal(paths, runtime: RuntimePaths, launcher: Path) -> Path:
             "GameControllerOperation PDU",
             "Hakoniwa Drone + MuJoCo",
             "DroneVisualStatePublisher",
-            "WebBridge",
-            "Three.js",
+            "Bridge Core web_bridge_disturb",
+            "Three.js viewer + disturbance controls",
         ),
         commands=(
             PortalCommand(
@@ -538,6 +562,7 @@ def write_portal(paths, runtime: RuntimePaths, launcher: Path) -> Path:
             PortalEnvironment("Recipe workspace", str(paths.recipe_root)),
             PortalEnvironment("Foundation install", str(paths.install_prefix)),
             PortalEnvironment("Foundation Python", str(runtime.foundation_python)),
+            PortalEnvironment("Bridge config", str(bridge_config_root(paths))),
             PortalEnvironment("Launcher", str(launcher)),
             PortalEnvironment("Session", str(session_file(paths))),
             PortalEnvironment(
@@ -549,7 +574,7 @@ def write_portal(paths, runtime: RuntimePaths, launcher: Path) -> Path:
         agency_notes=(
             "AIはRecipe設定、Launcher、手順書の生成とdoctorまでを担当します。",
             "展示のstart・reset・stopはオペレータが実行します。",
-            "PS5コントローラの操作は来場者またはオペレータが行います。",
+            "PS5コントローラとブラウザの外乱・故障操作は来場者またはオペレータが行います。",
             "このHTMLはローカルコマンドを直接実行しません。Copyボタンで手順を引き継ぎます。",
         ),
     )
@@ -568,6 +593,7 @@ def configure(drone_root: Path, viewer_root: Path, overrides: dict[str, Path | N
     print(f"Launcher         : {launcher}")
     print(f"Session          : {session_file(paths)}")
     print(f"Foundation Python: {runtime.foundation_python}")
+    print(f"Bridge config    : {bridge_config_root(paths)}")
     print(f"Viewer           : {VIEWER_URL}")
     print(f"Operator command : {_display_command(runtime, 'start')}")
     return 0
@@ -626,6 +652,7 @@ def _probe_controller(python: Path) -> tuple[bool, str]:
 
 def doctor(drone_root: Path, viewer_root: Path, overrides: dict[str, Path | None]) -> int:
     _foundation, paths, runtime = preflight(drone_root, viewer_root, overrides)
+    bridge_root = bridge_config_root(paths)
     checks: list[tuple[str, bool | None, str]] = [
         ("platform", True, runtime.system_name),
         ("drone service", runtime.drone_service.is_file(), str(runtime.drone_service)),
@@ -641,6 +668,11 @@ def doctor(drone_root: Path, viewer_root: Path, overrides: dict[str, Path | None
         ),
         ("hako-cmd", runtime.hako_cmd.is_file(), str(runtime.hako_cmd)),
         ("WebBridge", runtime.web_bridge.is_file(), str(runtime.web_bridge)),
+        (
+            "Bridge Core disturbance config",
+            (bridge_root / "bridge" / "bridge.json").is_file(),
+            str(bridge_root),
+        ),
         ("port 8000", _port_available(8000), "available"),
         ("port 8765", _port_available(8765), "available"),
     ]
