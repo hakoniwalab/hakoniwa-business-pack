@@ -1,6 +1,6 @@
 id: drone-single-mujoco-threejs-gamepad
 title: Human-operated Hakoniwa Drone MuJoCo and Three.js Exhibition Demo
-recipe_version: 0.4
+recipe_version: 0.5
 
 goal:
   user_request: 展示会場で参加者がPS5コントローラを使って箱庭ドローンを飛ばし、MuJoCoとブラウザの両方で見たい
@@ -9,8 +9,10 @@ goal:
     a PS5 controller with the verified ps4-control.json mapping. Hakoniwa Drone
     runs the physics simulation and native MuJoCo viewer, while the visual-state
     publisher, WebBridge, and Three.js viewer expose the same motion in a browser.
-    Business Pack owns the generated Launcher, workspace portal, and operator
-    workflow; Drone Core remains unchanged.
+    The browser can also send wind and rotor-fault disturbances through the
+    installed Bridge Core web_bridge_disturb configuration. Business Pack owns
+    the generated Launcher, workspace portal, and operator workflow; Drone Core
+    and Bridge Core remain unchanged.
 
 feasibility:
   status: feasible
@@ -18,19 +20,21 @@ feasibility:
   rationale:
     - Drone Core already provides the MuJoCo service, rc-custom.py, and the PS4 controller mapping confirmed to work with the PS5 controller.
     - DroneVisualStatePublisher, WebBridge, and Three.js already form a verified browser visualization path.
+    - Bridge Core installs web_bridge_disturb as the maintained bidirectional DroneVisualStateArray and Drone/disturb configuration.
+    - Three.js already provides viewer-config-disturb.json and pdudef-disturb.json for fleets rendering plus browser disturbance writes.
     - hakoniwa-pdu-python provides the common Launcher and OS-independent background lifecycle control.
 
 validation:
   status: partially_verified
-  verified_at: 2026-07-31
+  verified_at: 2026-08-04
   summary: >
-    The component topology is based on the existing Drone Core RC/WebBridge
-    Launcher and the verified Business Pack Three.js Recipe. PS5 operation with
-    ps4-control.json is confirmed by the user. The Business Pack-owned configure
-    and doctor flow is verified on macOS, including pinned pygame installation
-    and PS5 discovery. The complete exhibition lifecycle still requires runtime
-    validation of actual gamepad flight and browser rendering; Launcher startup,
-    process stability, and graceful shutdown are verified.
+    PS5 operation, MuJoCo rendering, and Three.js browser rendering were exercised
+    on the exhibition machine. Browser wind and rotor-fault submission exposed a
+    Recipe wiring defect: the generated Launcher used the display-only fleets
+    configuration copied from Drone Core. This revision switches the Recipe to
+    the installed Bridge Core web_bridge_disturb configuration and the existing
+    Three.js disturbance viewer. The corrected disturbance path still requires
+    one live re-verification before it is marked verified.
   steps:
     - id: ps5_with_ps4_mapping
       status: verified
@@ -62,7 +66,6 @@ validation:
         - configure installs the pinned Recipe-specific Python requirements into that Foundation venv before generating the runtime.
         - Runtime doctor verifies hakopy, hakoniwa_pdu, and the Launcher import from the same Foundation venv.
         - Runtime doctor detected one connected gamepad after configure installed pygame 2.6.1.
-        - Live exhibition validation is tracked separately by exhibition_end_to_end.
     - id: generated_recipe_portal
       status: verified
       evidence:
@@ -70,12 +73,20 @@ validation:
           date: 2026-07-31
       notes:
         - configure generates index.html at the Recipe workspace root.
-        - The portal records topology, Foundation Python, operator commands, resource links, and Agency Boundary without executing local commands.
-    - id: exhibition_end_to_end
+        - The portal records topology, Foundation Python, Bridge Core config, operator commands, resource links, and Agency Boundary without executing local commands.
+    - id: exhibition_visualization_end_to_end
+      status: verified
+      evidence:
+        - source: user-runtime-confirmation
+          date: 2026-08-04
+      notes:
+        - python tools/drone_gamepad_exhibition.py start opened the MuJoCo viewer and served a working Three.js browser view.
+    - id: browser_disturbance_end_to_end
       status: not_tested
       evidence: []
       notes:
-        - Verify gamepad flight, MuJoCo rendering, Three.js rendering, participant reset, and background termination on the exhibition machine.
+        - Re-run configure and start after this Recipe update.
+        - Verify that browser wind and rotor-fault controls write Drone/disturb through Bridge Core web_bridge_disturb and affect the simulated drone.
 
 constraints:
   - single-pc
@@ -83,12 +94,14 @@ constraints:
   - human-operated-gamepad
   - mujoco-native-viewer
   - threejs-browser-viewer
+  - browser-disturbance-input
   - shared-memory-pdu
   - shared-foundation-python-venv
   - generated-recipe-workspace-portal
   - no-px4
   - business-pack-owned-launcher
   - no-drone-core-modification
+  - no-bridge-core-modification
 
 target_environment:
   required_for: executable-demo
@@ -121,6 +134,7 @@ target_environment:
     - Architecture-specific arm64/x64 qualification is not a strict exhibition acceptance gate.
     - Initial live validation may be macOS-first, but the common Launcher model must not contain macOS-only paths.
     - All Python runtime participants must use work/foundation/install/python; arbitrary Python overrides are not permitted.
+    - The WebBridge configuration is reused from work/foundation/install/share/hakoniwa-pdu-bridge/config/web_bridge_disturb.
 
 execution_environment:
   required_for: executable-demo
@@ -176,7 +190,7 @@ agency_boundary:
       preconditions:
         - user_requested_execution
     - id: inspect_exhibition_status
-      description: Read Launcher status and logs without operating the gamepad.
+      description: Read Launcher status and logs without operating the gamepad or disturbance controls.
       autonomous: true
       preconditions:
         - launcher_started_by_operator
@@ -195,8 +209,12 @@ agency_boundary:
       description: Hold and operate the PS5 controller to fly the simulated drone.
       confirmation_required: true
       required_before: []
+    - id: inject_browser_disturbance
+      description: Use the Three.js controls to apply wind or rotor-fault disturbance to the simulated drone.
+      confirmation_required: true
+      required_before: []
     - id: reset_for_next_participant
-      description: Run the reset command between participants and confirm the initial state is restored.
+      description: Reset browser disturbance values and run the Recipe reset command between participants.
       confirmation_required: true
       required_before:
         - next_participant_session
@@ -231,11 +249,12 @@ components:
     roles:
       - bridge
       - communication_infrastructure
-    purpose: Bridge DroneVisualStateArray from shared memory to WebSocket.
+    purpose: Provide the installed web_bridge_disturb configuration that sends DroneVisualStateArray from SHM to WebSocket and Drone/disturb from WebSocket to SHM.
   - id: hakoniwa-threejs-drone
     roles:
       - visualizer
-    purpose: Render the simulated drone in the browser.
+      - operator_interface
+    purpose: Render the simulated drone and provide wind and rotor-fault controls through viewer-config-disturb.json.
 
 foundation_requirements:
   hakoniwa-core-pro:
@@ -259,7 +278,6 @@ foundation_requirements:
     capabilities:
       hakoniwa_app: true
       web_bridge: true
-      web_bridge_fleets_config_format: true
 
 connections:
   - from: hakoniwa-core-pro
@@ -283,7 +301,7 @@ connections:
       - Launcher lifecycle
       - GameControllerOperation
     contract:
-      status: partially_verified
+      status: verified
       requires:
         - work/foundation/install/python
         - hakopy and hakoniwa_pdu importable from the same interpreter
@@ -298,24 +316,54 @@ connections:
     data:
       - DroneVisualStateArray
     contract:
-      status: partially_verified
+      status: verified
       requires:
         - visual-state publisher configuration
-        - matching WebBridge config root
+        - installed web_bridge_disturb config root
       validation_notes:
-        - The existing Drone Three.js path verifies this architecture.
+        - The exhibition machine displayed the Drone through Three.js on 2026-08-04.
   - from: hakoniwa-pdu-bridge-core
     to: hakoniwa-threejs-drone
     interface: websocket
     data:
       - DroneVisualStateArray
     contract:
-      status: partially_verified
+      status: verified
       requires:
         - TCP port 8765
+        - viewer-config-disturb.json
         - wireVersion v2
       validation_notes:
-        - Browser runtime validation remains required for this generated workspace.
+        - Browser rendering was confirmed on the exhibition machine.
+  - from: hakoniwa-threejs-drone
+    to: hakoniwa-pdu-bridge-core
+    interface: websocket
+    data:
+      - Drone/disturb
+      - wind disturbance
+      - rotor-fault ratios
+    contract:
+      status: not_tested
+      requires:
+        - viewer-config-disturb.json
+        - pdudef-disturb.json
+        - browser WebSocket connection
+      validation_notes:
+        - The previous fleets viewer configuration could render but did not declare Drone/disturb.
+        - Live re-verification is required after switching to the existing disturbance viewer configuration.
+  - from: hakoniwa-pdu-bridge-core
+    to: hakoniwa-drone-core
+    interface: shared-memory-pdu
+    data:
+      - Drone/disturb
+    contract:
+      status: not_tested
+      requires:
+        - work/foundation/install/share/hakoniwa-pdu-bridge/config/web_bridge_disturb
+        - web_bridge_disturb_node1
+        - WebBridgeDisturb asset registration
+      validation_notes:
+        - Bridge Core owns the bidirectional configuration; Business Pack only selects it.
 
 data_flow:
   - source: PS5 controller
@@ -329,15 +377,21 @@ data_flow:
     path:
       - DroneVisualStatePublisher
       - DroneVisualStateArray
-      - WebBridge
+      - Bridge Core web_bridge_disturb
       - WebSocket
     destination: Three.js browser viewer
+  - source: Three.js disturbance controls
+    path:
+      - Drone/disturb over WebSocket
+      - Bridge Core web_bridge_disturb
+      - Hakoniwa shared memory
+    destination: Hakoniwa Drone disturbance input
 
 time_model:
   owner: hakoniwa-core-pro
   policy: shared-memory-simulation-time
   requirements:
-    - Drone service and visual-state publisher participate in the same Hakoniwa lifecycle.
+    - Drone service, visual-state publisher, and WebBridge participate in the same Hakoniwa lifecycle.
     - The gamepad controller starts after hako-cmd start.
     - The browser HTTP server may start after the WebBridge path is active.
 
@@ -351,6 +405,7 @@ artifact_sets:
       - work/foundation/config/cpp_core_config.json
       - work/foundation/runtime/mmap
       - work/foundation/install/share/hakoniwa/receipts
+      - work/foundation/install/share/hakoniwa-pdu-bridge/config/web_bridge_disturb
   recipe_runtime:
     status: partially_verified
     owner: work/recipes/drone-single-mujoco-threejs-gamepad
@@ -361,10 +416,11 @@ artifact_sets:
       - config/pdudef
       - config/controller
       - config/assets/visual_state_publisher
-      - config/assets/web_bridge_fleets
       - runtime/launcher-session.json
       - logs
       - validation
+    notes:
+      - Bridge configuration is not copied into the Recipe workspace; the Launcher directly reuses the installed Bridge Core artifact.
 
 artifacts:
   generated:
@@ -373,7 +429,7 @@ artifacts:
       purpose: Human-facing entry point with topology, workflow, environment, resources, and Agency Boundary.
     - path: work/recipes/drone-single-mujoco-threejs-gamepad/config/launcher.json
       owner: hakoniwa-business-pack
-      purpose: Common cross-platform Launcher topology with resolved absolute executable paths.
+      purpose: Common cross-platform Launcher topology with resolved absolute executable and Bridge config paths.
     - path: work/recipes/drone-single-mujoco-threejs-gamepad/runtime/launcher-session.json
       owner: hakoniwa-pdu-python
       purpose: Background Launcher lifecycle and ownership record.
@@ -391,9 +447,15 @@ artifacts:
     - path: work/foundation/install/python
       owner: hakoniwa-pdu-python
       purpose: The only Python environment used by Launcher, gamepad controller, and HTTP server.
+    - path: work/foundation/install/share/hakoniwa-pdu-bridge/config/web_bridge_disturb
+      owner: hakoniwa-pdu-bridge-core
+      purpose: Maintained bidirectional visual-state and disturbance Bridge configuration selected directly by the Recipe.
+    - path: hakoniwa-threejs-drone/config/viewer-config-disturb.json
+      owner: hakoniwa-threejs-drone
+      purpose: Existing fleets viewer profile that renders DroneVisualStateArray and enables wind and rotor-fault submission.
 
 missing_pieces:
-  - Live gamepad flight and browser-rendering validation on the macOS exhibition machine.
+  - Re-verify browser wind and rotor-fault injection after regenerating the Recipe workspace.
   - Native Linux runtime validation.
   - Native Windows runtime validation and confirmation of distributed executable names.
 
@@ -401,14 +463,14 @@ demo:
   profiles:
     - id: human-gamepad-exhibition
       launcher: work/recipes/drone-single-mujoco-threejs-gamepad/config/launcher.json
-      description: Start the Drone service, MuJoCo viewer, browser visualization path, and gamepad controller as one owned Launcher session.
+      description: Start the Drone service, MuJoCo viewer, bidirectional browser path, and gamepad controller as one owned Launcher session.
   prerequisites:
     - command: python tools/foundation.py doctor --recipe recipes/examples/drone-single-mujoco-threejs-gamepad.yaml
-      expected: Foundation SATISFIED
+      expected: Foundation SATISFIED, including the installed Bridge Core web_bridge_disturb configuration.
     - command: python tools/drone_gamepad_exhibition.py configure
       expected: Recipe workspace, index.html portal, and common Launcher JSON generated.
     - command: python tools/drone_gamepad_exhibition.py doctor
-      expected: Foundation venv imports, gamepad presence, runtime binaries, ports, generated portal, and generated Launcher are ready.
+      expected: Foundation venv imports, gamepad presence, runtime binaries, Bridge Core disturbance config, ports, generated portal, and generated Launcher are ready.
   steps:
     - id: configure
       command: python tools/drone_gamepad_exhibition.py configure
@@ -417,6 +479,7 @@ demo:
         - Pinned Recipe-specific Python requirements are installed into work/foundation/install/python.
         - index.html is generated at the Recipe workspace root.
         - Launcher JSON is generated under the Recipe workspace.
+        - The Launcher references work/foundation/install/share/hakoniwa-pdu-bridge/config/web_bridge_disturb directly.
         - The selected Python is work/foundation/install/python and is not replaced by a system interpreter.
     - id: read_portal
       command: human opens work/recipes/drone-single-mujoco-threejs-gamepad/index.html
@@ -430,6 +493,7 @@ demo:
       expected:
         - hakopy, hakoniwa_pdu, and the Launcher import from the same Foundation venv.
         - The PS5 controller is visible through pygame.
+        - The installed Bridge Core disturbance bridge and endpoint definitions are present.
     - id: start
       command: python tools/drone_gamepad_exhibition.py start
       status: verified
@@ -441,16 +505,18 @@ demo:
       command: python tools/drone_gamepad_exhibition.py open-viewer
       status: not_tested
       expected:
-        - Browser opens the Three.js viewer on port 8000 and connects to WebBridge port 8765.
+        - Browser opens viewer-config-disturb.json on port 8000 and connects to WebBridge port 8765.
     - id: participant_operation
-      command: human operates PS5 controller
+      command: human operates PS5 controller and browser disturbance controls
       status: not_tested
       expected:
-        - Drone responds in MuJoCo and Three.js.
+        - Drone responds to the gamepad in MuJoCo and Three.js.
+        - Wind and rotor-fault controls alter the simulated Drone through Drone/disturb.
     - id: reset
       command: python tools/drone_gamepad_exhibition.py reset
       status: not_tested
       expected:
+        - Browser disturbance values are returned to neutral by the operator.
         - hako-cmd stop, reset, and start complete without terminating the Launcher session.
     - id: status
       command: python tools/drone_gamepad_exhibition.py status
@@ -477,6 +543,7 @@ demo:
       - Confirm no process is listening on TCP port 8765.
       - Inspect the Launcher session log for incomplete cleanup.
     cautions:
+      - Reset rotor ratios to 1.0 and wind speed to 0.0 before reset or shutdown.
       - Do not replace the session-file terminate command with OS-specific kill, taskkill, or broad process cleanup.
       - Do not treat hako-cmd stop as process termination.
       - Do not run Launcher, controller, or viewer server with a Python outside work/foundation/install/python.
@@ -485,10 +552,12 @@ expected_result: >
   A human can open the generated Recipe workspace index.html to recover the exact
   exhibition workflow, then use the PS5 controller with the existing ps4-control.json
   mapping to operate one simulated Hakoniwa Drone. The native MuJoCo viewer and
-  Three.js browser viewer display the same run. Business Pack generates and owns the
-  portal, common Launcher, and workspace, all Python runtime participants use the same
-  shared Foundation venv, the operator uses one Python command surface on every OS,
-  and Drone Core remains unmodified.
+  Three.js browser viewer display the same run, while the browser can send wind and
+  rotor-fault disturbance through the installed Bridge Core web_bridge_disturb
+  configuration. Business Pack generates and owns the portal, common Launcher, and
+  workspace without copying or modifying the Bridge Core configuration. All Python
+  runtime participants use the same shared Foundation venv, the operator uses one
+  Python command surface on every OS, and Drone Core remains unmodified.
 
 source_catalogs:
   - component_id: hakoniwa-drone-core
@@ -498,9 +567,9 @@ source_catalogs:
   - component_id: hakoniwa-pdu-python
     purpose: Shared Foundation venv, Launcher, SHM backend, and background control.
   - component_id: hakoniwa-pdu-bridge-core
-    purpose: Shared-memory to WebSocket bridge.
+    purpose: Installed bidirectional shared-memory and WebSocket bridge configuration.
   - component_id: hakoniwa-threejs-drone
-    purpose: Browser visualization.
+    purpose: Browser visualization and disturbance controls.
 
 source_artifacts:
   - repository: toppers/hakoniwa-drone-core
@@ -515,6 +584,15 @@ source_artifacts:
   - repository: toppers/hakoniwa-drone-core
     path: drone_api/rc/rc_config/ps4-control.json
     relation: reused-runtime-artifact
+  - repository: hakoniwalab/hakoniwa-pdu-bridge-core
+    path: config/web_bridge_disturb
+    relation: installed-reused-runtime-config
+  - repository: hakoniwalab/hakoniwa-threejs-drone
+    path: config/viewer-config-disturb.json
+    relation: reused-browser-config
+  - repository: hakoniwalab/hakoniwa-threejs-drone
+    path: config/pdudef-disturb.json
+    relation: reused-browser-pdu-definition
   - repository: hakoniwalab/hakoniwa-business-pack
     path: tools/foundation.py
     relation: workspace-and-receipt-provider
