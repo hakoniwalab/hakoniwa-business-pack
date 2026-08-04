@@ -104,11 +104,24 @@ validation:
       it is not "we tried and it broke".
 
 tracking:
-  # MAINTAINER.md defines `open` as at least one follow-up issue existing.
-  # No issue was filed, deliberately -- incremental landing of a feature is not
-  # a defect -- so the honest value is `none`.
-  implementation_status: none
-  issues: []
+  # Corrected 2026-08-04. The upstream maintainer pointed at the issues that
+  # already track this work, so `open` is now accurate under MAINTAINER.md's
+  # definition (at least one follow-up issue exists). The earlier `none` was
+  # right only under the mistaken belief that nothing tracked it.
+  implementation_status: open
+  issues:
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      number: 1
+      relation: fix
+      status: open
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      number: 21
+      relation: fix
+      status: open
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      number: 44
+      relation: documentation
+      status: open
 
 promotion_targets:
   catalog: []
@@ -146,3 +159,14 @@ resolution:
       RuntimeCancelCause::TRANSPORT_DISCONNECTED once a client exists, in
       hakoniwa-pdu-rpc#67, because a real cross-OS boundary that can be severed on
       demand is available here.
+    - >-
+      Corrected 2026-08-04 after the upstream maintainer responded. The absence of
+      a client implementation and a C API is not an unnoticed gap: it is the
+      in-progress scope of hakoniwa-pdu-ros#1 (ROS 2 service/action server bridges
+      backed by PDU-RPC), hakoniwa-pdu-rpc#21 (backward-compatible Action feedback),
+      and hakoniwa-pdu-rpc#44 (Action Protocol design documentation). The framing
+      "filed as a candidate rather than an issue because incremental landing is not
+      a defect" was correct, but this candidate was written without knowing those
+      three existed. What remains useful here is only the reader-facing warning --
+      that the header surface and the passing contract tests together imply
+      drivability that does not exist yet.
