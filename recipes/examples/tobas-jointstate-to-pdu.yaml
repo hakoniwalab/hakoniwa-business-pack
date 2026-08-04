@@ -251,7 +251,7 @@ connections:
     to: hakoniwa-pdu-ros
     interface: ros2-topic
     data:
-      - sensor_msgs/JointState at 49.997 Hz measured
+      - sensor_msgs/JointState at a nominal 50 Hz
     contract:
       status: verified
       requires:

@@ -104,7 +104,10 @@ validation:
       it is not "we tried and it broke".
 
 tracking:
-  implementation_status: open
+  # MAINTAINER.md defines `open` as at least one follow-up issue existing.
+  # No issue was filed, deliberately -- incremental landing of a feature is not
+  # a defect -- so the honest value is `none`.
+  implementation_status: none
   issues: []
 
 promotion_targets:
