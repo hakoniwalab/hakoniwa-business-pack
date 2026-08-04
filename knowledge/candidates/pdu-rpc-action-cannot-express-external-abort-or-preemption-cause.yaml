@@ -1,0 +1,148 @@
+id: pdu-rpc-action-cannot-express-external-abort-or-preemption-cause
+title: An externally caused abort in a ROS 2 action server maps to ABORTED rather than a runtime cancel, and PDU-RPC has no cause value for it nor any protocol-level signal for preemption
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - runtime_rule
+
+summary: >
+  PDU-RPC's Action protocol has a RUNTIME_CANCEL_REQUEST event with a
+  RuntimeCancelCause of TRANSPORT_DISCONNECTED, SERVER_SHUTDOWN or INTERNAL_POLICY.
+  All three describe the box's own circumstances. A real ROS 2 action server also
+  terminates goals for reasons that are external and not client-initiated -- an
+  operator taking manual control, or a newer goal superseding a running one -- and
+  rclcpp_action expresses both by aborting, so the observed ROS 2 status is ABORTED,
+  not CANCELED. Mapping those onto RUNTIME_CANCEL_REQUEST because they are
+  "externally caused" would make the two sides disagree about the terminal status of
+  the same goal. The correct mapping is ABORTED with the reason carried in the result
+  payload. Separately, PDU-RPC assigns preemption to Application policy and states it
+  is not observable in the protocol, so a superseded goal's client cannot distinguish
+  preemption from any other abort without reading that payload. Upstream already
+  records the observability question as open.
+
+observation:
+  context: >
+    Comparing the PDU-RPC Action design documents (hakoniwa-pdu-rpc 4f5471d, all
+    eleven marked Draft) against a real third-party ROS 2 action server, the Tobas
+    multicopter mission executor for tobas_mission_msgs/ExecuteMission, 2026-08-03.
+    Neither side was run against the other; this is a documentation and source
+    reading comparison.
+  details:
+    - "The cause enumeration. action_types.hpp defines RuntimeCancelCause as
+      UNSPECIFIED, TRANSPORT_DISCONNECTED, SERVER_SHUTDOWN and INTERNAL_POLICY. Read
+      as a set, these are all conditions the simulation infrastructure knows about
+      itself. There is no value for an external actor intervening in the controlled
+      system."
+    - "What the real server does instead. The Tobas mission executor terminates a
+      running mission with an error code of MANUAL_OVERRIDE when an operator takes
+      control, and MISSION_SUPERSEDED when a newer mission displaces it. In both
+      cases it aborts the goal rather than cancelling it, so a ROS 2 client observes
+      ABORTED. Only a client-initiated cancel produces CANCELED."
+    - "Why the intuitive mapping is wrong. MANUAL_OVERRIDE is external and is not
+      client-initiated, which is exactly the description of RUNTIME_CANCEL_REQUEST, so
+      the obvious binding is to route it there. Doing so would report CANCELED on the
+      Hakoniwa side for a goal that ROS 2 reports as ABORTED. The disagreement would
+      be silent -- both sides would look internally consistent."
+    - "Preemption is deliberately invisible. docs/design/action/01-concepts.md assigns
+      queueing and preemption to the Application and states they are not observable in
+      the protocol; the same document lists making them observable as an open
+      question. So a client whose goal was superseded sees ABORTED with no protocol
+      indication that a different goal took its place."
+    - "Practically this is survivable but only because the vendor's result payload
+      carries an error code. A vendor action without such a field would lose the
+      distinction entirely, which is what makes this a protocol-shaped concern rather
+      than a Tobas-shaped one."
+    - "The cancel-versus-result race is a separate matter and is compatible. PDU-RPC's
+      rule is that the first decision committed to the runtime wins, and no
+      CANCEL_RESPONSE is sent when a terminal result wins. The Tobas executor checks
+      whether the goal is already cancelling before it switches status, so a
+      client cancel arriving in the same tick as a supersede wins there too. The
+      ordering does not need reconciling."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      path: include/hakoniwa/pdu/action/action_types.hpp
+      revision: 4f5471d
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      path: docs/design/action/01-concepts.md
+      revision: 4f5471d
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      path: docs/design/action/10-cancel-result-race.md
+      revision: 4f5471d
+  runtime_evidence: []
+  expert_input: []
+
+confidence: medium
+
+contradictions: []
+
+validation:
+  status: not_tested
+  required:
+    - >-
+      Decide whether an externally caused termination needs a protocol-level cause
+      distinct from the result payload, or whether carrying it in the payload is the
+      intended design. Either answer is defensible; what matters is that binding
+      authors are told which.
+    - >-
+      Decide whether preemption should be observable in the protocol. Upstream
+      already asks this in docs/design/action/01-concepts.md; a concrete third-party
+      action that relies on preemption is now available as a case for that
+      discussion.
+    - >-
+      Re-check both once PDU-RPC has an Action client implementation. Until then
+      neither side can be driven against the other, so nothing here can be confirmed
+      by measurement.
+  notes:
+    - >-
+      Deliberately not marked verified. This is a reading of two systems that have
+      never been connected: a Draft protocol specification on one side and a
+      third-party implementation on the other. The reasoning may be sound and still
+      be wrong about what the eventual implementation does. Being honest about that
+      matters more here than the finding does.
+    - >-
+      confidence is medium for the same reason. The enumeration values and the
+      abort-versus-cancel behaviour are both directly observed in source; the
+      inference that this constitutes a gap is not.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: true
+  base_ecosystem_guide: false
+  component_asset_guide: true
+  recipes: []
+  executable_guardrails: []
+
+promotion_rationale:
+  - >-
+    The mapping rule -- external, non-client-initiated termination is ABORTED with the
+    cause in the payload, not a runtime cancel -- is the kind of thing every Action
+    binding author needs and nobody will derive independently. It belongs in the
+    runtime guidance rather than in one Recipe.
+  - >-
+    On executable guardrails: none is proposed, and none seems possible. A checker
+    cannot detect that a binding chose a semantically wrong but structurally valid
+    event type. This is a review concern, not a machine-detectable one.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - >-
+      Not filed upstream yet. The preemption half already exists as an open question
+      in upstream's own design document, so raising it is a matter of contributing a
+      concrete case rather than reporting something unknown to them. Worth doing once
+      there is an implementation to discuss against.
+    - >-
+      This came out of a design pass mapping a real third-party ROS 2 action onto
+      the PDU-RPC Action protocol. The concrete case is available on request if it
+      would help the preemption-observability discussion.
