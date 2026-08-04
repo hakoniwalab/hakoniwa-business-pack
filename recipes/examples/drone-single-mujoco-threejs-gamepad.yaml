@@ -253,7 +253,6 @@ components:
   - id: hakoniwa-threejs-drone
     roles:
       - visualizer
-      - operator_interface
     purpose: Render the simulated drone and provide wind and rotor-fault controls through viewer-config-disturb.json.
 
 foundation_requirements:
