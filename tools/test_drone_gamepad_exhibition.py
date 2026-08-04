@@ -71,7 +71,7 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
                 [
                     "drone-service-1",
                     "visual-state-publisher",
-                    "web-bridge-fleets",
+                    "web-bridge-disturb",
                     "remote-controller",
                     "threejs-viewer-webserver",
                 ],
@@ -112,8 +112,29 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
                     "visual_state_publisher-1.json"
                 )
             )
-            self.assertIn(str(paths.install_prefix), json.dumps(data))
-            self.assertNotIn("/usr/local", json.dumps(data))
+            bridge = assets["web-bridge-disturb"]
+            self.assertEqual(
+                bridge["args"],
+                [
+                    "--config-root",
+                    str(recipe.bridge_config_root(paths)),
+                    "--asset-name",
+                    "WebBridgeDisturb",
+                    "--node-name",
+                    "web_bridge_disturb_node1",
+                    "--delta-time-step-usec",
+                    "20000",
+                ],
+            )
+            self.assertEqual(
+                assets["threejs-viewer-webserver"]["depends_on"],
+                ["web-bridge-disturb"],
+            )
+            serialized = json.dumps(data)
+            self.assertIn(str(paths.install_prefix), serialized)
+            self.assertIn("web_bridge_disturb", serialized)
+            self.assertNotIn("web_bridge_fleets", serialized)
+            self.assertNotIn("/usr/local", serialized)
 
     def test_generated_portal_is_recipe_workspace_entry_point(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -129,6 +150,8 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
             self.assertIn("Operator workflow", content)
             self.assertIn("Agency boundary", content)
             self.assertIn(str(runtime.foundation_python), content)
+            self.assertIn(str(recipe.bridge_config_root(paths)), content)
+            self.assertIn("viewer-config-disturb.json", content)
             self.assertIn("config/launcher.json", content)
             self.assertIn("runtime/", content)
             self.assertIn("logs/", content)
@@ -348,6 +371,8 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
         self.assertIn("recipes/requirements/drone-single-mujoco-threejs-gamepad.txt", content)
         self.assertIn("hakoniwa-pdu-endpoint:", content)
         self.assertIn("core_callback: true", content)
+        self.assertIn("web_bridge_disturb", content)
+        self.assertIn("viewer-config-disturb.json", content)
 
 
 if __name__ == "__main__":
