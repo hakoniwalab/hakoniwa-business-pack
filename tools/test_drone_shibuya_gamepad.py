@@ -319,29 +319,30 @@ class DroneShibuyaGamepadTest(unittest.TestCase):
                 portal.index("data-copy=\"exit\""),
             )
 
-    def test_map_viewer_origin_is_aligned_to_mujoco_without_source_mutation(self) -> None:
+    def test_map_viewer_origin_matches_plateau_without_source_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             paths, _glb, record_path = self._materialize(temporary)
             record = recipe._load_json(record_path)
+            coordinates = record["coordinate_invariants"]
 
             self.assertEqual(
-                record["coordinate_invariants"]["mujoco_simulation_location"],
+                coordinates["drone_simulation_location"],
                 recipe.MUJOCO_LOCATION,
             )
             self.assertEqual(
-                record["coordinate_invariants"]["map_viewer_origin"],
+                coordinates["plateau_map_origin"],
                 recipe.MAP_ORIGIN,
             )
-            self.assertEqual(
+            self.assertNotEqual(
                 recipe.MUJOCO_LOCATION["longitude"],
                 recipe.MAP_ORIGIN["longitude"],
             )
             self.assertEqual(
-                record["coordinate_invariants"]["map_viewer_source_origin"],
+                coordinates["map_viewer_source_origin"],
                 recipe.MAP_VIEWER_DEFAULT_ORIGIN,
             )
-            self.assertTrue(
-                record["coordinate_invariants"]["map_origin_aligned_to_mujoco"]
+            self.assertFalse(
+                coordinates["map_origin_derived_from_drone_location"]
             )
             generated_ui = (
                 paths.recipe_root
@@ -356,10 +357,11 @@ class DroneShibuyaGamepadTest(unittest.TestCase):
                 self.map_root / "src" / "client" / "src" / "ui.js"
             ).read_text(encoding="utf-8")
             self.assertIn(
-                "setView([35.6625, 139.69375], 15)",
+                "setView([35.6625, 139.70625], 15)",
                 generated_ui,
             )
-            self.assertIn("let ORIGIN_LON = 139.69375;", generated_ui)
+            self.assertIn("let ORIGIN_LON = 139.70625;", generated_ui)
+            self.assertNotIn("let ORIGIN_LON = 139.69375;", generated_ui)
             self.assertIn(
                 "setView([35.6812, 139.7671], 15)",
                 source_ui,
