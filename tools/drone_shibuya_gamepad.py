@@ -67,10 +67,10 @@ MUJOCO_LOCATION = {
 }
 MAP_VIEWER_DEFAULT_ORIGIN = {"latitude": 35.6625, "longitude": 139.70625}
 MAP_VIEWER_DEFAULT_CENTER = {"latitude": 35.6812, "longitude": 139.7671}
-MAP_ORIGIN = {
-    "latitude": MUJOCO_LOCATION["latitude"],
-    "longitude": MUJOCO_LOCATION["longitude"],
-}
+# Map Viewer converts local ROS/ENU coordinates back to latitude/longitude.
+# Its origin must match the PLATEAU local-coordinate origin, not Drone Core's
+# simulation.location, which is used by GPS and magnetic-field simulation.
+MAP_ORIGIN = dict(MAP_VIEWER_DEFAULT_ORIGIN)
 
 RecipeError = gamepad.RecipeError
 RuntimePaths = gamepad.RuntimePaths
@@ -139,7 +139,7 @@ def _replace_map_origin_assignment(
     if count != 1:
         raise RecipeError(
             f"Map Viewer {name} assignment does not match the expected "
-            f"default value {expected}"
+            f"PLATEAU origin value {expected}"
         )
     return updated
 
@@ -164,7 +164,7 @@ def _align_map_viewer_origin(client: Path) -> Path:
     source = source.replace(default_center, aligned_center, 1)
     source = source.replace(
         "// 東京駅",
-        "// RecipeでDrone Coreの校正済み原点へ整合",
+        "// Recipeで渋谷PLATEAUのローカル原点へ表示中心を整合",
         1,
     )
     source = _replace_map_origin_assignment(
@@ -181,7 +181,7 @@ def _align_map_viewer_origin(client: Path) -> Path:
     )
     source = source.replace(
         "// zone の原点（仮）",
-        "// RecipeでDrone Coreの校正済み原点へ整合",
+        "// 渋谷PLATEAUのローカル座標原点に対応する地理座標",
         1,
     )
     ui_path.write_text(source, encoding="utf-8")
@@ -688,8 +688,8 @@ def write_portal(paths, runtime: RuntimePaths, launcher: Path) -> Path:
             PortalEnvironment("Foundation Python", str(runtime.foundation_python)),
             PortalEnvironment("Launcher", str(launcher)),
             PortalEnvironment("Session", str(session_file(paths))),
-            PortalEnvironment("MuJoCo origin", "35.6625, 139.69375, 15.4"),
-            PortalEnvironment("Map origin", "35.6625, 139.69375"),
+            PortalEnvironment("Drone simulation location", "35.6625, 139.69375, 15.4"),
+            PortalEnvironment("PLATEAU map origin", "35.6625, 139.70625"),
             PortalEnvironment("Web ports", "8000 / 8765"),
         ),
         agency_notes=(
@@ -742,10 +742,10 @@ def materialize_runtime(
             "expected_sha256": GLB_SHA256,
         },
         "coordinate_invariants": {
-            "mujoco_simulation_location": MUJOCO_LOCATION,
+            "drone_simulation_location": MUJOCO_LOCATION,
             "map_viewer_source_origin": MAP_VIEWER_DEFAULT_ORIGIN,
-            "map_viewer_origin": MAP_ORIGIN,
-            "map_origin_aligned_to_mujoco": True,
+            "plateau_map_origin": MAP_ORIGIN,
+            "map_origin_derived_from_drone_location": False,
         },
         "launcher": str(launcher),
         "portal": str(portal),
@@ -779,7 +779,7 @@ def validate_materialization(paths, drone_root: Path) -> dict[str, str]:
     generated_location = generated_json["simulation"]["location"]
     _assert(
         all(generated_location.get(key) == value for key, value in MUJOCO_LOCATION.items()),
-        "MuJoCo simulation location changed",
+        "Drone simulation location changed",
     )
     _assert(
         generated_json["simulation"]["timeStep"] == 0.003,
@@ -809,17 +809,30 @@ def validate_materialization(paths, drone_root: Path) -> dict[str, str]:
     record = _load_json(record_path)
     glb = _required(Path(record["browser_bundle"]["glb_destination"]), "Generated GLB")
     _assert(_sha256(glb) == record["glb"]["sha256"], "generated GLB hash changed")
+    coordinates = record["coordinate_invariants"]
+    _assert(
+        coordinates["drone_simulation_location"] == MUJOCO_LOCATION,
+        "recorded Drone simulation location changed",
+    )
+    _assert(
+        coordinates["plateau_map_origin"] == MAP_ORIGIN,
+        "recorded PLATEAU map origin changed",
+    )
+    _assert(
+        coordinates["map_origin_derived_from_drone_location"] is False,
+        "Map Viewer origin must not be derived from Drone simulation.location",
+    )
 
     map_ui = _required(
         paths.recipe_root / "web" / "map-viewer" / "src" / "client" / "src" / "ui.js",
         "Generated Map Viewer UI",
     ).read_text(encoding="utf-8")
     _assert(
-        "setView([35.6625, 139.69375], 15)" in map_ui,
+        "setView([35.6625, 139.70625], 15)" in map_ui,
         "Map Viewer initial center changed",
     )
     _assert("let ORIGIN_LAT = 35.6625" in map_ui, "Map Viewer latitude changed")
-    _assert("let ORIGIN_LON = 139.69375" in map_ui, "Map Viewer longitude changed")
+    _assert("let ORIGIN_LON = 139.70625" in map_ui, "Map Viewer longitude changed")
 
     launcher_path = _required(
         paths.recipe_config / "launcher.json", "Generated Launcher"
