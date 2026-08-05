@@ -1,6 +1,6 @@
 id: drone-single-mujoco-shibuya-map-gamepad
 title: Human-operated Hakoniwa Drone Shibuya MuJoCo and Map Viewer Demo
-recipe_version: 0.4
+recipe_version: 0.5
 
 goal:
   user_request: PS5コントローラで渋谷のMuJoCo環境を飛行し、PLATEAU 3DビューとLeaflet地図で同時に確認したい
@@ -21,11 +21,13 @@ feasibility:
 
 validation:
   status: partially_verified
-  verified_at: 2026-07-31
+  verified_at: 2026-08-05
   summary: >
-    Source assets and design boundaries were inspected. Runtime materialization,
-    browser bundling, collision behavior, and full end-to-end execution remain
-    for Codex and operator validation.
+    Source assets, materialization, and the coordinate boundary have been inspected.
+    Runtime confirmation showed that Leaflet aligns with the PLATEAU, MuJoCo, and
+    Three.js local world when the Map Viewer georeference origin is preserved at
+    35.6625, 139.70625. Collision behavior and the complete operator lifecycle
+    still require end-to-end validation.
   steps:
     - id: source_asset_contract
       status: verified
@@ -44,29 +46,33 @@ validation:
     - id: coordinate_contract
       status: verified
       evidence:
-        - source: user-design-confirmation
-          date: 2026-07-31
+        - source: user-runtime-confirmation
+          date: 2026-08-05
+        - source: source-and-runtime-investigation
+          date: 2026-08-05
       notes:
-        - Use the calibrated Drone Core simulation location as the Recipe runtime origin.
-        - Replace the copied Map Viewer provisional longitude without modifying its source repository.
+        - MuJoCo and the Drone visual-state PDU use local coordinates in this Recipe.
+        - Drone Core simulation.location is retained independently for GPS and magnetic-field simulation.
+        - Map Viewer alone converts the local ROS/ENU position into latitude and longitude.
+        - Preserve the Map Viewer origin 35.6625, 139.70625 because it is the geographic anchor for the PLATEAU local-coordinate origin.
+        - Do not derive the Map Viewer origin from Drone Core simulation.location.
     - id: generated_runtime
       status: verified
       evidence:
         - source: tools/test_drone_shibuya_gamepad.py
-          date: 2026-07-31
+          date: 2026-08-05
         - source: work/recipes/drone-single-mujoco-shibuya-map-gamepad/validation/materialization.json
           date: 2026-07-31
       notes:
-        - Unit tests verify materialization, the four-path JSON allowlist, byte-identical MuJoCo XML and controller parameters, GLB provenance, coordinates, no-envsim, Launcher topology, and session-file cleanup commands.
+        - Unit tests verify materialization, the four-path JSON allowlist, byte-identical MuJoCo XML and controller parameters, GLB provenance, independent coordinate contracts, no-envsim, Launcher topology, and session-file cleanup commands.
         - Foundation doctor is SATISFIED for the three required Foundation components.
         - macOS configure downloaded the real v0.0.1 PLATEAU GLB into the Recipe workspace and verified its declared SHA-256.
         - The generated browser path reuses the Recipe-local GLB through a hard link on the verified macOS workspace.
-        - Human-operated runtime validation remains blocked until a gamepad is connected.
     - id: end_to_end
       status: not_tested
       evidence: []
       notes:
-        - Verify PS5 flight, collision, MuJoCo rendering, Three.js rendering, Leaflet tracking, reset, and cleanup.
+        - Verify PS5 flight, collision, MuJoCo rendering, Three.js rendering, Leaflet tracking, reset, and cleanup after regenerating the Recipe workspace.
 
 constraints:
   - single-pc
@@ -83,7 +89,8 @@ constraints:
   - no-envsim
   - no-drone-core-modification
   - no-map-viewer-source-modification
-  - align-map-origin-to-calibrated-drone-core-location
+  - preserve-plateau-map-georeference-origin
+  - separate-map-origin-from-drone-simulation-location
   - business-pack-owned-materialization
   - business-pack-owned-launcher
 
@@ -176,7 +183,7 @@ agency_boundary:
         - materialize_runtime
   human_decisions:
     - id: approve_coordinate_change
-      description: Approve any future change to the calibrated coordinate values.
+      description: Approve any future change to the PLATEAU georeference origin or Drone simulation location.
       required_before:
         - modify_coordinate_contract
   human_actions:
@@ -205,7 +212,7 @@ components:
     roles:
       - physics_runtime
       - simulation_core
-    purpose: Own the calibrated Shibuya MuJoCo world, Drone runtime, visual-state publisher, and RC application.
+    purpose: Own the Shibuya MuJoCo world, Drone runtime, visual-state publisher, and RC application.
   - id: hakoniwa-core-pro
     roles:
       - simulation_core
@@ -227,7 +234,7 @@ components:
       - monitor
       - integration_boundary
       - visualization_asset_source
-    purpose: Present the live drone on Leaflet and the embedded Three.js Shibuya scene.
+    purpose: Present the live drone on Leaflet and the embedded Three.js Shibuya scene while georeferencing the PLATEAU local coordinates.
   - id: hakoniwa-threejs-drone
     roles:
       - visualizer
@@ -278,7 +285,7 @@ connections:
         - generated Shibuya gamepad config
         - matching visual-state publisher configuration
       validation_notes:
-        - The state path is inherited; the generated Shibuya config remains untested.
+        - The state path is inherited; the generated Shibuya config remains partially verified.
   - from: hakoniwa-pdu-bridge-core
     to: hakoniwa-map-viewer
     interface: websocket
@@ -291,7 +298,7 @@ connections:
         - wireVersion v2
         - generated Shibuya fleets viewer configuration
       validation_notes:
-        - Component checks exist; the integrated Recipe remains untested.
+        - Component checks exist; the coordinate path was confirmed at runtime on 2026-08-05.
   - from: hakoniwa-map-viewer
     to: hakoniwa-threejs-drone
     interface: public-browser-api
@@ -344,7 +351,7 @@ artifact_sets:
       - work/foundation/runtime/mmap
       - work/foundation/install/share/hakoniwa/receipts
   recipe_runtime:
-    status: not_tested
+    status: partially_verified
     owner: work/recipes/drone-single-mujoco-shibuya-map-gamepad
     artifacts:
       - index.html
@@ -365,7 +372,7 @@ artifacts:
   generated:
     - path: work/recipes/drone-single-mujoco-shibuya-map-gamepad/config/drone/mujoco-shibuya-gamepad-1/drone_config_0.json
       owner: hakoniwa-business-pack
-      purpose: RC-enabled copy of the calibrated Shibuya configuration.
+      purpose: RC-enabled copy of the Shibuya configuration.
       contract:
         source: hakoniwa-drone-core/config/drone/mujoco-shibuya-api-1/drone_config_0.json
         allowed_changes:
@@ -376,7 +383,7 @@ artifacts:
         all_other_values: preserve
     - path: work/recipes/drone-single-mujoco-shibuya-map-gamepad/config/controller/param-gamepad-mixer-mujoco-shibuya.txt
       owner: hakoniwa-business-pack
-      purpose: Initial byte-for-byte copy of the calibrated Shibuya controller parameters.
+      purpose: Initial byte-for-byte copy of the Shibuya controller parameters.
     - path: work/recipes/drone-single-mujoco-shibuya-map-gamepad/web/map-viewer
       owner: hakoniwa-business-pack
       purpose: Map Viewer bundle, Recipe-specific configs, and a browser-visible link or copy of the pinned GLB.
@@ -387,7 +394,7 @@ artifacts:
       sha256: 2860f6db77f7d39af3320ca4e6650cd0e29082e5dfb5e081df6d810b0b172e9e
     - path: work/recipes/drone-single-mujoco-shibuya-map-gamepad/validation/materialization.json
       owner: hakoniwa-business-pack
-      purpose: Hashes, allowlisted JSON diff, coordinate invariants, and GLB provenance.
+      purpose: Hashes, allowlisted JSON diff, independent coordinate invariants, and GLB provenance.
   reused:
     - path: hakoniwa-drone-core/config/drone/mujoco-shibuya-api-1/drone.xml
       owner: hakoniwa-drone-core
@@ -396,24 +403,31 @@ artifacts:
       owner: hakoniwa-drone-core
     - path: hakoniwa-drone-core/drone_api/rc/rc_config/ps4-control.json
       owner: hakoniwa-drone-core
+
 coordinate_contract:
-  policy: align-generated-map-viewer-to-drone-core
+  policy: preserve-plateau-map-georeference
   source_repository_mutation: forbidden
-  mujoco_simulation_location:
+  drone_simulation_location:
     source: hakoniwa-drone-core/config/drone/mujoco-shibuya-api-1/drone_config_0.json
+    purpose: Geographic reference for GPS and magnetic-field simulation.
     latitude: 35.6625
     longitude: 139.69375
     altitude: 15.4
     mutation: forbidden-without-human-approval
-  map_viewer_origin:
-    source: generated Recipe copy of hakoniwa-map-viewer/src/client/src/ui.js
+  plateau_map_origin:
+    source: hakoniwa-map-viewer/src/client/src/ui.js
+    purpose: Geographic anchor corresponding to the PLATEAU local-coordinate origin.
     latitude: 35.6625
-    longitude: 139.69375
-    mutation: forbidden-without-human-approval
+    longitude: 139.70625
+    mutation: preserve
+  derivation:
+    map_origin_from_drone_simulation_location: forbidden
   notes:
-    - The Map Viewer source default 35.6625, 139.70625 is explicitly marked provisional.
-    - Recipe configure changes only the generated Map Viewer copy's origin and initial center to the calibrated Drone Core origin.
-    - Tests must fail if either the calibrated origin or expected provisional source value changes silently.
+    - MuJoCo and DroneVisualStateArray use local coordinates and do not require latitude or longitude for this Recipe's visual path.
+    - Map Viewer converts local ROS coordinates to ENU and then to latitude and longitude.
+    - The Map Viewer origin must therefore match the PLATEAU local-coordinate origin.
+    - Recipe configure may center Leaflet on the PLATEAU origin, but must not replace it with Drone Core simulation.location.
+    - Tests must fail if the generated Map Viewer origin is derived from Drone Core simulation.location.
 
 implementation_plan:
   owner: codex-with-operator
@@ -424,18 +438,19 @@ implementation_plan:
     - Generate the Map Viewer bundle and Shibuya fleets configuration.
     - Resolve the pinned Shibuya GLB Release Asset into the Recipe workspace, verify its SHA-256, and record its source. Accept --shibuya-glb only as an offline override.
     - Generate Launcher, portal, configure, doctor, and tests.
-    - Align the generated Map Viewer origin with Drone Core and validate the no-envsim boundary and coordinate invariants.
-    - Perform live macOS validation before upgrading validation status.
+    - Preserve the PLATEAU Map Viewer origin independently from Drone Core simulation.location and validate the no-envsim boundary and coordinate invariants.
+    - Perform live macOS validation before upgrading the remaining validation status.
 
 acceptance_criteria:
   - configure creates the declared workspace without modifying source repositories.
   - generated drone.xml is byte-for-byte identical to the Drone Core source.
   - generated drone_config_0.json differs only at the four allowlisted JSON paths.
   - generated controller uses RadioController and the Recipe-owned parameter file.
-  - MuJoCo location remains latitude 35.6625, longitude 139.69375, altitude 15.4.
-  - Generated Map Viewer origin is latitude 35.6625, longitude 139.69375.
-  - Generated Leaflet initial center uses the same calibrated origin.
-  - Map Viewer source repository remains unchanged at its provisional default.
+  - Drone simulation location remains latitude 35.6625, longitude 139.69375, altitude 15.4.
+  - Generated Map Viewer origin remains latitude 35.6625, longitude 139.70625.
+  - Generated Leaflet initial center uses the PLATEAU origin 35.6625, 139.70625.
+  - Generated validation evidence records that Map Viewer origin is not derived from Drone simulation.location.
+  - Map Viewer source repository remains unchanged.
   - no generated dependency, config, Launcher asset, or command references hakoniwa-envsim.
   - Launcher includes Drone service, visual-state publisher, WebBridge, RC controller, and Map Viewer HTTP server.
   - PS5 operation moves the same drone in MuJoCo, Three.js, and Leaflet.
@@ -444,7 +459,7 @@ acceptance_criteria:
 
 missing_pieces:
   - Component-owned machine-readable release manifest; this Recipe currently pins the v0.0.1 URL and SHA-256 directly.
-  - Live aligned-coordinate and collision validation.
+  - Live collision and complete operator-lifecycle validation.
   - Native Linux validation.
   - Native Windows validation.
 
@@ -496,6 +511,7 @@ demo:
       expected:
         - Source assets are copied and hashes recorded.
         - Only the allowlisted JSON paths are changed.
+        - The PLATEAU Map Viewer origin remains independent from Drone simulation.location.
     - id: start
       command: python tools/drone_shibuya_gamepad.py start
       status: not_tested
@@ -506,12 +522,13 @@ demo:
         - The output tells the operator how to open the viewer, inspect status, and stop the session.
     - id: open_viewer
       command: python tools/drone_shibuya_gamepad.py open-viewer
-      status: not_tested
+      status: partially_verified
       expected:
         - The browser displays Leaflet and the Shibuya Three.js scene.
+        - Leaflet uses the PLATEAU georeference origin 35.6625, 139.70625.
     - id: validate_flight
       command: human operates the PS5 controller
-      status: not_tested
+      status: partially_verified
       expected:
         - MuJoCo, Three.js, and Leaflet show the same drone motion.
         - Collision with the Shibuya MuJoCo geometry is observable.
@@ -541,12 +558,12 @@ demo:
 
 expected_result: >
   A human can operate one Hakoniwa Drone with the PS5 controller inside the
-  calibrated Shibuya MuJoCo collision world while the same state is shown in
-  Hakoniwa Map Viewer as both a Three.js PLATEAU scene and a Leaflet map.
+  Shibuya MuJoCo collision world while the same local-coordinate state is shown
+  in Hakoniwa Map Viewer as both a Three.js PLATEAU scene and a Leaflet map.
   Business Pack owns the generated configuration, browser bundle, Launcher,
-  portal, and validation record. The generated Map Viewer uses the calibrated
-  Drone Core origin, source repositories remain unmodified, and hakoniwa-envsim
-  is absent.
+  portal, and validation record. The generated Map Viewer preserves the PLATEAU
+  georeference origin independently from Drone Core simulation.location, source
+  repositories remain unmodified, and hakoniwa-envsim is absent.
 
 source_catalogs:
   - component_id: hakoniwa-drone-core
@@ -558,20 +575,20 @@ source_catalogs:
   - component_id: hakoniwa-pdu-bridge-core
     purpose: Shared-memory to WebSocket bridge.
   - component_id: hakoniwa-map-viewer
-    purpose: Integrated Leaflet and Three.js monitor.
+    purpose: Integrated Leaflet and Three.js monitor with PLATEAU georeferencing.
   - component_id: hakoniwa-threejs-drone
     purpose: Drone and PLATEAU rendering.
 
 source_artifacts:
   - repository: toppers/hakoniwa-drone-core
     path: config/drone/mujoco-shibuya-api-1/drone_config_0.json
-    relation: calibrated-source-config-and-transformation-input
+    relation: drone-simulation-location-and-transformation-input
   - repository: toppers/hakoniwa-drone-core
     path: config/drone/mujoco-shibuya-api-1/drone.xml
     relation: byte-for-byte-reused-collision-world
   - repository: toppers/hakoniwa-drone-core
     path: config/controller/param-api-mixer-mujoco-shibuya.txt
-    relation: calibrated-controller-parameter-source
+    relation: controller-parameter-source
   - repository: toppers/hakoniwa-drone-core
     path: drone_api/rc/rc-custom.py
     relation: reused-runtime-artifact
@@ -580,7 +597,7 @@ source_artifacts:
     relation: reused-runtime-artifact
   - repository: hakoniwalab/hakoniwa-map-viewer
     path: src/client/src/ui.js
-    relation: map-origin-and-threejs-integration-source
+    relation: plateau-map-georeference-and-threejs-integration-source
   - repository: hakoniwalab/hakoniwa-threejs-drone
     path: config/drone_config-compact-dji-1.json
     relation: shibuya-scene-transform-reference
