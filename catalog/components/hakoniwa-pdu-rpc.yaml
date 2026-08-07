@@ -10,8 +10,8 @@ distribution:
   notes:
     - Public OSS Hakoniwa component.
 verification:
-  verified_at: 2026-08-02
-  source_revision: 3436ae40c124f7f2112a951e383abd4fc2e42041
+  verified_at: 2026-08-07
+  source_revision: 3085b01b7458538f7228ed875aa12944b0583213
   source_ref: main
 summary: Hakoniwa-native request-response layer built on Endpoint topology and generated PDU service definitions, with C++ APIs, Python CFFI typed clients, asynchronous futures, and native-backed Python TCP mux servers.
 category:
@@ -25,164 +25,207 @@ status:
   maturity: active
   catalog_confidence: high
   notes:
-    - Catalog includes the merged native TCP mux server and Python RpcMuxServer APIs.
-    - Local Foundation installation can attest native and Python surfaces in one Receipt when --python-venv is selected.
-    - Runtime capabilities and Foundation installation evidence are intentionally distinguished.
-    - Scope is narrower than a general RPC framework.
+    - Service RPC and long-running Action lifecycles are both implemented on main.
+    - Action supports point-to-point Client/Server and TCP Mux Server paths.
+    - Native C++, C API, and Python CFFI Action surfaces are implemented and contract-tested.
+    - Action Goal Response, Feedback, Cancel, Result, and Cancel/Result race behavior are defined by implemented design contracts.
+    - Scope remains narrower than a general-purpose RPC framework.
 capabilities:
   - name: PDU-native request-response
-    description: Provides RPC semantics aligned with Hakoniwa PDU channels, Endpoint configuration, generated service types, explicit timeout notification, and protocol-level cancellation.
+    description: Provides Service RPC semantics aligned with Hakoniwa PDU channels, Endpoint configuration, generated service types, explicit timeout notification, and protocol-level cancellation.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: README.md
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
-  - name: Config-driven service topology
-    description: Defines services, clients, endpoints, request/response channels, and timeout behavior in JSON.
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: docs/test-contract.md
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+
+  - name: Long-running Action lifecycle
+    description: Provides Goal Request/Response, zero or more Feedback messages, optional Cancel Request/Response, and terminal Result delivery with explicit Goal identity and state transitions.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: docs/design/action/README.md
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: include/hakoniwa/pdu/action/action_types.hpp
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+
+  - name: Action semantic state management
+    description: Separates packet/slot ownership in Action Endpoints from accepted Goal semantic state in Services, using explicit EXECUTING, CANCELING, and FINISHING states and pure state reducers.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: include/hakoniwa/pdu/action/action_server_state_machine.hpp
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: src/action_server_state_machine.cpp
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: test/action_server_state_machine_contract_test.cpp
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+
+  - name: Point-to-point Action Client and Server
+    description: Exposes explicitly polled ActionServicesClient and ActionServicesServer APIs over configured Endpoint transports, with caller-supplied non-zero 128-bit Goal IDs.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: include/hakoniwa/pdu/action/action_services_client.hpp
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: include/hakoniwa/pdu/action/action_services_server.hpp
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: test/action_tcp_e2e_contract_test.cpp
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+
+  - name: Native TCP Mux Action server
+    description: Accepts multiple independent TCP Endpoint sessions while keeping physical connection identity internal and exposing Goals to the Application by action name and ServerGoalHandle.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: include/hakoniwa/pdu/action/action_services_mux_server.hpp
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: test/action_mux_server_contract_test.cpp
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+
+  - name: C Action API
+    description: Exposes Action Client, Server, and Mux Server lifecycle operations through a C ABI suitable for language bindings and adapter layers.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: include/hakoniwa/pdu/action/c_action.h
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: test/c_action_tcp_e2e_contract_test.cpp
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+
+  - name: Python CFFI Action API
+    description: Provides Python wrappers for Action Client, Server, and Mux Server while delegating lifecycle and routing semantics to the native runtime.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: python/hakoniwa_pdu_rpc/action_cffi.py
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: python/test_cffi_action.py
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: python/test_cffi_action_mux_server.py
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+
+  - name: Config-driven Service and Action topology
+    description: Defines Service and Action endpoints and channels in JSON, with a user-facing Action manifest that can generate resolved Action and Endpoint runtime configuration.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: config/schema/service-schema.json
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
-  - name: Python CFFI client binding
-    description: Exposes the native RPC client lifecycle to Python while returning ordinary Python bytes instead of leaking native PDU buffer ownership.
-    evidence:
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
       - repository: hakoniwalab/hakoniwa-pdu-rpc
-        path: python/hakoniwa_pdu_rpc/cffi_api.py
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
+        path: config/schema/action-schema.json
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
       - repository: hakoniwalab/hakoniwa-pdu-rpc
-        path: python/test_cffi_basic.py
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
+        path: tools/generate_action_config.py
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+
   - name: Registry-generated typed service auto-wiring
     description: Resolves generated request and response packet classes and converters by service naming convention, preferring the installed hakoniwa-pdu package layout and falling back to the Registry source-tree layout.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: python/hakoniwa_pdu_rpc/auto_wire.py
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
-      - repository: hakoniwalab/hakoniwa-pdu-rpc
-        path: python/test_cffi_registry_auto_wire.py
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
-  - name: ROS-independent asynchronous Python API
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+
+  - name: ROS-independent asynchronous Python Service API
     description: RpcClient.call_async returns RpcFuture and drives timeout, cancellation, and response/cancel race handling in a background worker without depending on rclpy or asyncio.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: python/hakoniwa_pdu_rpc/client.py
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: python/hakoniwa_pdu_rpc/future.py
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+
   - name: Native TCP mux RPC server
     description: Accepts multiple independent Endpoint sessions on one listener, creates one RPC server adapter per accepted connection, and routes replies to the originating connection.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: include/hakoniwa/pdu/rpc/rpc_services_mux_server.hpp
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
-      - repository: hakoniwalab/hakoniwa-pdu-rpc
-        path: test/rpc_mux_server_contract_test.cpp
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
-  - name: Python RpcMuxServer
-    description: Provides a thin Python wrapper over the native mux server for start, stop, poll, reply, cancel reply, connection counts, expected counts, and readiness without reimplementing mux lifecycle in Python.
-    evidence:
-      - repository: hakoniwalab/hakoniwa-pdu-rpc
-        path: python/hakoniwa_pdu_rpc/mux_server.py
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
-      - repository: hakoniwalab/hakoniwa-pdu-rpc
-        path: python/test_cffi_mux_server.py
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
-      - repository: hakoniwalab/hakoniwa-pdu-rpc
-        path: docs/tcp-mux-server.md
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+
   - name: Installed CMake package contract
-    description: Exports a consumable CMake package with preferred target hakoniwa_pdu_rpc::rpc and compatibility target hakoniwa_pdu_rpc::hakoniwa_pdu_rpc.
+    description: Exports a consumable CMake package and consumes hakoniwa-pdu-endpoint through its installed public CMake target.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: CMakeLists.txt
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
-      - repository: hakoniwalab/hakoniwa-pdu-rpc
-        path: cmake/hakoniwa_pdu_rpcConfig.cmake.in
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
-  - name: Foundation native plus Python install contract
-    description: tools/hako.py install optionally installs hakoniwa_pdu_rpc and packaged schemas into a selected Foundation venv and records native libraries, Python package, schemas, typed async, and mux capabilities in one Component Receipt.
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+
+  - name: Cross-platform contract validation
+    description: CI exercises reviewed Service and Action contracts on Ubuntu x64, Ubuntu ARM64, macOS, and Windows x64, with package and Python integration checks in companion workflows.
     evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: .github/workflows/action-contract-tests.yml
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: tools/hako.py
-        revision: 3436ae40c124f7f2112a951e383abd4fc2e42041
-      - repository: hakoniwalab/hakoniwa-pdu-rpc
-        path: pyproject.toml
-        revision: 3436ae40c124f7f2112a951e383abd4fc2e42041
-  - name: Core-free Endpoint package dependency
-    description: Standalone PDU-RPC consumes the installed hakoniwa-pdu-endpoint CMake package rather than directly requiring Hakoniwa Core.
-    evidence:
-      - repository: hakoniwalab/hakoniwa-pdu-rpc
-        path: CMakeLists.txt
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
-  - name: Cross-platform build and validation
-    description: tools/hako.py and CI cover native doctor, build, lifecycle tests, CFFI integration tests, installation, and package-consumer verification across supported platforms.
-    evidence:
-      - repository: hakoniwalab/hakoniwa-pdu-rpc
-        path: tools/hako.py
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
-  - name: Reviewed RPC lifecycle contracts
-    description: Focused tests cover basic round trip and reuse, timeout=0 infinite wait, timeout followed by explicit cancel, and the normal-response/cancel race.
-    evidence:
-      - repository: hakoniwalab/hakoniwa-pdu-rpc
-        path: docs/test-contract.md
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+
 limitations:
   - Not a general-purpose RPC framework like gRPC.
   - Not a dynamic service mesh with discovery, authentication, tracing, and streaming semantics.
-  - Native C++ integration is explicitly polled; the Python high-level asynchronous adapter uses a background worker.
-  - One Python RpcClient instance permits one in-flight request. Independent concurrent requests require separate client instances.
-  - Requires Endpoint and Registry alignment; mismatched endpoint IDs, node names, PDU sizes, generated package layouts, or channels fail at import, config, or runtime boundaries.
-  - Timeout does not make the Endpoint immediately reusable. A caller must cancel or otherwise resolve the request.
-  - The RPC state machine does not infer permanent peer failure from timeout alone.
-  - A ROS 2 Service Bridge is owned by hakoniwa-pdu-ros, not this repository.
-  - Python package installation is opt-in through --python-venv; omitting it intentionally retains the native/CMake-only install behavior.
-  - The selected Python venv must live below the shared Foundation install prefix so every attested artifact remains inside that Foundation.
+  - Native C++ Service and Action integration is explicitly polled.
+  - Action does not provide a built-in Future or callback scheduler; adapters own executor integration.
+  - Action Goal IDs are supplied by the caller; the runtime rejects invalid or already-active identities rather than generating IDs.
+  - One Python RpcClient instance permits one in-flight Service request. Independent concurrent Service requests require separate client instances.
+  - Requires Endpoint and Registry alignment; mismatched endpoint IDs, node names, PDU sizes, generated package layouts, or channels fail at config, build, or runtime boundaries.
+  - A ROS 2 Service or Action Bridge is owned by hakoniwa-pdu-ros, not this repository.
+
 interfaces:
   inputs:
     - name: Service configuration
       kind: config
-      description: JSON service topology including clients, Endpoint IDs, request/response channels, and timeouts.
-    - name: Endpoint container configuration
+      description: JSON service topology including clients, Endpoint IDs, request/response channels, and timeout behavior.
+    - name: Action manifest or resolved Action configuration
       kind: config
-      description: Endpoint mappings reused from hakoniwa-pdu-endpoint.
-    - name: Generated service PDU types
+      description: Action names, generated PDU Action type, slotCount, buffer sizes, Client/Server node IDs, and transport topology.
+    - name: Endpoint configuration
+      kind: config
+      description: Endpoint mappings and transport details consumed through hakoniwa-pdu-endpoint.
+    - name: Generated Service and Action PDU types
       kind: api
-      description: Request and response packet types and converters generated from service definitions.
-    - name: Python request packet or bytes
+      description: Generated request, response, and feedback packet types and converters.
+    - name: Goal and Cancel operations
       kind: api
-      description: Python callers may use raw PDU bytes or Registry-generated typed request packets through TypedRpcClient.
-    - name: Explicit cancel request
-      kind: api
-      description: Caller-controlled cancellation request for an in-flight RPC.
+      description: Caller-supplied Goal identity and Application decisions for Goal acceptance, cancellation, Feedback, and terminal completion.
   outputs:
     - name: RPC response PDUs
       kind: pdu
-      description: Normal or cancellation response payloads sent over Endpoint transports.
-    - name: Client events
+      description: Normal or cancellation Service response payloads sent over Endpoint transports.
+    - name: Action lifecycle events
       kind: api
-      description: Native poll events distinguish normal response, timeout, cancel completion, and no-event states.
+      description: Explicitly polled Goal Response, Feedback, Cancel Response, Result, timeout, and error events correlated by Goal handle.
+    - name: Action PDUs
+      kind: pdu
+      description: Goal Request/Response, Feedback, Cancel, and Result packets transported by Endpoint channels.
     - name: RpcFuture
       kind: api
-      description: ROS-independent Python completion handle supporting result, exception, done callback, and protocol-level cancel operations.
-    - name: RpcMuxRequest
-      kind: api
-      description: Server-side request paired with its accepted connection identity for exact response routing.
+      description: ROS-independent Python completion handle for asynchronous Service calls.
   protocols:
     - name: Endpoint transports
       role: client
-      notes: RPC clients reuse hakoniwa-pdu-endpoint transports.
+      notes: Service and Action clients reuse configured hakoniwa-pdu-endpoint transports.
+    - name: Endpoint transports
+      role: server
+      notes: Service and Action servers reuse configured hakoniwa-pdu-endpoint transports.
     - name: TCP mux Endpoint transport
       role: server
-      notes: RpcMuxServer accepts multiple independent clients through one listener and delegates physical sessions to Endpoint.
+      notes: Service and Action Mux Servers accept multiple independent clients through one listener.
   configuration:
     - path: config/schema/service-schema.json
-      description: Service config schema.
-    - path: config/sample/simple-service.json
-      description: Basic service configuration.
-    - path: config/sample/endpoints.json
-      description: Endpoint mapping for examples.
-    - path: docs/tcp-mux-server.md
-      description: Native and Python mux server lifecycle contract.
+      description: Service configuration schema.
+    - path: config/schema/action-schema.json
+      description: User-facing Action manifest schema.
+    - path: config/sample/action.json
+      description: Sample Fibonacci Action manifest.
+    - path: tools/generate_action_config.py
+      description: Generates resolved Action and Endpoint TCP configuration files.
+    - path: docs/design/action/README.md
+      description: Index of implemented Action protocol and state contracts.
+
 dependencies:
   required:
     - name: C++20 compiler
@@ -196,42 +239,44 @@ dependencies:
       notes: Required installed CMake package for Endpoint topology and transport I/O.
     - name: hakoniwa-pdu-registry
       type: repository
-      notes: Provides generated request/response service packet definitions and source-tree converters used by integration tests.
+      notes: Provides generated Service and Action packet definitions, sizes, and converters.
   optional:
     - name: Python 3.12 or later
       type: runtime
-      notes: Required for Python CFFI clients, typed APIs, RpcMuxServer, tools/hako.py, and config validation.
+      notes: Required for Python CFFI APIs, tools/hako.py, and Action config generation.
     - name: hakoniwa-pdu
       type: package
-      notes: Installed generated PDU package layout preferred by typed service auto-discovery.
+      notes: Installed generated PDU package layout preferred by typed Service auto-discovery.
     - name: GoogleTest
       type: library
       notes: Used for native contract tests.
+
 platforms:
   supported:
     - macOS
     - Linux
     - Windows
   notes:
-    - Native and Python CFFI workflows are exercised in CI on Ubuntu x64, Ubuntu ARM64, macOS, and Windows x64.
-    - A host-native artifact cannot be reused as a Linux container runtime artifact.
+    - Reviewed Action contracts are exercised in CI on Ubuntu x64, Ubuntu ARM64, macOS, and Windows x64.
+    - Native and Python package workflows provide additional cross-platform evidence.
+
 connects_to:
   - component_id: hakoniwa-pdu-endpoint
     direction: uses
     interface: Installed CMake package / Endpoint API / endpoint config
-    notes: All RPC transport and accepted TCP mux sessions are delegated through Endpoint.
+    notes: Service RPC and Action packet transport, slot channels, and accepted TCP mux sessions are delegated through Endpoint.
   - component_id: hakoniwa-pdu-registry
     direction: uses
-    interface: generated request/response PDU types and Python converters
-    notes: Registry provides service packet types, size definitions, and source-tree conversion modules.
+    interface: generated Service and Action PDU types and converters
+    notes: Registry supplies generated request/response/feedback packet definitions and size information.
   - component_id: hakoniwa-pdu-python
     direction: related
     interface: installed hakoniwa_pdu.pdu_msgs package layout
-    notes: Typed auto-wiring prefers the installed generated PDU package layout used by Python applications.
+    notes: Typed Service auto-wiring prefers the installed generated PDU package layout used by Python applications.
   - component_id: hakoniwa-pdu-ros
     direction: used_by
-    interface: TypedRpcClient, RpcFuture, and RpcMuxServer boundary
-    notes: PDU-ROS owns ROS mapping and executor integration while PDU-RPC owns request lifecycle and mux routing.
+    interface: Service RPC and Action lifecycle boundary
+    notes: PDU-ROS owns ROS 2 mapping and executor integration while PDU-RPC owns Service/Action transport lifecycle and routing.
   - component_id: hakoniwa-conductor-light
     direction: used_by
     interface: RPC client/server transport
@@ -240,56 +285,63 @@ connects_to:
     direction: related
     interface: control-plane RPC concept
     notes: Both address control-plane coordination with different scopes.
+
 data_contracts:
-  - name: RPC service config
-    description: Explicit config contract for service names, clients, endpoints, channels, request IDs, and timeouts.
-    source:
-      - repository: hakoniwalab/hakoniwa-pdu-rpc
-        path: config/schema/service-schema.json
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
-  - name: Generated service auto-wire convention
-    description: Service type names resolve RequestPacket and ResponsePacket classes and converters from the installed hakoniwa_pdu package or Registry source-tree fallback.
-    source:
-      - repository: hakoniwalab/hakoniwa-pdu-rpc
-        path: python/hakoniwa_pdu_rpc/auto_wire.py
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
-  - name: Python asynchronous request lifecycle
-    description: call_async returns immediately, one worker drives the terminal state machine, and RpcFuture reports completion without a ROS or asyncio dependency.
-    source:
-      - repository: hakoniwalab/hakoniwa-pdu-rpc
-        path: python/hakoniwa_pdu_rpc/client.py
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
-  - name: TCP mux server routing
-    description: Every polled server request carries accepted connection identity and every reply is routed through that identity to its originating client.
-    source:
-      - repository: hakoniwalab/hakoniwa-pdu-rpc
-        path: docs/tcp-mux-server.md
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
-  - name: Timeout and cancel lifecycle
-    description: Timeout leaves the request running until explicit cancel or another terminal response resolves it.
+  - name: RPC Service lifecycle
+    description: Service requests have explicit response, timeout notification, cancellation, and response/cancel race semantics.
     source:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: docs/test-contract.md
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+  - name: Action Goal identity
+    description: A caller-supplied non-zero 128-bit Goal ID identifies one Action lifecycle and correlates Goal, Cancel, Feedback, and Result operations.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: docs/design/action/03-data-model.md
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+  - name: Action server state model
+    description: Accepted Goals use EXECUTING, CANCELING, and FINISHING semantic states with explicit Cancel decision and terminal Result rules.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: docs/design/action/04-state-model.md
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+  - name: Action Cancel and Result race
+    description: Cancel and terminal Result decisions follow an explicit first-committed-decision contract instead of inferring terminal state from transport failure.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: docs/design/action/11-cancel-result-race.md
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+  - name: Action Endpoint transaction contract
+    description: Endpoint receive queues are independent from semantic state locking, while state-bound synchronous sends are serialized with their validation and commit.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: docs/design/action/12-endpoint-transaction-state.md
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+
 recipe_roles:
   - role: control_plane
-    description: Adds deterministic RPC calls for simulation control or service requests.
+    description: Adds deterministic Service RPC or long-running Action lifecycles for simulation control and integration requests.
   - role: communication_infrastructure
-    description: Reuses Endpoint transport while imposing request-response semantics.
+    description: Reuses Endpoint transport while imposing Service request-response and Action Goal lifecycle semantics.
   - role: integration_boundary
-    description: Bridges native or Python service-style control code to PDU-native Hakoniwa topology.
+    description: Bridges native, C, or Python control code to PDU-native Hakoniwa communication without requiring ROS inside the runtime.
+
 typical_usecases:
-  - Hakoniwa-native C++ control-plane services.
-  - Python request-response clients using raw PDU bytes or Registry-generated service packets.
-  - Python RpcMuxServer applications accepting multiple independent clients on one TCP listener.
-  - ROS 2 or GUI adapters needing a non-blocking RPC completion handle.
+  - Hakoniwa-native C++ control-plane Service RPC.
+  - Long-running Goal execution with progressive Feedback and terminal Result.
+  - Client-requested or Runtime-requested Action cancellation.
+  - Native or Python TCP Mux Action servers accepting multiple independent clients.
+  - C API or Python CFFI adapters that need ROS-independent Action semantics.
+  - ROS 2 adapters that delegate Service and Action lifecycle handling to PDU-RPC.
   - Reusable installed CMake package consumption from other Hakoniwa components.
+
 anti_usecases:
   - Public web APIs across many languages.
-  - Streaming RPC workloads.
+  - Generic streaming RPC workloads unrelated to Action Goal lifecycles.
   - Dynamic service discovery, authentication, tracing, or full service mesh requirements.
-  - Multiple concurrent calls through one Python RpcClient instance.
-  - Treating runtime Python capability as Foundation-installed without package and Receipt evidence.
+  - Treating Action transport failure as an implicit terminal Goal status.
+  - Expecting the Action runtime to generate Goal IDs or provide an application scheduler.
+
 demo_candidates:
   - name: AddTwoInts RPC pair
     description: Build examples, run server and client, then send two integers and receive their sum.
@@ -300,27 +352,36 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: examples/rpc_server.cpp
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
-  - name: Python typed async client
-    description: Load a Registry-generated service wire, issue a non-blocking Python call, and bridge RpcFuture completion into an application callback or executor.
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+
+  - name: Fibonacci Action round trip
+    description: Run the native Fibonacci Action pair to observe Goal acceptance, progressive Feedback, and terminal Result over TCP.
     required_components:
       - hakoniwa-pdu-rpc
       - hakoniwa-pdu-endpoint
       - hakoniwa-pdu-registry
-      - hakoniwa-pdu-python
     source_examples:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
-        path: python/test_cffi_async_api.py
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
-  - name: Python TCP mux server
-    description: Accept two independent RPC clients on one listener and route each response to the originating connection.
+        path: examples/action_fibonacci_server.cpp
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: examples/action_fibonacci_client.cpp
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+
+  - name: Action TCP contract path
+    description: Exercise Goal, Feedback, Cancel, Result, and state correlation through native point-to-point or Mux contract tests.
     required_components:
       - hakoniwa-pdu-rpc
       - hakoniwa-pdu-endpoint
+      - hakoniwa-pdu-registry
     source_examples:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
-        path: python/test_cffi_mux_server.py
-        revision: 10eb9c8e7664691816796427b2cff68b61c13433
+        path: test/action_tcp_e2e_contract_test.cpp
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: test/action_mux_server_contract_test.cpp
+        revision: 3085b01b7458538f7228ed875aa12944b0583213
+
 operations:
   build:
     commands:
@@ -328,24 +389,22 @@ operations:
       - python tools/hako.py doctor
       - python tools/hako.py configure --dry-run
       - python tools/hako.py build
-      - python tools/hako.py install --python-venv <foundation-prefix>/python
     notes:
-      - tools/hako.py is the recommended cross-platform native build entry point.
-      - Omit --python-venv when only the backward-compatible native/CMake install surface is required.
+      - tools/hako.py is the recommended cross-platform build entry point.
   test:
     commands:
       - python tools/hako.py test
       - python tools/hako.py package-test
     notes:
-      - Native tests cover reviewed lifecycle and mux server contracts.
-      - Python CFFI, typed auto-wire, async API, and mux tests run in Python integration workflows.
+      - Reviewed Service and Action contract targets are included in hako.py test.
   run:
     commands:
-      - PYTHONPATH=python:$PYTHONPATH python -m hakoniwa_pdu_rpc.validate_configs config/sample/simple-service.json --skip-endpoint-validation
-      - build/examples/hakoniwa_pdu_rpc_server
-      - build/examples/hakoniwa_pdu_rpc_client 1000000
+      - python tools/generate_action_config.py --config config/sample/action.json --output .hako/action
+      - build/examples/hakoniwa_pdu_action_fibonacci_server
+      - build/examples/hakoniwa_pdu_action_fibonacci_client 10
     notes:
-      - Python callers must set HAKO_PDU_RPC_LIBRARY or pass the native library path explicitly.
+      - Build examples with HAKO_PDU_RPC_BUILD_EXAMPLES=ON before running the Fibonacci pair.
+
 runtime_checks:
   - id: build-readiness
     kind: doctor
@@ -353,7 +412,7 @@ runtime_checks:
     command: [python, tools/hako.py, doctor]
     working_directory: repository
     output: text
-  - id: rpc-contract-tests
+  - id: service-action-contract-tests
     kind: test
     platforms: [macos, linux, windows]
     command: [python, tools/hako.py, test]
@@ -365,30 +424,42 @@ runtime_checks:
     command: [python, tools/hako.py, package-test]
     working_directory: repository
     output: text
+
 known_gaps:
-  - Windows and Linux host Foundation installation still require platform-specific integration evidence for the optional Python install surface.
+  - Action deliberately has no built-in Future/callback scheduler; application or adapter layers own execution scheduling.
+  - ROS 2 Action mapping remains a hakoniwa-pdu-ros responsibility.
   - Broad cross-language client support and general peer-failure or high-availability policy remain out of scope.
+
 source_refs:
   - repository: hakoniwalab/hakoniwa-pdu-rpc
     path: README.md
-    revision: 10eb9c8e7664691816796427b2cff68b61c13433
-    description: Main overview, package/build workflow, supported platforms, timeout semantics, and public usage guidance.
+    revision: 3085b01b7458538f7228ed875aa12944b0583213
+    description: Main overview of Service RPC, Action, C/C++/Python surfaces, topology, and supported platforms.
   - repository: hakoniwalab/hakoniwa-pdu-rpc
-    path: python/hakoniwa_pdu_rpc/client.py
-    revision: 10eb9c8e7664691816796427b2cff68b61c13433
-    description: Python high-level synchronous and asynchronous client lifecycle.
+    path: docs/design/action/README.md
+    revision: 3085b01b7458538f7228ed875aa12944b0583213
+    description: Implemented Action protocol, state, configuration, C API, race, Endpoint transaction, and Mux contracts.
   - repository: hakoniwalab/hakoniwa-pdu-rpc
-    path: python/hakoniwa_pdu_rpc/mux_server.py
-    revision: 10eb9c8e7664691816796427b2cff68b61c13433
-    description: Python wrapper over the native TCP mux server.
+    path: include/hakoniwa/pdu/action/c_action.h
+    revision: 3085b01b7458538f7228ed875aa12944b0583213
+    description: Public C Action API contract.
   - repository: hakoniwalab/hakoniwa-pdu-rpc
-    path: docs/tcp-mux-server.md
-    revision: 10eb9c8e7664691816796427b2cff68b61c13433
-    description: Accepted connection lifecycle and exact response routing contract.
+    path: python/hakoniwa_pdu_rpc/action_cffi.py
+    revision: 3085b01b7458538f7228ed875aa12944b0583213
+    description: Python CFFI Action Client, Server, and Mux Server wrapper.
+  - repository: hakoniwalab/hakoniwa-pdu-rpc
+    path: test/action_tcp_e2e_contract_test.cpp
+    revision: 3085b01b7458538f7228ed875aa12944b0583213
+    description: Native TCP Action end-to-end contract coverage.
+  - repository: hakoniwalab/hakoniwa-pdu-rpc
+    path: examples/action_fibonacci_server.cpp
+    revision: 3085b01b7458538f7228ed875aa12944b0583213
+    description: Runnable Fibonacci Action server example.
   - repository: hakoniwalab/hakoniwa-pdu-rpc
     path: tools/hako.py
-    revision: 3436ae40c124f7f2112a951e383abd4fc2e42041
-    description: Native and optional Foundation Python installation plus Component Receipt implementation.
+    revision: 3085b01b7458538f7228ed875aa12944b0583213
+    description: Cross-platform build and reviewed contract-test entry point.
+
 tags:
   - hakoniwa
   - pdu
