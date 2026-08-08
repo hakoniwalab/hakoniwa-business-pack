@@ -52,6 +52,17 @@ observation:
       as hakoniwa-pdu-rpc#67."
     - "All eleven documents under docs/design/action/ carry an explicit
       'Status: Draft' banner, so the protocol is not settled either."
+    - "Update, 2026-08-08: upstream maintainer tmori reported in PR #96 that this gap is
+      closed -- Action Client, Server, and Mux Server, plus the C API, Python CFFI API,
+      and TypedActionClient/TypedActionServer, are now implemented, at pdu-rpc revision
+      501ce5a (package-contract green) and pdu-ros revision f17e1cc (native integration
+      green), with all three tracked issues below closed. The observation above (headers
+      and design documents ahead of implementation at revision 4f5471d) remains an
+      accurate historical record of that revision and is left unchanged. The
+      reader-facing lesson it leaves behind is unaffected by the fix: a complete-looking
+      header surface, eleven design documents, and a green contract-test run do not by
+      themselves prove a feature is drivable. See resolution.notes for the current
+      implementation state and the still-open Windows-native re-verification."
 
 sources:
   repositories:
@@ -88,13 +99,14 @@ validation:
   status: verified
   required:
     - >-
-      Re-check once a client implementation and a C API land. Everything downstream
-      of this -- type mapping, state-machine bindings, ROS 2 conversion -- is
-      untestable until then.
+      Superseded 2026-08-08: upstream reports the client implementation and C API have
+      landed (pdu-rpc 501ce5a, pdu-ros f17e1cc), so "re-check once they land" no longer
+      applies. What remains in its place is narrower: re-execute a client run against
+      these revisions from this candidate's own Windows x64 native environment, since
+      upstream's own confirmation was on macOS arm64 + Docker. See resolution.notes.
     - >-
-      Confirm with upstream whether the C API is intended to arrive with the client
-      implementation or separately, since a C API without a client is also possible
-      and would change what becomes drivable first.
+      Superseded 2026-08-08: upstream confirmed the C API arrived together with the
+      client implementation rather than separately, closing this question.
   notes:
     - >-
       IMPORTANT about how this was verified: by reading the source tree and by
@@ -108,20 +120,26 @@ tracking:
   # already track this work, so `open` is now accurate under MAINTAINER.md's
   # definition (at least one follow-up issue exists). The earlier `none` was
   # right only under the mistaken belief that nothing tracked it.
-  implementation_status: open
+  # Corrected 2026-08-08. Upstream maintainer tmori reported in PR #96 that the
+  # Action Client, Server, and Mux Server, plus the C API, Python CFFI API, and
+  # TypedActionClient/TypedActionServer, are implemented, and closed all three
+  # issues below as done. `implementation_status` moves from `open` to
+  # `resolved` under MAINTAINER.md's definition ("the tracked implementation
+  # work has landed").
+  implementation_status: resolved
   issues:
     - repository: hakoniwalab/hakoniwa-pdu-ros
       number: 1
       relation: fix
-      status: open
+      status: closed
     - repository: hakoniwalab/hakoniwa-pdu-rpc
       number: 21
       relation: fix
-      status: open
+      status: closed
     - repository: hakoniwalab/hakoniwa-pdu-rpc
       number: 44
       relation: documentation
-      status: open
+      status: closed
 
 promotion_targets:
   catalog: []
@@ -142,8 +160,17 @@ promotion_rationale:
     its absence would have to be deleted immediately afterwards.
 
 resolution:
-  status: pending
-  fixed_by: []
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      issue: 1
+      revision: f17e1cc
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      issue: 21
+      revision: 501ce5a
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      issue: 44
+      revision: 501ce5a
   verified: false
   promoted_to: []
   executable_guardrails: []
@@ -170,3 +197,16 @@ resolution:
       three existed. What remains useful here is only the reader-facing warning --
       that the header surface and the passing contract tests together imply
       drivability that does not exist yet.
+    - >-
+      Corrected 2026-08-08: upstream maintainer tmori reported, in a PR #96 comment,
+      that the Action Client, Server, and Mux Server, plus the C API, Python CFFI API,
+      and TypedActionClient/TypedActionServer, are implemented, at pdu-rpc revision
+      501ce5a (package-contract test green) and pdu-ros revision f17e1cc (native
+      integration green). All three tracked issues -- hakoniwa-pdu-ros#1,
+      hakoniwa-pdu-rpc#21, and hakoniwa-pdu-rpc#44 -- are closed as done.
+      `resolution.verified` remains false: upstream's own confirmation ran on macOS
+      arm64 + Docker, and this candidate's authoring environment (Windows x64 native)
+      has not yet re-executed a client run against these revisions. Flip
+      `resolution.verified` to true only after that Windows-native re-check, per
+      MAINTAINER.md ("closing an issue is not sufficient evidence for
+      resolution.verified: true").

@@ -82,12 +82,58 @@ validation:
           packet-drop auditing, which is a security-setting change the contributor's
           agent policy does not permit autonomously. Blocked by a boundary, not
           unfinished.
+    - id: shm_leg_with_synthetic_jointstate
+      status: verified
+      evidence:
+        - date: 2026-08-03
+      notes:
+        - >-
+          Demonstrated in a separate configuration (configs/tobas-jointstate-shm/,
+          case T31, not one of this Recipe's own components), not with Tobas itself:
+          a registered asset (consumer.py) calls asset_register() and
+          conductor_start(), creating the channel and single-owning the conductor. A
+          second, unregistered external process (injector.py) attaches with
+          init_for_external() and writes a synthetic JointState. A third external
+          process (tap.py) polls the same channel directly to verify the written
+          values independently of the writer.
+        - >-
+          Two consecutive passing runs, exit 0. Two negative-path runs both exited
+          1; the writer-stopped case was confirmed by content, not merely by exit
+          code -- 198 polls returned zero valid samples.
+        - >-
+          Verification checked position^2 + velocity^2 == 1 and an inter-joint
+          phase offset of 0.1*i, an identity that only holds for this synthetic
+          waveform. A non-empty-only check would have missed a
+          looks-green-but-the-arrays-are-empty failure, the same class of false
+          positive already flagged in jointstate_ros_to_pdu_over_tcp above.
+        - >-
+          What this does and does not establish: the SHM channel read/write path,
+          the external-process priming and polling discipline, and the ownership
+          model are all verified. The bytes written were a synthetic waveform, not
+          Tobas telemetry, because bringing up the vendor stack is a human action.
+          Whether the SHM leg itself is correct does not depend on the byte
+          provenance, so this is recorded as a distinct, verified claim from
+          jointstate_into_hakoniwa_core below, which is about combining it with the
+          real Tobas data.
+        - >-
+          Known pitfalls worth carrying forward: an external write must be preceded
+          by a priming read (run_nowait()) or the write is lost; external writes
+          never call notify_write_pdu_done(), so readers must poll directly rather
+          than wait on notification; and startup order must be consumer, then sim
+          start, then a 1 second wait, then the external processes -- skipping the
+          wait produced 0xC0000005.
     - id: jointstate_into_hakoniwa_core
       status: not_tested
       notes:
         - >-
           Until this is done no Hakoniwa conductor participates, so the composition is
           a decode rather than a simulation.
+        - >-
+          The SHM leg itself is already verified, with synthetic data (see
+          shm_leg_with_synthetic_jointstate above). What remains here is narrower:
+          combining it with real Tobas JointState output, and replacing the
+          synthetic-waveform identity check with a validation method suited to an
+          unknown vendor waveform.
     - id: pdu_to_ros_command_direction
       status: not_tested
       notes:
@@ -96,9 +142,25 @@ validation:
       status: not_tested
       notes:
         - >-
-          Blocked upstream. hakoniwa-pdu-rpc has no Action client implementation and
-          no C API, so no goal can be originated from Python. See the candidate
-          pdu-rpc-action-has-no-client-implementation.
+          Updated 2026-08-08. The blocker previously recorded here -- no Action
+          client implementation and no C API, so no goal could be originated from
+          Python -- is resolved. hakoniwa-pdu-rpc 501ce5a implements the Action
+          Client, Server and Mux Server, the C API and the Python CFFI API;
+          hakoniwa-pdu-ros f17e1cc adds an Action Client Bridge and Action Server
+          Bridge on top of it. See the candidate
+          pdu-rpc-action-has-no-client-implementation, whose
+          tracking.implementation_status is now resolved. Status here stays
+          not_tested because unexecutable-for-lack-of-a-client is no longer the
+          reason; what is untested is this specific goal against these specific
+          revisions.
+        - >-
+          Three things remain open, none of them the client-existence question: (a)
+          whether the ExecuteMission goal shape -- a variable-length array of
+          variable-size structs each holding a byte array -- has a workable PDU
+          representation, which has not been checked against the registry
+          generator; (b) the command direction (pdu_to_ros) is unverified, and
+          every Action path depends on it; (c) no combination with the Tobas side
+          has been attempted.
 
 agency_boundary:
   agent_actions:
@@ -308,7 +370,18 @@ external_connections:
         - an external write needs a priming read first
         - a registered asset must own the conductor
       validation_notes:
-        - Not attempted. This is the leg that would make a conductor participate.
+        - >-
+          Not attempted with this Recipe's own components, so status stays
+          not_tested rather than being promoted to verified. Corroborating
+          evidence exists (validation.steps.shm_leg_with_synthetic_jointstate,
+          2026-08-03) but comes from a separate configuration
+          (configs/tobas-jointstate-shm/) with its own registered asset and
+          external processes, not from the tobas, hakoniwa-pdu-ros and
+          hakoniwa-pdu-endpoint components listed in this Recipe. It shows the SHM
+          read/write contract and ownership model hold in general -- external
+          priming, direct polling instead of notify_write_pdu_done(), and startup
+          ordering -- but does not by itself demonstrate this Recipe's own
+          consumer performing that write.
     notes: Without this leg the composition is a decode, not a simulation.
     analogous_catalog_component: hakoniwa-pdu-endpoint
 
@@ -372,25 +445,37 @@ missing_pieces:
       The command direction (pdu_to_ros) is unverified. Every action path needs it,
       so it gates more than it appears to.
   - >-
-      The PDU does not reach a Core SHM channel, so no conductor participates and
-      there is no shared clock. This is the single biggest gap between this Recipe
-      and a Hakoniwa composition.
+      The PDU does not reach a Core SHM channel with this Recipe's own components,
+      so no conductor participates and there is no shared clock. This is now
+      narrower than it once was: the SHM leg itself is verified with synthetic
+      data in a separate configuration (see
+      validation.steps.shm_leg_with_synthetic_jointstate), so what remains is
+      carrying real Tobas telemetry across it and replacing the synthetic-waveform
+      identity check with a validation method suited to Tobas's actual signal.
   - >-
-      Vendor action bridging is designed but unexecutable: hakoniwa-pdu-rpc has no
-      Action client implementation and no C API, so Python cannot originate a goal.
+      Updated 2026-08-08. Vendor action bridging is no longer unexecutable.
+      hakoniwa-pdu-rpc 501ce5a implements the Action Client, Server and Mux Server,
+      the C API and the Python CFFI API; hakoniwa-pdu-ros f17e1cc adds Action
+      Client and Server Bridges. What remains is (a) whether the ExecuteMission
+      goal shape has a workable PDU representation (see the next item), (b) the
+      still-unverified command direction above, and (c) no attempt yet at
+      combining this with the Tobas side.
   - >-
       The ExecuteMission goal is a variable-length array of variable-size structs
       each holding a byte array. No verified PDU representation for that shape is
       known to the contributor. The registry generator was not read, so this is an
       open question rather than a stated limitation.
   - >-
-      An externally caused abort in the vendor stack maps to ABORTED, not to a
-      runtime cancel, and RuntimeCancelCause has no value for operator intervention.
-      Recorded so the intuitive mapping is not adopted by mistake.
-  - >-
-      Preemption is Application policy in PDU-RPC and is not observable in the
-      protocol, so a superseded goal's client cannot distinguish it from other aborts
-      except by reading the result payload.
+      Resolved by design, 2026-08-08. An externally caused abort (operator
+      override, a newer mission superseding a running one) maps to ABORTED with
+      the reason carried in the Result payload, not to a runtime cancel, and
+      preemption is Application policy rather than a protocol-level signal.
+      Both were open questions recorded in
+      pdu-rpc-action-cannot-express-external-abort-or-preemption-cause; tmori's
+      design response settled them, and hakoniwa-pdu-ros f17e1cc implements the
+      Action Result mapping. Kept here as a settled design note rather than
+      dropped outright, since no run against the real Tobas action has verified
+      it end to end.
   - The root cause of the blocked inbound direction is unknown, so the transport arrangement rests on a workaround.
 
 demo:

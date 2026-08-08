@@ -1,33 +1,43 @@
 id: pdu-rpc-action-cannot-express-external-abort-or-preemption-cause
-title: An externally caused abort in a ROS 2 action server maps to ABORTED rather than a runtime cancel, and PDU-RPC has no cause value for it nor any protocol-level signal for preemption
+title: "Binding authors: map externally caused ROS ABORTED to Hakoniwa ABORTED, not Runtime Cancel; PDU-ROS now implements the ABORTED/CANCELED boundary"
 status: candidate
 
 knowledge_type:
   - known_pitfall
   - runtime_rule
+  - interface_contract
 
 summary: >
-  PDU-RPC's Action protocol has a RUNTIME_CANCEL_REQUEST event with a
-  RuntimeCancelCause of TRANSPORT_DISCONNECTED, SERVER_SHUTDOWN or INTERNAL_POLICY.
-  All three describe the box's own circumstances. A real ROS 2 action server also
-  terminates goals for reasons that are external and not client-initiated -- an
-  operator taking manual control, or a newer goal superseding a running one -- and
-  rclcpp_action expresses both by aborting, so the observed ROS 2 status is ABORTED,
-  not CANCELED. Mapping those onto RUNTIME_CANCEL_REQUEST because they are
-  "externally caused" would make the two sides disagree about the terminal status of
-  the same goal. The correct mapping is ABORTED with the reason carried in the result
-  payload. Separately, PDU-RPC assigns preemption to Application policy and states it
-  is not observable in the protocol, so a superseded goal's client cannot distinguish
-  preemption from any other abort without reading that payload. Upstream already
-  records the observability question as open.
+  PDU-RPC's Action protocol deliberately keeps RuntimeCancelCause (TRANSPORT_DISCONNECTED,
+  SERVER_SHUTDOWN, INTERNAL_POLICY) limited to reasons the Runtime itself owns for asking an
+  Application to stop. A real ROS 2 action server also terminates goals for reasons that are
+  external and not client-initiated -- an operator taking manual control, or a newer goal
+  superseding a running one -- and rclcpp_action expresses both by aborting the goal, so the
+  observed ROS 2 status is ABORTED, not CANCELED. The pitfall this candidate now records is for
+  Binding authors: do not map that externally caused ABORTED onto RUNTIME_CANCEL_REQUEST just
+  because it "feels external." Upstream maintainer tmori clarified on 2026-08-04 that manual
+  override, goal supersede, and preemption are Action Server Application policy, not something
+  the RPC Runtime infers, and confirmed on 2026-08-08 that the boundary is implemented: ROS
+  ABORTED maps to Hakoniwa ABORTED; CANCELED is used only when a Hakoniwa-side Cancel was
+  accepted; a ROS CANCELED that arrives without an accepted Hakoniwa Cancel is logged as a
+  diagnostic and delivered as ABORTED; reason detail stays in the Result payload; and no
+  preemption-specific Protocol terminal cause was added. This is live in hakoniwa-pdu-ros's
+  Action Client Bridge (`_terminal_status` in `action_client_node.py`, revision f17e1cc /
+  commit f99d6c1, closing hakoniwa-pdu-ros#17) and is exercised by that repository's own native
+  integration tests.
 
 observation:
   context: >
-    Comparing the PDU-RPC Action design documents (hakoniwa-pdu-rpc 4f5471d, all
-    eleven marked Draft) against a real third-party ROS 2 action server, the Tobas
-    multicopter mission executor for tobas_mission_msgs/ExecuteMission, 2026-08-03.
-    Neither side was run against the other; this is a documentation and source
-    reading comparison.
+    Comparing the PDU-RPC Action design documents (hakoniwa-pdu-rpc 4f5471d, all eleven marked
+    Draft) against a real third-party ROS 2 action server, the Tobas multicopter mission
+    executor for tobas_mission_msgs/ExecuteMission, 2026-08-03. Neither side was run against
+    the other at the time; this was a documentation and source reading comparison. Upstream
+    maintainer tmori resolved the interpretation in hakoniwalab/hakoniwa-business-pack#96
+    (2026-08-04 and 2026-08-08 comments): the underlying source reading below was correct, but
+    it did not constitute a Protocol-level gap. This record was reframed on 2026-08-09 from a
+    protocol-gap claim into a Binding-authoring pitfall plus the now-implemented mapping, per
+    tmori's request. See `contradictions` and `resolution` for how the original framing was
+    corrected.
   details:
     - "The cause enumeration. action_types.hpp defines RuntimeCancelCause as
       UNSPECIFIED, TRANSPORT_DISCONNECTED, SERVER_SHUTDOWN and INTERNAL_POLICY. Read
@@ -39,26 +49,43 @@ observation:
       control, and MISSION_SUPERSEDED when a newer mission displaces it. In both
       cases it aborts the goal rather than cancelling it, so a ROS 2 client observes
       ABORTED. Only a client-initiated cancel produces CANCELED."
-    - "Why the intuitive mapping is wrong. MANUAL_OVERRIDE is external and is not
-      client-initiated, which is exactly the description of RUNTIME_CANCEL_REQUEST, so
-      the obvious binding is to route it there. Doing so would report CANCELED on the
-      Hakoniwa side for a goal that ROS 2 reports as ABORTED. The disagreement would
-      be silent -- both sides would look internally consistent."
-    - "Preemption is deliberately invisible. docs/design/action/01-concepts.md assigns
-      queueing and preemption to the Application and states they are not observable in
-      the protocol; the same document lists making them observable as an open
-      question. So a client whose goal was superseded sees ABORTED with no protocol
-      indication that a different goal took its place."
-    - "Practically this is survivable but only because the vendor's result payload
-      carries an error code. A vendor action without such a field would lose the
-      distinction entirely, which is what makes this a protocol-shaped concern rather
-      than a Tobas-shaped one."
+    - "The pitfall this observation actually describes. MANUAL_OVERRIDE is external and not
+      client-initiated, so it can be tempting to confuse it with RUNTIME_CANCEL_REQUEST; that
+      is incorrect because RUNTIME_CANCEL_REQUEST is only for Runtime-initiated stop requests.
+      Upstream maintainer tmori clarified (business-pack PR #96, 2026-08-04) that this is not a
+      Protocol gap: manual override, goal supersede, and preemption are Action Server
+      Application policy, and the RPC Runtime does not infer or need a cause value for them.
+      The correct binding is ABORTED with the reason carried in the Result payload, not a
+      runtime cancel. Getting this wrong would make the two sides silently disagree about a
+      goal's terminal status while both looked internally consistent."
+    - "Preemption is deliberately invisible, by design rather than by omission.
+      docs/design/action/01-concepts.md assigns queueing and preemption to the Application and
+      states they are not observable in the protocol. tmori confirmed on 2026-08-08 that no
+      preemption-specific Protocol terminal cause was added: a superseded goal still terminates
+      as ABORTED, with the specific reason left to the Result payload by design."
+    - "Practically this is survivable because the vendor's result payload carries an error
+      code, and that is now the confirmed, not merely lucky, design: the common Protocol does
+      not judge the business meaning of an abort, only the Action-specific Result body does. A
+      vendor action without such a field would still lose the distinction, which is why this
+      remains a reusable Binding-authoring rule rather than a Tobas-specific detail."
     - "The cancel-versus-result race is a separate matter and is compatible. PDU-RPC's
       rule is that the first decision committed to the runtime wins, and no
       CANCEL_RESPONSE is sent when a terminal result wins. The Tobas executor checks
       whether the goal is already cancelling before it switches status, so a
       client cancel arriving in the same tick as a supersede wins there too. The
       ordering does not need reconciling."
+    - "The implemented mapping, read directly from source. hakoniwa-pdu-ros revision
+      f17e1cc (commit f99d6c1, closing hakoniwa-pdu-ros#17) implements exactly this boundary in
+      `HakoniwaRosActionClientNode._terminal_status()`
+      (hakoniwa_pdu_ros/action_client_node.py): ROS `GoalStatus.STATUS_SUCCEEDED` maps to
+      `ActionTerminalStatus.SUCCEEDED`, `STATUS_ABORTED` maps to `ActionTerminalStatus.ABORTED`,
+      and Hakoniwa terminal CANCELED is emitted only when the bridge has recorded an accepted
+      Hakoniwa-side Cancel request (`context.cancel_accepted` is true); otherwise it logs \"ROS
+      Goal became CANCELED without an accepted Hakoniwa Cancel\" and returns ABORTED.
+      `test/native/test_native_action_client_node.py::test_hakoniwa_action_client_bridges_goal_feedback_result_and_reject`
+      and `::test_hakoniwa_action_client_bridges_cancel_accept_and_reject` exercise SUCCEEDED,
+      ABORTED, cancel accept, cancel reject, and CANCELED-after-accepted-cancel end to end
+      through this bridge."
 
 sources:
   repositories:
@@ -71,78 +98,197 @@ sources:
     - repository: hakoniwalab/hakoniwa-pdu-rpc
       path: docs/design/action/10-cancel-result-race.md
       revision: 4f5471d
-  runtime_evidence: []
-  expert_input: []
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      path: hakoniwa_pdu_ros/action_client_node.py
+      revision: f17e1cc20b8ba52e36dc76376cf91093d7f8bd80
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      path: test/native/test_native_action_client_node.py
+      revision: f17e1cc20b8ba52e36dc76376cf91093d7f8bd80
+  runtime_evidence:
+    - description: >-
+        Upstream-reported native integration evidence, not independently re-executed in this
+        workspace: tmori's 2026-08-08 comment on hakoniwalab/hakoniwa-business-pack#96 states
+        hakoniwa-pdu-ros's ROS 2 Jazzy + real CFFI/TCP native integration CI is green at
+        revision f17e1cc. This workspace's own reading of
+        test/native/test_native_action_client_node.py at the same revision (local checkout)
+        confirms that test_hakoniwa_action_client_bridges_goal_feedback_result_and_reject and
+        test_hakoniwa_action_client_bridges_cancel_accept_and_reject assert exactly the
+        SUCCEEDED / ABORTED / cancel-accept / cancel-reject / CANCELED-after-accepted-cancel
+        outcomes this candidate describes. Reading the test source is not the same as running
+        it; this workspace has not executed hakoniwa-pdu-ros's test suite itself.
+  expert_input:
+    - source: >-
+        tmori (hakoniwa-pdu-rpc / hakoniwa-business-pack maintainer), PR
+        hakoniwalab/hakoniwa-business-pack#96, comment 2026-08-04T22:30:59Z
+      statement: >-
+        Manual override, goal supersede, and preemption are Action Server Application policy
+        (docs/design/action/01-concepts.md and 02-responsibility-boundaries.md); the RPC Runtime
+        does not infer external causes and auto-preempt a Goal. When Tobas hits MANUAL_OVERRIDE
+        or MISSION_SUPERSEDED, the Server Application is expected to call abort(goal_id, result)
+        and return ABORTED with an Action-specific reason in the Result body.
+        RUNTIME_CANCEL_REQUEST / RuntimeCancelCause exists only for Runtime-initiated stop
+        requests (transport disconnect, server shutdown, internal policy); an
+        Application-decided abort should not be mapped onto that path. This is therefore not a
+        Protocol-level gap; requested the candidate be deleted or reframed as a Binding pitfall
+        ("do not map an Application-originated ABORTED onto Runtime Cancel"). Preemption reason
+        detail is meant to live in the Action-specific Result body by policy, not in a common
+        Protocol field.
+    - source: >-
+        tmori (hakoniwa-pdu-rpc / hakoniwa-business-pack maintainer), PR
+        hakoniwalab/hakoniwa-business-pack#96, comment 2026-08-08T05:33:56Z
+      statement: >-
+        The boundary discussed above is now implemented in the PDU-ROS Action Client Bridge:
+        ROS ABORTED converts to Hakoniwa ABORTED; CANCELED is used only when the Hakoniwa-side
+        Cancel request was accepted; a ROS CANCELED without an accepted Hakoniwa Cancel is
+        logged as a diagnostic and treated as ABORTED; externally caused or preemption-driven
+        business decisions remain Application Policy with reason detail in the Result payload;
+        no preemption-specific Protocol terminal cause was added. Native tests confirm
+        SUCCEEDED, ABORTED, cancel accept/reject, and CANCELED. Current revisions: pdu-rpc
+        501ce5a (package-contract green), pdu-ros f17e1cc (native integration green). This is no
+        longer an unimplemented gap; it can now be recorded as a design decision plus an
+        implemented, tested mapping.
 
-confidence: medium
+confidence: high
 
-contradictions: []
+contradictions:
+  - target: >-
+      this candidate's own original framing (2026-08-03): PDU-RPC's RuntimeCancelCause
+      enumeration is missing a value for externally caused abort/preemption, making this a
+      Protocol-level gap, and preemption's Result-only observability is an open design question
+      this third-party case should inform.
+    existing_claim: >-
+      An externally caused ROS 2 action abort has no corresponding Protocol cause value, and
+      that absence is a protocol-shaped gap rather than an intentional boundary.
+    new_evidence: >-
+      Upstream maintainer tmori clarified (business-pack PR #96, 2026-08-04) that manual
+      override, goal supersede, and preemption are Action Server Application policy by design,
+      not something the RPC Runtime infers or needs a cause value for; RUNTIME_CANCEL_REQUEST /
+      RuntimeCancelCause covers only Runtime-initiated stops. Confirmed again on 2026-08-08 with
+      the mapping now implemented and native-tested in hakoniwa-pdu-ros's Action Client Bridge,
+      with no preemption-specific Protocol terminal cause added. The original source reading
+      (enumeration values, rclcpp_action's abort-not-cancel behavior) was correct throughout;
+      only the "this is a protocol gap" interpretation was wrong.
 
 validation:
-  status: not_tested
+  status: partially_verified
   required:
     - >-
-      Decide whether an externally caused termination needs a protocol-level cause
-      distinct from the result payload, or whether carrying it in the payload is the
-      intended design. Either answer is defensible; what matters is that binding
-      authors are told which.
-    - >-
-      Decide whether preemption should be observable in the protocol. Upstream
-      already asks this in docs/design/action/01-concepts.md; a concrete third-party
-      action that relies on preemption is now available as a case for that
-      discussion.
-    - >-
-      Re-check both once PDU-RPC has an Action client implementation. Until then
-      neither side can be driven against the other, so nothing here can be confirmed
-      by measurement.
+      Reproduce the SUCCEEDED / ABORTED / cancel-accept / cancel-reject /
+      CANCELED-after-accepted-cancel behavior independently in this workspace once a ROS 2 +
+      hakoniwa-pdu-ros native test environment is available here. So far this candidate relies
+      on reading test/native/test_native_action_client_node.py at hakoniwa-pdu-ros revision
+      f17e1cc and on tmori's 2026-08-08 report that upstream's own native integration CI is
+      green; this workspace has not executed that suite itself.
   notes:
     - >-
-      Deliberately not marked verified. This is a reading of two systems that have
-      never been connected: a Draft protocol specification on one side and a
-      third-party implementation on the other. The reasoning may be sound and still
-      be wrong about what the eventual implementation does. Being honest about that
-      matters more here than the finding does.
+      The original validation.required items are resolved by upstream maintainer tmori's PR #96
+      comments (2026-08-04 and 2026-08-08): an externally caused termination does not need a
+      protocol-level cause distinct from the Result payload, by design; preemption is
+      intentionally not made observable in the protocol, and no dedicated terminal cause was
+      added; and the "re-check once PDU-RPC has an Action client implementation" item is
+      satisfied now that the client exists (pdu-rpc 501ce5a / pdu-ros f17e1cc).
     - >-
-      confidence is medium for the same reason. The enumeration values and the
-      abort-versus-cancel behaviour are both directly observed in source; the
-      inference that this constitutes a gap is not.
+      Deliberately not marked verified. The mapping is confirmed by source reading
+      (action_client_node.py::_terminal_status) and by hakoniwa-pdu-ros's own native test file,
+      plus tmori's report that upstream's native CI passes, but this workspace has not run
+      hakoniwa-pdu-ros's test suite itself. partially_verified reflects that the claim rests on
+      upstream-executed evidence plus this workspace's independent source reading, not on
+      execution performed here.
+    - >-
+      confidence is high (raised from medium) because the enumeration values, the
+      abort-versus-cancel behaviour, and now the exact implemented mapping have all been read
+      directly from source at pinned revisions, and the design rationale comes from the owning
+      maintainer rather than inference.
 
 tracking:
-  implementation_status: none
-  issues: []
+  implementation_status: resolved
+  issues:
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      number: 17
+      relation: fix
+      status: closed
+    - repository: hakoniwalab/hakoniwa-business-pack
+      number: 101
+      relation: documentation
+      status: closed
 
 promotion_targets:
-  catalog: []
+  catalog:
+    - hakoniwa-pdu-ros
   runtime_primer: true
   base_ecosystem_guide: false
-  component_asset_guide: true
+  component_asset_guide: false
   recipes: []
-  executable_guardrails: []
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      kind: test
+      path: test/native/test_native_action_client_node.py
+      mode: detect-only
+      notes:
+        - >-
+          test_hakoniwa_action_client_bridges_goal_feedback_result_and_reject and
+          test_hakoniwa_action_client_bridges_cancel_accept_and_reject already exercise the
+          SUCCEEDED / ABORTED / cancel-accept / cancel-reject / CANCELED-after-accepted-cancel
+          mapping this candidate describes; no new guardrail needs to be authored here, only
+          referenced.
 
 promotion_rationale:
   - >-
-    The mapping rule -- external, non-client-initiated termination is ABORTED with the
-    cause in the payload, not a runtime cancel -- is the kind of thing every Action
-    binding author needs and nobody will derive independently. It belongs in the
-    runtime guidance rather than in one Recipe.
+    The mapping rule -- external, non-client-initiated termination is ABORTED with the cause in
+    the payload, not a runtime cancel -- is the kind of thing every Action binding author needs
+    and nobody will derive independently. It belongs in the runtime guidance rather than in one
+    Recipe.
   - >-
-    On executable guardrails: none is proposed, and none seems possible. A checker
-    cannot detect that a binding chose a semantically wrong but structurally valid
-    event type. This is a review concern, not a machine-detectable one.
+    hakoniwa-pdu-ros is now the concrete component that implements this contract, so the
+    component-specific fact belongs in its Catalog entry. component_asset_guide is dropped in
+    favor of catalog because this is an interface-contract detail of one component's Action
+    bridge, not ecosystem positioning of a major component category.
+  - >-
+    On executable guardrails: previously none seemed possible, because a checker cannot detect
+    that a binding chose a semantically wrong but structurally valid event type in the
+    abstract. The landed implementation changes that -- hakoniwa-pdu-ros ships a native test
+    that already asserts the exact mapping end to end, so the guardrail exists at the component
+    level; this candidate only needs to point at it, not author a new one.
 
 resolution:
-  status: pending
-  fixed_by: []
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      issue: 17
+      pull_request: null
+      revision: f99d6c1522a4c3f638bf7744dcb80dd04c853e43
   verified: false
   promoted_to: []
-  executable_guardrails: []
+  executable_guardrails:
+    - hakoniwalab/hakoniwa-pdu-ros:test/native/test_native_action_client_node.py
   notes:
     - >-
-      Not filed upstream yet. The preemption half already exists as an open question
-      in upstream's own design document, so raising it is a matter of contributing a
-      concrete case rather than reporting something unknown to them. Worth doing once
-      there is an implementation to discuss against.
+      Reframed 2026-08-09 at upstream maintainer tmori's request (PR
+      hakoniwalab/hakoniwa-business-pack#96, 2026-08-04T22:30:59Z comment): this was never a
+      Protocol-level gap. Manual override, goal supersede, and preemption are Action Server
+      Application policy; RUNTIME_CANCEL_REQUEST / RuntimeCancelCause is a Runtime-initiated
+      stop-request path only. The corrected framing is a Binding-authoring pitfall: do not map
+      an Application-decided, externally caused ABORTED onto RUNTIME_CANCEL_REQUEST.
     - >-
-      This came out of a design pass mapping a real third-party ROS 2 action onto
-      the PDU-RPC Action protocol. The concrete case is available on request if it
-      would help the preemption-observability discussion.
+      tmori's 2026-08-08T05:33:56Z comment on the same PR confirms the boundary is implemented
+      in hakoniwa-pdu-ros's Action Client Bridge (HakoniwaRosActionClientNode._terminal_status,
+      commit f99d6c1, closing hakoniwa-pdu-ros#17) and exercised by that repository's own native
+      integration tests (test/native/test_native_action_client_node.py) at revisions pdu-rpc
+      501ce5a / pdu-ros f17e1cc. hakoniwa-business-pack#101 (tracked in tracking.issues as
+      relation: documentation, closed) is deliberately not listed under fixed_by: its scope is
+      the broader four-direction Catalog/Recipe normalization for ROS Service/Action, not a fix
+      specific to this candidate's mapping detail. Listing it as fixed_by would overstate that
+      #101 was filed for this pitfall; it is only where the four-direction feature that includes
+      this mapping became user-facing Catalog/Recipe documentation.
+    - >-
+      verified: false is deliberate: this workspace confirmed the mapping by reading
+      action_client_node.py and the native test source at the cited revisions, and from tmori's
+      report that upstream's own native CI is green, but has not executed hakoniwa-pdu-ros's
+      test suite itself. Re-verification here should flip this to true once that run happens in
+      this workspace.
+    - >-
+      Original notes preserved for the record: the original observation's factual reading (the
+      RuntimeCancelCause enumeration values, and rclcpp_action's abort-not-cancel behavior for
+      externally caused termination) was correct throughout. What changed is the interpretation
+      that this constituted a Protocol-level gap -- it did not; it was an unstated
+      Binding-authoring boundary that upstream has now both explained and implemented.
