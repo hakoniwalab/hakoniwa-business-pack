@@ -1,6 +1,6 @@
 id: drone-single-mujoco-threejs-mac
 title: Single Hakoniwa Drone MuJoCo Three.js Demo on macOS
-recipe_version: 0.3
+recipe_version: 0.4
 
 goal:
   user_request: Macで箱庭ドローンを1台飛ばし、Python APIで動かしてThree.jsで可視化したい
@@ -436,10 +436,10 @@ demo:
     - order: 5
       component: hakoniwa-business-pack
       action: Generate Recipe-specific PDU, Fleet, Bridge, Viewer, Launcher, and Mission configuration.
-      command: python3.12 tools/drone_threejs.py configure
+      command: python3.12 tools/recipe/drone_threejs.py configure
       evidence:
         - repository: hakoniwalab/hakoniwa-business-pack
-          path: tools/drone_threejs.py
+          path: tools/recipe/drone_threejs.py
           revision: issue-56-foundation-mvp
       notes:
         - This step does not modify hakoniwa-drone-core.
@@ -447,10 +447,10 @@ demo:
     - order: 6
       component: hakoniwa-business-pack
       action: Run Recipe runtime preflight without rebuilding Foundation.
-      command: python3.12 tools/drone_threejs.py doctor
+      command: python3.12 tools/recipe/drone_threejs.py doctor
       evidence:
         - repository: hakoniwalab/hakoniwa-business-pack
-          path: tools/drone_threejs.py
+          path: tools/recipe/drone_threejs.py
           revision: issue-56-foundation-mvp
     - order: 7
       component: hakoniwa-drone-core
@@ -464,7 +464,7 @@ demo:
         - To finish the Demo, press Ctrl+C in this launcher terminal. The launcher terminates all child assets; do not use hako-cmd stop as the launcher shutdown operation.
       evidence:
         - repository: hakoniwalab/hakoniwa-business-pack
-          path: tools/drone_threejs.py
+          path: tools/recipe/drone_threejs.py
           revision: issue-56-foundation-mvp
     - order: 8
       component: hakoniwa-threejs-drone

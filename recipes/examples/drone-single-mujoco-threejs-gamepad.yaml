@@ -1,6 +1,6 @@
 id: drone-single-mujoco-threejs-gamepad
 title: Human-operated Hakoniwa Drone MuJoCo and Three.js Exhibition Demo
-recipe_version: 0.5
+recipe_version: 0.6
 
 goal:
   user_request: 展示会場で参加者がPS5コントローラを使って箱庭ドローンを飛ばし、MuJoCoとブラウザの両方で見たい
@@ -80,7 +80,7 @@ validation:
         - source: user-runtime-confirmation
           date: 2026-08-04
       notes:
-        - python tools/drone_gamepad_exhibition.py start opened the MuJoCo viewer and served a working Three.js browser view.
+        - python tools/recipe/drone_gamepad_exhibition.py start opened the MuJoCo viewer and served a working Three.js browser view.
     - id: browser_disturbance_end_to_end
       status: not_tested
       evidence: []
@@ -168,7 +168,7 @@ execution_environment:
   notes:
     - TCP ports 8000 and 8765 must be available.
     - The operator uses one Python command surface on every supported OS.
-    - OS-specific executable discovery is isolated under tools/platforms/drone_gamepad.
+    - OS-specific executable discovery is isolated under tools/recipe/platforms/drone_gamepad.
     - The Foundation Python executable path must be preserved without resolving its venv symlink to a system interpreter.
     - The generated workspace root index.html is the human-facing entry point for this Recipe result.
     - Recipe-specific Python packages are installed from recipes/requirements/drone-single-mujoco-threejs-gamepad.txt by configure.
@@ -466,13 +466,13 @@ demo:
   prerequisites:
     - command: python tools/foundation.py doctor --recipe recipes/examples/drone-single-mujoco-threejs-gamepad.yaml
       expected: Foundation SATISFIED, including the installed Bridge Core web_bridge_disturb configuration.
-    - command: python tools/drone_gamepad_exhibition.py configure
+    - command: python tools/recipe/drone_gamepad_exhibition.py configure
       expected: Recipe workspace, index.html portal, and common Launcher JSON generated.
-    - command: python tools/drone_gamepad_exhibition.py doctor
+    - command: python tools/recipe/drone_gamepad_exhibition.py doctor
       expected: Foundation venv imports, gamepad presence, runtime binaries, Bridge Core disturbance config, ports, generated portal, and generated Launcher are ready.
   steps:
     - id: configure
-      command: python tools/drone_gamepad_exhibition.py configure
+      command: python tools/recipe/drone_gamepad_exhibition.py configure
       status: verified
       expected:
         - Pinned Recipe-specific Python requirements are installed into work/foundation/install/python.
@@ -487,21 +487,21 @@ demo:
         - The operator can recover the topology, exact commands, environment, resource paths, and Agency Boundary from one page.
         - The page offers command copy controls but does not execute local commands.
     - id: doctor
-      command: python tools/drone_gamepad_exhibition.py doctor
+      command: python tools/recipe/drone_gamepad_exhibition.py doctor
       status: verified
       expected:
         - hakopy, hakoniwa_pdu, and the Launcher import from the same Foundation venv.
         - The PS5 controller is visible through pygame.
         - The installed Bridge Core disturbance bridge and endpoint definitions are present.
     - id: start
-      command: python tools/drone_gamepad_exhibition.py start
+      command: python tools/recipe/drone_gamepad_exhibition.py start
       status: verified
       expected:
         - Background Launcher session starts.
         - MuJoCo viewer opens.
         - RC controller and HTTP server use the same Foundation Python interpreter.
     - id: open_viewer
-      command: python tools/drone_gamepad_exhibition.py open-viewer
+      command: python tools/recipe/drone_gamepad_exhibition.py open-viewer
       status: not_tested
       expected:
         - Browser opens viewer-config-disturb.json on port 8000 and connects to WebBridge port 8765.
@@ -512,18 +512,18 @@ demo:
         - Drone responds to the gamepad in MuJoCo and Three.js.
         - Wind and rotor-fault controls alter the simulated Drone through Drone/disturb.
     - id: reset
-      command: python tools/drone_gamepad_exhibition.py reset
+      command: python tools/recipe/drone_gamepad_exhibition.py reset
       status: not_tested
       expected:
         - Browser disturbance values are returned to neutral by the operator.
         - hako-cmd stop, reset, and start complete without terminating the Launcher session.
     - id: status
-      command: python tools/drone_gamepad_exhibition.py status
+      command: python tools/recipe/drone_gamepad_exhibition.py status
       status: verified
       expected:
         - Launcher control reports the owned session state.
     - id: stop
-      command: python tools/drone_gamepad_exhibition.py stop
+      command: python tools/recipe/drone_gamepad_exhibition.py stop
       status: verified
       expected:
         - hako_launcher_ctl terminate invokes LauncherService.terminate.
@@ -532,7 +532,7 @@ demo:
     provider: hakoniwa-pdu-python
     mode: background
     target: work/recipes/drone-single-mujoco-threejs-gamepad/runtime/launcher-session.json
-    trigger: python tools/drone_gamepad_exhibition.py stop
+    trigger: python tools/recipe/drone_gamepad_exhibition.py stop
     expected_behavior:
       - hako_launcher_ctl terminate invokes the Launcher normal termination path.
       - Launcher reports state TERMINATED and terminates only the assets it owns.
@@ -599,7 +599,7 @@ source_artifacts:
     path: tools/recipe_portal.py
     relation: reusable-workspace-portal-renderer
   - repository: hakoniwalab/hakoniwa-business-pack
-    path: tools/drone_gamepad_exhibition.py
+    path: tools/recipe/drone_gamepad_exhibition.py
     relation: generator-and-operator-interface
   - repository: hakoniwalab/hakoniwa-business-pack
     path: recipes/requirements/drone-single-mujoco-threejs-gamepad.txt

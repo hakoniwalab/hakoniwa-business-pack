@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Contract tests for the Shadow Hand Foxglove Recipe operator."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -124,13 +126,13 @@ class ShadowHandFoxgloveTest(unittest.TestCase):
                 "stop",
             ):
                 self.assertIn(
-                    f"python tools/shadow_hand_foxglove.py {action}", content
+                    f"python tools/recipe/shadow_hand_foxglove.py {action}", content
                 )
             self.assertIn(recipe.FOXGLOVE_WS_URL, content)
             self.assertIn(recipe.URDF_URL, content)
             self.assertIn("python tools/workspace.py enter", content)
             self.assertLess(
-                content.index("python tools/shadow_hand_foxglove.py stop"),
+                content.index("python tools/recipe/shadow_hand_foxglove.py stop"),
                 content.index('data-copy="exit"'),
             )
 

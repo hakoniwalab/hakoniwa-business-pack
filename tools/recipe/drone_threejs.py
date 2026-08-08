@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 
+TOOLS_DIR = Path(__file__).resolve().parents[1]
 RECIPE_ID = "drone-single-mujoco-threejs-mac"
 VIEWER_URL = (
     "http://127.0.0.1:8000/index.html"
@@ -24,7 +25,7 @@ class RecipeError(RuntimeError):
 
 
 def load_foundation_module():
-    script = Path(__file__).with_name("foundation.py")
+    script = TOOLS_DIR / "foundation.py"
     spec = importlib.util.spec_from_file_location(
         "business_pack_foundation_runtime", script
     )
@@ -37,7 +38,7 @@ def load_foundation_module():
 
 
 def root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
 
 
 def default_source(name: str) -> Path:

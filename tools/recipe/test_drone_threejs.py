@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Contract tests for the Drone Three.js Recipe operator."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -16,7 +18,7 @@ recipe = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = recipe
 SPEC.loader.exec_module(recipe)
 
-FOUNDATION_SCRIPT = Path(__file__).with_name("foundation.py")
+FOUNDATION_SCRIPT = Path(__file__).resolve().parents[1] / "foundation.py"
 FOUNDATION_SPEC = importlib.util.spec_from_file_location(
     "drone_threejs_foundation_test", FOUNDATION_SCRIPT
 )

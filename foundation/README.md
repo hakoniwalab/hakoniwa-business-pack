@@ -150,8 +150,8 @@ python3.12 tools/foundation.py build \
 Foundation構築後、Recipe固有configとlauncherを生成します。
 
 ```bash
-python3.12 tools/drone_threejs.py configure
-python3.12 tools/drone_threejs.py doctor
+python3.12 tools/recipe/drone_threejs.py configure
+python3.12 tools/recipe/drone_threejs.py doctor
 ```
 
 生成物はすべて次に配置されます。

@@ -34,7 +34,7 @@ observation:
 sources:
   repositories:
     - repository: hakoniwalab/hakoniwa-business-pack
-      path: tools/drone_shibuya_gamepad.py
+      path: tools/recipe/drone_shibuya_gamepad.py
       revision: working-tree-after-ace8ef6
     - repository: hakoniwalab/hakoniwa-business-pack
       path: recipes/examples/drone-single-mujoco-shibuya-map-gamepad.yaml
@@ -98,7 +98,7 @@ promotion_targets:
         - Validate the structure of declared demo.readiness and operator handoff fields.
     - repository: hakoniwalab/hakoniwa-business-pack
       kind: test
-      path: tools/test_drone_shibuya_gamepad.py
+      path: tools/recipe/test_drone_shibuya_gamepad.py
       mode: detect-only
       notes:
         - Verify all four Shibuya Demo readiness signals and background handoff output.
@@ -123,7 +123,7 @@ resolution:
     - recipes/examples/drone-single-mujoco-shibuya-map-gamepad.yaml
   executable_guardrails:
     - recipes/tools/validate_recipes.rb
-    - tools/test_drone_shibuya_gamepad.py
+    - tools/recipe/test_drone_shibuya_gamepad.py
   notes:
     - The Recipe start path now fails unless the selected Demo readiness checks pass and prints an explicit background operator handoff on success.
     - hakoniwa-pdu-python issue 49 tracks replacing Recipe-specific fixed ordering delays with a first-class Launcher asset readiness contract.

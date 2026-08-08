@@ -13,12 +13,12 @@ summary: >
   whole -- nothing here covers the shared Foundation venv, the primer's
   same-interpreter ABI rule, or component build orchestration.
   Within that scope, the Local Foundation layer added in hakoniwa-business-pack PR #57
-  (foundation/, tools/foundation.py, tools/drone_threejs.py) runs correctly: `paths`
+  (foundation/, tools/foundation.py, tools/recipe/drone_threejs.py) runs correctly: `paths`
   resolves Windows paths, and `doctor` evaluated against a real Component Receipt written
   by hakoniwa-core-pro's `tools/hako.py install` reports SATISFIED for a satisfied
   requirement and INCOMPATIBLE with a correct reason and exit code 1 for an unsatisfiable
   one. The main Foundation test suite, however, fails on Windows -- 9 of 21 tests in
-  tools/test_foundation.py. A separate assertion in tools/test_drone_threejs.py also fails
+  tools/test_foundation.py. A separate assertion in tools/recipe/test_drone_threejs.py also fails
   on Windows because it compares a raw path against JSON-escaped output; that Recipe is
   macOS-oriented, so this is tracked as assertion portability rather than evidence that the
   Recipe itself must execute on Windows. Every Foundation failure examined is in TEST code,
@@ -50,7 +50,7 @@ observation:
       limits -- i.e. the Receipt half of the Foundation contract is already being produced
       correctly by a component repository on Windows."
     - "Test suite result: tools/test_foundation.py -> Ran 21 tests, FAILED (failures=9).
-      tools/test_drone_threejs.py -> Ran 3 tests, FAILED (failures=1). Failing names:
+      tools/recipe/test_drone_threejs.py -> Ran 3 tests, FAILED (failures=1). Failing names:
       test_satisfied, test_plan_has_no_actions_when_foundation_is_satisfied,
       test_incompatible_reports_capability_limit_platform_and_artifact,
       test_dependency_receipt_mismatch_is_incompatible,
@@ -99,7 +99,7 @@ sources:
       path: tools/test_foundation.py
       revision: ed04582
     - repository: hakoniwalab/hakoniwa-business-pack
-      path: tools/test_drone_threejs.py
+      path: tools/recipe/test_drone_threejs.py
       revision: ed04582
     - repository: hakoniwalab/hakoniwa-core-pro
       path: tools/hako.py
@@ -111,7 +111,7 @@ sources:
         (14 paths, nothing created); `foundation.py doctor` against a real Core receipt
         (SATISFIED, exit 0); the same with asset_num.min raised to 32 (INCOMPATIBLE with
         the correct reason line, exit 1); `python tools/test_foundation.py` (21 tests, 9
-        failures); `python tools/test_drone_threejs.py` (3 tests, 1 failure); and a direct
+        failures); `python tools/recipe/test_drone_threejs.py` (3 tests, 1 failure); and a direct
         probe calling foundation.load_receipt() on an unescaped versus an escaped
         double-quoted Windows path scalar (JSONDecodeError versus correct value), which
         isolates the fixture as the cause rather than the parser.

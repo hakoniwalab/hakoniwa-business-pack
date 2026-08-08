@@ -15,7 +15,7 @@ import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
 
-TOOLS_DIR = Path(__file__).absolute().parent
+TOOLS_DIR = Path(__file__).absolute().parents[1]
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
@@ -47,7 +47,7 @@ class RuntimePaths:
 
 
 def root() -> Path:
-    return Path(__file__).absolute().parents[1]
+    return Path(__file__).absolute().parents[2]
 
 
 def default_source(name: str) -> Path:
@@ -59,7 +59,7 @@ def recipe_file() -> Path:
 
 
 def load_foundation_module():
-    script = Path(__file__).with_name("foundation.py")
+    script = TOOLS_DIR / "foundation.py"
     spec = importlib.util.spec_from_file_location(
         "business_pack_foundation_shadow_hand", script
     )
@@ -385,7 +385,7 @@ def _run(command: list[str], env: dict[str, str] | None = None) -> int:
 
 
 def _display(action: str) -> str:
-    return f"python tools/shadow_hand_foxglove.py {action}"
+    return f"python tools/recipe/shadow_hand_foxglove.py {action}"
 
 
 def write_portal(paths, runtime: RuntimePaths, launcher: Path) -> Path:

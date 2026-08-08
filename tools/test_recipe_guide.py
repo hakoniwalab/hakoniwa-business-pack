@@ -29,6 +29,25 @@ class RecipeGuideTest(unittest.TestCase):
                 self.assertEqual(data["id"], path.stem)
                 self.assertIn("demo", data)
 
+    def test_top_level_tools_are_repository_wide_contracts(self) -> None:
+        expected = {
+            "catalog_doctor.rb",
+            "docker-mac.bash",
+            "doctor-mac.bash",
+            "doctor.bash",
+            "foundation.py",
+            "recipe.py",
+            "recipe_portal.py",
+            "test_foundation.py",
+            "test_recipe_guide.py",
+            "test_workspace.py",
+            "test_workspace_enter.py",
+            "workspace.py",
+        }
+        tools_dir = self.business_pack_root / "tools"
+        actual = {path.name for path in tools_dir.iterdir() if path.is_file()}
+        self.assertEqual(actual, expected)
+
     def test_guide_generates_workspace_index_from_recipe_yaml(self) -> None:
         recipe_path = (
             self.recipe_dir / "drone-single-mujoco-shibuya-map-gamepad.yaml"
@@ -65,10 +84,10 @@ class RecipeGuideTest(unittest.TestCase):
             self.assertNotIn("python3.12 tools/foundation.py", content)
             self.assertLess(
                 content.index("python tools/workspace.py enter"),
-                content.index("python tools/drone_shibuya_gamepad.py configure"),
+                content.index("python tools/recipe/drone_shibuya_gamepad.py configure"),
             )
             self.assertLess(
-                content.index("python tools/drone_shibuya_gamepad.py stop"),
+                content.index("python tools/recipe/drone_shibuya_gamepad.py stop"),
                 content.index("data-copy=\"exit\""),
             )
 
@@ -83,7 +102,7 @@ class RecipeGuideTest(unittest.TestCase):
         values = [item.command for item in commands]
         self.assertEqual(len(values), len(set(values)))
         self.assertEqual(
-            values.count("python tools/drone_shibuya_gamepad.py configure"),
+            values.count("python tools/recipe/drone_shibuya_gamepad.py configure"),
             1,
         )
         self.assertTrue(any("foundation.py doctor" in value for value in values))

@@ -1,6 +1,6 @@
 id: shadow-hand-hakoniwa-to-foxglove
 title: Shadow Hand Hakoniwa JointState to Foxglove 3D
-recipe_version: 0.5
+recipe_version: 0.6
 
 goal:
   user_request: 箱庭で動かしている Shadow Hand の関節状態を、Mac 上の Foxglove でリアルタイムに観測・3D 可視化したい。
@@ -183,7 +183,7 @@ validation:
       status: verified
       evidence:
         - repository: hakoniwalab/hakoniwa-business-pack
-          path: tools/shadow_hand_foxglove.py
+          path: tools/recipe/shadow_hand_foxglove.py
           revision: local-working-tree-2026-08-04
         - source: local-macos-foundation-session
           date: "2026-08-04"
@@ -596,34 +596,34 @@ demo:
   prerequisites:
     - command: python tools/foundation.py doctor --recipe recipes/examples/shadow-hand-hakoniwa-to-foxglove.yaml
       expected: Foundation SATISFIED
-    - command: python tools/shadow_hand_foxglove.py configure
+    - command: python tools/recipe/shadow_hand_foxglove.py configure
       expected: Recipe workspace, copied runtime inputs, portal, and Launcher generated.
-    - command: python tools/shadow_hand_foxglove.py doctor
+    - command: python tools/recipe/shadow_hand_foxglove.py doctor
       expected: Foundation, local Hand/CDR artifacts, schema, URDF, ports, and generated files are ready.
   steps:
     - id: configure
-      command: python tools/shadow_hand_foxglove.py configure
+      command: python tools/recipe/shadow_hand_foxglove.py configure
       status: verified
       expected:
         - Inputs are copied from component-owned work areas into the Recipe workspace.
         - The schema path is rewritten to the Recipe-owned staged bundle.
         - index.html and config/launcher.json are generated.
     - id: doctor
-      command: python tools/shadow_hand_foxglove.py doctor
+      command: python tools/recipe/shadow_hand_foxglove.py doctor
       status: verified
       expected:
         - Foundation is SATISFIED and its Python imports hakopy, hakoniwa_pdu, and hakoniwa_pdu_endpoint.
         - Ports 8766 and 8767 are available.
         - The local MuJoCo Hand and CDR publisher artifacts exist.
     - id: start
-      command: python tools/shadow_hand_foxglove.py start
+      command: python tools/recipe/shadow_hand_foxglove.py start
       status: verified
       expected:
         - The background Launcher session becomes RUNNING.
         - MuJoCo opens and all five managed assets remain stable.
         - The command returns while the Demo continues running.
     - id: open_foxglove
-      command: python tools/shadow_hand_foxglove.py open-viewer
+      command: python tools/recipe/shadow_hand_foxglove.py open-viewer
       status: verified
       evidence:
         - source: user-runtime-confirmation
@@ -633,12 +633,12 @@ demo:
         - Human connects ws://127.0.0.1:8766.
         - Human loads http://127.0.0.1:8767/shadow_hand_right.urdf, selects Joint states mode and /hakoniwa/ShadowHandAsset/joint_states, and enables Ignore COLLADA <up_axis>.
     - id: status
-      command: python tools/shadow_hand_foxglove.py status
+      command: python tools/recipe/shadow_hand_foxglove.py status
       status: verified
       expected:
         - Launcher control reports the owned session state.
     - id: stop
-      command: python tools/shadow_hand_foxglove.py stop
+      command: python tools/recipe/shadow_hand_foxglove.py stop
       status: verified
       expected:
         - LauncherService.terminate completes and the persisted session reports TERMINATED.
@@ -665,7 +665,7 @@ demo:
     provider: hakoniwa-pdu-python
     mode: background
     target: work/recipes/shadow-hand-hakoniwa-to-foxglove/runtime/launcher-session.json
-    trigger: python tools/shadow_hand_foxglove.py stop
+    trigger: python tools/recipe/shadow_hand_foxglove.py stop
     expected_behavior:
       - hako_launcher_ctl terminate invokes the Launcher normal termination path.
       - The launcher terminates only the assets it manages.
@@ -710,7 +710,7 @@ source_catalogs:
 
 source_artifacts:
   - repository: hakoniwalab/hakoniwa-business-pack
-    path: tools/shadow_hand_foxglove.py
+    path: tools/recipe/shadow_hand_foxglove.py
     revision: main
     description: Foundation-aware workspace generator and OS-independent operator lifecycle.
   - repository: hakoniwalab/hakoniwa-business-pack

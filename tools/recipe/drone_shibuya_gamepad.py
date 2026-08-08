@@ -16,9 +16,12 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
-TOOLS_DIR = Path(__file__).absolute().parent
+RECIPE_TOOLS_DIR = Path(__file__).absolute().parent
+TOOLS_DIR = RECIPE_TOOLS_DIR.parent
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
+if str(RECIPE_TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(RECIPE_TOOLS_DIR))
 
 import drone_gamepad_exhibition as gamepad
 from recipe_portal import (
@@ -77,7 +80,7 @@ RuntimePaths = gamepad.RuntimePaths
 
 
 def root() -> Path:
-    return Path(__file__).absolute().parents[1]
+    return Path(__file__).absolute().parents[2]
 
 
 def default_source(name: str) -> Path:
@@ -639,7 +642,7 @@ def print_background_handoff(paths, runtime: RuntimePaths) -> None:
 
 
 def _display_command(_runtime: RuntimePaths, action: str) -> str:
-    return f"python tools/drone_shibuya_gamepad.py {action}"
+    return f"python tools/recipe/drone_shibuya_gamepad.py {action}"
 
 
 def write_portal(paths, runtime: RuntimePaths, launcher: Path) -> Path:

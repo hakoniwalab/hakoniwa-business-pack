@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Contract tests for the TurtleBot3 Godot Recipe operator."""
+
 from __future__ import annotations
 
 import importlib.util

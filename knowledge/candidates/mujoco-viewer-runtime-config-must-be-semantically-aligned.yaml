@@ -40,10 +40,10 @@ sources:
       path: drone_api/rc/rc-custom.py
       revision: afb9d4f468c4d03188c05a949b73c741534bfd10
     - repository: hakoniwalab/hakoniwa-business-pack
-      path: tools/drone_gamepad_exhibition.py
+      path: tools/recipe/drone_gamepad_exhibition.py
       revision: working-tree-2026-07-31
     - repository: hakoniwalab/hakoniwa-business-pack
-      path: tools/test_drone_gamepad_exhibition.py
+      path: tools/recipe/test_drone_gamepad_exhibition.py
       revision: working-tree-2026-07-31
   runtime_evidence:
     - description: >-
@@ -89,7 +89,7 @@ promotion_targets:
   executable_guardrails:
     - repository: hakoniwalab/hakoniwa-business-pack
       kind: test
-      path: tools/test_drone_gamepad_exhibition.py
+      path: tools/recipe/test_drone_gamepad_exhibition.py
       mode: detect-only
       notes:
         - The generated topology test fixes the matching physics, PDU, controller, and visual-state configuration as one contract.
@@ -112,6 +112,6 @@ resolution:
     - docs/hakoniwa-runtime-primer.md
     - recipes/examples/drone-single-mujoco-threejs-gamepad.yaml
   executable_guardrails:
-    - tools/test_drone_gamepad_exhibition.py
+    - tools/recipe/test_drone_gamepad_exhibition.py
   notes:
     - The candidate preserves the original crash signature and the semantic reason, while the promoted documents state the reusable runtime rule.

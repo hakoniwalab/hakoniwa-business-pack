@@ -1,6 +1,6 @@
 id: unitree-go1-menagerie-mjcf-to-hakoniwa
 title: Unitree Go1 Menagerie MJCF to Hakoniwa MuJoCo Recipe
-recipe_version: 0.2
+recipe_version: 0.3
 
 goal:
   user_request: MuJoCo Menagerie の Unitree Go1 四足歩行ロボット MJCF サンプルを起点に、箱庭 MuJoCo runtime へ接続するレシピを作りたい。
@@ -660,30 +660,30 @@ demo:
   prerequisites:
     - command: python tools/foundation.py doctor --recipe recipes/examples/unitree-go1-menagerie-mjcf-to-hakoniwa.yaml
       expected: Foundation SATISFIED
-    - command: python tools/unitree_go1_demo.py configure
+    - command: python tools/recipe/unitree_go1_demo.py configure
       expected: Recipe workspace, staged MJCF/config, portal, build manifest, and three Launchers generated.
-    - command: python tools/unitree_go1_demo.py build
+    - command: python tools/recipe/unitree_go1_demo.py build
       expected: Go1 binaries built in the Recipe-owned build directory against the selected Foundation.
-    - command: python tools/unitree_go1_demo.py doctor
+    - command: python tools/recipe/unitree_go1_demo.py doctor
       expected: Foundation runtime, model/LICENSE, Python imports, configs, and binaries are ready.
   steps:
     - id: configure
-      command: python tools/unitree_go1_demo.py configure
+      command: python tools/recipe/unitree_go1_demo.py configure
       status: verified
     - id: build
-      command: python tools/unitree_go1_demo.py build
+      command: python tools/recipe/unitree_go1_demo.py build
       status: verified
     - id: doctor
-      command: python tools/unitree_go1_demo.py doctor
+      command: python tools/recipe/unitree_go1_demo.py doctor
       status: verified
     - id: step1_joint_io
-      command: python tools/unitree_go1_demo.py step1
+      command: python tools/recipe/unitree_go1_demo.py step1
       status: verified
       expected:
         - All 12 actuator names are resolved in the stable command order.
         - Home and bounded perturbation remain finite and the output ends with check ok.
     - id: start_pose_bounce
-      command: python tools/unitree_go1_demo.py start
+      command: python tools/recipe/unitree_go1_demo.py start
       status: verified
       expected:
         - Business Pack starts the Go1 plant and Pose Bounce sender in one background Launcher session.
@@ -692,16 +692,16 @@ demo:
       evidence:
         - On 2026-08-04, Launcher reached RUNNING, the plant and sender entered their running states, and the user visually confirmed jumping motion in MuJoCo.
     - id: start_perturbation
-      command: python tools/unitree_go1_demo.py start --profile perturbation
+      command: python tools/recipe/unitree_go1_demo.py start --profile perturbation
       status: not_tested
     - id: start_creep
-      command: python tools/unitree_go1_demo.py start --profile creep
+      command: python tools/recipe/unitree_go1_demo.py start --profile creep
       status: not_tested
     - id: status
-      command: python tools/unitree_go1_demo.py status
+      command: python tools/recipe/unitree_go1_demo.py status
       status: verified
     - id: stop
-      command: python tools/unitree_go1_demo.py stop
+      command: python tools/recipe/unitree_go1_demo.py stop
       status: verified
   observability:
     success_signals:
@@ -747,12 +747,12 @@ demo:
     provider: hakoniwa-pdu-python
     mode: background
     target: work/recipes/unitree-go1-menagerie-mjcf-to-hakoniwa/runtime/launcher-session.json
-    trigger: python tools/unitree_go1_demo.py stop
+    trigger: python tools/recipe/unitree_go1_demo.py stop
     expected_behavior:
       - LauncherService.terminate stops only the plant and sender it owns.
       - The session file remains inspectable with state TERMINATED.
     verification_checks:
-      - python tools/unitree_go1_demo.py status reports TERMINATED.
+      - python tools/recipe/unitree_go1_demo.py status reports TERMINATED.
       - No Recipe-owned Go1 plant or sender remains after normal termination.
     cautions:
       - Do not use kill -9, broad process-name cleanup, or hako-cmd stop as process termination.

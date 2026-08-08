@@ -15,9 +15,12 @@ import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
 
-TOOLS_DIR = Path(__file__).absolute().parent
+RECIPE_TOOLS_DIR = Path(__file__).absolute().parent
+TOOLS_DIR = RECIPE_TOOLS_DIR.parent
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
+if str(RECIPE_TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(RECIPE_TOOLS_DIR))
 
 from platforms.drone_gamepad import current_adapter
 from recipe_portal import (
@@ -29,7 +32,7 @@ from recipe_portal import (
 
 RECIPE_ID = "drone-single-mujoco-threejs-gamepad"
 RUNTIME_REQUIREMENTS = (
-    Path(__file__).absolute().parents[1]
+    Path(__file__).absolute().parents[2]
     / "recipes"
     / "requirements"
     / f"{RECIPE_ID}.txt"
@@ -65,7 +68,7 @@ class RuntimePaths:
 
 
 def load_foundation_module():
-    script = Path(__file__).with_name("foundation.py")
+    script = TOOLS_DIR / "foundation.py"
     spec = importlib.util.spec_from_file_location(
         "business_pack_foundation_gamepad_runtime", script
     )
@@ -78,7 +81,7 @@ def load_foundation_module():
 
 
 def root() -> Path:
-    return Path(__file__).absolute().parents[1]
+    return Path(__file__).absolute().parents[2]
 
 
 def default_source(name: str) -> Path:
@@ -496,7 +499,7 @@ def _run(command: list[str], env: dict[str, str] | None = None) -> int:
 
 
 def _display_command(_runtime: RuntimePaths, action: str) -> str:
-    return f"python tools/drone_gamepad_exhibition.py {action}"
+    return f"python tools/recipe/drone_gamepad_exhibition.py {action}"
 
 
 def write_portal(paths, runtime: RuntimePaths, launcher: Path) -> Path:

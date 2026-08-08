@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-TOOLS_DIR = Path(__file__).absolute().parent
+TOOLS_DIR = Path(__file__).absolute().parents[1]
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
@@ -23,7 +23,7 @@ from recipe_portal import PortalCommand, PortalEnvironment, PortalLink, write_re
 
 RECIPE_ID = "mujoco-turtlebot3-godot"
 RUNTIME_REQUIREMENTS = (
-    Path(__file__).absolute().parents[1]
+    Path(__file__).absolute().parents[2]
     / "recipes"
     / "requirements"
     / f"{RECIPE_ID}.txt"
@@ -51,7 +51,7 @@ class RuntimePaths:
 
 
 def root() -> Path:
-    return Path(__file__).absolute().parents[1]
+    return Path(__file__).absolute().parents[2]
 
 
 def default_source(name: str) -> Path:
@@ -63,7 +63,7 @@ def recipe_file() -> Path:
 
 
 def load_foundation_module():
-    script = Path(__file__).with_name("foundation.py")
+    script = TOOLS_DIR / "foundation.py"
     spec = importlib.util.spec_from_file_location("business_pack_foundation_tb3_godot", script)
     if spec is None or spec.loader is None:
         raise RecipeError(f"cannot load Foundation helper: {script}")
@@ -371,7 +371,7 @@ def write_launcher(paths, runtime: RuntimePaths, mujoco_root: Path, profile: str
 
 
 def display(action: str) -> str:
-    return f"python tools/turtlebot3_godot_exhibition.py {action}"
+    return f"python tools/recipe/turtlebot3_godot_exhibition.py {action}"
 
 
 def write_portal(paths, runtime: RuntimePaths) -> Path:

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Contract tests for the Unitree Go1 Recipe operator."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -114,8 +116,8 @@ class UnitreeGo1DemoTest(unittest.TestCase):
             content = portal.read_text(encoding="utf-8")
             self.assertIn("Pose Bounce", content)
             self.assertIn("verified jump", content)
-            self.assertIn("python tools/unitree_go1_demo.py start", content)
-            self.assertIn("python tools/unitree_go1_demo.py stop", content)
+            self.assertIn("python tools/recipe/unitree_go1_demo.py start", content)
+            self.assertIn("python tools/recipe/unitree_go1_demo.py stop", content)
             self.assertIn("python tools/workspace.py enter", content)
 
 

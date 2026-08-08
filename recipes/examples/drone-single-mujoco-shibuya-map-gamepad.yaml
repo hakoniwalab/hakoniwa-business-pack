@@ -1,6 +1,6 @@
 id: drone-single-mujoco-shibuya-map-gamepad
 title: Human-operated Hakoniwa Drone Shibuya MuJoCo and Map Viewer Demo
-recipe_version: 0.5
+recipe_version: 0.6
 
 goal:
   user_request: PS5コントローラで渋谷のMuJoCo環境を飛行し、PLATEAU 3DビューとLeaflet地図で同時に確認したい
@@ -59,7 +59,7 @@ validation:
     - id: generated_runtime
       status: verified
       evidence:
-        - source: tools/test_drone_shibuya_gamepad.py
+        - source: tools/recipe/test_drone_shibuya_gamepad.py
           date: 2026-08-05
         - source: work/recipes/drone-single-mujoco-shibuya-map-gamepad/validation/materialization.json
           date: 2026-07-31
@@ -471,7 +471,7 @@ demo:
   prerequisites:
     - command: python tools/foundation.py doctor --recipe recipes/examples/drone-single-mujoco-shibuya-map-gamepad.yaml
       expected: Foundation SATISFIED
-    - command: python tools/drone_shibuya_gamepad.py configure
+    - command: python tools/recipe/drone_shibuya_gamepad.py configure
       expected: MuJoCo assets, Map Viewer bundle, portal, validation record, and Launcher generated.
   readiness:
     lifecycle_state:
@@ -506,14 +506,14 @@ demo:
       logs: work/recipes/drone-single-mujoco-shibuya-map-gamepad/logs
   steps:
     - id: configure
-      command: python tools/drone_shibuya_gamepad.py configure
+      command: python tools/recipe/drone_shibuya_gamepad.py configure
       status: not_tested
       expected:
         - Source assets are copied and hashes recorded.
         - Only the allowlisted JSON paths are changed.
         - The PLATEAU Map Viewer origin remains independent from Drone simulation.location.
     - id: start
-      command: python tools/drone_shibuya_gamepad.py start
+      command: python tools/recipe/drone_shibuya_gamepad.py start
       status: not_tested
       expected:
         - All runtime assets start in one owned Launcher session.
@@ -521,7 +521,7 @@ demo:
         - The command then returns while the Launcher session continues in the background.
         - The output tells the operator how to open the viewer, inspect status, and stop the session.
     - id: open_viewer
-      command: python tools/drone_shibuya_gamepad.py open-viewer
+      command: python tools/recipe/drone_shibuya_gamepad.py open-viewer
       status: partially_verified
       expected:
         - The browser displays Leaflet and the Shibuya Three.js scene.
@@ -533,7 +533,7 @@ demo:
         - MuJoCo, Three.js, and Leaflet show the same drone motion.
         - Collision with the Shibuya MuJoCo geometry is observable.
     - id: stop
-      command: python tools/drone_shibuya_gamepad.py stop
+      command: python tools/recipe/drone_shibuya_gamepad.py stop
       status: not_tested
       expected:
         - Launcher terminates all owned processes cleanly.
@@ -542,7 +542,7 @@ demo:
     provider: hakoniwa-pdu-python
     mode: background
     target: work/recipes/drone-single-mujoco-shibuya-map-gamepad/runtime/launcher-session.json
-    trigger: python tools/drone_shibuya_gamepad.py stop
+    trigger: python tools/recipe/drone_shibuya_gamepad.py stop
     expected_behavior:
       - Launcher invokes its normal termination path.
       - Only assets owned by this Recipe session are terminated.
@@ -608,11 +608,11 @@ source_artifacts:
     path: recipes/examples/drone-single-mujoco-threejs-gamepad.yaml
     relation: parent-gamepad-runtime-contract
   - repository: hakoniwalab/hakoniwa-business-pack
-    path: tools/drone_gamepad_exhibition.py
+    path: tools/recipe/drone_gamepad_exhibition.py
     relation: parent-generator-and-operator-interface
   - repository: hakoniwalab/hakoniwa-business-pack
-    path: tools/drone_shibuya_gamepad.py
+    path: tools/recipe/drone_shibuya_gamepad.py
     relation: implemented-materializer-and-operator-interface
   - repository: hakoniwalab/hakoniwa-business-pack
-    path: tools/test_drone_shibuya_gamepad.py
+    path: tools/recipe/test_drone_shibuya_gamepad.py
     relation: generated-runtime-contract-tests

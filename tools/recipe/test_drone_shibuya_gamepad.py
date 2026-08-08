@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Contract tests for the Shibuya Drone Recipe operator."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -311,11 +313,11 @@ class DroneShibuyaGamepadTest(unittest.TestCase):
             self.assertIn("Leaflet + Three.js", portal)
             self.assertIn(recipe.VIEWER_URL.replace("&", "&amp;"), portal)
             self.assertIn("python tools/workspace.py enter", portal)
-            self.assertIn("python tools/drone_shibuya_gamepad.py start", portal)
-            self.assertIn("python tools/drone_shibuya_gamepad.py stop", portal)
+            self.assertIn("python tools/recipe/drone_shibuya_gamepad.py start", portal)
+            self.assertIn("python tools/recipe/drone_shibuya_gamepad.py stop", portal)
             self.assertIn("data-copy=\"exit\"", portal)
             self.assertLess(
-                portal.index("python tools/drone_shibuya_gamepad.py stop"),
+                portal.index("python tools/recipe/drone_shibuya_gamepad.py stop"),
                 portal.index("data-copy=\"exit\""),
             )
 

@@ -1,3 +1,5 @@
+"""Windows runtime paths for the Drone gamepad Recipe."""
+
 from __future__ import annotations
 
 from pathlib import Path

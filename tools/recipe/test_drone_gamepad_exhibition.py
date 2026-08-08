@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Contract tests for the Drone gamepad Recipe operator."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -159,7 +161,7 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
             for action in ("doctor", "start", "open-viewer", "status", "reset", "stop"):
                 self.assertIn(action, content)
                 self.assertIn(
-                    f"python tools/drone_gamepad_exhibition.py {action}",
+                    f"python tools/recipe/drone_gamepad_exhibition.py {action}",
                     content,
                 )
             self.assertIn("python tools/workspace.py enter", content)
@@ -169,7 +171,7 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
                 content,
             )
             self.assertLess(
-                content.index("python tools/drone_gamepad_exhibition.py stop"),
+                content.index("python tools/recipe/drone_gamepad_exhibition.py stop"),
                 content.index("data-copy=\"exit\""),
             )
             self.assertIn("data-copy=", content)

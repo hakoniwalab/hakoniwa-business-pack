@@ -1,6 +1,6 @@
 id: mujoco-turtlebot3-godot
 title: TurtleBot3 MuJoCo + Godot Gamepad Demo
-recipe_version: 0.2
+recipe_version: 0.3
 
 goal:
   user_request: Drive a TurtleBot3 in MuJoCo with a gamepad and show the same motion in Godot without ROS.
@@ -49,7 +49,7 @@ validation:
       status: verified
       evidence:
         - repository: hakoniwalab/hakoniwa-business-pack
-          path: tools/turtlebot3_godot_exhibition.py
+          path: tools/recipe/turtlebot3_godot_exhibition.py
           revision: local-validation-2026-08-04
         - repository: hakoniwalab/hakoniwa-godot
           path: examples/mujoco
@@ -424,7 +424,7 @@ artifact_sets:
       - launcher-gamepad.json
       - launcher-route.json
       - launcher-session.json
-      - tools/turtlebot3_godot_exhibition.py
+      - tools/recipe/turtlebot3_godot_exhibition.py
     notes:
       - The gamepad profile was manually verified on macOS arm64.
       - A clean-workspace rebuild remains to be verified.
@@ -472,7 +472,7 @@ artifacts:
     producer: hakoniwa-business-pack
     consumer:
       - operator
-    path: tools/turtlebot3_godot_exhibition.py
+    path: tools/recipe/turtlebot3_godot_exhibition.py
 
 missing_pieces:
   - Re-run configure, build, doctor, start, status, and stop from an empty work directory to verify clean-machine reproducibility.
@@ -499,7 +499,7 @@ demo:
       order: 1
       component: hakoniwa-business-pack
       action: Generate Recipe-owned MuJoCo configuration, Godot project files, launcher profiles, and the local operator portal.
-      command: python tools/turtlebot3_godot_exhibition.py configure
+      command: python tools/recipe/turtlebot3_godot_exhibition.py configure
       expected:
         - work/recipes/mujoco-turtlebot3-godot contains config, project, runtime, logs, and index.html.
 
@@ -507,7 +507,7 @@ demo:
       order: 2
       component: hakoniwa-business-pack
       action: Build the TurtleBot3 MuJoCo target and Godot native addon in the Recipe workspace.
-      command: python tools/turtlebot3_godot_exhibition.py build
+      command: python tools/recipe/turtlebot3_godot_exhibition.py build
       expected:
         - tb3_sim_burger exists in the Recipe build directory.
         - The Godot native addon and geometry_msgs and sensor_msgs codecs exist in the generated project.
@@ -516,7 +516,7 @@ demo:
       order: 3
       component: hakoniwa-business-pack
       action: Verify Foundation imports, endpoint libraries, generated files, Godot, the simulator, and the connected controller.
-      command: python tools/turtlebot3_godot_exhibition.py doctor
+      command: python tools/recipe/turtlebot3_godot_exhibition.py doctor
       expected:
         - All required checks report OK before the gamepad profile is started.
 
@@ -524,7 +524,7 @@ demo:
       order: 4
       component: hakoniwa-business-pack
       action: Start MuJoCo, Godot, and the PS5 gamepad controller as a background Launcher session.
-      command: python tools/turtlebot3_godot_exhibition.py start
+      command: python tools/recipe/turtlebot3_godot_exhibition.py start
       expected:
         - The command returns after the Demo readiness markers are observed.
         - MuJoCo and Godot remain running in the background.
@@ -533,7 +533,7 @@ demo:
       order: 5
       component: hakoniwa-business-pack
       action: Start the scripted route fallback instead of the gamepad profile.
-      command: python tools/turtlebot3_godot_exhibition.py start --profile route
+      command: python tools/recipe/turtlebot3_godot_exhibition.py start --profile route
       expected:
         - TurtleBot3 follows a figure-eight route without a physical controller.
       notes: Run this only when no other profile is active.
@@ -542,7 +542,7 @@ demo:
       order: 6
       component: hakoniwa-business-pack
       action: Inspect the active Launcher session.
-      command: python tools/turtlebot3_godot_exhibition.py status
+      command: python tools/recipe/turtlebot3_godot_exhibition.py status
       expected:
         - The Launcher session reports RUNNING while the Demo is active.
 
@@ -550,7 +550,7 @@ demo:
       order: 7
       component: hakoniwa-business-pack
       action: Send a neutral controller command and terminate all Recipe-owned processes through the Launcher control path.
-      command: python tools/turtlebot3_godot_exhibition.py stop
+      command: python tools/recipe/turtlebot3_godot_exhibition.py stop
       expected:
         - The gamepad worker reports that a neutral command was sent.
         - MuJoCo, Godot, and controller processes exit through the managed lifecycle.
@@ -582,8 +582,8 @@ demo:
       explain_command_return: true
       next_actions:
         - Move the controller sticks and compare MuJoCo with Godot.
-        - Run python tools/turtlebot3_godot_exhibition.py status.
-        - Run python tools/turtlebot3_godot_exhibition.py stop before exit.
+        - Run python tools/recipe/turtlebot3_godot_exhibition.py status.
+        - Run python tools/recipe/turtlebot3_godot_exhibition.py stop before exit.
 
   observability:
     success_signals:
@@ -647,7 +647,7 @@ source_catalogs:
 
 source_artifacts:
   - repository: hakoniwalab/hakoniwa-business-pack
-    path: tools/turtlebot3_godot_exhibition.py
+    path: tools/recipe/turtlebot3_godot_exhibition.py
     revision: local-validation-2026-08-04
     description: Recipe-specific configure, build, doctor, start, status, stop, and gamepad workflow.
   - repository: hakoniwalab/hakoniwa-mbody-registry
