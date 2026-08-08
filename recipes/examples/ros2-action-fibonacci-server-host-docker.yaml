@@ -1,0 +1,129 @@
+id: ros2-action-fibonacci-server-host-docker
+title: Docker ROS 2 Fibonacci Action Client to Host Hakoniwa Action Server
+recipe_version: 0.1
+
+goal:
+  user_request: DockerのROS 2 Action Clientからhostの箱庭Fibonacci Action Serverを呼びたい
+  description: Action Server Bridgeとhost Typed Action ServerのGoal・Feedback・Resultを実TCPで検証する。
+
+feasibility:
+  status: feasible
+  confidence: high
+  rationale: [PDU-ROS native Action Server E2EとPDU-RPC Typed Action APIが実装済み。]
+
+validation:
+  status: partially_verified
+  verified_at: 2026-08-08
+  summary: macOS arm64 hostの箱庭Action ServerへDocker Linux arm64のROS 2 Action ClientからGoalを送り、Feedback、Result、正常停止を確認した。
+  steps:
+    - {id: configure, status: verified, evidence: [{path: tools/recipe/ros2_bridge_examples.py}]}
+    - {id: end_to_end, status: verified, evidence: [{source: local-macos-arm64-e2e, date: 2026-08-08}]}
+
+constraints: [host-hakoniwa-action-server, docker-ros2-action-client, tcp-only, hakoniwa-pdu-1.6.6-or-later]
+
+host_python_requirements:
+  interpreter: work/foundation/install/python
+  packages:
+    - component_id: hakoniwa-pdu-python
+      distribution: hakoniwa-pdu
+      minimum_version: 1.6.6
+      import: hakoniwa_pdu.pdu_msgs.sample_action_msgs
+      required_capabilities: [generated_action_types, Fibonacci]
+
+target_environment:
+  os: macOS | Linux | Windows
+  architecture: host-native
+  execution_mode: host-plus-docker
+  runtimes:
+    - {name: Python, version: "3.12", path: work/foundation/install/python}
+    - {name: Docker, version: current, path: system}
+    - {name: ROS 2, version: jazzy, path: container}
+
+execution_environment:
+  host: {role: Hakoniwa Typed Action Server, install_root: work/foundation/install}
+  container: {role: ROS 2 Action Server Bridge and ros2 action client, platform: linux}
+  boundary: {protocol: PDU-RPC TCP, listener: host, address: host.docker.internal, port: 54013}
+
+components:
+  - {id: hakoniwa-pdu-ros, roles: [bridge, integration_boundary]}
+  - {id: hakoniwa-pdu-rpc, roles: [communication_infrastructure, control_plane]}
+  - {id: hakoniwa-pdu-endpoint, roles: [communication_infrastructure]}
+  - {id: hakoniwa-pdu-python, roles: [language_binding]}
+  - {id: hakoniwa-pdu-registry, roles: [data_model, registry]}
+
+foundation_requirements:
+  hakoniwa-pdu-rpc:
+    capabilities:
+      typed_action_server: true
+      action_config_generator: true
+      shared_native_library: true
+      python_package: true
+  hakoniwa-pdu-endpoint:
+    capabilities: {tcp: true}
+
+connections:
+  - {from: hakoniwa-pdu-ros, to: hakoniwa-pdu-rpc, interface: typed-action-client, contract: {status: verified, requires: [direction-neutral Action Binding]}}
+  - {from: hakoniwa-pdu-rpc, to: hakoniwa-pdu-endpoint, interface: tcp, contract: {status: verified, requires: [host listener]}}
+  - {from: hakoniwa-pdu-ros, to: hakoniwa-pdu-python, interface: typed-action-mapping, contract: {status: verified, requires: [hakoniwa-pdu >= 1.6.6]}}
+  - {from: hakoniwa-pdu-python, to: hakoniwa-pdu-registry, interface: packaged-generated-action, contract: {status: verified, requires: [sample_action_msgs/Fibonacci]}}
+
+data_flow:
+  - {source: Docker ROS Action Client, path: [Action Server Bridge, TypedActionClient, PDU-RPC TCP], destination: Host Fibonacci Action Server}
+  - {source: Host Fibonacci Action Server, path: [Goal response, Feedback, Result, Action Server Bridge], destination: Docker ROS Action Client}
+
+time_model:
+  owner: hakoniwa-pdu-rpc
+  policy: real-time-action-events
+  requirements: [Goal response timeout comes from the Action Binding]
+
+artifact_sets:
+  foundation: {status: verified, artifacts: [work/foundation/install]}
+  recipe_runtime: {status: verified, artifacts: [config/action, runtime, logs]}
+
+artifacts:
+  generated:
+    - {path: work/recipes/ros2-action-fibonacci-server-host-docker/config/action/action-binding.json, owner: hakoniwa-business-pack}
+    - {path: work/recipes/ros2-action-fibonacci-server-host-docker/config/action/resolved-action.json, owner: hakoniwa-pdu-rpc}
+  reused:
+    - {path: hakoniwa-pdu-python/src/hakoniwa_pdu/pdu_msgs/sample_action_msgs, owner: hakoniwa-pdu-python}
+
+missing_pieces:
+  - WindowsおよびLinux host E2E証跡。
+
+demo:
+  operator: python tools/recipe/ros2_bridge_examples.py action-server
+  steps:
+    - {id: configure, command: python tools/recipe/ros2_bridge_examples.py action-server configure}
+    - {id: build, command: python tools/recipe/ros2_bridge_examples.py action-server build}
+    - {id: doctor, command: python tools/recipe/ros2_bridge_examples.py action-server doctor}
+    - {id: start, command: python tools/recipe/ros2_bridge_examples.py action-server start}
+    - {id: smoke, command: python tools/recipe/ros2_bridge_examples.py action-server smoke}
+    - {id: status, command: python tools/recipe/ros2_bridge_examples.py action-server status}
+    - {id: stop, command: python tools/recipe/ros2_bridge_examples.py action-server stop}
+  readiness:
+    lifecycle_state: {source: runtime/session.json, required: RUNNING, sufficient: false}
+    checks:
+      - {id: host, kind: session, target: Host Action Server, expected: RUNNING}
+      - {id: bridge, kind: log, target: Docker Action Server Bridge, expected: "action ready"}
+    operator_handoff: {background: true, explain_command_return: true, next_actions: [smoke, status, stop]}
+  cleanup:
+    expected_behavior: [Container and owned host worker stop, session becomes TERMINATED]
+    verification_checks: [container stopped, host session terminated]
+    cautions: [Stop only the recorded session and container]
+
+expected_result:
+  observable: ROS CLI displays Fibonacci Feedback and a terminal sequence through the requested order.
+  success_conditions: [Goal accepted, Feedback observable, Result succeeds, cleanup terminates]
+
+implementation_plan: [Require hakoniwa-pdu 1.6.6 or later, generate config, run E2E, capture evidence.]
+acceptance_criteria: [One Action Binding serves both directions, Fibonacci Goal/Feedback/Result cross the boundary, cleanup is bounded.]
+
+source_catalogs:
+  - {component_id: hakoniwa-pdu-ros, path: catalog/components/hakoniwa-pdu-ros.yaml}
+  - {component_id: hakoniwa-pdu-rpc, path: catalog/components/hakoniwa-pdu-rpc.yaml}
+  - {component_id: hakoniwa-pdu-endpoint, path: catalog/components/hakoniwa-pdu-endpoint.yaml}
+  - {component_id: hakoniwa-pdu-python, path: catalog/components/hakoniwa-pdu-python.yaml}
+  - {component_id: hakoniwa-pdu-registry, path: catalog/components/hakoniwa-pdu-registry.yaml}
+source_artifacts:
+  - {repository: hakoniwalab/hakoniwa-pdu-ros, path: config/action/fibonacci.json}
+  - {repository: hakoniwalab/hakoniwa-business-pack, path: tools/recipe/ros2_action_fibonacci_host.py}

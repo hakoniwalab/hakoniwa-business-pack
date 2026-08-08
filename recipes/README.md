@@ -113,7 +113,9 @@ guide generation. The generated page is the handoff point. Follow its commands
 to prepare Foundation and run the Recipe-specific workflow.
 Recipe-specific `configure` implementations may enrich the same `index.html`
 with resolved paths and generated resources while preserving it as the common
-human-facing entry point.
+handoff surface. Recipe-specific executables live under
+[`tools/recipe/`](../tools/recipe/README.md); repository-wide Foundation,
+Catalog, and workspace management remains under the top-level `tools/`.
 
 The generated guide uses the same OS-independent Workspace lifecycle for every
 Foundation-aware Recipe:

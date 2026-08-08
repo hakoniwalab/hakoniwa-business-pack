@@ -17,6 +17,26 @@ SPEC.loader.exec_module(recipe)
 
 
 class ConfigurationTests(unittest.TestCase):
+    def test_host_python_install_reuses_matching_action_capable_version(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            project = root / "hakoniwa-pdu-python"
+            project.mkdir()
+            (project / "pyproject.toml").write_text(
+                '[project]\nversion = "1.6.6"\n', encoding="utf-8"
+            )
+            interpreter = root / "python"
+            interpreter.write_text("", encoding="utf-8")
+            completed = MagicMock(returncode=0, stdout="1.6.6\n")
+            with (
+                patch.object(recipe, "foundation_python", return_value=interpreter),
+                patch.object(recipe, "sibling", side_effect=lambda name: root / name),
+                patch.object(recipe.subprocess, "run", return_value=completed),
+                patch.object(recipe, "run") as install,
+            ):
+                recipe.install_host_python()
+            install.assert_not_called()
+
     def test_exposure_classification_requires_explicit_ip(self) -> None:
         self.assertEqual(recipe.exposure("127.0.0.1"), "loopback")
         self.assertEqual(recipe.exposure("0.0.0.0"), "wildcard")
@@ -24,24 +44,37 @@ class ConfigurationTests(unittest.TestCase):
         with self.assertRaises(recipe.RecipeError):
             recipe.exposure("host.example")
 
-    def test_physical_configs_split_host_and_container_addresses(self) -> None:
+    def test_user_configs_use_direction_neutral_binding_and_transport(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             config = Path(temporary)
-            recipe.write_endpoint_configs(config, "0.0.0.0", 54010)
-
-            host = json.loads(
-                (config / "host-rpc-comm.json").read_text(encoding="utf-8")
-            )
-            container = json.loads(
-                (config / "container-rpc-comm.json").read_text(encoding="utf-8")
+            binding_path, transport_path = recipe.write_user_configs(
+                config, "0.0.0.0", 54010
             )
 
-            self.assertEqual(host["local"], {"address": "0.0.0.0", "port": 54010})
+            binding = json.loads(binding_path.read_text(encoding="utf-8"))
+            transport = json.loads(transport_path.read_text(encoding="utf-8"))
+
+            self.assertNotIn("kind", binding)
             self.assertEqual(
-                container["remote"],
+                binding["service"]["transport_config"],
+                "service-transport.json",
+            )
+            self.assertEqual(
+                binding["bindings"][0]["client_endpoint"],
+                {"node_id": "hakoniwa-pdu-ros-service"},
+            )
+            self.assertEqual(
+                binding["bindings"][0]["server_endpoint"],
+                {"node_id": "server_node"},
+            )
+            self.assertEqual(
+                transport["endpoints"]["server_node"]["local"],
+                {"address": "0.0.0.0", "port": 54010},
+            )
+            self.assertEqual(
+                transport["endpoints"]["hakoniwa-pdu-ros-service"]["remote"],
                 {"address": "host.docker.internal", "port": 54010},
             )
-            self.assertEqual(host["expected_clients"], 4)
 
     def test_offset_copy_uses_pdu_python_repository_copy(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -60,6 +93,20 @@ class ConfigurationTests(unittest.TestCase):
                     (destination / "hako_srv_msgs" / name).read_text(encoding="utf-8"),
                     name,
                 )
+
+    def test_configure_cleanup_removes_only_known_legacy_generated_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            config = Path(temporary)
+            for name in recipe.LEGACY_GENERATED_FILES:
+                (config / name).write_text("legacy\n", encoding="utf-8")
+            current = config / "service-binding.json"
+            current.write_text("current\n", encoding="utf-8")
+
+            recipe.remove_legacy_generated_files(config)
+
+            self.assertTrue(current.is_file())
+            for name in recipe.LEGACY_GENERATED_FILES:
+                self.assertFalse((config / name).exists())
 
     def test_dockerfile_builds_linux_artifacts_independently(self) -> None:
         content = recipe.dockerfile_text()

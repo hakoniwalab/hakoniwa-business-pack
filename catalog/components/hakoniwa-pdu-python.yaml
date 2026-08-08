@@ -7,11 +7,13 @@ repository:
   visibility: public
 distribution:
   channel: oss
+  package: hakoniwa-pdu
+  version: 1.6.6
   notes:
     - Public OSS Hakoniwa component distributed as hakoniwa-pdu on PyPI.
 verification:
-  verified_at: 2026-08-02
-  source_revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
+  verified_at: 2026-08-08
+  source_revision: 4e62403481afe3b5e0272eb822c47cbff9c38933
   source_ref: main
 summary: Python PDU package providing generated type and offset-based binary conversion independently of Hakoniwa Core, with optional WebSocket, shared-memory, RPC, and Launcher runtime capabilities.
 category:
@@ -42,6 +44,18 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-pdu-python
         path: pyproject.toml
         revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
+  - name: Generated Action PDU types
+    description: Version 1.6.6 and later include hako_action_msgs headers and sample_action_msgs/Fibonacci Goal, Feedback, Result, and Action packet converters used by the typed Action APIs.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: src/hakoniwa_pdu/pdu_msgs/hako_action_msgs
+        revision: 4e62403481afe3b5e0272eb822c47cbff9c38933
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: src/hakoniwa_pdu/pdu_msgs/sample_action_msgs
+        revision: 4e62403481afe3b5e0272eb822c47cbff9c38933
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: pyproject.toml
+        revision: 4e62403481afe3b5e0272eb822c47cbff9c38933
   - name: WebSocket topic and RPC support
     description: Runs Pub/Sub topics and RPC over WebSocket with ready-to-run Twist and AddTwoInts examples.
     evidence:
@@ -99,6 +113,9 @@ interfaces:
     - name: PDU payloads
       kind: pdu
       description: Binary payloads sent over WebSocket or SHM backends.
+    - name: Typed Action packet objects
+      kind: api
+      description: Generated Goal, Feedback, Result, ActionRequest, ActionResponse, and ActionFeedback Python objects; sample_action_msgs/Fibonacci requires hakoniwa-pdu 1.6.6 or later.
   protocols:
     - name: WebSocket
       role: client

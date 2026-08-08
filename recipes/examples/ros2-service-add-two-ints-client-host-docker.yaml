@@ -1,0 +1,175 @@
+id: ros2-service-add-two-ints-client-host-docker
+title: Host Hakoniwa RPC Client to Docker ROS 2 AddTwoInts Server
+recipe_version: 0.1
+
+goal:
+  user_request: Hostの箱庭RPC ClientからDocker内のROS 2 AddTwoInts Serverを呼びたい
+  description: Service Client Bridgeの向きを、direction-neutral Service Bindingから生成して実行・検証する。
+
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - hakoniwa-pdu-rosの実TCP native testで同じ向きが検証されている。
+    - Docker側をlistenerにしてhostへport publishすればOS非依存の接続契約になる。
+
+validation:
+  status: partially_verified
+  verified_at: 2026-08-08
+  summary: macOS arm64 hostからDocker Linux arm64のROS 2 AddTwoInts Serverへ実TCPで接続し、20 + 22 = 42と正常停止を確認した。
+  steps:
+    - id: configure
+      status: verified
+      evidence: [{path: tools/recipe/ros2_bridge_examples.py}]
+    - id: end_to_end
+      status: verified
+      evidence: [{source: local-macos-arm64-e2e, date: 2026-08-08}]
+
+constraints:
+  - host-hakoniwa-rpc-client
+  - docker-ros2-service-server
+  - pdu-rpc-tcp-only
+  - core-free
+  - recipe-local-runtime
+
+target_environment:
+  os: macOS | Linux | Windows
+  architecture: host-native
+  execution_mode: host-plus-docker
+  runtimes:
+    - {name: Python, version: "3.12", path: work/foundation/install/python}
+    - {name: Docker, version: current, path: system}
+    - {name: ROS 2, version: jazzy, path: container}
+
+execution_environment:
+  host:
+    role: Hakoniwa Typed RPC Client
+    install_root: work/foundation/install
+  container:
+    role: ROS 2 AddTwoInts Server plus Service Client Bridge
+    platform: linux
+  boundary:
+    protocol: PDU-RPC TCP
+    listener: container
+    published_address: 127.0.0.1
+    port: 54012
+
+components:
+  - id: hakoniwa-pdu-ros
+    roles: [bridge, integration_boundary]
+  - id: hakoniwa-pdu-rpc
+    roles: [communication_infrastructure, control_plane]
+  - id: hakoniwa-pdu-endpoint
+    roles: [communication_infrastructure]
+  - id: hakoniwa-pdu-python
+    roles: [language_binding]
+  - id: hakoniwa-pdu-registry
+    roles: [data_model]
+
+foundation_requirements:
+  hakoniwa-pdu-rpc:
+    capabilities:
+      rpc_client: true
+      typed_async_client: true
+      service_config_generator: true
+      shared_native_library: true
+      python_package: true
+  hakoniwa-pdu-endpoint:
+    capabilities: {tcp: true}
+
+connections:
+  - from: hakoniwa-pdu-rpc
+    to: hakoniwa-pdu-ros
+    interface: typed-rpc-service-client
+    contract: {status: verified, requires: [direction-neutral Service Binding]}
+  - from: hakoniwa-pdu-ros
+    to: hakoniwa-pdu-python
+    interface: generated-pdu-mapping
+    contract: {status: verified, requires: [AddTwoInts generated type and offsets]}
+  - from: hakoniwa-pdu-rpc
+    to: hakoniwa-pdu-endpoint
+    interface: tcp
+    contract: {status: verified, requires: [container listener published to host loopback]}
+  - from: hakoniwa-pdu-python
+    to: hakoniwa-pdu-registry
+    interface: generated-service-data
+    contract: {status: verified, requires: [hako_srv_msgs/AddTwoInts]}
+
+data_flow:
+  - source: Host TypedRpcClient
+    path: [PDU-RPC TCP, Docker Service Client Bridge, ROS call_async]
+    destination: Docker ROS AddTwoInts Server
+  - source: Docker ROS AddTwoInts Server
+    path: [ROS response, Service Client Bridge, correlated PDU-RPC response]
+    destination: Host TypedRpcClient
+
+time_model:
+  owner: hakoniwa-pdu-ros
+  policy: real-time-with-binding-timeout
+  requirements: [timeout_msec is owned by the Service Bridge]
+
+artifact_sets:
+  foundation:
+    status: verified
+    artifacts: [work/foundation/install]
+  recipe_runtime:
+    status: verified
+    artifacts: [config/service, runtime, logs]
+
+artifacts:
+  generated:
+    - {path: work/recipes/ros2-service-add-two-ints-client-host-docker/config/service/service-binding.json, owner: hakoniwa-business-pack}
+    - {path: work/recipes/ros2-service-add-two-ints-client-host-docker/config/service/endpoints.json, owner: hakoniwa-pdu-rpc}
+  reused:
+    - {path: hakoniwa-pdu-ros/schema/service-binding.schema.json, owner: hakoniwa-pdu-ros}
+
+missing_pieces:
+  - WindowsおよびLinux hostでのE2E証跡。
+
+demo:
+  operator: python tools/recipe/ros2_bridge_examples.py service-client
+  steps:
+    - {id: configure, command: python tools/recipe/ros2_bridge_examples.py service-client configure}
+    - {id: build, command: python tools/recipe/ros2_bridge_examples.py service-client build}
+    - {id: doctor, command: python tools/recipe/ros2_bridge_examples.py service-client doctor}
+    - {id: start, command: python tools/recipe/ros2_bridge_examples.py service-client start}
+    - {id: smoke, command: python tools/recipe/ros2_bridge_examples.py service-client smoke}
+    - {id: status, command: python tools/recipe/ros2_bridge_examples.py service-client status}
+    - {id: stop, command: python tools/recipe/ros2_bridge_examples.py service-client stop}
+  readiness:
+    lifecycle_state: {source: runtime/session.json, required: RUNNING, sufficient: false}
+    checks:
+      - {id: bridge, kind: log, target: Docker Service Client Bridge, expected: "service client ready"}
+    operator_handoff:
+      background: true
+      explain_command_return: true
+      next_actions: [smoke, status, stop]
+  cleanup:
+    expected_behavior: [Docker container stops, session becomes TERMINATED]
+    verification_checks: [container is not running, session state is TERMINATED]
+    cautions: [Do not kill unrelated Python or Docker processes]
+
+expected_result:
+  observable: "AddTwoInts result: 20 + 22 = 42"
+  success_conditions: [smoke exits zero, response sum is 42, stop records TERMINATED]
+
+implementation_plan:
+  - Generate both RPC roles from one Service Binding.
+  - Keep the container listener behind a loopback-only published port.
+  - Validate configure/build/doctor/start/smoke/status/stop.
+
+acceptance_criteria:
+  - No kind field exists in the Service Binding.
+  - Host TypedRpcClient receives sum 42 from the Docker ROS Server.
+  - Start returns only after the bridge is ready and stop is bounded.
+
+source_catalogs:
+  - {component_id: hakoniwa-pdu-ros, path: catalog/components/hakoniwa-pdu-ros.yaml}
+  - {component_id: hakoniwa-pdu-rpc, path: catalog/components/hakoniwa-pdu-rpc.yaml}
+  - {component_id: hakoniwa-pdu-endpoint, path: catalog/components/hakoniwa-pdu-endpoint.yaml}
+  - {component_id: hakoniwa-pdu-python, path: catalog/components/hakoniwa-pdu-python.yaml}
+  - {component_id: hakoniwa-pdu-registry, path: catalog/components/hakoniwa-pdu-registry.yaml}
+
+source_artifacts:
+  - {repository: hakoniwalab/hakoniwa-pdu-ros, path: config/service/add_two_ints.json}
+  - {repository: hakoniwalab/hakoniwa-business-pack, path: tools/recipe/ros2_bridge_examples.py}

@@ -514,9 +514,11 @@ components:
   - language-binding
   maturity: active
   distribution: oss
-  summary: Config-driven Python integration for bidirectional Hakoniwa PDU and ROS
-    2 Topic mapping plus ROS 2 Service Server to Hakoniwa PDU-RPC bridging, without
-    application-specific bridge code for supported generated types.
+  summary: Configuration-driven ROS 2 integration for bidirectional Topic mapping
+    plus Service and Action bridges in both directions. hakoniwa-pdu-ros owns ROS
+    type mapping, Goal/Service semantic conversion, and executor integration while
+    hakoniwa-pdu-rpc owns protocol lifecycle, correlation, generated runtime configuration,
+    packet handling, and transport-facing state.
   recipe_roles:
   - bridge
   - integration_boundary
@@ -526,12 +528,13 @@ components:
   - hakoniwa-pdu-rpc
   - hakoniwa-pdu-python
   - hakoniwa-pdu-registry
-  - hakoniwa-core-pro
   tags:
   - hakoniwa
   - pdu
   - ros2
+  - topic
   - service
+  - action
   - bridge
   - endpoint
   - rpc

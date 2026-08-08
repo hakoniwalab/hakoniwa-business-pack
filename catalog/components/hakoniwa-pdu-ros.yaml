@@ -46,6 +46,16 @@ capabilities:
         path: test/native/test_native_mapping.py
         revision: f17e1cc20b8ba52e36dc76376cf91093d7f8bd80
 
+  - name: Runtime Topic type mapping and QoS
+    description: Resolves generated PDU types, recursively maps standard ROS messages, supports binding-level QoS, and reports incompatibility.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: hakoniwa_pdu_ros/config_loader.py
+        revision: f17e1cc20b8ba52e36dc76376cf91093d7f8bd80
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: test/native/test_native_qos.py
+        revision: f17e1cc20b8ba52e36dc76376cf91093d7f8bd80
+
   - name: ROS 2 Service Server Bridge
     description: Exposes a ROS 2 Service Server backed by typed Hakoniwa RPC clients, so ROS callers invoke Hakoniwa Service implementations.
     evidence:
@@ -87,7 +97,7 @@ capabilities:
         path: hakoniwa_pdu_ros/action_server_node.py
         revision: f17e1cc20b8ba52e36dc76376cf91093d7f8bd80
       - repository: hakoniwalab/hakoniwa-pdu-ros
-        path: test/native
+        path: test/native/test_native_action_server_node.py
         revision: f17e1cc20b8ba52e36dc76376cf91093d7f8bd80
 
   - name: ROS 2 Action Client Bridge
@@ -97,7 +107,7 @@ capabilities:
         path: hakoniwa_pdu_ros/action_client_node.py
         revision: f17e1cc20b8ba52e36dc76376cf91093d7f8bd80
       - repository: hakoniwalab/hakoniwa-pdu-ros
-        path: test/native
+        path: test/native/test_native_action_client_node.py
         revision: f17e1cc20b8ba52e36dc76376cf91093d7f8bd80
 
   - name: Direction-neutral Action Binding
@@ -131,12 +141,21 @@ interfaces:
     - name: Topic Binding config
       kind: config
       description: Maps PDU keys to ROS topics, directions, and optional QoS.
+    - name: Topic Endpoint config
+      kind: config
+      description: Selects the hakoniwa-pdu-endpoint transport used by Topic mapping.
     - name: Service Binding config
       kind: config
       description: Direction-neutral mapping between ROS Services and Hakoniwa RPC Services.
+    - name: Service Transport config
+      kind: config
+      description: Defines the TCP roles and addresses referenced by the Service Binding.
     - name: Action Binding config
       kind: config
       description: Direction-neutral mapping between ROS Actions and Hakoniwa Actions.
+    - name: Action Transport config
+      kind: config
+      description: Defines the TCP roles and addresses referenced by the Action Binding.
     - name: ROS 2 messages, Service requests, or Action events
       kind: api
       description: ROS-facing inputs for the selected bridge runtime direction.
@@ -183,8 +202,16 @@ interfaces:
       description: Topic Binding example.
     - path: schema/service-binding.schema.json
       description: Canonical direction-neutral Service Binding schema.
+    - path: config/service/add_two_ints.json
+      description: AddTwoInts direction-neutral Service Binding example.
+    - path: config/service/add_two_ints-transport.json
+      description: AddTwoInts Service transport example referenced by the Binding.
     - path: schema/action-binding.schema.json
       description: Canonical direction-neutral Action Binding schema.
+    - path: config/action/fibonacci.json
+      description: Fibonacci direction-neutral Action Binding example.
+    - path: config/action/fibonacci-transport.json
+      description: Fibonacci Action transport example referenced by the Binding.
 dependencies:
   required:
     - name: ROS 2
@@ -205,6 +232,10 @@ dependencies:
     - name: hakoniwa-pdu-rpc
       type: repository
       notes: Provides Service/Action typed Client/Server APIs, lifecycle, routing, generators, cancellation, and TCP mux support.
+  optional:
+    - name: Zenoh backend
+      type: runtime
+      notes: Used by the Topic quick start when Zenoh transport is selected.
 platforms:
   supported:
     - Linux
@@ -271,8 +302,8 @@ operations:
       - ros2 run hakoniwa_pdu_ros bridge --config config/sample/sample_binding.json
       - service-server --config config/service/add_two_ints.json --offset-dir <offset-dir> --rpc-library <shared-rpc-library>
       - service-client --config config/service/add_two_ints.json --offset-dir <offset-dir> --rpc-library <shared-rpc-library>
-      - action-server --config config/action/fibonacci.json --offset-dir <offset-dir> --rpc-library <shared-rpc-library>
-      - action-client --config config/action/fibonacci.json --offset-dir <offset-dir> --rpc-library <shared-rpc-library>
+      - action-server --config config/action/fibonacci.json --output-dir <output-dir> --rpc-library <shared-rpc-library>
+      - action-client --config config/action/fibonacci.json --output-dir <output-dir> --rpc-library <shared-rpc-library>
 known_gaps:
   - Implement a manifest-driven Business Pack hako.py doctor/configure/build/test/install/smoke contract.
   - Keep the existing AddTwoInts host/Docker recipe as verified evidence and add normalized recipes for reverse Service plus both Action directions.

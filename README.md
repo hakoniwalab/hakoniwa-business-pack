@@ -365,6 +365,11 @@ Recipe固有の`configure`以降の手順をページ内で確認できます。
 Recipe固有の`configure`は、同じ`index.html`を解決済みパスや生成物を含む
 実行ガイドへ更新する場合があります。
 
+Recipe固有の実行ツールは、FoundationやCatalogを管理する汎用ツールと区別して
+[`tools/recipe/`](tools/recipe/README.md)に配置します。ROS 2 Service / Actionの
+4方向サンプルも、このディレクトリのツールから共通の
+`configure -> build -> doctor -> start -> smoke -> status -> stop`操作で実行します。
+
 ---
 
 ## Runtime Primer

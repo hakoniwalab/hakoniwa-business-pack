@@ -53,7 +53,7 @@ observation:
       hardcodes RpcMuxServer, which always listens. Swapping that single class for
       RpcServer (whose endpoint-config argument is an endpoints list rather than a
       single mux endpoint) was the entire change needed. Everything else in
-      tools/ros2_service_add_two_ints_host.py -- the session file, the stop-request
+      tools/recipe/ros2_service_add_two_ints_host.py -- the session file, the stop-request
       protocol, the wire decode/encode, the cancel path -- worked unmodified on
       Windows."
     - "Consequence for the Recipe. The Recipe's boundary section allows exactly
@@ -96,7 +96,7 @@ sources:
       path: hakoniwa_pdu_ros/service_client_pool.py
       revision: 832a6d1
     - repository: hakoniwalab/hakoniwa-business-pack
-      path: tools/ros2_service_add_two_ints_host.py
+      path: tools/recipe/ros2_service_add_two_ints_host.py
       revision: d4d6558
   runtime_evidence:
     - description: >-
@@ -160,5 +160,5 @@ resolution:
       issue filed yet for the reversal or the pool constraint.
     - >-
       No component was patched. The reversed host script is a copy of upstream's
-      tools/ros2_service_add_two_ints_host.py with RpcMuxServer swapped for
+      tools/recipe/ros2_service_add_two_ints_host.py with RpcMuxServer swapped for
       RpcServer, and the configs are throwaway copies kept outside every checkout.

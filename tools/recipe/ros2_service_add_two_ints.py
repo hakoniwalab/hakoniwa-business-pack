@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 from pathlib import Path
 
 
@@ -31,6 +32,15 @@ REQUIRED_OFFSETS = (
     "AddTwoIntsResponse.offset",
     "AddTwoIntsResponsePacket.offset",
 )
+LEGACY_GENERATED_FILES = (
+    "container-client-endpoint.json",
+    "container-rpc-comm.json",
+    "container-rpc-endpoints.json",
+    "host-rpc-comm.json",
+    "host-rpc-endpoints.json",
+    "rpc-pdudef.json",
+    "rpc-queue.json",
+)
 
 
 class RecipeError(RuntimeError):
@@ -38,7 +48,7 @@ class RecipeError(RuntimeError):
 
 
 def root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
 
 
 def sibling(name: str) -> Path:
@@ -72,6 +82,7 @@ def paths() -> dict[str, Path]:
         "logs": base / "logs",
         "validation": base / "validation",
         "binding": config / "service-binding.json",
+        "transport": config / "service-transport.json",
         "runtime_config": config / "runtime.json",
         "session": runtime / "session.json",
         "host_session": runtime / "host-session.json",
@@ -148,86 +159,70 @@ def exposure(address: str) -> str:
         raise RecipeError(f"bind address must be an IP literal: {address}") from error
 
 
-def write_endpoint_configs(config_dir: Path, bind: str, port: int) -> None:
+def write_user_configs(config_dir: Path, bind: str, port: int) -> tuple[Path, Path]:
+    transport = config_dir / "service-transport.json"
+    binding = config_dir / "service-binding.json"
     atomic_json(
-        config_dir / "rpc-pdudef.json",
+        transport,
         {
-            "robots": [
+            "protocol": "tcp",
+            "packetVersion": "v2",
+            "queueDepth": 16,
+            "endpoints": {
+                "hakoniwa-pdu-ros-service": {
+                    "role": "client",
+                    "remote": {
+                        "address": "host.docker.internal",
+                        "port": port,
+                    },
+                    "options": {
+                        "connect_timeout_ms": 2000,
+                        "read_timeout_ms": 1000,
+                        "write_timeout_ms": 1000,
+                    },
+                },
+                "server_node": {
+                    "role": "server",
+                    "local": {"address": bind, "port": port},
+                    "options": {
+                        "read_timeout_ms": 1000,
+                        "write_timeout_ms": 1000,
+                    },
+                },
+            },
+        },
+    )
+    atomic_json(
+        binding,
+        {
+            "$schema": str(
+                sibling("hakoniwa-pdu-ros")
+                / "schema"
+                / "service-binding.schema.json"
+            ),
+            "version": 1,
+            "service": {
+                "transport_config": transport.name,
+                "delta_time_usec": 1000,
+                "time_source_type": "real",
+            },
+            "bindings": [
                 {
-                    "name": "AddTwoIntsRecipe",
-                    "rpc_pdu_readers": [],
-                    "rpc_pdu_writers": [],
-                    "shm_pdu_readers": [],
-                    "shm_pdu_writers": [],
+                    "ros_name": "/add_two_ints",
+                    "ros_type": "example_interfaces/srv/AddTwoInts",
+                    "hakoniwa_service": "Service/Add",
+                    "pdu_service_type": "hako_srv_msgs/AddTwoInts",
+                    "client_endpoint": {
+                        "node_id": "hakoniwa-pdu-ros-service"
+                    },
+                    "server_endpoint": {"node_id": "server_node"},
+                    "max_clients": 4,
+                    "timeout_msec": 3000,
                 }
-            ]
+            ],
         },
     )
-    atomic_json(
-        config_dir / "rpc-queue.json",
-        {"type": "buffer", "name": "add_two_ints_rpc_queue", "store": {"mode": "queue", "depth": 16}},
-    )
-    atomic_json(
-        config_dir / "host-rpc-comm.json",
-        {
-            "protocol": "tcp",
-            "name": "add_two_ints_host_mux",
-            "direction": "inout",
-            "local": {"address": bind, "port": port},
-            "expected_clients": 4,
-            "options": {"read_timeout_ms": 1000, "write_timeout_ms": 1000},
-        },
-    )
-    atomic_json(
-        config_dir / "host-rpc-endpoints.json",
-        {
-            "name": "add_two_ints_host_mux",
-            "pdu_def_path": "rpc-pdudef.json",
-            "cache": "rpc-queue.json",
-            "comm": "host-rpc-comm.json",
-        },
-    )
-    atomic_json(
-        config_dir / "container-rpc-comm.json",
-        {
-            "protocol": "tcp",
-            "name": "add_two_ints_container_client",
-            "direction": "inout",
-            "role": "client",
-            "remote": {"address": "host.docker.internal", "port": port},
-            "options": {
-                "connect_timeout_ms": 2000,
-                "read_timeout_ms": 1000,
-                "write_timeout_ms": 1000,
-            },
-        },
-    )
-    atomic_json(
-        config_dir / "container-client-endpoint.json",
-        {
-            "name": "add_two_ints_container_client",
-            "pdu_def_path": "rpc-pdudef.json",
-            "cache": "rpc-queue.json",
-            "comm": "container-rpc-comm.json",
-        },
-    )
-    atomic_json(
-        config_dir / "container-rpc-endpoints.json",
-        [
-            {
-                "nodeId": "server_node",
-                "endpoints": [
-                    {"id": "server_ep_id", "config_path": "host-rpc-endpoints.json"}
-                ],
-            },
-            {
-                "nodeId": "hakoniwa-pdu-ros-service",
-                "endpoints": [
-                    {"id": "client_ep_id", "config_path": "container-client-endpoint.json"}
-                ],
-            },
-        ],
-    )
+    return binding, transport
 
 
 def copy_offsets(destination: Path) -> None:
@@ -260,10 +255,19 @@ def generate_service_configs(binding: Path, offset: Path, output: Path) -> None:
             pass
 
 
+def remove_legacy_generated_files(config_dir: Path) -> None:
+    """Remove files emitted by the pre-generator Recipe implementation."""
+    for name in LEGACY_GENERATED_FILES:
+        candidate = config_dir / name
+        if candidate.is_file():
+            candidate.unlink()
+
+
 def dockerfile_text() -> str:
     return """FROM ros:jazzy-ros-base-noble
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV CMAKE_BUILD_PARALLEL_LEVEL=2
 RUN apt-get update && apt-get install -y --no-install-recommends \\
     cmake g++ git libboost-dev python3-venv ros-jazzy-example-interfaces \\
     ros-jazzy-rmw-cyclonedds-cpp && rm -rf /var/lib/apt/lists/*
@@ -323,38 +327,9 @@ def configure(args: argparse.Namespace) -> None:
             "image": IMAGE,
         },
     )
-    write_endpoint_configs(p["config"], bind, port)
-    atomic_json(
-        p["binding"],
-        {
-            "$schema": str(sibling("hakoniwa-pdu-ros") / "schema" / "service-binding.schema.json"),
-            "version": 1,
-            "kind": "ros_service_server",
-            "rpc": {
-                "client_endpoint": {
-                    "node_id": "hakoniwa-pdu-ros-service",
-                    "endpoint_id": "client_ep_id",
-                },
-                "endpoint_config": "container-rpc-endpoints.json",
-                "delta_time_usec": 1000,
-                "time_source_type": "real",
-            },
-            "bindings": [
-                {
-                    "ros_name": "/add_two_ints",
-                    "ros_type": "example_interfaces/srv/AddTwoInts",
-                    "hakoniwa_service": "Service/Add",
-                    "pdu_service_type": "hako_srv_msgs/AddTwoInts",
-                    "server_endpoints": [
-                        {"node_id": "server_node", "endpoint_id": "server_ep_id"}
-                    ],
-                    "max_clients": 4,
-                    "timeout_msec": 3000,
-                }
-            ],
-        },
-    )
+    write_user_configs(p["config"], bind, port)
     copy_offsets(p["offset"])
+    remove_legacy_generated_files(p["config"])
     generate_service_configs(p["binding"], p["offset"], p["config"])
     docker = p["docker"]
     (docker / "Dockerfile").write_text(dockerfile_text(), encoding="utf-8")
@@ -427,13 +402,33 @@ def install_host_python() -> None:
     interpreter = foundation_python()
     if not interpreter.is_file():
         raise RecipeError("Foundation Python is missing; build the host Foundation first")
+    project = sibling("hakoniwa-pdu-python")
+    metadata = tomllib.loads((project / "pyproject.toml").read_text(encoding="utf-8"))
+    required_version = str(metadata["project"]["version"])
+    check = subprocess.run(
+        [
+            str(interpreter),
+            "-c",
+            "from importlib.metadata import version; "
+            "from hakoniwa_pdu.pdu_msgs.sample_action_msgs "
+            "import pdu_pytype_FibonacciActionRequest; "
+            "print(version('hakoniwa-pdu'))",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if check.returncode == 0 and check.stdout.strip() == required_version:
+        print(f"hakoniwa-pdu {required_version} is already installed; reusing it")
+        return
     run(
         [
             str(interpreter),
             "-m",
             "pip",
             "install",
-            str(sibling("hakoniwa-pdu-python")),
+            "--upgrade",
+            str(project),
         ]
     )
 
@@ -557,7 +552,7 @@ def doctor(_args: argparse.Namespace) -> int:
     else:
         checks.append(("host-foundation", False, "Foundation Python is missing"))
 
-    required = [p["runtime_config"], p["binding"]]
+    required = [p["runtime_config"], p["binding"], p["transport"]]
     required.extend(p["offset"] / "hako_srv_msgs" / name for name in REQUIRED_OFFSETS)
     missing = [str(path) for path in required if not path.is_file()]
     checks.append(("recipe-config", not missing, "missing: " + ", ".join(missing) if missing else "generated files present"))
@@ -655,11 +650,11 @@ def start(args: argparse.Namespace) -> None:
     host_log = p["host_log"].open("w", encoding="utf-8")
     host_command = [
         str(foundation_python()),
-        str(root() / "tools" / "ros2_service_add_two_ints_host.py"),
+        str(root() / "tools" / "recipe" / "ros2_service_add_two_ints_host.py"),
         "--service-config",
         str(p["config"] / "rpc-server-services.json"),
         "--endpoint-config",
-        str(p["config"] / "host-rpc-endpoints.json"),
+        str(p["config"] / "endpoints.json"),
         "--rpc-library",
         str(rpc_library(foundation_prefix())),
         "--session",
