@@ -1,0 +1,103 @@
+id: ros2-application-integration
+title: ROS 2アプリケーション資産を維持した箱庭統合検証
+usecase_version: 0.1
+
+audience:
+  primary:
+    - ros2-application-developer
+    - robot-system-integrator
+    - control-software-developer
+  notes:
+    - The current reference topology runs ROS 2 Jazzy in Docker and Hakoniwa RPC applications on a macOS arm64 host.
+
+situation: >
+  A developer has ROS 2 applications, message types, Services, or Actions that should
+  interoperate with a Hakoniwa system. ROS 2 may need to remain in a Linux container
+  while a simulator or integration application runs on the host, and either side may
+  own the client or server role.
+
+problem: >
+  Reusing ROS 2 assets across the runtime boundary requires generated type bindings,
+  direction-correct client/server configuration, TCP lifecycle management, and
+  coordinated startup and cleanup. Reimplementing those concerns in each application
+  exposes PDU/RPC details and makes the four Service/Action directions difficult to
+  validate consistently.
+
+desired_outcome: >
+  Preserve ROS 2 application-facing interfaces while bridging Service and Action
+  interactions to Hakoniwa through generated contracts, and validate both ownership
+  directions with a repeatable Host + Docker lifecycle.
+
+status:
+  feasibility: feasible
+  validation: partially_verified
+  confidence: high
+  rationale:
+    - Four Recipes cover ROS 2 and Hakoniwa as opposing Service and Action client/server roles.
+    - The references use direction-neutral bindings and generated Hakoniwa RPC configuration rather than application-authored low-level channel configuration.
+    - End-to-end evidence exists on macOS arm64 plus a Linux arm64 ROS 2 Jazzy container; native Windows and Linux host coverage is incomplete.
+
+realized_by:
+  - recipe_id: ros2-service-add-two-ints-host-docker
+    relationship: service_ros_client_variant
+    validation_scope: >
+      Docker ROS 2 calls a Service whose Hakoniwa RPC server runs on the host; 20 + 22
+      returned 42 on macOS arm64 plus Linux arm64 Docker.
+  - recipe_id: ros2-service-add-two-ints-client-host-docker
+    relationship: service_hakoniwa_client_variant
+    validation_scope: >
+      A host Hakoniwa RPC client calls a ROS 2 Service server in Docker over a
+      published TCP endpoint.
+  - recipe_id: ros2-action-fibonacci-server-host-docker
+    relationship: action_ros_client_variant
+    validation_scope: >
+      A Docker ROS 2 Action client sends a Goal to a host Hakoniwa Action server and
+      receives Feedback and Result.
+  - recipe_id: ros2-action-fibonacci-client-host-docker
+    relationship: action_hakoniwa_client_variant
+    validation_scope: >
+      A host Hakoniwa Action client calls a Docker ROS 2 Action server; Goal,
+      Feedback, Result, Cancel Reject continuation, next-Goal reuse, and cleanup were
+      observed in the recorded macOS environment.
+
+supported_by:
+  - component_id: hakoniwa-pdu-ros
+    role: Bridge ROS 2 Service and Action APIs to direction-neutral Hakoniwa bindings.
+  - component_id: hakoniwa-pdu-rpc
+    role: Provide typed Service/Action APIs, correlation, tcp_mux, and generated detailed RPC configuration.
+  - component_id: hakoniwa-pdu-endpoint
+    role: Provide the TCP transport boundary between host and container runtimes.
+  - component_id: hakoniwa-pdu-python
+    role: Provide generated packet types, offsets, converters, and Python runtime integration.
+  - component_id: hakoniwa-pdu-registry
+    role: Own the ROS-derived Service and Action data contracts and generation inputs.
+
+communication_notes:
+  safe_statements:
+    - Representative ROS 2 Service and Action interactions have run across a macOS Host + Linux Docker boundary in both ownership directions.
+    - Application-facing bindings avoid requiring users to author detailed Hakoniwa RPC channel configuration directly.
+    - The integration can be Core-free when the selected Recipe does not require Hakoniwa shared memory or simulation time.
+  avoid_statements:
+    - Every ROS 2 package or custom type works without generation and validation.
+    - All host operating systems have completed the same end-to-end validation.
+    - The reference topology proves production network reliability or security.
+
+limitations:
+  - Current Business Pack end-to-end evidence is macOS arm64 plus Linux arm64 Docker.
+  - Custom ROS 2 types require compatible generated PDU types, offsets, and converters.
+  - Service and Action semantics differ; application timeout, cancellation, and recovery policies still require explicit review.
+  - Host/container name resolution, port publication, firewall behavior, and TCP diagnostics vary by platform.
+
+next_steps:
+  - Add native Linux and Windows Host + Docker validation evidence.
+  - Add a representative custom message package workflow through PDU Registry generation.
+  - Define broader recovery expectations for transport interruption without weakening RPC slot-safety contracts.
+
+tags:
+  - ros2
+  - service
+  - action
+  - docker
+  - host
+  - integration
+  - rpc

@@ -30,6 +30,13 @@ Catalog capabilities + validated Recipes
 
 Neither direction has priority over the other. Demand-driven discovery prevents unmet needs from disappearing. Capability-driven discovery prevents existing technical value from remaining invisible because nobody has written the corresponding Use Case yet.
 
+For capability-driven discovery, prefer an actor-first, composition-based review over
+creating one Usecase per Catalog capability or Recipe. Start with
+[`ACTORS.md`](ACTORS.md), identify a recurring situation and desired value from that
+Actor's point of view, and then inspect clusters of Recipes and their Catalog
+composition as evidence. A single component feature that is already obvious from its
+Catalog entry normally does not justify a separate Usecase.
+
 ## Preserve unmet demand before feasibility is solved
 
 Do not discard a request because the current Catalog cannot realize it.

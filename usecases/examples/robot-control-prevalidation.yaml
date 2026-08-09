@@ -1,6 +1,6 @@
 id: robot-control-prevalidation
 title: 実機投入前のロボット制御ロジック事前検証
-usecase_version: 0.1
+usecase_version: 0.2
 
 audience:
   primary:
@@ -42,6 +42,11 @@ realized_by:
     relationship: behavior_variant
     validation_scope: >
       Sensor-driven mobile-robot control composition described by the Recipe.
+  - recipe_id: mujoco-turtlebot3-godot
+    relationship: interactive_visualization_variant
+    validation_scope: >
+      A PS5 controller drives a TurtleBot3 in MuJoCo while an independently running
+      Godot frontend observes synchronized pose and wheel-joint state on macOS arm64.
 
 supported_by:
   - component_id: hakoniwa-mbody-registry
@@ -54,6 +59,8 @@ supported_by:
     role: Provide runtime PDU communication infrastructure.
   - component_id: hakoniwa-pdu-registry
     role: Provide canonical command, state, and sensor data contracts.
+  - component_id: hakoniwa-godot
+    role: Provide an independently running 3D observation frontend for the interactive TurtleBot3 variant.
 
 communication_notes:
   safe_statements:
@@ -68,6 +75,7 @@ limitations:
   - Simulation results do not authorize connection to or actuation of physical hardware.
   - Customer-specific robot models, controllers, fixtures, and acceptance criteria require separate validation.
   - This Usecase does not claim a complete Sim2Real transfer or production-readiness process.
+  - The Godot interaction variant requires local GUI and gamepad availability for its primary exhibition path.
 
 next_steps:
   - Define acceptance criteria for control-path readiness before physical testing.

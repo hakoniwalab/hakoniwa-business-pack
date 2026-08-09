@@ -52,6 +52,10 @@ value can be stated independently from the Hakoniwa implementation.
 See [`MAINTAINER.md`](MAINTAINER.md) for the Catalog/Recipe-to-Usecase discovery and
 reconciliation workflow.
 
+For actor-first discovery, use [`ACTORS.md`](ACTORS.md). It organizes recurring
+situations, difficulties, desired value, and existing evidence by the people who may
+benefit. It is an exploration map, not a rule to create one Usecase per Actor.
+
 ## Submit a Usecase without AI
 
 AI is an optional interface, not a requirement for contributing a Usecase.
@@ -144,6 +148,7 @@ status values, Catalog component references, Recipe references, and duplicate ID
 ```text
 usecases/
 ├── README.md
+├── ACTORS.md
 ├── MAINTAINER.md
 ├── index.yaml
 ├── schema.yaml
