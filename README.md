@@ -1,5 +1,7 @@
 # hakoniwa-business-pack
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/hakoniwalab/hakoniwa-business-pack)
+
 > **A catalog and recipe hub for composing Hakoniwa components with AI to turn user ideas into working demos and products.**
 
 ## 箱庭ビジネスパックの全体像
