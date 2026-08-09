@@ -1,0 +1,72 @@
+name: Usecase Request
+description: Propose a reusable problem or desired outcome that Hakoniwa Business Pack should capture.
+title: "[Usecase] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing a usecase.
+
+        You do not need to know Hakoniwa component names, Recipes, or whether the request is currently feasible. Describe the user goal and context. Maintainers will check existing Usecases, Recipes, Catalog capabilities, and missing pieces.
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: What do you want to achieve?
+      description: Describe the outcome you want, without needing to explain how Hakoniwa should implement it.
+      placeholder: Example: I want to run many robot simulations on one PC and compare their behavior under the same scenario.
+    validations:
+      required: true
+
+  - type: textarea
+    id: audience
+    attributes:
+      label: Who would use this?
+      description: Describe the role or type of user. A company or product name is optional.
+      placeholder: Example: robotics researcher, system integrator, developer, instructor
+    validations:
+      required: true
+
+  - type: textarea
+    id: situation
+    attributes:
+      label: In what situation would they use it?
+      description: Describe the workflow, environment, or trigger that makes this usecase relevant.
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is difficult today?
+      description: Describe the current pain point, limitation, manual work, or missing capability.
+    validations:
+      required: true
+
+  - type: textarea
+    id: value
+    attributes:
+      label: What would become better if this were possible?
+      description: Explain the expected benefit or decision this would enable. Avoid needing to prove feasibility here.
+    validations:
+      required: true
+
+  - type: textarea
+    id: related_systems
+    attributes:
+      label: Related robots, simulators, middleware, or systems
+      description: Optional. List anything relevant such as ROS 2, MuJoCo, Gazebo, PX4, a robot model, or an existing Hakoniwa component.
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Optional. Add links, papers, screenshots, demos, or other context.
+
+  - type: checkboxes
+    id: acknowledgement
+    attributes:
+      label: Submission note
+      options:
+        - label: I understand this Issue records a usecase request and does not imply that the request is currently feasible or scheduled for implementation.
+          required: true
