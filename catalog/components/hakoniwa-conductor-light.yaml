@@ -72,7 +72,7 @@ capabilities:
         revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
 
 limitations:
-  - Does not aim to cover the full RD functionality of conductor-pro.
+  - Does not aim to cover the full RD functionality of Hakoniwa Conductor.
   - RPC examples require submodules hakoniwa-pdu-rpc and hakoniwa-pdu-endpoint.
   - Some client/server combinations are explicitly unsupported and rejected by config checks.
   - RPC request timeout is not a peer-failure detector. After timeout, the caller explicitly cancels and waits for the in-flight RPC to resolve; loss of the Conductor Light server itself is treated as simulation failure rather than transparent recovery.
@@ -159,10 +159,10 @@ connects_to:
     direction: related
     interface: simulation control and RPC state-machine concepts
     notes: Conductor Light is a separate lightweight runtime, but its PDU-RPC timeout/cancel semantics intentionally follow the Core Pro RPC model.
-  - component_id: hakoniwa-conductor-pro
+  - component_id: hakoniwa-conductor
     direction: related
     interface: conductor role
-    notes: Light is the simpler dynamic-asset conductor; pro covers heavier distributed/RD-oriented flows.
+    notes: Light emphasizes dynamic participation and external integration; Hakoniwa Conductor covers Owner, Epoch, Commit Point, and RD-oriented flows.
 
 data_contracts:
   - name: Virtual tick contract
@@ -203,7 +203,7 @@ typical_usecases:
   - Cross-platform integration validation where the same doctor/build/test/smoke vocabulary should run on Linux, macOS, and Windows.
 
 anti_usecases:
-  - Full RD handoff scenarios requiring conductor-pro/RD features.
+  - Full RD handoff scenarios requiring Hakoniwa Conductor features.
   - General pub/sub data exchange without simulation time coordination.
   - Systems needing browser-facing visualization without a separate bridge/viewer.
   - High-availability systems that require transparent recovery after the time-coordination server disappears.

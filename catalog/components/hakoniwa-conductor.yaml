@@ -1,0 +1,286 @@
+id: hakoniwa-conductor
+name: Hakoniwa Conductor
+repository:
+  owner: hakoniwalab
+  name: hakoniwa-conductor
+  url: https://github.com/hakoniwalab/hakoniwa-conductor
+  visibility: public
+distribution:
+  channel: dual-license
+  notes:
+    - The free edition is distributed as binary-only software for non-commercial use.
+    - Commercial use and source distribution require a separate Hakoniwa Conductor PRO agreement.
+    - Public repository visibility does not grant OSS or commercial-use rights.
+verification:
+  verified_at: 2026-08-09
+  source_revision: 0df3765ef5572eaca9ec568c4b890aadad96c38d
+  source_ref: v1.0.0
+summary: Distributed Hakoniwa control-plane binaries and configuration generators for coordinating execution responsibility, simulation time, and Runtime Delegation across server/client nodes.
+category:
+  primary: simulation-core
+  secondary:
+    - conductor
+    - distributed-execution
+    - rd
+    - control-plane
+    - commercial
+
+status:
+  maturity: experimental
+  catalog_confidence: high
+  notes:
+    - v1.0.0 publishes Linux x86_64 and macOS arm64 binary packages with checksums and build-contract metadata.
+    - The public repository owns user documentation, release distribution, and issue intake; implementation source remains private.
+    - A public generated configuration fixture and Business Pack time-synchronization Recipe provide a no-RD first smoke.
+
+capabilities:
+  - name: Distributed simulation-time coordination
+    description: Coordinates Hakoniwa server/client participants across nodes under an explicit distributed execution topology.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-conductor
+        path: docs/feature-scope-ja.md
+        revision: 0df3765ef5572eaca9ec568c4b890aadad96c38d
+  - name: Execution responsibility management
+    description: Provides Owner, Epoch, Commit Point, and Runtime Delegation support for controlled execution handoff.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-conductor
+        path: docs/architecture-ja.md
+        revision: 0df3765ef5572eaca9ec568c4b890aadad96c38d
+  - name: Server/client conductor processes
+    description: The release includes main_server, main_client, main_client_shell, and main_exmonitor binaries.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-conductor
+        path: docs/binary-package-ja.md
+        revision: 0df3765ef5572eaca9ec568c4b890aadad96c38d
+  - name: Configuration generation
+    description: The release includes Conductor, Endpoint, RPC, Bridge, and Remote API configuration generators.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-conductor
+        path: docs/configuration-ja.md
+        revision: 0df3765ef5572eaca9ec568c4b890aadad96c38d
+  - name: Cross-platform binary distribution
+    description: v1.0.0 provides Ubuntu 24.04 x86_64 and macOS arm64 ZIP packages with SHA-256 files.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-conductor
+        path: docs/releases/v1.0.0-ja.md
+        revision: 0df3765ef5572eaca9ec568c4b890aadad96c38d
+
+limitations:
+  - The free edition is binary-only and is not an open-source distribution.
+  - The v1.0.0 ZIP does not bundle Foundation shared libraries or user configuration.
+  - Extracting the ZIP alone does not create a runnable topology; use the public sample fixture through the Business Pack runtime Recipe.
+  - v1.0.0 is verified only for Ubuntu 24.04 x86_64 and macOS arm64.
+  - Time differences are available through diagnostic logs; a UI or graph visualization is not provided.
+
+interfaces:
+  inputs:
+    - name: User-facing Conductor configuration
+      kind: config
+      description: Public contract intended to describe topology and policy before detailed runtime configuration is generated; the v1.0.0 public schema is a follow-up.
+    - name: Generated runtime configuration
+      kind: config
+      description: Conductor, RD, Remote API, Bridge, Endpoint, RPC, and PDU configuration consumed by the release binaries.
+  outputs:
+    - name: Conductor runtime binaries
+      kind: command
+      description: main_server, main_client, main_client_shell, and main_exmonitor.
+    - name: Configuration generator binaries
+      kind: command
+      description: conductor_config_gen, endpoint_gen, endpoint_container_gen, rpc_gen, bridge_gen, and remote_api_gen.
+    - name: Release build contract
+      kind: file
+      description: VERSION and metadata/build-contract.txt identify the release and exact Foundation revisions used to build it.
+  protocols:
+    - name: TCP
+      role: client | server | pubsub
+      notes: Used for distributed Endpoint, RPC, and control-plane communication.
+    - name: Hakoniwa shared memory
+      role: local
+      notes: Used where a process participates in a host-local Hakoniwa runtime.
+  configuration:
+    - path: docs/configuration-ja.md
+      description: Public boundary between user configuration and generated runtime configuration.
+    - path: docs/binary-package-ja.md
+      description: Release filenames, package contents, and sample-execution boundary.
+    - path: docs/compatibility-ja.md
+      description: v1.0.0 Foundation and platform compatibility contract.
+
+dependencies:
+  required:
+    - name: Hakoniwa Business Pack Foundation
+      type: runtime
+      notes: Supplies Core, Endpoint, RPC, and Bridge libraries compatible with metadata/build-contract.txt.
+    - name: hakoniwa-core-pro
+      type: repository
+      notes: Supplies Hakoniwa lifecycle, shared-memory, time, and command runtime libraries.
+    - name: hakoniwa-pdu-endpoint
+      type: repository
+      notes: Supplies Endpoint transport and installed package contracts.
+    - name: hakoniwa-pdu-rpc
+      type: repository
+      notes: Supplies RPC transport used by the distributed control plane.
+    - name: hakoniwa-pdu-bridge-core
+      type: repository
+      notes: Supplies Bridge libraries and the compatibility target consumed by the Conductor binaries.
+  optional:
+    - name: Docker
+      type: runtime
+      notes: Used by future containerized multi-node runtime Recipes.
+
+platforms:
+  supported:
+    - Ubuntu 24.04 x86_64
+    - macOS arm64
+  notes:
+    - Platform claims are limited to the published v1.0.0 binary packages.
+
+connects_to:
+  - component_id: hakoniwa-core-pro
+    direction: uses
+    interface: core runtime / shared memory / simulation lifecycle
+    notes: The compatible Foundation revision is recorded in each release package.
+  - component_id: hakoniwa-pdu-bridge-core
+    direction: uses
+    interface: installed Bridge package / generated Bridge config
+    notes: Bridge remains a Foundation dependency rather than a library duplicated in the ZIP.
+  - component_id: hakoniwa-pdu-endpoint
+    direction: uses
+    interface: Endpoint config / TCP and SHM transport
+    notes: Endpoint defines the communication paths used by server/client processes.
+  - component_id: hakoniwa-pdu-rpc
+    direction: uses
+    interface: RPC transport
+    notes: RPC supports distributed control-plane request/response communication.
+  - component_id: hakoniwa-conductor-light
+    direction: related
+    interface: conductor role
+    notes: Conductor Light emphasizes lightweight dynamic participation and external integration; Hakoniwa Conductor emphasizes Owner, Epoch, Commit Point, and RD semantics.
+
+data_contracts:
+  - name: Release identity
+    description: The tag, ZIP filename, VERSION, and metadata/build-contract.txt jointly identify a distributable runtime.
+    source:
+      - repository: hakoniwalab/hakoniwa-conductor
+        path: docs/compatibility-ja.md
+        revision: 0df3765ef5572eaca9ec568c4b890aadad96c38d
+  - name: Binary package names
+    description: v1.0.0 uses hakoniwa-conductor-v1.0.0-linux-x86_64.zip and hakoniwa-conductor-v1.0.0-macos-arm64.zip with corresponding .sha256 files.
+    source:
+      - repository: hakoniwalab/hakoniwa-conductor
+        path: docs/binary-package-ja.md
+        revision: 0df3765ef5572eaca9ec568c4b890aadad96c38d
+  - name: Foundation compatibility
+    description: Foundation libraries are not bundled; the Business Pack must satisfy the revisions and versions recorded by the release build contract.
+    source:
+      - repository: hakoniwalab/hakoniwa-conductor
+        path: docs/compatibility-ja.md
+        revision: 0df3765ef5572eaca9ec568c4b890aadad96c38d
+
+recipe_roles:
+  - role: simulation_core
+    description: Coordinates distributed simulation participants and time.
+  - role: control_plane
+    description: Manages simulation lifecycle and distributed execution responsibility.
+  - role: rd_runtime
+    description: Supports Runtime Delegation and execution-owner handoff.
+  - role: time_sync
+    description: Coordinates distributed Hakoniwa simulation time.
+
+typical_usecases:
+  - Distributed Hakoniwa experiments that require explicit execution responsibility.
+  - Runtime Delegation and ownership-handoff research.
+  - Multi-node server/client simulation-time coordination.
+  - Academic reproducibility using a pinned binary and Foundation build contract.
+
+anti_usecases:
+  - Lightweight dynamic-asset demos where Conductor Light is sufficient.
+  - Simple PDU forwarding without distributed execution control.
+  - Source modification under the free binary-only license.
+  - Running a topology from the ZIP without the corresponding generated configuration.
+
+demo_candidates:
+  - name: v1.0.0 binary-package setup
+    description: Download the platform ZIP into the Business Pack work area, verify SHA-256 and package structure, and expose its installed path for a future runtime Recipe.
+    required_components:
+      - hakoniwa-conductor
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-business-pack
+        path: recipes/examples/hakoniwa-conductor-v1-0-0-binary-package.yaml
+        revision: main
+  - name: Distributed RD smoke
+    description: Start the Conductor server/client topology, observe Runtime Delegation, and terminate normally after public sample configuration becomes available.
+    required_components:
+      - hakoniwa-conductor
+      - hakoniwa-core-pro
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-pdu-rpc
+      - hakoniwa-pdu-bridge-core
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-conductor
+        path: docs/binary-package-ja.md
+        revision: 0df3765ef5572eaca9ec568c4b890aadad96c38d
+  - name: Python two-asset time synchronization
+    description: Use the published generated fixture to run two Python Hakoniwa assets under two Clients and verify equal simulation time without Runtime Delegation.
+    required_components:
+      - hakoniwa-conductor
+      - hakoniwa-core-pro
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-pdu-rpc
+      - hakoniwa-pdu-bridge-core
+      - hakoniwa-pdu-python
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-business-pack
+        path: recipes/examples/hakoniwa-conductor-python-time-sync.yaml
+        revision: main
+      - repository: hakoniwalab/hakoniwa-conductor
+        path: samples/python-time-sync
+        revision: main
+
+operations:
+  install:
+    commands:
+      - python tools/recipe/hakoniwa_conductor.py configure --accept-license
+      - python tools/recipe/hakoniwa_conductor.py doctor
+    notes:
+      - Assets are installed under work/recipes/hakoniwa-conductor-v1-0-0-binary-package rather than a system directory.
+      - --accept-license records an explicit operator acknowledgement; an AI must not infer acceptance.
+  run:
+    commands:
+      - python tools/recipe/hakoniwa_conductor.py status
+      - python tools/recipe/hakoniwa_conductor_time_sync.py configure
+      - python tools/recipe/hakoniwa_conductor_time_sync.py doctor
+      - python tools/recipe/hakoniwa_conductor_time_sync.py smoke
+    notes:
+      - v1.0.0 package setup does not start a Conductor topology.
+      - The time-sync smoke owns its processes, verifies behavior, and performs bounded normal cleanup.
+
+known_gaps:
+  - Pin the public sample source to its merged revision after publication.
+  - Add Ubuntu x86_64 Business Pack runtime evidence using the public ZIP.
+
+source_refs:
+  - repository: hakoniwalab/hakoniwa-conductor
+    path: README.md
+    revision: 0df3765ef5572eaca9ec568c4b890aadad96c38d
+    description: Public product boundary, Business Pack entry point, licensing, and release path.
+  - repository: hakoniwalab/hakoniwa-conductor
+    path: docs/architecture-ja.md
+    revision: 0df3765ef5572eaca9ec568c4b890aadad96c38d
+    description: Public architecture and responsibility boundaries.
+  - repository: hakoniwalab/hakoniwa-conductor
+    path: docs/feature-scope-ja.md
+    revision: 0df3765ef5572eaca9ec568c4b890aadad96c38d
+    description: Implemented semantic scope and Conductor Light distinction.
+  - repository: hakoniwalab/hakoniwa-conductor
+    path: docs/releases/v1.0.0-ja.md
+    revision: 0df3765ef5572eaca9ec568c4b890aadad96c38d
+    description: Published artifacts, platform targets, and Foundation build contract.
+
+tags:
+  - hakoniwa
+  - conductor
+  - rd
+  - distributed
+  - binary
+  - non-commercial
+  - dual-license

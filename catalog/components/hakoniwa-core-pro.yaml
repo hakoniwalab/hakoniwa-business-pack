@@ -138,10 +138,10 @@ connects_to:
     direction: related
     interface: Python package / launcher / SHM client environment
     notes: hakoniwa-pdu supplies Python PDU APIs and the launcher; hakopy comes from the core-pro install and must be importable in the same Python environment for SHM demos.
-  - component_id: hakoniwa-conductor-pro
+  - component_id: hakoniwa-conductor
     direction: used_by
     interface: runtime and install layout
-    notes: Conductor-pro builds on Hakoniwa core runtime concepts.
+    notes: Hakoniwa Conductor builds on Hakoniwa core runtime concepts.
   - component_id: hakoniwa-mujoco-robots
     direction: used_by
     interface: hako-cmd / sync / PDU runtime

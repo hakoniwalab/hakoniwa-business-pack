@@ -33,6 +33,36 @@ Recipe固有ライフサイクルを実装する場合も、このディレク�
 - `unitree_go1_demo.py`
 - `ros2_service_add_two_ints.py`
 - `ros2_bridge_examples.py`
+- `hakoniwa_conductor.py`
+- `hakoniwa_conductor_time_sync.py`
+
+## Hakoniwa Conductor v1.0.0
+
+公開バイナリの準備Recipeは、ライセンス確認後にOS/CPUに対応するRelease ZIPを
+Business Packの`work/`へ取得し、SHA-256、プラットフォーム契約、11個の収録
+バイナリを検証します。システムディレクトリにはインストールしません。
+
+```bash
+python tools/recipe/hakoniwa_conductor.py configure --accept-license
+python tools/recipe/hakoniwa_conductor.py doctor
+python tools/recipe/hakoniwa_conductor.py status
+```
+
+`--accept-license`は人間の判断境界です。AIが暗黙に付与してはいけません。
+このRecipeはバイナリ準備だけを担当し、Conductorプロセスは起動しません。
+
+生成済み設定を同梱した公開Python時刻同期サンプルは、別の実行Recipeで確認します。
+
+```bash
+python tools/recipe/hakoniwa_conductor_time_sync.py configure
+python tools/recipe/hakoniwa_conductor_time_sync.py doctor
+python tools/recipe/hakoniwa_conductor_time_sync.py smoke
+```
+
+`smoke`はConductor Server、2つのClient、2つのPython Assetを起動し、両Assetが
+tick 20で同じ箱庭時刻を観測することを確認してから正常停止します。初回実行前に
+`tools/foundation.py plan`で、公開バイナリのbuild contractと互換なFoundationを
+準備してください。
 
 補助worker、probe、platform adapterと対応する`test_*.py`も同じディレクトリで
 管理します。CIは`tools/recipe/test_*.py`をdiscoverするため、新規テストを

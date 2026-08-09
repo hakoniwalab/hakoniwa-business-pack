@@ -377,7 +377,7 @@ Some APIs expose explicit conductor calls, such as `conductor_start()` /
 does not change the singleton rule. A Recipe must still identify which process
 is allowed to call those APIs.
 
-For the distinction between Core PRO, Conductor PRO, and Conductor Light, see
+For the distinction between Core PRO, Hakoniwa Conductor, and Conductor Light, see
 the Ecosystem Guide. This primer focuses only on runtime ownership and startup
 rules for the selected composition.
 

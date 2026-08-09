@@ -22,7 +22,7 @@ components:
   - hakoniwa-pdu-rpc
   - hakoniwa-pdu-endpoint
   - hakoniwa-core-pro
-  - hakoniwa-conductor-pro
+  - hakoniwa-conductor
   tags:
   - hakoniwa
   - conductor
@@ -30,8 +30,8 @@ components:
   - rpc
   - endpoint
   catalog_path: components/hakoniwa-conductor-light.yaml
-- id: hakoniwa-conductor-pro
-  name: Hakoniwa Conductor Pro
+- id: hakoniwa-conductor
+  name: Hakoniwa Conductor
   category: simulation-core
   secondary_categories:
   - conductor
@@ -40,10 +40,10 @@ components:
   - control-plane
   - commercial
   maturity: experimental
-  distribution: commercial
-  summary: Distributed conductor and RD-oriented execution-unit stack for coordinating
-    server/client assets, time synchronization, control flows, and runtime handoff
-    experiments.
+  distribution: dual-license
+  summary: Distributed Hakoniwa control-plane binaries and configuration generators
+    for coordinating execution responsibility, simulation time, and Runtime Delegation
+    across server/client nodes.
   recipe_roles:
   - simulation_core
   - control_plane
@@ -53,15 +53,17 @@ components:
   - hakoniwa-core-pro
   - hakoniwa-pdu-bridge-core
   - hakoniwa-pdu-endpoint
+  - hakoniwa-pdu-rpc
   - hakoniwa-conductor-light
   tags:
   - hakoniwa
   - conductor
   - rd
   - distributed
-  - endpoint
-  - bridge
-  catalog_path: components/hakoniwa-conductor-pro.yaml
+  - binary
+  - non-commercial
+  - dual-license
+  catalog_path: components/hakoniwa-conductor.yaml
 - id: hakoniwa-core-pro
   name: Hakoniwa Core Pro
   category: simulation-core
@@ -83,7 +85,7 @@ components:
   - hakoniwa-pdu-endpoint
   - hakoniwa-pdu-bridge-core
   - hakoniwa-pdu-python
-  - hakoniwa-conductor-pro
+  - hakoniwa-conductor
   - hakoniwa-mujoco-robots
   - hakoniwa-godot
   tags:
@@ -564,7 +566,7 @@ components:
   - hakoniwa-pdu-python
   - hakoniwa-pdu-ros
   - hakoniwa-conductor-light
-  - hakoniwa-conductor-pro
+  - hakoniwa-conductor
   tags:
   - hakoniwa
   - pdu

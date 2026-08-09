@@ -4,7 +4,7 @@
 
 本ドキュメントは、箱庭のベースエコシステムの上で利用できる主要なコンポーネントやアセットが、エコシステム全体のどこに位置するかを説明するためのガイドです。
 
-箱庭の共通基盤である PDU、PDU Registry、MBody Registry、PDU Endpoint、PDU Bridge Core、PDU RPC、Core PRO、Conductor PRO、Conductor Light については、[箱庭ベースエコシステムガイド](hakoniwa-base-ecosystem-ja.md) を参照してください。
+箱庭の共通基盤である PDU、PDU Registry、MBody Registry、PDU Endpoint、PDU Bridge Core、PDU RPC、Core PRO、Hakoniwa Conductor、Conductor Light については、[箱庭ベースエコシステムガイド](hakoniwa-base-ecosystem-ja.md) を参照してください。
 
 本ガイドの目的は、単なるリポジトリ一覧を提供することではありません。「何を実現したいか」から、どのコンポーネントが関係するのかを理解できる地図を提供することです。個々の Capability、Interface、制約については Catalog を参照してください。
 

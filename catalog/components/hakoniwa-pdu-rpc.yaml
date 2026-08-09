@@ -281,7 +281,7 @@ connects_to:
     direction: used_by
     interface: RPC client/server transport
     notes: Conductor Light uses PDU-RPC for server/client coordination.
-  - component_id: hakoniwa-conductor-pro
+  - component_id: hakoniwa-conductor
     direction: related
     interface: control-plane RPC concept
     notes: Both address control-plane coordination with different scopes.

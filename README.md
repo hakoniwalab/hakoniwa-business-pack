@@ -202,7 +202,7 @@ Product / Service
 - PDU Bridge Core
 - PDU RPC
 - Core PRO
-- Conductor PRO / Conductor Light
+- Hakoniwa Conductor / Conductor Light
 - JSON を中心とした宣言型のシステム構成
 
 ### Component / Asset Guide
@@ -230,7 +230,7 @@ Catalog にある主要コンポーネントがエコシステムのどこに位
 ### Simulation Core
 
 - `hakoniwa-core-pro`
-- `hakoniwa-conductor-pro`
+- `hakoniwa-conductor`
 - `hakoniwa-conductor-light`
 
 ### Physics / Environment / Domain
