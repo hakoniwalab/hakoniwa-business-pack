@@ -20,5 +20,31 @@ impl.pid_alive = pid_alive
 globals()["pid_alive"] = pid_alive
 
 
+def _sync_impl(*names: str) -> None:
+    """Reflect monkey-patched public symbols into the implementation module."""
+    for name in names:
+        setattr(impl, name, globals()[name])
+
+
+def install_host_python() -> None:
+    _sync_impl("foundation_python", "sibling", "run")
+    return impl.install_host_python()
+
+
+def copy_offsets(destination):
+    _sync_impl("sibling")
+    return impl.copy_offsets(destination)
+
+
+def managed_host_alive(session, host_session_path):
+    _sync_impl("pid_alive")
+    return impl.managed_host_alive(session, host_session_path)
+
+
+def start(args):
+    _sync_impl("paths")
+    return impl.start(args)
+
+
 if __name__ == "__main__":
     raise SystemExit(impl.main())
