@@ -57,9 +57,13 @@ reconciliation workflow.
 AI is an optional interface, not a requirement for contributing a Usecase.
 
 If you have a reusable problem or desired outcome but do not use an AI assistant,
-open a GitHub Issue and choose **Usecase Request**. The form asks only for the user
-goal and context: what you want to achieve, who needs it, when it matters, what is
-difficult today, and what would become better if it were possible.
+open the dedicated **[Usecase Request form](https://github.com/hakoniwalab/hakoniwa-business-pack/issues/new?template=usecase-request.yml)** directly.
+This direct link is preferred because some GitHub clients or entry points may open a
+blank Issue editor instead of showing the template chooser.
+
+The form asks only for the user goal and context: what you want to achieve, who needs
+it, when it matters, what is difficult today, and what would become better if it were
+possible.
 
 You do not need to know Hakoniwa component names, Recipe IDs, or whether the request
 is currently feasible. Maintainers will search existing Usecases, assess Catalog and
