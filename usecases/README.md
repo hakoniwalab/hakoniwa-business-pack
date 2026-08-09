@@ -52,6 +52,22 @@ value can be stated independently from the Hakoniwa implementation.
 See [`MAINTAINER.md`](MAINTAINER.md) for the Catalog/Recipe-to-Usecase discovery and
 reconciliation workflow.
 
+## Submit a Usecase without AI
+
+AI is an optional interface, not a requirement for contributing a Usecase.
+
+If you have a reusable problem or desired outcome but do not use an AI assistant,
+open a GitHub Issue and choose **Usecase Request**. The form asks only for the user
+goal and context: what you want to achieve, who needs it, when it matters, what is
+difficult today, and what would become better if it were possible.
+
+You do not need to know Hakoniwa component names, Recipe IDs, or whether the request
+is currently feasible. Maintainers will search existing Usecases, assess Catalog and
+Recipe evidence, and record missing capabilities or unresolved gaps as needed.
+
+The Usecase Request form is only one Issue entry path. Blank Issues remain enabled for
+bugs, technical discussions, and other topics.
+
 ## Status rules
 
 Keep feasibility and validation separate:
