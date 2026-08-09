@@ -14,7 +14,7 @@ body:
     attributes:
       label: What do you want to achieve?
       description: Describe the outcome you want, without needing to explain how Hakoniwa should implement it.
-      placeholder: Example: I want to run many robot simulations on one PC and compare their behavior under the same scenario.
+      placeholder: "Example: I want to run many robot simulations on one PC and compare their behavior under the same scenario."
     validations:
       required: true
 
@@ -23,7 +23,7 @@ body:
     attributes:
       label: Who would use this?
       description: Describe the role or type of user. A company or product name is optional.
-      placeholder: Example: robotics researcher, system integrator, developer, instructor
+      placeholder: "Example: robotics researcher, system integrator, developer, instructor"
     validations:
       required: true
 
