@@ -29,13 +29,18 @@ The normal flow is:
 
 ```text
 User Requirement
-  -> Use Case interpretation
+  -> Search / interpret existing Use Cases
   -> Required Capabilities
   -> Catalog Components
   -> Recipe
   -> Feasibility / Validation / Agency Boundary
   -> Optional Execution
+  -> Preserve unmet or reusable demand as Use Case knowledge
 ```
+
+Before evaluating feasibility from Catalog components alone, search `usecases/` for an existing reusable problem or desired outcome that matches the user's intent. Reuse or refine that Use Case when appropriate.
+
+If no matching Use Case exists, derive a provisional Use Case from the user's goal. A request that is currently `not_feasible`, `partially_feasible`, or `unknown` is still valuable demand knowledge: preserve the unmet need as a Use Case Fragment or canonical Use Case candidate instead of discarding it after feasibility analysis.
 
 The Recipe is the primary system-composition output. A Demo is optional downstream validation, not the primary goal.
 
@@ -63,6 +68,19 @@ Observation / Demand Signal
   -> Fix / Re-verification
   -> Promotion or Executable Guardrail
 ```
+
+Maintainers also have a reverse-discovery path:
+
+```text
+Catalog capabilities + existing Recipes
+  -> identify demonstrated user value
+  -> search existing Use Cases
+  -> propose missing Use Case candidates
+  -> review / generalize
+  -> add canonical Use Cases when justified
+```
+
+Use [`usecases/MAINTAINER.md`](usecases/MAINTAINER.md) for this Catalog/Recipe-to-Usecase discovery workflow. Do not manufacture a customer need merely because a component exists; every proposed Use Case must express credible user value independently from the implementation.
 
 ## Role Handoff
 
@@ -104,17 +122,20 @@ This prevents repository understanding from stopping at the user-facing Recipe l
 Both roles share the same underlying system knowledge. Read the relevant documents before making claims or executing changes:
 
 1. `README.md`
-2. `docs/hakoniwa-base-ecosystem-ja.md`
-3. `docs/hakoniwa-component-asset-guide-ja.md`
-4. `catalog/index.yaml`
-5. `catalog/schema.yaml`
-6. `docs/hakoniwa-runtime-primer.md`
-7. relevant `catalog/components/*.yaml`
-8. `recipes/README.md`
-9. relevant `recipes/examples/*.yaml`
+2. `usecases/README.md`
+3. `usecases/index.yaml`
+4. `docs/hakoniwa-base-ecosystem-ja.md`
+5. `docs/hakoniwa-component-asset-guide-ja.md`
+6. `catalog/index.yaml`
+7. `catalog/schema.yaml`
+8. `docs/hakoniwa-runtime-primer.md`
+9. relevant `catalog/components/*.yaml`
+10. `recipes/README.md`
+11. relevant `recipes/examples/*.yaml`
 
 Read these additional documents when the task requires them:
 
+- `usecases/MAINTAINER.md` when mining existing Catalog or Recipe knowledge for missing reusable Use Cases.
 - `docs/hakoniwa-agent-human-boundary.md` before execution or when human judgement, physical action, permission, credentials, licensing, real hardware, or consequential decisions are involved.
 - `docs/hakoniwa-knowledge-refinement-loop.md` and `knowledge/` when reusable system knowledge is discovered or curated.
 - `MAINTAINER.md` when performing repository-level reflection, demand clustering, implementation tracking, promotion, or executable-knowledge maintenance.
@@ -135,6 +156,25 @@ Do not silently cross from simulation to real-world actuation.
 
 Repository visibility, component identity, distribution channel, and license rights are separate facts.
 
+## Use Case Learning Invariant
+
+Use Cases are the durable record of **who wants what outcome and why it matters**. They are not limited to already-realized solutions.
+
+Therefore:
+
+- search existing Use Cases before reducing a new user goal directly to Catalog components;
+- preserve reusable unmet demand even when the current feasibility result is `not_feasible`, `partially_feasible`, or `unknown`;
+- keep implementation gaps in Recipe / Catalog knowledge while keeping the desired outcome in Use Case knowledge;
+- re-evaluate previously blocked or unknown Use Cases when Catalog capabilities, Recipes, or validation evidence change;
+- allow maintainers to discover candidate Use Cases from demonstrated Catalog/Recipe capabilities, but require an implementation-independent user-value statement before promotion.
+
+This creates two complementary learning directions:
+
+```text
+Demand -> Use Case -> Capability -> Catalog / Recipe
+Catalog / Recipe evidence -> demonstrated value -> Use Case candidate
+```
+
 ## Understanding Report
 
 After a bootstrap-style repository understanding task, report at least:
@@ -144,6 +184,7 @@ I have read:
 - AGENTS.md router: yes/no
 - AGENTS-USER.md: yes/no
 - AGENTS-MAINTAINER.md: yes/no
+- usecases/README.md: yes/no
 - docs/hakoniwa-base-ecosystem-ja.md: yes/no
 - docs/hakoniwa-component-asset-guide-ja.md: yes/no
 - catalog/index.yaml: yes/no
@@ -163,6 +204,7 @@ Current understanding:
 - what can be proposed from Catalog and Recipe evidence
 - what is feasible, verified, unknown, or blocked
 - how reusable discoveries and demand signals feed back into Business Pack knowledge
+- how unmet demand and demonstrated capabilities grow the Use Case layer
 ```
 
 The purpose of the router is not to create two isolated agents. It is to make the active responsibility explicit while allowing a controlled handoff between **using Hakoniwa** and **improving Hakoniwa's reusable knowledge**.
