@@ -21,6 +21,37 @@ The layers have different responsibilities:
 A Usecase is not a marketing claim and is not executable by itself. It must not turn
 component capability into a broad customer outcome without traceable support.
 
+## Usecase learning loop
+
+Usecases are not limited to requests that Hakoniwa can already realize.
+
+Before reducing a new user goal directly to Catalog components, search existing
+Usecases for the same reusable outcome. If no matching Usecase exists, a reusable
+request may become a Usecase Fragment or canonical Usecase candidate even when its
+current realization is `not_feasible`, `partially_feasible`, or `unknown`.
+
+Keep the desired outcome separate from implementation gaps:
+
+```text
+Unmet demand
+  -> Usecase / Fragment
+  -> Required Capabilities
+  -> Catalog / Recipe assessment
+  -> missing capability / missing catalog entry / undocumented capability /
+     unresolved connection
+```
+
+When Catalog capabilities, Recipes, or validation evidence change, previously blocked
+or unknown Usecases should be considered for re-evaluation.
+
+Maintainers should also work in the reverse direction: inspect existing Catalog
+capabilities and validated Recipes, identify the reusable user outcomes they enable,
+search for corresponding Usecases, and propose missing Usecase candidates when the
+value can be stated independently from the Hakoniwa implementation.
+
+See [`MAINTAINER.md`](MAINTAINER.md) for the Catalog/Recipe-to-Usecase discovery and
+reconciliation workflow.
+
 ## Status rules
 
 Keep feasibility and validation separate:
@@ -66,13 +97,16 @@ available.
 ## Authoring rules
 
 1. Start from an audience, situation, problem, and desired outcome.
-2. Reference existing Recipes in `realized_by` when available.
-3. Reference Catalog components in `supported_by` only for capabilities actually used.
-4. Do not describe remote access, production readiness, cost reduction, safety, or
+2. Search existing Usecases before creating a new canonical entry.
+3. Preserve reusable unmet demand even when no current Recipe can realize it.
+4. Reference existing Recipes in `realized_by` when available.
+5. Reference Catalog components in `supported_by` only for capabilities actually used.
+6. Do not describe remote access, production readiness, cost reduction, safety, or
    superiority unless explicit evidence supports that statement.
-5. Keep commercial/private access and human approval gates visible.
-6. Put missing validation or a needed Recipe in `next_steps`.
-7. Run the Usecase validator after adding or changing a Usecase.
+7. Keep commercial/private access and human approval gates visible.
+8. Put missing validation or a needed Recipe in `next_steps`.
+9. Re-evaluate blocked or unknown Usecases after relevant Catalog / Recipe changes.
+10. Run the Usecase validator after adding or changing a Usecase.
 
 ## Validation
 
@@ -90,6 +124,7 @@ status values, Catalog component references, Recipe references, and duplicate ID
 ```text
 usecases/
 ├── README.md
+├── MAINTAINER.md
 ├── index.yaml
 ├── schema.yaml
 ├── tools/
