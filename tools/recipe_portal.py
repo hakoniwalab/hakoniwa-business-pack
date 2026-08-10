@@ -127,11 +127,13 @@ def write_recipe_portal(
     agency_notes: Iterable[str],
     status_label: str = "Foundation ready",
     status_tone: str = "ready",
+    configuration: Iterable[PortalEnvironment] = (),
 ) -> Path:
     if status_tone not in {"ready", "warning", "error"}:
         raise ValueError(f"unsupported portal status tone: {status_tone}")
     output.parent.mkdir(parents=True, exist_ok=True)
     operator_commands = _workspace_commands(commands)
+    configuration_items = tuple(configuration)
     document = f"""<!doctype html>
 <html lang="ja">
 <head>
@@ -289,6 +291,12 @@ def write_recipe_portal(
     <h2>Runtime topology</h2>
     <div class="topology">{_render_topology(topology)}</div>
   </section>
+
+  {f'''<section>
+    <h2>Experiment configuration</h2>
+    <p>実験条件を変更した場合は、Operator workflowのConfigureから再実行してください。</p>
+    <div class="panel"><dl>{_render_environment(configuration_items)}</dl></div>
+  </section>''' if configuration_items else ''}
 
   <section>
     <h2>Operator workflow</h2>

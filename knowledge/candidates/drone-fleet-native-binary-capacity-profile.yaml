@@ -1,0 +1,109 @@
+id: drone-fleet-native-binary-capacity-profile
+title: Drone fleet capacity is a Foundation and native-binary build profile contract
+status: candidate
+
+knowledge_type:
+  - interface_contract
+  - runtime_rule
+  - known_pitfall
+  - validation_rule
+
+summary: >
+  The public/default Hakoniwa Drone native distribution is the general-user
+  profile for at most 200 drones. A fleet above 200 cannot be enabled safely
+  by increasing only Foundation limits: Core, Drone simulator, VSP, Endpoint,
+  and Bridge artifacts must belong to one separately built and verified
+  512-drone profile. Scalability comparisons that include a point above 200
+  must use that same profile for every measurement point to avoid changing the
+  binary under test. Building that profile requires Hakoniwa Drone PRO license
+  entitlement and access to the private PRO source repository.
+
+observation:
+  context: >
+    Reviewing the new native single-host fleet Recipe before extending it from
+    the public/default distribution toward 512-drone research experiments.
+  details:
+    - The installed Foundation receipt exactly matches the documented 200-drone Core profile.
+    - Drone PRO documents Core limits as compile-time parameters and require Core, Drone, and Bridge rebuilds after changing them.
+    - The Business Pack Recipe can derive Foundation requirements, but a Foundation receipt alone does not prove the selected Drone and VSP binaries were produced for the same profile.
+    - The general-user Recipe therefore needs an executable guard that rejects resolved counts above 200.
+    - Research comparisons must not use the default profile for small points and the 512 profile for large points because that changes the binary/build contract across the series.
+    - The 512 profile is not a public Drone Core build path; it requires Hakoniwa Drone PRO license/source access and must remain behind an explicit permission gate.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-drone-pro
+      path: docs/fleets/core-parameter-sizing.md
+      revision: e879cbc99bde93d2448518a2c09d9c0c0f3abfd7
+    - repository: hakoniwalab/hakoniwa-drone-pro
+      path: docs/fleets/rebuild-and-restart.md
+      revision: e879cbc99bde93d2448518a2c09d9c0c0f3abfd7
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/recipe/drone_fleet_single_host.py
+      revision: main
+  runtime_evidence:
+    - description: The local Foundation Core receipt records the documented 200-drone values asset_num=16, pdu_channel_max=8192, recv_event_max=4096, service_client_max=256, and service_max=1024.
+    - description: A native macOS run completed with 200 drones across four simulator processes using the public/default profile; simulation elapsed 21.52 sec, aligned wall elapsed 23.40 sec, and RTF was approximately 0.92.
+  expert_input:
+    - source: Hakoniwa maintainer
+      statement: The general-user limit is 200 drones; experiments above it must use 512-drone-profile binaries, and one comparison series should use the same profile at every scale point.
+    - source: Hakoniwa maintainer
+      statement: Only Hakoniwa Drone PRO users with the applicable license and private source access may build the 512-drone profile.
+    - source: Hakoniwa maintainer
+      statement: service_client_max=1024 may reflect the future two-node 512+512 allocation and avoidance of channel-number overlap, but this rationale still requires confirmation.
+
+confidence: high
+
+contradictions:
+  - target: hakoniwa-drone-pro/docs/fleets/core-parameter-sizing.md and tools/calc_fleet_params.py
+    existing_claim: The 512-drone table selects service_client_max=1024 while next_pow2(512) and the calculator produce 512.
+    new_evidence: The maintainer suspects 1024 belongs to the two-node 512+512 contract, but the current documents do not establish that mapping.
+
+validation:
+  status: partially_verified
+  required:
+    - Produce and identify a 512-drone native binary set and record its resolved Core build limits.
+    - Verify the same 512 profile at measurement points both below and above 200 drones.
+    - Confirm or correct the service_client_max=1024 rationale before making it normative.
+  notes:
+    - The 200-drone guard is deterministic and can be tested without building the research profile.
+
+tracking:
+  implementation_status: in_progress
+  issues:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      number: 114
+      relation: validation
+      status: open
+
+promotion_targets:
+  catalog:
+    - hakoniwa-drone-core
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - drone-fleet-single-host
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      kind: validator
+      path: tools/recipe/drone_fleet_single_host.py
+      mode: detect-and-suggest-remediation
+      notes:
+        - Reject more than 200 drones before runtime artifacts are treated as executable.
+
+promotion_rationale:
+  - The capacity profile is a concrete connection contract between the Drone runtime artifacts and Foundation, so the Recipe and component Catalog are the appropriate durable targets.
+  - The general-user threshold is machine-detectable and should be guarded rather than left only in prose.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails:
+    - tools/recipe/drone_fleet_single_host.py
+  notes:
+    - The general-user guard is implemented and validated by unit tests in the working tree.
+    - The 200-drone public/default profile completed on macOS, but did not sustain real time on the tested host.
+    - The 512-drone Receipt and research Recipe remain future work.

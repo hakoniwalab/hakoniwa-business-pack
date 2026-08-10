@@ -114,9 +114,32 @@ class RecipeGuideTest(unittest.TestCase):
         help_text = guide.parser().format_help()
         self.assertIn("guide", help_text)
         self.assertIn("--recipe", help_text)
+        self.assertIn("--foundation-requirements", help_text)
         self.assertIn("--open", help_text)
         self.assertNotIn("configure", help_text)
         self.assertNotIn("build", help_text)
+
+    def test_dynamic_experiment_guide_uses_declared_foundation_order(self) -> None:
+        recipe_path = self.recipe_dir / "drone-fleet-single-host.yaml"
+        data = guide.load_recipe(recipe_path)
+        commands = [item.command for item in guide._command_items(data, recipe_path)]
+        configure = "python tools/recipe/drone_fleet_single_host.py configure"
+        generated_doctor = (
+            "python tools/foundation.py doctor --recipe "
+            "work/recipes/drone-fleet-single-host/config/foundation-requirements.yaml"
+        )
+        self.assertIn(configure, commands)
+        self.assertIn(generated_doctor, commands)
+        self.assertLess(commands.index(configure), commands.index(generated_doctor))
+        self.assertNotIn(
+            "python tools/foundation.py doctor --recipe "
+            "recipes/examples/drone-fleet-single-host.yaml",
+            commands,
+        )
+        configuration = guide._configuration_items(data)
+        rendered = "\n".join(f"{item.label}: {item.value}" for item in configuration)
+        self.assertIn("drones_per_process", rendered)
+        self.assertIn("process_count*drones_per_process", rendered)
 
     def test_readiness_and_background_handoff_are_rendered_as_notes(self) -> None:
         notes = guide._agency_notes(

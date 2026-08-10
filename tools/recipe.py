@@ -119,7 +119,10 @@ def _command_items(data: dict, recipe_path: Path) -> tuple[PortalCommand, ...]:
     raw_items = _list(demo.get("prerequisites")) + _list(demo.get("steps"))
     commands: list[PortalCommand] = []
     seen: set[str] = set()
-    if isinstance(data.get("foundation_requirements"), dict):
+    if (
+        isinstance(data.get("foundation_requirements"), dict)
+        and demo.get("foundation_workflow") != "declared"
+    ):
         rendered_recipe = _relative_recipe_path(recipe_path)
         for label, action, description in (
             ("Foundation doctor", "doctor", "現在の共通FoundationがRecipe要求を満たすか確認します。"),
@@ -135,7 +138,11 @@ def _command_items(data: dict, recipe_path: Path) -> tuple[PortalCommand, ...]:
         command = _workspace_command(_text(item.get("command")))
         if not command or command in seen:
             continue
-        if "tools/foundation.py doctor" in command and commands:
+        if (
+            "tools/foundation.py doctor" in command
+            and commands
+            and demo.get("foundation_workflow") != "declared"
+        ):
             continue
         seen.add(command)
         label = _text(item.get("id"), _text(item.get("action"))).replace("_", " ")
@@ -163,10 +170,32 @@ def _command_items(data: dict, recipe_path: Path) -> tuple[PortalCommand, ...]:
         else:
             description = _text(
                 expected,
-                _text(item.get("notes"), _text(item.get("description"), "Recipeで宣言された操作")),
+                _text(
+                    item.get("notes"),
+                    _text(
+                        item.get("description"),
+                        _text(item.get("action"), "Recipeで宣言された操作"),
+                    ),
+                ),
             )
         commands.append(PortalCommand(label.title(), command, description))
     return tuple(commands)
+
+
+def _configuration_items(data: dict) -> tuple[PortalEnvironment, ...]:
+    contract = _mapping(data.get("experiment_contract"))
+    if not contract:
+        return ()
+    items: list[PortalEnvironment] = []
+    source = _text(contract.get("source"))
+    if source:
+        items.append(PortalEnvironment("Experiment YAML", source))
+    inputs = [str(value) for value in _list(contract.get("user_inputs"))]
+    if inputs:
+        items.append(PortalEnvironment("Editable fields", ", ".join(inputs)))
+    for index, rule in enumerate(_list(contract.get("resolution")), start=1):
+        items.append(PortalEnvironment(f"Resolution rule {index}", str(rule)))
+    return tuple(items)
 
 
 def _agency_notes(data: dict) -> tuple[str, ...]:
@@ -236,6 +265,17 @@ def _links(paths, recipe_path: Path, data: dict) -> tuple[PortalLink, ...]:
         PortalLink("Logs", "logs/", "実行時ログ"),
         PortalLink("Validation", "validation/", "検証証跡"),
     ]
+    experiment_source = _text(_mapping(data.get("experiment_contract")).get("source"))
+    if experiment_source:
+        experiment_path = root() / experiment_source
+        links.insert(
+            1,
+            PortalLink(
+                "Experiment YAML",
+                experiment_path.as_uri(),
+                "機体数、process数、飛行シナリオを変更する入力",
+            ),
+        )
     launcher = next(
         (
             profile.get("launcher")
@@ -253,11 +293,17 @@ def _links(paths, recipe_path: Path, data: dict) -> tuple[PortalLink, ...]:
     return tuple(links)
 
 
-def write_guide(recipe_path: Path, data: dict) -> Path:
+def write_guide(
+    recipe_path: Path,
+    data: dict,
+    foundation_requirements_path: Path | None = None,
+) -> Path:
     foundation = load_foundation_module()
     paths = foundation.resolve_workspace(root(), data["id"])
     paths.recipe_root.mkdir(parents=True, exist_ok=True)
-    status_label, foundation_detail = _foundation_state(recipe_path, data)
+    status_label, foundation_detail = _foundation_state(
+        foundation_requirements_path or recipe_path, data
+    )
     if status_label.endswith("SATISFIED") or status_label == "Foundation not declared":
         status_tone = "ready"
     elif status_label.endswith("UNKNOWN"):
@@ -299,6 +345,7 @@ def write_guide(recipe_path: Path, data: dict) -> Path:
         agency_notes=_agency_notes(data),
         status_label=status_label,
         status_tone=status_tone,
+        configuration=_configuration_items(data),
     )
 
 
@@ -308,6 +355,11 @@ def parser() -> argparse.ArgumentParser:
     )
     result.add_argument("command", choices=("guide",))
     result.add_argument("--recipe", type=Path, required=True)
+    result.add_argument(
+        "--foundation-requirements",
+        type=Path,
+        help="Use generated Foundation requirements when rendering current status",
+    )
     result.add_argument(
         "--open",
         action="store_true",
@@ -321,7 +373,12 @@ def main(argv: list[str] | None = None) -> int:
     try:
         recipe_path = args.recipe.expanduser().absolute()
         data = load_recipe(recipe_path)
-        output = write_guide(recipe_path, data)
+        requirements_path = (
+            args.foundation_requirements.expanduser().absolute()
+            if args.foundation_requirements is not None
+            else None
+        )
+        output = write_guide(recipe_path, data, requirements_path)
         print(f"Recipe guide: {output}")
         if args.open and not webbrowser.open(output.as_uri()):
             raise RecipeGuideError(f"failed to open Recipe guide: {output}")

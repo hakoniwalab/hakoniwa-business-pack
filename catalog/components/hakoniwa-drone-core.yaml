@@ -28,8 +28,8 @@ license:
     - Hakoniwa Drone PRO is not a separate component dependency; it is the commercial licensing path for this component.
     - Control Link and Scenario Link are optional licensed capabilities and must not be assumed to be included in every commercial agreement.
 verification:
-  verified_at: 2026-07-20
-  source_revision: afb9d4f468c4d03188c05a949b73c741534bfd10
+  verified_at: 2026-08-10
+  source_revision: 00182af5d8bb6b46aefb39c4316280ea53c61b34
   source_ref: main
 summary: Drone simulation component with dynamics, PX4 and ArduPilot integration, Hakoniwa PDU integration, Python control APIs, multi-drone simulation, and extensible environment and sensor models. The same codebase is offered under non-commercial Hakoniwa Drone Core terms and commercial Hakoniwa Drone PRO licensing.
 category:
@@ -76,6 +76,24 @@ capabilities:
       - repository: toppers/hakoniwa-drone-core
         path: README.md
         revision: afb9d4f468c4d03188c05a949b73c741534bfd10
+  - name: Native multi-process fleet execution
+    description: Generates arbitrary fleet definitions, splits one fleet across multiple native Drone simulator processes, and assigns built-in Conductor ownership to the first process while followers disable their Conductor.
+    evidence:
+      - repository: toppers/hakoniwa-drone-core
+        path: tools/gen_fleet_scale_config.py
+        revision: 00182af5d8bb6b46aefb39c4316280ea53c61b34
+      - repository: toppers/hakoniwa-drone-core
+        path: tools/gen_fleet_split_config.py
+        revision: 00182af5d8bb6b46aefb39c4316280ea53c61b34
+      - repository: toppers/hakoniwa-drone-core
+        path: tools/gen_fleet_nproc_launch.py
+        revision: 00182af5d8bb6b46aefb39c4316280ea53c61b34
+  - name: Fleet workload timing and real-time pacing
+    description: The shared Python Show Runner records wall/Core phase timing and Real Time Factor, and can pace wall time cumulatively to authoritative Hakoniwa simulation time.
+    evidence:
+      - repository: toppers/hakoniwa-drone-core
+        path: drone_api/external_rpc/apps/show_asset_runner.py
+        revision: 00182af5d8bb6b46aefb39c4316280ea53c61b34
   - name: Control Link
     description: Optional Hakoniwa Drone PRO capability for connecting PX4 or custom control software through the Adapter Interface for lightweight closed-loop validation.
     availability: commercial-option
@@ -95,6 +113,8 @@ limitations:
   - Public repository access must not be interpreted as unrestricted OSS or commercial-use rights.
   - Control Link and Scenario Link are optional licensed capabilities and must not be assumed to be available in the non-commercial distribution or every PRO agreement.
   - Multi-drone scale and real-time performance depend on host resources and the selected flight-controller stack.
+  - The public/default native binary profile is the general-user path for at most 200 drones; larger research profiles require compatible Core, Drone, VSP, Endpoint, Bridge, and Foundation builds rather than only larger runtime configuration values.
+  - Building and using a 512-drone research profile requires applicable Hakoniwa Drone PRO entitlement and private source access.
 interfaces:
   inputs:
     - name: Drone and fleet configuration
@@ -187,6 +207,12 @@ data_contracts:
       - repository: toppers/hakoniwa-drone-core
         path: README.md
         revision: afb9d4f468c4d03188c05a949b73c741534bfd10
+  - name: Native fleet capacity profile
+    description: Fleet scale is constrained jointly by Foundation build limits and the capacity profile used to build native Core, Drone, visualization, Endpoint, and Bridge artifacts.
+    source:
+      - repository: hakoniwalab/hakoniwa-business-pack
+        path: knowledge/candidates/drone-fleet-native-binary-capacity-profile.yaml
+        revision: main
   - name: Control Link Adapter Interface
     description: Optional licensed boundary between the Hakoniwa drone control core and PX4 or custom control backends.
     source:
@@ -212,6 +238,7 @@ typical_usecases:
   - Use the same technical component commercially under a Hakoniwa Drone PRO license.
   - Perform lightweight repeated closed-loop validation using licensed Control Link configurations.
   - Perform fault, disturbance, sensor-noise, and environment-condition verification using licensed Scenario Link configurations.
+  - Evaluate native single-host multi-drone scalability by varying fleet and simulator-process counts while recording Real Time Factor.
 anti_usecases:
   - Commercial product development or operation under the public non-commercial license alone.
   - Modeling Hakoniwa Drone PRO as a separate technical component or dependency from Hakoniwa Drone Core.
@@ -246,11 +273,16 @@ operations:
 known_gaps:
   - Exact usage rights must be checked against the applicable public license or commercial agreement.
   - A public catalog cannot determine a specific customer's contracted PRO options; recipes must treat Control Link and Scenario Link as conditional capabilities.
+  - The exact 512-drone build profile and the service_client_max=1024 rationale still require a machine-verifiable Receipt and end-to-end validation.
 source_refs:
   - repository: toppers/hakoniwa-drone-core
     path: README.md
-    revision: afb9d4f468c4d03188c05a949b73c741534bfd10
+    revision: 00182af5d8bb6b46aefb39c4316280ea53c61b34
     description: Public overview, capabilities, integration paths, and multi-drone behavior.
+  - repository: toppers/hakoniwa-drone-core
+    path: drone_api/external_rpc/apps/show_asset_runner.py
+    revision: 00182af5d8bb6b46aefb39c4316280ea53c61b34
+    description: Fleet workload execution, phase timing, authoritative simulation-time measurement, Real Time Factor, and optional wall-clock pacing.
   - repository: toppers/hakoniwa-drone-core
     path: LICENSE-ja.md
     revision: afb9d4f468c4d03188c05a949b73c741534bfd10

@@ -28,6 +28,7 @@ Recipe固有ライフサイクルを実装する場合も、このディレク�
 - `drone_threejs.py`
 - `drone_gamepad_exhibition.py`
 - `drone_shibuya_gamepad.py`
+- `drone_fleet_single_host.py`
 - `shadow_hand_foxglove.py`
 - `turtlebot3_godot_exhibition.py`
 - `unitree_go1_demo.py`
@@ -102,3 +103,45 @@ configure -> build -> doctor -> start -> smoke -> status -> stop
 Action Recipeは`hakoniwa-pdu >= 1.6.6`を要求します。この版から
 `hako_action_msgs`と`sample_action_msgs/Fibonacci`の生成済みPython型が
 正式な`hakoniwa-pdu` packageに含まれます。
+
+## Native Single-host Multi-drone
+
+任意の機体数を複数のDrone simulator processへ分割するRecipeは、実験条件を
+YAMLで受け取ります。既定値は1 processあたり26機、1 process（合計26機）です。
+`scale.process_count`を2、3と変更すると、1 processあたり26機を維持したまま、
+合計機体数が52、78へ増えます。総機体数を直接指定して均等分割する構成や、
+`process_count: auto`と`drones_per_process`の組み合わせも利用できます。
+MVPはDockerを使わず、macOS / Linux / Windowsのnative
+Drone binaryを選択します。全機の離陸完了を待ってからHAKONIWAの文字配置へ
+移り、全機の配置完了後に一定時間保持します。文字を欠損なく構成する最小数は
+26機、視認性を確保する推奨値は52機以上です。26本の各ストロークへ最低数を
+割り当て、残りの機体はストローク長に比例して配分します。
+
+一般ユーザ向けの公開／既定Droneバイナリ構成は最大200機です。201機以上を指定すると
+`configure`は実行可能な生成物を作る前にエラーにします。201〜512機の研究評価には、
+Core、Drone simulator、VSP、Endpoint、Bridgeを同一の512機向けbuild limitで作成し、
+その整合性を確認できる専用プロファイルに加え、Hakoniwa Drone PROのライセンスと
+非公開PROソースへのアクセス権が必要です。Foundationの値だけを増やして
+公開バイナリを流用してはいけません。また200機超を含む性能比較では、公平性のため、
+200機以下の測定点にも同じ512機向けバイナリプロファイルを使用します。
+
+```bash
+python tools/recipe/drone_fleet_single_host.py configure
+python tools/foundation.py doctor \
+  --recipe work/recipes/drone-fleet-single-host/config/foundation-requirements.yaml
+python tools/recipe/drone_fleet_single_host.py doctor
+python tools/recipe/drone_fleet_single_host.py start
+python tools/recipe/drone_fleet_single_host.py open-viewer
+python tools/recipe/drone_fleet_single_host.py smoke
+python tools/recipe/drone_fleet_single_host.py stop
+```
+
+入力は`recipes/experiments/drone-fleet-single-host-mvp.yaml`、生成物はすべて
+`work/recipes/drone-fleet-single-host/`配下です。`start`は背景起動後に復帰するため、
+`open-viewer`でブラウザ表示を開き、`smoke`で全機のHAKONIWA配置と保持の完了を
+確認し、最後に必ず`stop`してください。既定では着陸せず、文字を表示した状態で
+実験シーケンスだけが完了します。`open-viewer`は解決済み総機体数を
+`maxDynamicDrones`としてURLへ自動設定します。
+各実行のwall/Core phase時間とReal Time Factorは
+`validation/execution-summary.json`へ記録されます。matrix展開、反復実行、
+実験ごとの結果保持、集計済み`results/`は次段階です。
