@@ -130,7 +130,9 @@ execution_environment:
       required: false
       available: not-required
   python:
-    environment: venv
+    environment: foundation-venv
+    path: work/foundation/install/python
+    version: "3.12"
     hakopy_available: true
   hakoniwa:
     install_prefix: work/foundation/install

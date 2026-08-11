@@ -28,6 +28,7 @@ status:
   notes:
     - Core-free packet conversion and Core-dependent runtime integration are separate capability profiles.
     - The package does not install hakopy, hako-cmd, or Hakoniwa Core by itself.
+    - Core-integrated Foundation Recipes use the same managed CPython 3.12 interpreter for hakoniwa-pdu and the SOABI-tagged hakopy artifact declared by the Core Receipt.
 capabilities:
   - name: Python PDU communication
     description: Provides Python APIs for Hakoniwa PDU topic and RPC communication.
@@ -100,6 +101,7 @@ limitations:
   - WebSocket URI scope must be explicitly configured.
   - This is a Python-facing package, not the C++ Endpoint abstraction.
   - hakopy, hako-cmd, local shared memory, and simulation lifecycle require a compatible Hakoniwa Core installation; they are not prerequisites for generated packet conversion alone.
+  - Core-integrated runtime must resolve hakopy from the Core Receipt and reject ambiguous or legacy untagged native extensions; copying or renaming a compatibility artifact is not a supported workaround.
   - Current Business Pack Foundation metadata does not yet expose separate core-free-conversion and core-integrated-runtime install profiles or Receipts.
 interfaces:
   inputs:

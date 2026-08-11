@@ -604,6 +604,49 @@ def evaluate_component(
                 reasons.append(
                     _reason("python.soabi", "non-empty SOABI", "missing")
                 )
+            extension_suffix = installed_python.get("extension_suffix")
+            expected_artifact = (
+                f"share/hakoniwa/python/hakopy{extension_suffix}"
+                if isinstance(extension_suffix, str) and extension_suffix
+                else None
+            )
+            installed_artifact = installed_python.get("artifact")
+            if expected_artifact is None or installed_artifact != expected_artifact:
+                reasons.append(
+                    _reason(
+                        "python.artifact",
+                        expected_artifact or "SOABI-tagged hakopy artifact",
+                        installed_artifact or "missing",
+                    )
+                )
+            artifact_paths = {
+                artifact.get("path")
+                for artifact in receipt.get("artifacts", [])
+                if isinstance(artifact, dict)
+            }
+            if installed_artifact not in artifact_paths:
+                reasons.append(
+                    _reason(
+                        "python.artifact.receipt",
+                        "listed in artifacts",
+                        installed_artifact or "missing",
+                    )
+                )
+            python_dir = prefix / "share" / "hakoniwa" / "python"
+            installed_bindings = sorted(
+                path.name
+                for path in python_dir.glob("hakopy*")
+                if path.is_file() and path.suffix.lower() in {".so", ".pyd"}
+            )
+            expected_name = Path(expected_artifact).name if expected_artifact else None
+            if installed_bindings != ([expected_name] if expected_name else []):
+                reasons.append(
+                    _reason(
+                        "python.artifacts.unique",
+                        [expected_name] if expected_name else ["one SOABI-tagged hakopy"],
+                        installed_bindings,
+                    )
+                )
     for capability, enabled in required.get("capabilities", {}).items():
         installed = receipt.get("capabilities", {}).get(capability)
         if isinstance(enabled, bool) and installed is not enabled:

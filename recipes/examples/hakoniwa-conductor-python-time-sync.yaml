@@ -113,7 +113,9 @@ execution_environment:
     required: true
     access: Recipe-local server, client-a, and client-b mmap roots
   python:
-    environment: venv
+    environment: foundation-venv
+    path: work/foundation/install/python
+    version: "3.12"
     hakopy_available: required
   hakoniwa:
     install_prefix: work/foundation/install

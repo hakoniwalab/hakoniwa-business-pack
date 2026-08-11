@@ -23,6 +23,7 @@ observation:
     - The downstream Tracer Twist demo does execute all of those runtime facilities and requires Foundation Python 3.12 with matching SOABI evidence.
     - One Recipe previously described both stages, retained /usr/local/hakoniwa metadata, and could not truthfully be classified as Foundation-required or not-required.
     - Splitting the Recipe removed one legacy Foundation warning without imposing Core installation on the offline conversion workflow.
+    - A managed hakopy runtime is identified by the Core Receipt, not by a guessed filename: binding_mode must be soabi, SOABI must match the Foundation interpreter, and exactly the declared tagged artifact may exist; legacy hakopy.so or hakopy.pyd fallback hides ABI incompatibility and is rejected.
 
 sources:
   repositories:
@@ -32,12 +33,16 @@ sources:
     - repository: hakoniwalab/hakoniwa-business-pack
       path: recipes/examples/agilex-tracer-hakoniwa-runtime.yaml
       revision: working-tree-2026-08-11
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/foundation.py
+      revision: working-tree-2026-08-11
     - repository: hakoniwalab/hakoniwa-mujoco-robots
       path: examples/actuators/agilex_tracer/README.md
       revision: main-2026-08-11
   runtime_evidence:
     - description: Recipe validator warnings fell from four legacy runtime Recipes to three after the conversion/runtime boundary was made explicit.
     - description: The managed macOS lifecycle built and ran the split runtime Recipe with Foundation Python 3.12 and moved the Tracer from base.x 0.000 to 0.301.
+    - description: Foundation contract tests reject a mismatched SOABI, a Receipt artifact inconsistent with EXT_SUFFIX, and an additional legacy untagged hakopy artifact.
   expert_input:
     - source: Hakoniwa maintainer
       statement: The MBody conversion is not TB3- or runtime-specific; dependencies and Recipe ownership should follow the repository and responsibility boundary.
@@ -66,8 +71,10 @@ tracking:
       status: open
 
 promotion_targets:
-  catalog: []
-  runtime_primer: false
+  catalog:
+    - hakoniwa-core-pro
+    - hakoniwa-pdu-python
+  runtime_primer: true
   base_ecosystem_guide: false
   component_asset_guide: false
   recipes:
@@ -80,6 +87,13 @@ promotion_targets:
       mode: detect-and-suggest-remediation
       notes:
         - Detect runtime Foundation signals in an unclassified Recipe.
+        - Enforce the managed install prefix and Foundation CPython 3.12 contract for hakopy Recipes.
+    - repository: hakoniwalab/hakoniwa-business-pack
+      kind: runtime-inspector
+      path: tools/foundation.py
+      mode: detect-only
+      notes:
+        - Reject missing Receipt metadata, SOABI mismatch, ambiguous native artifacts, and legacy untagged fallback before Recipe execution.
 
 promotion_rationale:
   - The boundary belongs primarily in Recipe composition and validation rather than a component Catalog.

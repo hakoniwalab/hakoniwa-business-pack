@@ -291,6 +291,8 @@ target_environment:
 execution_environment:
   workspace:
     mode: managed
+  hakoniwa:
+    install_prefix: work/foundation/install
   required_for: executable-demo
   status: verified
   gui:

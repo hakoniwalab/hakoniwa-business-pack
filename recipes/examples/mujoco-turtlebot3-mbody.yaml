@@ -177,10 +177,12 @@ execution_environment:
       required: false
       available: unknown
   python:
-    environment: venv
+    environment: foundation-venv
+    path: work/foundation/install/python
+    version: "3.12"
     hakopy_available: true
   hakoniwa:
-    install_prefix: /usr/local/hakoniwa
+    install_prefix: work/foundation/install
     hako_cmd_access: requires-unsandboxed-command
   notes:
     - Python 3.12, hakopy, and hakoniwa-pdu must be available in the same Python environment used by route and visualizer scripts.

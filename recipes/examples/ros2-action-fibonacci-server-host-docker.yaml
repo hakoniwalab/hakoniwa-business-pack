@@ -42,6 +42,8 @@ target_environment:
 execution_environment:
   workspace:
     mode: managed
+  hakoniwa:
+    install_prefix: work/foundation/install
   host: {role: Hakoniwa Typed Action Server, install_root: work/foundation/install}
   container: {role: ROS 2 Action Server Bridge and ros2 action client, platform: linux}
   boundary: {protocol: PDU-RPC TCP, listener: host, address: host.docker.internal, port: 54013}

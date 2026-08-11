@@ -41,6 +41,8 @@ component_receipt:
     - dependencies
     - artifacts
     - resolved_manifest
+  optional_fields:
+    - python
   schema_version: 1
   component:
     required_fields:
@@ -79,3 +81,22 @@ component_receipt:
       path: install_prefix_relative
   resolved_manifest:
     type: install_prefix_relative_path
+  python:
+    description: Optional native Python binding identity, currently emitted by hakoniwa-core-pro.
+    required_fields:
+      - binding_mode
+      - implementation
+      - executable
+      - version
+      - major
+      - minor
+      - soabi
+      - extension_suffix
+      - artifact
+    binding_mode: soabi
+    implementation: CPython
+    major: 3
+    minor: 12
+    soabi: non_empty_string
+    extension_suffix: native_python_extension_suffix
+    artifact: install_prefix_relative_path

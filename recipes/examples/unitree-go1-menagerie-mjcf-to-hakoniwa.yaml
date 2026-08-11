@@ -285,6 +285,7 @@ execution_environment:
   python:
     environment: foundation-venv
     path: work/foundation/install/python
+    version: "3.12"
     hakopy_available: required-for-hakoniwa-runtime
   hakoniwa:
     install_prefix: work/foundation/install

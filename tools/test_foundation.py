@@ -277,6 +277,8 @@ class FoundationInspectorTest(unittest.TestCase):
         create_artifact: bool = True,
     ) -> None:
         os_name, architecture = foundation._host_contract()
+        if component == "hakoniwa-core-pro" and artifact == "lib/component.marker":
+            artifact = "share/hakoniwa/python/hakopy.cpython-312-test.so"
         resolved = (
             self.prefix
             / "share"
@@ -300,7 +302,7 @@ class FoundationInspectorTest(unittest.TestCase):
             "  major: 3\n"
             "  minor: 12\n"
             "  soabi: cpython-312-test\n"
-            "  extension_suffix: .test.so\n"
+            "  extension_suffix: .cpython-312-test.so\n"
             f"  artifact: {artifact}\n"
             if component == "hakoniwa-core-pro"
             else ""
@@ -523,6 +525,54 @@ class FoundationInspectorTest(unittest.TestCase):
                 "installed": "cpython-313-test",
             },
             core["reasons"],
+        )
+
+    def test_core_receipt_rejects_legacy_untagged_hakopy_alongside_soabi_artifact(self) -> None:
+        self.write_recipe(
+            "  hakoniwa-core-pro:\n"
+            "    capabilities:\n"
+            "      shared_memory: true\n"
+        )
+        self.write_receipt(
+            "hakoniwa-core-pro",
+            capabilities="  shared_memory: true\n",
+        )
+        legacy = self.prefix / "share/hakoniwa/python/hakopy.so"
+        legacy.write_text("legacy\n", encoding="utf-8")
+
+        result = foundation.inspect_foundation(self.recipe, self.prefix)
+        core = result["components"][0]
+
+        self.assertEqual(result["status"], "INCOMPATIBLE")
+        self.assertTrue(
+            any(reason["field"] == "python.artifacts.unique" for reason in core["reasons"])
+        )
+
+    def test_core_receipt_rejects_python_artifact_not_derived_from_extension_suffix(self) -> None:
+        self.write_recipe(
+            "  hakoniwa-core-pro:\n"
+            "    capabilities:\n"
+            "      shared_memory: true\n"
+        )
+        self.write_receipt(
+            "hakoniwa-core-pro",
+            capabilities="  shared_memory: true\n",
+        )
+        receipt = self.prefix / "share/hakoniwa/receipts/hakoniwa-core-pro.yaml"
+        receipt.write_text(
+            receipt.read_text(encoding="utf-8").replace(
+                "artifact: share/hakoniwa/python/hakopy.cpython-312-test.so",
+                "artifact: share/hakoniwa/python/hakopy.so",
+            ),
+            encoding="utf-8",
+        )
+
+        result = foundation.inspect_foundation(self.recipe, self.prefix)
+        core = result["components"][0]
+
+        self.assertEqual(result["status"], "INCOMPATIBLE")
+        self.assertTrue(
+            any(reason["field"] == "python.artifact" for reason in core["reasons"])
         )
 
     def test_false_capability_requires_installed_false(self) -> None:

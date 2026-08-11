@@ -269,12 +269,6 @@ recipe_paths.each do |path|
       label: label
     )
   )
-  if data["foundation_contract"].nil?
-    signals = FoundationValidation.foundation_usage_signals(data["execution_environment"])
-    unless signals.empty?
-      warnings << "#{label}: legacy Recipe requires Foundation migration; runtime signals: #{signals.join(', ')}"
-    end
-  end
 end
 
 warnings.each { |message| warn "warning: #{message}" }

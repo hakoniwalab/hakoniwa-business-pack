@@ -43,6 +43,8 @@ target_environment:
 execution_environment:
   workspace:
     mode: managed
+  hakoniwa:
+    install_prefix: work/foundation/install
   host: {role: Hakoniwa Typed Action Client, install_root: work/foundation/install}
   container: {role: ROS 2 Fibonacci Action Server and Action Client Bridge, platform: linux}
   boundary: {protocol: PDU-RPC TCP, listener: container, published_address: 127.0.0.1, port: 54014}

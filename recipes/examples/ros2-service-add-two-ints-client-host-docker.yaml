@@ -44,6 +44,8 @@ target_environment:
 execution_environment:
   workspace:
     mode: managed
+  hakoniwa:
+    install_prefix: work/foundation/install
   host:
     role: Hakoniwa Typed RPC Client
     install_root: work/foundation/install

@@ -27,6 +27,7 @@ status:
   notes:
     - Cataloged from README and core-cpp references.
     - The standard operational entry point is tools/hako.py; platform-specific build logic remains component-owned.
+    - A Foundation Python binding is built with CPython 3.12 and python.soabi enabled; its Receipt owns the binding_mode, SOABI, extension suffix, and exact tagged hakopy artifact identity.
 
 capabilities:
   - name: Simulation hub integration
@@ -71,6 +72,7 @@ limitations:
   - Legacy C API remains for compatibility but README indicates newer polling API should be preferred.
   - "`hako-cmd stop` controls simulation lifecycle but does not necessarily terminate all OS processes; recipes must document launcher termination or cleanup."
   - Only one process should own conductor startup in a composed shared-memory runtime unless source documentation says otherwise.
+  - A Foundation runtime must reject missing, ambiguous, or untagged hakopy artifacts rather than falling back to hakopy.so or hakopy.pyd.
 
 interfaces:
   inputs:
