@@ -1,0 +1,103 @@
+id: recipe-staging-must-preserve-runtime-artifact-closure
+title: Recipe staging must preserve the complete runtime artifact closure
+status: validating
+
+knowledge_type:
+  - architectural_principle
+  - known_pitfall
+  - validation_rule
+
+summary: >
+  Copying only a top-level MJCF or Endpoint JSON into Recipe work is insufficient
+  when it contains relative references. A managed Recipe must stage the complete
+  dependency closure, preserve valid relative layout, and remove cross-repository
+  runtime path assumptions before declaring the artifact runnable.
+
+observation:
+  context: >
+    Native macOS re-validation of the split AgileX and dual TurtleBot3 Recipes
+    under managed Foundation workspaces.
+  details:
+    - The AgileX MJCF loaded only after its generated mesh directory was staged with the XML.
+    - The AgileX PDU definition required its referenced PDU type file, and the Endpoint required its cache and communication JSON files.
+    - The dual TurtleBot3 MJCF embedded a relative path into a sibling MBody repository and therefore failed after otherwise-correct Recipe staging.
+    - Copying the MBody mesh source into Recipe work and rewriting only the staged MJCF to a Recipe-relative path restored portable runtime loading.
+    - TB3 headless execution still requires a viewer-capable build because camera sensor objects link renderer and GLFW symbols; headless controls runtime windows rather than link dependencies.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/recipe/agilex_tracer_demo.py
+      revision: working-tree-2026-08-11
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/recipe/mujoco_turtlebot3_dual_mirror.py
+      revision: working-tree-2026-08-11
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      path: models/tb3/tb3_burger_real_waffle_mirror.xml
+      revision: main-2026-08-11
+  runtime_evidence:
+    - description: AgileX model loading and Endpoint startup succeeded after staging all referenced files.
+    - description: Dual TurtleBot3 reached bidirectional mirror counts above 8000 after staged MBody mesh references replaced sibling-repository paths.
+  expert_input:
+    - source: Hakoniwa maintainer
+      statement: Foundation and Recipe-managed work must make runtime dependencies observable rather than rely on a developer's sibling repository layout.
+
+confidence: high
+
+contradictions:
+  - target: Runtime Recipe staging
+    existing_claim: Copying the entry JSON or MJCF is sufficient to make an artifact Recipe-owned.
+    new_evidence: Relative mesh, PDU type, cache, and communication references remain runtime dependencies and fail outside the original source layout.
+
+validation:
+  status: partially_verified
+  required:
+    - Apply dependency-closure inspection to the remaining legacy runtime Recipes.
+    - Re-run the staged layouts on native Windows and Linux.
+  notes:
+    - AgileX and dual TurtleBot3 pass on native macOS with Recipe-owned runtime inputs.
+
+tracking:
+  implementation_status: in_progress
+  issues:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      number: 116
+      relation: fix
+      status: open
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - agilex-tracer-hakoniwa-runtime
+    - mujoco-turtlebot3-dual-mirror
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      kind: unit-test
+      path: tools/recipe/test_agilex_tracer_demo.py
+      mode: blocking
+    - repository: hakoniwalab/hakoniwa-business-pack
+      kind: unit-test
+      path: tools/recipe/test_mujoco_turtlebot3_dual_mirror.py
+      mode: blocking
+
+promotion_rationale:
+  - The rule belongs at the Recipe composition boundary because it governs source-to-work materialization.
+  - Component catalogs can describe artifacts but cannot prove that a particular Recipe staged all transitive runtime references.
+
+resolution:
+  status: pending
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      issue: 116
+      pull_request: null
+      revision: null
+  verified: false
+  promoted_to: []
+  executable_guardrails:
+    - tools/recipe/test_agilex_tracer_demo.py
+    - tools/recipe/test_mujoco_turtlebot3_dual_mirror.py
+  notes:
+    - Final resolution requires the remaining legacy Recipe migrations and cross-platform evidence.
