@@ -22,8 +22,9 @@ validation:
   status: verified
   summary: >
     TurtleBot3 Burger, Waffle, and Waffle Pi MBody artifacts were validated in
-    MuJoCo on macOS arm64. The launcher-driven Waffle and Waffle Pi demos ran with MuJoCo viewer,
-    joystick-free figure-eight route control, and LiDAR visualization.
+    MuJoCo on macOS arm64. The managed cross-platform Recipe was also validated
+    with TurtleBot3 Burger on Windows x64 on 2026-08-11. The launcher-driven
+    demos use joystick-free figure-eight route control and LiDAR observation.
   steps:
     - id: mbody_burger_forge
       status: verified
@@ -112,6 +113,16 @@ validation:
       notes:
         - Demo marker boxes were raised to intersect the TurtleBot3 LiDAR scan plane.
         - Waffle runtime logs showed nearby LiDAR hits with lidar_min around 0.52 to 0.75 m.
+    - id: managed_windows_burger_runtime
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-business-pack
+          path: tools/recipe/mujoco_turtlebot3_mbody.py
+          revision: 3084a80
+      notes:
+        - User confirmed the managed Recipe completed native Windows x64 validation on 2026-08-11.
+        - The same configure, build, doctor, and start command surface used on macOS was used on Windows.
+        - Foundation Python 3.12, the SOABI-tagged Core binding, Endpoint import libraries, vcpkg/GLFW, and the Recipe-owned work directory were validated before runtime.
 
 constraints:
   - no-ros-runtime
@@ -135,9 +146,9 @@ target_environment:
     - name: Python
       required: true
       version: "3.12"
-      path: unknown
+      path: work/foundation/install/python
   hakoniwa:
-    install_prefix: /usr/local/hakoniwa
+    install_prefix: work/foundation/install
     components_built:
       - hakoniwa-core-pro
       - hakoniwa-pdu-endpoint
@@ -461,7 +472,7 @@ missing_pieces:
   - Replace local-validation revisions with concrete commit SHAs after the related repository changes are pushed.
   - Decide whether this recipe should become the canonical minimal TB3 MuJoCo demo recipe.
   - Add CI or scripted smoke validation if shared-memory and GUI constraints can be handled.
-  - Record native Windows evidence for Waffle and Waffle Pi when those profiles are required; the common runner already exposes them.
+  - Record native Windows evidence for Waffle and Waffle Pi when those additional profiles are required; Burger and the common runner are verified.
 
 demo:
   objective: Run TurtleBot3 Burger, Waffle, or Waffle Pi in MuJoCo from MBody-generated artifacts and validate motion plus LiDAR output.
