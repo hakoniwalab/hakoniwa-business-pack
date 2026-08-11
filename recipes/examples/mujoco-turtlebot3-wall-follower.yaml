@@ -21,14 +21,15 @@ feasibility:
     - Smooth obstacle following is feasible, but robust one-loop navigation depends on world fixture design and controller tuning.
 
 validation:
-  status: partially_verified
+  status: verified
   verified_at: 2026-08-11
   summary: >
     The managed Foundation Recipe was configured, built, and executed with
     TurtleBot3 Waffle on macOS arm64 with the MuJoCo viewer and LiDAR visualizer
     on 2026-08-11. A 10-second run reached FOLLOWING mode repeatedly and
-    terminated through the Launcher session. Windows execution and one full loop
-    around obstacles remain to be verified.
+    terminated through the Launcher session. The Foundation-managed viewer
+    workflow was also verified on Windows x64. Completing one measured loop
+    around a dedicated obstacle fixture remains a separate validation extension.
   steps:
     - id: controller_implementation
       status: verified
@@ -63,6 +64,7 @@ validation:
       notes:
         - The managed Recipe used work/foundation/install Python and kept build, configuration, assets, logs, runtime session, and validation state under work/recipes/mujoco-turtlebot3-wall-follower/.
         - On 2026-08-11, a 10-second macOS arm64 viewer-enabled run produced repeated FOLLOWING status lines and ended with Launcher state TERMINATED.
+        - On 2026-08-11, Windows x64 viewer execution and the Foundation-managed Launcher lifecycle were confirmed by the user after the portability fixes.
         - hakoniwa-pdu 1.6.8 exposed the initial uninitialized LaserScan slot; the controller now logs that startup boundary and waits for the first valid packet.
         - Waffle demo ran headless for 20 seconds and with GUI for 30 seconds.
         - Runtime logs showed nonzero lidar_hits and changing robot pose.
@@ -90,7 +92,7 @@ target_environment:
   status: specified
   os: macOS | Linux | Windows
   os_version: unknown
-  architecture: arm64
+  architecture: arm64 | x86_64 | x64
   execution_mode: native
   runtimes:
     - name: MuJoCo
@@ -117,7 +119,7 @@ execution_environment:
     mode: managed
   os: macOS | Linux | Windows
   os_version: unknown
-  architecture: arm64
+  architecture: arm64 | x86_64 | x64
   execution_mode: native
   gui:
     required: true

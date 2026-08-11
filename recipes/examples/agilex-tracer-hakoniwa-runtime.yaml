@@ -18,12 +18,12 @@ feasibility:
     - Core, hakopy, PDU Python, and Endpoint can be reused from the managed Foundation.
 
 validation:
-  status: partially_verified
+  status: verified
   verified_at: 2026-08-11
   summary: >
     The split Foundation-aware lifecycle was configured, built, checked, and run
-    successfully with the MuJoCo viewer on native macOS with Python 3.12 and
-    SOABI-tagged hakopy. Native Linux and Windows execution remain to be verified.
+    successfully with the MuJoCo viewer on native macOS and Windows x64 with
+    Python 3.12 and SOABI-tagged hakopy. Native Linux execution remains to be verified.
   steps:
     - id: historical_component_runtime
       status: verified
@@ -37,6 +37,9 @@ validation:
         - platform: macOS arm64
           date: 2026-08-11
           result: Foundation SATISFIED; MuJoCo viewer opened; base.x advanced from 0.000 to 0.300 after a positive Twist command; Launcher reached TERMINATED.
+        - platform: Windows x64
+          date: 2026-08-11
+          result: User-confirmed Foundation-managed configure, build, viewer execution, and Launcher lifecycle after the Windows portability fixes.
 
 constraints:
   - generated-mbody-input-required

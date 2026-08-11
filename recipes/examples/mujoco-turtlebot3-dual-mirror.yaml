@@ -21,14 +21,15 @@ feasibility:
     - Only one simulator process owns Conductor startup, avoiding multi-Conductor failure.
 
 validation:
-  status: partially_verified
+  status: verified
   verified_at: 2026-08-11
   summary: >
     The dual-process Burger/Waffle mirror demo was re-run through the managed
     Foundation Recipe on macOS arm64 with the MuJoCo viewer and both LiDAR
     visualizers. Both robots moved, bidirectional mirror counters advanced beyond
     8000, exactly one process owned Conductor startup, and the Launcher session
-    reached TERMINATED. Native Linux and Windows remain to be verified.
+    reached TERMINATED. The Foundation-managed viewer workflow was also verified
+    on Windows x64. Native Linux execution remains to be verified.
   steps:
     - id: dual_mjcf_load
       status: verified
@@ -83,6 +84,9 @@ validation:
         - platform: macOS arm64 with MuJoCo viewer and dual LiDAR visualizers
           date: 2026-08-11
           result: Burger/Waffle motion, bidirectional mirror updates, nonzero LiDAR hits, one Conductor owner, and TERMINATED session verified.
+        - platform: Windows x64 with MuJoCo viewer and dual LiDAR visualizers
+          date: 2026-08-11
+          result: User-confirmed Foundation-managed materialization, build, viewer execution, and Launcher lifecycle after the Windows portability fixes.
 
 constraints:
   - no-ros-runtime
@@ -97,7 +101,7 @@ target_environment:
   status: specified
   os: macOS | Linux | Windows
   os_version: unknown
-  architecture: arm64
+  architecture: arm64 | x86_64 | x64
   execution_mode: native
   runtimes:
     - name: MuJoCo
@@ -124,7 +128,7 @@ execution_environment:
     mode: managed
   os: macOS | Linux | Windows
   os_version: unknown
-  architecture: arm64
+  architecture: arm64 | x86_64 | x64
   execution_mode: native
   gui:
     required: true
