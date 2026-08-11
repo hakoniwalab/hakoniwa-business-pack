@@ -22,8 +22,8 @@ validation:
   verified_at: 2026-08-11
   summary: >
     The split Foundation-aware lifecycle was configured, built, checked, and run
-    successfully on native macOS with Python 3.12 and SOABI-tagged hakopy. Native
-    Linux and Windows execution remain to be verified.
+    successfully with the MuJoCo viewer on native macOS with Python 3.12 and
+    SOABI-tagged hakopy. Native Linux and Windows execution remain to be verified.
   steps:
     - id: historical_component_runtime
       status: verified
@@ -36,7 +36,7 @@ validation:
       evidence:
         - platform: macOS arm64
           date: 2026-08-11
-          result: Foundation SATISFIED; base.x advanced from 0.000 to 0.301 after a positive Twist command.
+          result: Foundation SATISFIED; MuJoCo viewer opened; base.x advanced from 0.000 to 0.300 after a positive Twist command; Launcher reached TERMINATED.
 
 constraints:
   - generated-mbody-input-required
@@ -208,13 +208,13 @@ artifact_sets:
     status: verified
     artifacts: [tracer_v1.minimal_world.xml]
   visualization_artifacts:
-    status: partially_verified
+    status: verified
     artifacts: [MuJoCo viewer]
   pdu_artifacts:
     status: verified
     artifacts: [rover-twist-pdudef-compact.json, rover_twist_endpoint.json, geometry_msgs/Twist]
   runtime_artifacts:
-    status: partially_verified
+    status: verified
     artifacts: [agilex-tracer-rover-example, rover-twist-hakoniwa-asset, send_rover_twist.py]
 
 artifacts:

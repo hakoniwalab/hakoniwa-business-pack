@@ -25,11 +25,10 @@ validation:
   verified_at: 2026-08-11
   summary: >
     The dual-process Burger/Waffle mirror demo was re-run through the managed
-    Foundation Recipe on macOS arm64 in headless mode. Both robots moved,
-    bidirectional mirror counters advanced beyond 8000, both LiDAR streams had
-    nonzero hits, exactly one process owned Conductor startup, and the Launcher
-    session reached TERMINATED. Native Linux, Windows, and the migrated GUI path
-    remain to be verified.
+    Foundation Recipe on macOS arm64 with the MuJoCo viewer and both LiDAR
+    visualizers. Both robots moved, bidirectional mirror counters advanced beyond
+    8000, exactly one process owned Conductor startup, and the Launcher session
+    reached TERMINATED. Native Linux and Windows remain to be verified.
   steps:
     - id: dual_mjcf_load
       status: verified
@@ -81,7 +80,7 @@ validation:
     - id: managed_foundation_dual_runtime
       status: verified
       evidence:
-        - platform: macOS arm64 headless
+        - platform: macOS arm64 with MuJoCo viewer and dual LiDAR visualizers
           date: 2026-08-11
           result: Burger/Waffle motion, bidirectional mirror updates, nonzero LiDAR hits, one Conductor owner, and TERMINATED session verified.
 
