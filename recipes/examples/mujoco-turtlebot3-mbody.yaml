@@ -178,6 +178,7 @@ execution_environment:
     - The same Recipe runner and command sequence are used on macOS and Windows; platform-specific paths, executable suffixes, CMake layout, and vcpkg selection are resolved internally.
     - The runner defaults to Burger; Waffle and Waffle Pi use the same commands with --model waffle or --model waffle_pi.
     - Managed execution must use the Business Pack Workspace and keep generated state under work/recipes/mujoco-turtlebot3-mbody/.
+    - TB3 headless execution still requires a viewer-capable build because sensor targets link renderer/GLFW symbols; --headless disables runtime windows only.
 
 foundation_contract:
   mode: required

@@ -125,12 +125,11 @@ def inspect(args: argparse.Namespace) -> dict:
             )
         else:
             require_file(vcpkg_root / "scripts" / "buildsystems" / "vcpkg.cmake", "vcpkg CMake toolchain", errors)
-            if not args.headless:
-                require_file(
-                    vcpkg_root / "installed" / "x64-windows" / "share" / "glfw3" / "glfw3Config.cmake",
-                    "GLFW CMake package for viewer",
-                    errors,
-                )
+            require_file(
+                vcpkg_root / "installed" / "x64-windows" / "share" / "glfw3" / "glfw3Config.cmake",
+                "GLFW CMake package required by TB3 sensor renderer linkage",
+                errors,
+            )
         for variant in ("core_callback", "core_polling"):
             require_file(prefix / "lib" / f"hakoniwa_pdu_endpoint_{variant}.lib", f"PDU Endpoint {variant} import library", errors)
 
@@ -253,7 +252,8 @@ def cmake_configure_command(args: argparse.Namespace, state: dict) -> list[str]:
     prefix = resolved["prefix"]
     command = [
         "cmake", "-S", str(args.mujoco_root.resolve() / "src"), "-B", str(resolved["build"]),
-        f"-DUSE_VIEWER={'OFF' if args.headless else 'ON'}",
+        # TB3 sensor targets link renderer/GLFW symbols even when no window is opened.
+        "-DUSE_VIEWER=ON",
         f"-DFETCHCONTENT_BASE_DIR={resolved['deps']}",
         f"-DHAKONIWA_INSTALL_PREFIX={prefix}",
         f"-DHAKONIWA_PDU_ENDPOINT_PREFIX={prefix}",
