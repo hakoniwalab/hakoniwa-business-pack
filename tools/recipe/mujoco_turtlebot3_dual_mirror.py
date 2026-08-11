@@ -14,6 +14,7 @@ from pathlib import Path
 
 RECIPE_ID = "mujoco-turtlebot3-dual-mirror"
 TOOLS_DIR = Path(__file__).resolve().parents[1]
+MBODY_TOOL_REQUIREMENTS = TOOLS_DIR.parent / "recipes" / "requirements" / "hakoniwa-mbody-registry.txt"
 
 
 class RecipeError(RuntimeError):
@@ -80,24 +81,6 @@ def executable(build: Path, model: str) -> Path:
     return next((candidate for candidate in candidates if candidate.is_file()), candidates[-1])
 
 
-def python_contract(python: Path, venv_root: Path) -> tuple[bool, str]:
-    code = (
-        "import json,pathlib,sys,sysconfig; import hakopy,hakoniwa_pdu; "
-        "print(json.dumps({'prefix':str(pathlib.Path(sys.prefix).absolute()),'soabi':sysconfig.get_config_var('SOABI')}))"
-    )
-    result = subprocess.run([str(python), "-c", code], capture_output=True, text=True, check=False)
-    if result.returncode != 0:
-        return False, result.stderr.strip() or "Foundation Python imports failed"
-    try:
-        evidence = json.loads(result.stdout.splitlines()[-1])
-        Path(evidence["prefix"]).resolve().relative_to(venv_root.resolve())
-        if not evidence.get("soabi"):
-            return False, "Foundation Python has no SOABI"
-    except (IndexError, KeyError, ValueError, json.JSONDecodeError) as exc:
-        return False, f"invalid Foundation Python evidence: {exc}"
-    return True, f"venv={evidence['prefix']} SOABI={evidence['soabi']}"
-
-
 def write_json(path: Path, value: object) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -121,20 +104,16 @@ def inspect(args: argparse.Namespace) -> dict:
         (source / "models" / "tb3" / "tb3_waffle_real_burger_mirror.xml", "Waffle mirror world"),
         (source / "config" / "tb3-dual-pdudef-compact.json", "dual PDU definition"),
         (source / "python" / "tb3_route_demo.py", "route controller"),
-        (
-            args.mbody_root.resolve()
-            / "bodies/turtlebot3_burger/source/turtlebot3_description/meshes/bases/burger_base.stl",
-            "MBody Burger source meshes",
-        ),
+        (args.mbody_root.resolve() / "tools/fetch.py", "MBody fetch tool"),
+        (args.mbody_root.resolve() / "sources/turtlebot3_burger.yaml", "pinned MBody Burger source definition"),
+        (MBODY_TOOL_REQUIREMENTS, "MBody tool requirements"),
     )
     for path, label in required:
         if not path.is_file():
             errors.append(f"{label} is missing: {path}")
-    python = foundation_python(resolved["prefix"])
-    if python.is_file():
-        python_ok, python_detail = python_contract(python, resolved["prefix"] / "python")
-        if not python_ok:
-            errors.append(f"Foundation Python/SOABI contract failed: {python_detail}")
+    # inspect_foundation() owns the cross-platform Python ABI contract, including
+    # the EXT_SUFFIX fallback required when Windows reports SOABI as null.
+    runtime_python = inspection.get("runtime", {}).get("python", {})
     toolchain = {}
     if resolved["toolchain"].is_file():
         toolchain = json.loads(resolved["toolchain"].read_text(encoding="utf-8"))
@@ -155,6 +134,7 @@ def inspect(args: argparse.Namespace) -> dict:
         "errors": errors,
         "vcpkg_root": str(vcpkg) if vcpkg else None,
         "python": str(foundation_python(resolved["prefix"])),
+        "python_contract": runtime_python,
     }
 
 
@@ -165,7 +145,30 @@ def require_ready(args: argparse.Namespace) -> dict:
     return state
 
 
-def stage_runtime_inputs(source: Path, mbody_root: Path) -> None:
+def install_mbody_tool_dependencies() -> None:
+    run([
+        str(foundation_python(paths()["prefix"])),
+        "-m", "pip", "install", "--disable-pip-version-check",
+        "--requirement", str(MBODY_TOOL_REQUIREMENTS),
+    ])
+
+
+def materialize_burger_source(mbody_root: Path) -> Path:
+    destination = paths()["input"] / "mbody" / "turtlebot3_burger" / "source"
+    marker = destination / "turtlebot3_description" / "meshes" / "bases" / "burger_base.stl"
+    if not marker.is_file():
+        run([
+            str(foundation_python(paths()["prefix"])),
+            str(mbody_root / "tools" / "fetch.py"),
+            str(mbody_root / "sources" / "turtlebot3_burger.yaml"),
+            "--output-dir", str(destination),
+        ])
+    if not marker.is_file():
+        raise RecipeError(f"materialized MBody Burger mesh is missing: {marker}")
+    return destination
+
+
+def stage_runtime_inputs(source: Path, mbody_source: Path) -> None:
     destination = paths()["input"]
     for relative in ("config", "models/tb3"):
         shutil.copytree(source / relative, destination / relative, dirs_exist_ok=True)
@@ -173,8 +176,9 @@ def stage_runtime_inputs(source: Path, mbody_root: Path) -> None:
     python_dir.mkdir(parents=True, exist_ok=True)
     for name in ("tb3_route_demo.py", "lidar_visualizer.py"):
         shutil.copy2(source / "python" / name, python_dir / name)
-    mesh_source = mbody_root / "bodies" / "turtlebot3_burger" / "source"
-    shutil.copytree(mesh_source, destination / "mbody" / "turtlebot3_burger" / "source", dirs_exist_ok=True)
+    staged_mesh_source = destination / "mbody" / "turtlebot3_burger" / "source"
+    if mbody_source.resolve() != staged_mesh_source.resolve():
+        shutil.copytree(mbody_source, staged_mesh_source, dirs_exist_ok=True)
     old_prefix = "../../../hakoniwa-mbody-registry/bodies/turtlebot3_burger/source"
     new_prefix = "../../mbody/turtlebot3_burger/source"
     for model in (
@@ -290,7 +294,9 @@ def configure(args: argparse.Namespace) -> None:
     state = require_ready(args)
     for name in ("build", "deps", "input", "config", "logs", "runtime"):
         paths()[name].mkdir(parents=True, exist_ok=True)
-    stage_runtime_inputs(args.mujoco_root.resolve(), args.mbody_root.resolve())
+    install_mbody_tool_dependencies()
+    mbody_source = materialize_burger_source(args.mbody_root.resolve())
+    stage_runtime_inputs(args.mujoco_root.resolve(), mbody_source)
     write_launcher(args)
     run(cmake_command(args, state))
     print(f"Recipe workspace: {paths()['recipe']}")

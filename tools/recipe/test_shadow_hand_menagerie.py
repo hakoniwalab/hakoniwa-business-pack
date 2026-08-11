@@ -40,7 +40,18 @@ class ShadowHandMenagerieRecipeTest(unittest.TestCase):
             assets = {item["name"]: item for item in data["assets"]}
             self.assertEqual(assets["shadow_hand_sender"]["command"], str(python))
             self.assertEqual(assets["shadow_hand"]["args"][0], "--no-viewer")
-            self.assertIn(str(root / "work/recipes" / recipe.RECIPE_ID), json.dumps(data))
+            recipe_root = root / "work/recipes"
+            self.assertTrue(Path(data["defaults"]["cwd"]).is_relative_to(recipe_root))
+            self.assertTrue(Path(assets["shadow_hand_sender"]["args"][0]).is_relative_to(recipe_root))
+
+    def test_windows_build_directory_is_short_and_recipe_owned(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "business"
+            with mock.patch.object(recipe.base, "business_root", return_value=root), mock.patch.object(
+                recipe.platform, "system", return_value="Windows"
+            ):
+                resolved = recipe.paths()
+            self.assertEqual(resolved["build"], resolved["recipe"] / "b")
 
     def test_viewer_flag_removes_no_viewer_argument(self):
         with tempfile.TemporaryDirectory() as temporary:

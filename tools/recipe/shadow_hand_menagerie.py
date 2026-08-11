@@ -23,7 +23,12 @@ base.RECIPE_ID = RECIPE_ID
 
 
 def paths() -> dict[str, Path]:
-    return base.paths()
+    resolved = base.paths()
+    if platform.system() == "Windows":
+        # Keep MSBuild/link tracking paths below the legacy Windows path limit
+        # while preserving Recipe workspace ownership.
+        resolved["build"] = resolved["recipe"] / "b"
+    return resolved
 
 
 def executable_path() -> Path:
@@ -137,8 +142,31 @@ def stage_inputs(args: argparse.Namespace) -> dict[str, Path]:
 
 
 def cmake_command(args: argparse.Namespace, state: dict[str, object]) -> list[str]:
-    proxy = argparse.Namespace(mujoco_root=args.mujoco_root)
-    return base.cmake_configure_command(proxy, state)
+    resolved = paths()
+    prefix = resolved["prefix"]
+    command = [
+        "cmake", "-S", str(args.mujoco_root.resolve() / "src"), "-B", str(resolved["build"]),
+        "-DUSE_VIEWER=ON",
+        f"-DFETCHCONTENT_BASE_DIR={resolved['deps']}",
+        f"-DHAKONIWA_INSTALL_PREFIX={prefix}",
+        f"-DHAKONIWA_PDU_ENDPOINT_PREFIX={prefix}",
+    ]
+    if platform.system() == "Windows":
+        vcpkg = Path(str(state["vcpkg_root"]))
+        installed = vcpkg / "installed" / "x64-windows"
+        command.extend([
+            f"-DCMAKE_PREFIX_PATH={prefix};{installed}",
+            f"-DHAKONIWA_EXTRA_PREFIX_PATH={prefix};{installed}",
+            f"-DCMAKE_TOOLCHAIN_FILE={vcpkg / 'scripts/buildsystems/vcpkg.cmake'}",
+            "-DVCPKG_TARGET_TRIPLET=x64-windows",
+        ])
+    else:
+        command.extend([
+            f"-DCMAKE_PREFIX_PATH={prefix}",
+            f"-DHAKONIWA_EXTRA_PREFIX_PATH={prefix}",
+            "-DCMAKE_BUILD_TYPE=Release",
+        ])
+    return command
 
 
 def write_launcher(args: argparse.Namespace, staged: dict[str, Path]) -> Path:

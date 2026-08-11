@@ -51,7 +51,8 @@ class AgileXTracerRecipeTest(unittest.TestCase):
             workspace = self.workspace(root)
             mujoco = root.parent / "hakoniwa-mujoco-robots"
             path = recipe.write_build_manifest(workspace, mujoco)
-            self.assertIn("work/recipes/agilex-tracer-hakoniwa-runtime/build/mujoco", path.read_text())
+            build_dir = path.read_text(encoding="utf-8").split("dir:", 1)[1].strip()
+            self.assertEqual((mujoco / build_dir).resolve(), (workspace.recipe_root / "build/mujoco").resolve())
 
     def test_launcher_uses_foundation_python_and_recipe_owned_inputs(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -62,8 +63,28 @@ class AgileXTracerRecipeTest(unittest.TestCase):
             assets = {asset["name"]: asset for asset in data["assets"]}
             self.assertEqual(assets["rover-twist-sender"]["command"], str(runtime.python))
             self.assertEqual(assets["rover-twist-plant"]["args"][0], "--no-viewer")
-            self.assertIn(str(workspace.recipe_root), json.dumps(data))
+            self.assertTrue(Path(data["defaults"]["cwd"]).is_relative_to(workspace.recipe_root))
+            self.assertTrue(Path(assets["rover-twist-sender"]["args"][0]).is_relative_to(workspace.recipe_root))
             self.assertNotIn("/usr/local/hakoniwa", json.dumps(data))
+
+    def test_windows_native_build_args_propagate_foundation_and_vcpkg(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = self.workspace(Path(temporary) / "business-pack")
+            runtime = self.runtime(workspace)
+            runtime = recipe.Runtime(**{**runtime.__dict__, "system_name": "Windows"})
+            vcpkg = Path(temporary) / "vcpkg"
+            (vcpkg / "scripts/buildsystems").mkdir(parents=True)
+            (vcpkg / "scripts/buildsystems/vcpkg.cmake").write_text("", encoding="utf-8")
+            (vcpkg / "installed/x64-windows").mkdir(parents=True)
+            workspace.foundation_config.mkdir(parents=True)
+            (workspace.foundation_config / "toolchain.json").write_text(
+                json.dumps({"vcpkg_root": str(vcpkg)}), encoding="utf-8"
+            )
+            command = recipe.native_build_args(workspace, runtime)
+            self.assertEqual(command[command.index("-HakoniwaCoreRoot") + 1], str(workspace.install_prefix))
+            self.assertEqual(command[command.index("-HakoniwaPduEndpointRoot") + 1], str(workspace.install_prefix))
+            self.assertEqual(command[command.index("-ToolchainFile") + 1], str(vcpkg / "scripts/buildsystems/vcpkg.cmake"))
+            self.assertEqual(command[command.index("-ExtraPrefixPaths") + 1], str(vcpkg / "installed/x64-windows"))
 
     def test_stage_inputs_copies_only_into_recipe_workspace(self):
         with tempfile.TemporaryDirectory() as temporary:

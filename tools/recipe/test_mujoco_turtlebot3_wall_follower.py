@@ -57,7 +57,9 @@ class WallFollowerRecipeTest(unittest.TestCase):
             assets = {asset["name"]: asset for asset in data["assets"]}
             self.assertEqual(assets["obstacle_avoider"]["command"], str(python))
             self.assertNotIn("lidar_visualizer", assets)
-            self.assertIn(str(root / "work/recipes" / recipe.RECIPE_ID), json.dumps(data))
+            recipe_root = root / "work/recipes" / recipe.RECIPE_ID
+            self.assertTrue(Path(data["defaults"]["cwd"]).is_relative_to(recipe_root))
+            self.assertTrue(Path(assets["obstacle_avoider"]["args"][0]).is_relative_to(recipe_root))
 
     def test_gui_launcher_adds_lidar_visualizer(self):
         with tempfile.TemporaryDirectory() as temporary:

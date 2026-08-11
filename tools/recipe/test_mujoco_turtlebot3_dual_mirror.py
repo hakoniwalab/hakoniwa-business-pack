@@ -40,16 +40,42 @@ class DualMirrorRecipeTest(unittest.TestCase):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 content = 'file="../../../hakoniwa-mbody-registry/bodies/turtlebot3_burger/source/mesh.stl"\n' if path.suffix == ".xml" else "{}\n"
                 path.write_text(content, encoding="utf-8")
-            mesh = mbody / "bodies/turtlebot3_burger/source/mesh.stl"
+            mesh_source = mbody / "bodies/turtlebot3_burger/source"
+            mesh = mesh_source / "mesh.stl"
             mesh.parent.mkdir(parents=True, exist_ok=True)
             mesh.write_text("mesh\n", encoding="utf-8")
             with mock.patch.object(recipe, "business_root", return_value=root / "business"):
-                recipe.stage_runtime_inputs(source, mbody)
+                recipe.stage_runtime_inputs(source, mesh_source)
             for relative in files:
                 self.assertTrue((destination / relative).is_file())
             staged_model = destination / "models/tb3/tb3_burger_real_waffle_mirror.xml"
             self.assertIn("../../mbody/turtlebot3_burger/source/mesh.stl", staged_model.read_text())
             self.assertTrue((destination / "mbody/turtlebot3_burger/source/mesh.stl").is_file())
+
+    def test_materialization_uses_foundation_python_and_recipe_owned_destination(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "business"
+            mbody = Path(temporary) / "mbody"
+            python = root / "work/foundation/install/python/bin/python3"
+            python.parent.mkdir(parents=True, exist_ok=True)
+            python.write_text("", encoding="utf-8")
+            (mbody / "tools").mkdir(parents=True)
+            (mbody / "tools/fetch.py").write_text("", encoding="utf-8")
+            (mbody / "sources").mkdir(parents=True)
+            (mbody / "sources/turtlebot3_burger.yaml").write_text("", encoding="utf-8")
+
+            def materialize(command, *, check=True):
+                destination = Path(command[command.index("--output-dir") + 1])
+                marker = destination / "turtlebot3_description/meshes/bases/burger_base.stl"
+                marker.parent.mkdir(parents=True)
+                marker.write_text("mesh", encoding="utf-8")
+
+            with mock.patch.object(recipe, "business_root", return_value=root), mock.patch.object(
+                recipe, "run", side_effect=materialize
+            ) as run:
+                destination = recipe.materialize_burger_source(mbody)
+            self.assertTrue(destination.is_relative_to(root / "work/recipes" / recipe.RECIPE_ID))
+            self.assertEqual(run.call_args.args[0][0], str(python))
 
     def test_launcher_has_one_conductor_owner_and_foundation_python(self):
         with tempfile.TemporaryDirectory() as temporary:

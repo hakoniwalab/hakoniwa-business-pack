@@ -155,6 +155,27 @@ def write_build_manifest(workspace, mujoco_root: Path) -> Path:
     return output
 
 
+def native_build_args(workspace, runtime: Runtime) -> list[str]:
+    if runtime.system_name != "Windows":
+        return ["-DCMAKE_BUILD_TYPE=Release"]
+
+    toolchain_path = workspace.foundation_config / "toolchain.json"
+    toolchain = json.loads(required(toolchain_path, "Foundation toolchain").read_text(encoding="utf-8"))
+    vcpkg_value = toolchain.get("vcpkg_root")
+    if not isinstance(vcpkg_value, str) or not vcpkg_value.strip():
+        raise RecipeError(f"Windows Foundation toolchain has no vcpkg_root: {toolchain_path}")
+    vcpkg = required(Path(vcpkg_value), "vcpkg root")
+    cmake_toolchain = required(vcpkg / "scripts/buildsystems/vcpkg.cmake", "vcpkg CMake toolchain")
+    installed = required(vcpkg / "installed/x64-windows", "vcpkg x64-windows prefix")
+    return [
+        "-HakoniwaCoreRoot", str(workspace.install_prefix),
+        "-HakoniwaPduEndpointRoot", str(workspace.install_prefix),
+        "-ToolchainFile", str(cmake_toolchain),
+        "-ExtraPrefixPaths", str(installed),
+        "-Configuration", "Release",
+    ]
+
+
 def runtime_inputs(workspace) -> tuple[Path, Path, Path, Path, Path, Path, Path, Path]:
     return (
         workspace.recipe_root / "assets/models/agilex_tracer/generated/tracer_v1.minimal_world.xml",
@@ -283,10 +304,11 @@ def build(mujoco_root: Path) -> int:
     manifest = required(workspace.recipe_config / "mujoco-build.yaml", "generated build manifest")
     hako = required(mujoco_root / "tools" / "hako.py", "hakoniwa-mujoco-robots hako.py")
     env = environment(workspace, runtime)
+    native_args = native_build_args(workspace, runtime)
     for operation in ("doctor", "build"):
         command = [str(runtime.python), str(hako), operation, "--config", str(manifest)]
-        if operation == "build":
-            command.extend(["--", "-DCMAKE_BUILD_TYPE=Release"])
+        if runtime.system_name == "Windows" or operation == "build":
+            command.extend(["--", *native_args])
         rc = run(command, cwd=mujoco_root, env=env)
         if rc != 0:
             return rc
