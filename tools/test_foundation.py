@@ -192,6 +192,48 @@ class FoundationPythonContractTest(unittest.TestCase):
 
         self.assertIn("hakoniwa-core-pro", catalog)
 
+    def test_python_probe_strips_windows_extension_from_soabi_fallback(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0,
+            stdout=json.dumps({
+                "implementation": "CPython", "executable": "python.exe", "prefix": "python",
+                "version": "3.12.10", "major": 3, "minor": 12,
+                "soabi": "", "extension_suffix": ".cp312-win_amd64.pyd",
+            }),
+            stderr="",
+        )
+        with mock.patch.object(foundation.subprocess, "run", return_value=completed):
+            probe = foundation.probe_python(Path("python.exe"))
+        self.assertEqual(probe["soabi"], "cp312-win_amd64")
+
+    def test_untagged_extension_does_not_invent_soabi(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0,
+            stdout=json.dumps({
+                "implementation": "CPython", "executable": "python", "prefix": "python",
+                "version": "3.12.10", "major": 3, "minor": 12,
+                "soabi": "", "extension_suffix": ".so",
+            }),
+            stderr="",
+        )
+        with mock.patch.object(foundation.subprocess, "run", return_value=completed):
+            probe = foundation.probe_python(Path("python"))
+        self.assertFalse(probe["soabi"])
+
+    def test_toolchain_selection_is_persisted_under_foundation_config(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths = foundation.resolve_workspace(root, "test-recipe")
+            vcpkg = root / "external" / "vcpkg"
+            vcpkg.mkdir(parents=True)
+            (vcpkg / ("vcpkg.exe" if sys.platform == "win32" else "vcpkg")).write_text("test\n", encoding="utf-8")
+            cmake = vcpkg / "scripts" / "buildsystems" / "vcpkg.cmake"
+            cmake.parent.mkdir(parents=True)
+            cmake.write_text("# test\n", encoding="utf-8")
+            output = foundation.configure_foundation_toolchain(paths, vcpkg)
+            self.assertEqual(output, paths.foundation_config / "toolchain.json")
+            self.assertEqual(foundation.load_foundation_toolchain(paths)["vcpkg_root"], str(vcpkg.resolve()))
+
 
 class FoundationInspectorTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -360,6 +402,27 @@ class FoundationInspectorTest(unittest.TestCase):
         self.assertEqual(
             result["components"][0]["reasons"][0]["field"], "receipt"
         )
+
+    def test_shared_python_runtime_does_not_imply_pdu_python_install(self) -> None:
+        self.write_recipe(
+            "  hakoniwa-pdu-python:\n"
+            "    capabilities:\n"
+            "      shm_backend: true\n"
+        )
+        (self.prefix / "python" / "Lib" / "site-packages").mkdir(parents=True)
+        result = foundation.inspect_foundation(self.recipe, self.prefix)
+        self.assertEqual(result["components"][0]["status"], "MISSING")
+
+    def test_pdu_owned_package_without_receipt_is_unknown(self) -> None:
+        self.write_recipe(
+            "  hakoniwa-pdu-python:\n"
+            "    capabilities:\n"
+            "      shm_backend: true\n"
+        )
+        package = self.prefix / "python" / "Lib" / "site-packages" / "hakoniwa_pdu"
+        package.mkdir(parents=True)
+        result = foundation.inspect_foundation(self.recipe, self.prefix)
+        self.assertEqual(result["components"][0]["status"], "UNKNOWN")
 
     def test_malformed_receipt_is_unknown_instead_of_crashing(self) -> None:
         self.write_recipe(

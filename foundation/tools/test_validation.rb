@@ -86,6 +86,29 @@ class FoundationValidationTest < Minitest::Test
     assert errors.any? { |error| error.include?("min must be a positive integer") }
   end
 
+  def test_managed_workspace_requires_foundation_requirements
+    errors = FoundationValidation.validate_workspace_contract(
+      {"workspace" => {"mode" => "managed"}}, nil, label: "recipe.yaml"
+    )
+    assert errors.any? { |error| error.include?("managed Workspace Recipe") }
+    assert errors.any? { |error| error.include?("do not bypass") }
+  end
+
+  def test_managed_workspace_accepts_non_empty_foundation_requirements
+    errors = FoundationValidation.validate_workspace_contract(
+      {"workspace" => {"mode" => "managed"}},
+      {"hakoniwa-core-pro" => {"capabilities" => {"shared_memory" => true}}},
+      label: "recipe.yaml"
+    )
+    assert_empty errors
+  end
+
+  def test_legacy_recipe_can_omit_workspace_and_foundation_requirements
+    assert_empty FoundationValidation.validate_workspace_contract(
+      {"required_for" => "executable-demo"}, nil, label: "recipe.yaml"
+    )
+  end
+
   def test_valid_receipt
     assert_empty FoundationValidation.validate_receipt(valid_receipt, label: "receipt.yaml")
   end

@@ -262,6 +262,14 @@ Leaving the child shell restores the parent environment but does not clean up
 background processes. For non-interactive execution, use
 `python tools/workspace.py run -- <command>`.
 
+Treat a Foundation failure to load or evaluate the selected Recipe as a Recipe
+validity gate. Do not bypass missing or invalid `foundation_requirements` by
+running sibling components' `tools/hako.py`, doctor, build, install, or
+activation commands directly. Component repositories are source inputs to the
+selected Recipe; component-local `.hako`, venv, build, or install state is not
+Foundation evidence unless the Recipe explicitly owns that path. Fix or
+classify the Recipe gap first, then resume through Workspace and Foundation.
+
 Before executable steps, collect target-environment details when they change commands, feasibility, or Agency Boundary: OS, architecture, execution mode, GUI, SHM access, runtime versions, Python environment, Hakoniwa install prefix, build status, physical devices, and commercial/private availability.
 
 Before local execution of SHM/PDU Recipes, run or ask the user to run:

@@ -31,7 +31,6 @@ ARTIFACT_PROBES = {
         "bin/hakoniwa-pdu-web-bridge",
         "bin/hakoniwa-pdu-web-bridge.exe",
     ),
-    "hakoniwa-pdu-python": ("python",),
 }
 FOUNDATION_PYTHON_IMPLEMENTATION = "CPython"
 FOUNDATION_PYTHON_VERSION = (3, 12)
@@ -130,6 +129,47 @@ def prepare_workspace(paths: WorkspacePaths) -> None:
         directory.mkdir(parents=True, exist_ok=True)
 
 
+def foundation_toolchain_path(paths: WorkspacePaths) -> Path:
+    return paths.foundation_config / "toolchain.json"
+
+
+def configure_foundation_toolchain(paths: WorkspacePaths, vcpkg_root: Path) -> Path:
+    root = vcpkg_root.expanduser().resolve()
+    executable = root / ("vcpkg.exe" if sys.platform == "win32" else "vcpkg")
+    toolchain = root / "scripts" / "buildsystems" / "vcpkg.cmake"
+    missing = [str(path) for path in (executable, toolchain) if not path.is_file()]
+    if missing:
+        raise FoundationError("invalid vcpkg root; missing required files: " + ", ".join(missing))
+    output = foundation_toolchain_path(paths)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = output.with_suffix(".json.tmp")
+    temporary.write_text(
+        json.dumps({"schema_version": 1, "vcpkg_root": str(root)}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(output)
+    return output
+
+
+def load_foundation_toolchain(paths: WorkspacePaths) -> dict[str, str]:
+    path = foundation_toolchain_path(paths)
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise FoundationError(f"cannot read Foundation toolchain config {path}: {exc}") from exc
+    if set(data) != {"schema_version", "vcpkg_root"} or data["schema_version"] != 1:
+        raise FoundationError(f"unsupported Foundation toolchain config: {path}")
+    value = data["vcpkg_root"]
+    if not isinstance(value, str) or not value:
+        raise FoundationError(f"Foundation toolchain vcpkg_root is invalid: {path}")
+    root = Path(value).resolve()
+    if not (root / "scripts" / "buildsystems" / "vcpkg.cmake").is_file():
+        raise FoundationError(f"Foundation toolchain vcpkg_root is not usable: {root}")
+    return {"vcpkg_root": str(root)}
+
+
 def foundation_python_executable(python_root: Path) -> Path:
     return python_root / (
         "Scripts/python.exe" if sys.platform == "win32" else "bin/python"
@@ -161,11 +201,23 @@ def probe_python(executable: Path) -> dict:
             f"{result.stderr.strip()}"
         )
     try:
-        return json.loads(result.stdout)
+        metadata = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         raise FoundationError(
             f"Foundation Python returned invalid metadata: {result.stdout.strip()}"
         ) from exc
+    if not metadata.get("soabi"):
+        suffix = metadata.get("extension_suffix")
+        if isinstance(suffix, str):
+            name = suffix.lstrip(".")
+            for extension in (".pyd", ".so"):
+                if name.endswith(extension):
+                    name = name[: -len(extension)]
+                    break
+            # An untagged suffix (plain .so/.pyd) does not prove an ABI contract.
+            if name not in {"so", "pyd"}:
+                metadata["soabi"] = name
+    return metadata
 
 
 def validate_foundation_python_probe(probe: dict, python_root: Path) -> None:
@@ -419,6 +471,14 @@ def _receipt_path(prefix: Path, component_id: str) -> Path:
 
 
 def _probe_artifact(prefix: Path, component_id: str) -> bool:
+    if component_id == "hakoniwa-pdu-python":
+        site_packages = [prefix / "python" / "Lib" / "site-packages"]
+        site_packages.extend((prefix / "python" / "lib").glob("python*/site-packages"))
+        return any(
+            (site / "hakoniwa_pdu").exists()
+            or any(site.glob("hakoniwa_pdu-*.dist-info"))
+            for site in site_packages
+        )
     return any(
         (prefix / relative).exists()
         for relative in ARTIFACT_PROBES.get(component_id, ())
@@ -991,6 +1051,8 @@ def write_component_manifest(
     build_dir = paths.foundation_build / component_id
     manifest = paths.foundation_build / f"{component_id}.yaml"
     prefix = paths.install_prefix
+    toolchain = load_foundation_toolchain(paths)
+    vcpkg_root = toolchain.get("vcpkg_root", "")
     required_capabilities = (required or {}).get("capabilities", {})
     if component_id == "hakoniwa-core-pro":
         content = _core_foundation_manifest(source / "hakoniwa-build.yaml")
@@ -1028,7 +1090,7 @@ validation:
 
 paths:
   hakoniwa_core_root: {_yaml_string(prefix) if core_enabled else '""'}
-  vcpkg_root: ""
+  vcpkg_root: {_yaml_string(vcpkg_root)}
 """
     elif component_id == "hakoniwa-pdu-rpc":
         content = f"""version: 1
@@ -1040,7 +1102,7 @@ build:
 
 paths:
   pdu_endpoint_root: {_yaml_string(prefix)}
-  vcpkg_root: ""
+  vcpkg_root: {_yaml_string(vcpkg_root)}
 """
     elif component_id == "hakoniwa-pdu-bridge-core":
         content = f"""version: 1
@@ -1064,7 +1126,7 @@ validation:
 paths:
   pdu_endpoint_root: {_yaml_string(prefix)}
   hakoniwa_core_root: {_yaml_string(prefix)}
-  vcpkg_root: ""
+  vcpkg_root: {_yaml_string(vcpkg_root)}
 """
     elif component_id == "hakoniwa-pdu-python":
         content = f"""version: 1
@@ -1270,6 +1332,13 @@ def build_parser() -> argparse.ArgumentParser:
         subparser.add_argument("--recipe-id", required=True)
         subparser.add_argument("--json", action="store_true", dest="json_output")
 
+    toolchain = subparsers.add_parser(
+        "toolchain",
+        help="persist explicit host toolchain selection under work/foundation/config",
+    )
+    toolchain.add_argument("--recipe-id", required=True)
+    toolchain.add_argument("--vcpkg-root", required=True)
+
     doctor = subparsers.add_parser(
         "doctor",
         help="inspect Recipe requirements against installed Component Receipts",
@@ -1347,6 +1416,11 @@ def main(argv: list[str] | None = None) -> int:
             print_inspection(result, args.json_output)
             return 0 if result["status"] == "SATISFIED" else 1
         paths = resolve_workspace(repository_root(), args.recipe_id)
+        if args.command == "toolchain":
+            output = configure_foundation_toolchain(paths, Path(args.vcpkg_root))
+            print(f"Foundation toolchain: {output}")
+            print(f"vcpkg_root: {load_foundation_toolchain(paths)['vcpkg_root']}")
+            return 0
         if args.command == "prepare":
             prepare_workspace(paths)
         print_paths(paths, args.json_output)

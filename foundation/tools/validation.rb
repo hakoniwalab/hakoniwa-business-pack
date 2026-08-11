@@ -56,6 +56,26 @@ module FoundationValidation
     errors
   end
 
+  def validate_workspace_contract(execution_environment, requirements, label:)
+    return [] if execution_environment.nil?
+    return ["#{label}: execution_environment must be a mapping"] unless execution_environment.is_a?(Hash)
+
+    workspace = execution_environment["workspace"]
+    return [] if workspace.nil?
+    unless workspace.is_a?(Hash) && workspace.keys == ["mode"]
+      return ["#{label}: execution_environment.workspace must contain only mode"]
+    end
+    unless workspace["mode"] == "managed"
+      return ["#{label}: execution_environment.workspace.mode must be managed"]
+    end
+    return [] if requirements.is_a?(Hash) && !requirements.empty?
+
+    [
+      "#{label}: managed Workspace Recipe must define non-empty foundation_requirements; " \
+      "do not bypass this gate with component-local doctor/build/install commands"
+    ]
+  end
+
   def validate_receipt(value, label:)
     errors = []
     unless value.is_a?(Hash)

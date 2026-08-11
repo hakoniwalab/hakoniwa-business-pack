@@ -254,6 +254,13 @@ recipe_paths.each do |path|
       catalog_ids: catalog_ids
     )
   )
+  errors.concat(
+    FoundationValidation.validate_workspace_contract(
+      data["execution_environment"],
+      data["foundation_requirements"],
+      label: label
+    )
+  )
 end
 
 warnings.each { |message| warn "warning: #{message}" }

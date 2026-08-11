@@ -123,9 +123,9 @@ constraints:
 target_environment:
   required_for: executable-demo
   status: recorded
-  os: macOS
+  os: macOS or Windows
   os_version: unknown
-  architecture: arm64
+  architecture: arm64 or x64
   execution_mode: native
   runtimes:
     - name: MuJoCo
@@ -149,9 +149,11 @@ target_environment:
 execution_environment:
   required_for: executable-demo
   status: partially_recorded
-  os: macOS
+  workspace:
+    mode: managed
+  os: macOS or Windows
   os_version: unknown
-  architecture: arm64
+  architecture: arm64 or x64
   execution_mode: native
   gui:
     required: true
@@ -173,6 +175,39 @@ execution_environment:
     - Python 3.12, hakopy, and hakoniwa-pdu must be available in the same Python environment used by route and visualizer scripts.
     - MuJoCo viewer requires GUI access.
     - Hakoniwa PDU shared memory requires an execution environment where the Hakoniwa master is visible.
+    - The same Recipe runner and command sequence are used on macOS and Windows; platform-specific paths, executable suffixes, CMake layout, and vcpkg selection are resolved internally.
+    - The runner defaults to Burger; Waffle and Waffle Pi use the same commands with --model waffle or --model waffle_pi.
+    - Managed execution must use the Business Pack Workspace and keep generated state under work/recipes/mujoco-turtlebot3-mbody/.
+
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      shared_memory: true
+      hako_cmd: true
+      python_binding: true
+  hakoniwa-pdu-python:
+    version:
+      min: 1.6.5
+    capabilities:
+      hako_launcher: true
+      launcher_background_lifecycle: true
+      shm_backend: true
+  hakoniwa-pdu-endpoint:
+    capabilities:
+      hakoniwa_core: true
+      core_callback: true
+
+recipe_local_requirements:
+  hakoniwa-mbody-registry:
+    role: generated-physics-and-PDU-artifact-source
+    required_artifacts:
+      - TurtleBot3 Burger minimal MuJoCo world
+      - TurtleBot3 PDU definitions
+  hakoniwa-mujoco-robots:
+    build_entrypoint: tools/hako.py
+    required_artifacts:
+      - tb3_sim_burger
+      - tb3_route_demo.py
 
 components:
   - id: hakoniwa-mbody-registry
@@ -421,72 +456,45 @@ missing_pieces:
   - Replace local-validation revisions with concrete commit SHAs after the related repository changes are pushed.
   - Decide whether this recipe should become the canonical minimal TB3 MuJoCo demo recipe.
   - Add CI or scripted smoke validation if shared-memory and GUI constraints can be handled.
+  - Record native Windows evidence for Waffle and Waffle Pi when those profiles are required; the common runner already exposes them.
 
 demo:
   objective: Run TurtleBot3 Burger, Waffle, or Waffle Pi in MuJoCo from MBody-generated artifacts and validate motion plus LiDAR output.
   steps:
     - order: 1
-      component: hakoniwa-mbody-registry
-      action: Verify or regenerate TurtleBot3 Burger artifacts.
-      command: ./tools/forge.sh sources/turtlebot3_burger.yaml turtlebot3_description/urdf/turtlebot3_burger.urdf
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mbody-registry
-          path: bodies/turtlebot3_burger/generated
-          revision: local-validation-2026-07-19
-
+      component: hakoniwa-business-pack
+      action: Materialize the Burger assets and configure the managed build on the current host OS.
+      command: python tools/recipe/mujoco_turtlebot3_mbody.py configure
     - order: 2
-      component: hakoniwa-mbody-registry
-      action: Verify or regenerate TurtleBot3 Waffle artifacts.
-      command: ./tools/forge.sh sources/turtlebot3_waffle.yaml turtlebot3_description/urdf/turtlebot3_waffle.urdf
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mbody-registry
-          path: bodies/turtlebot3_waffle/generated
-          revision: local-validation-2026-07-19
-
+      component: hakoniwa-business-pack
+      action: Build the Burger simulator in the Recipe workspace.
+      command: python tools/recipe/mujoco_turtlebot3_mbody.py build
     - order: 3
-      component: hakoniwa-mbody-registry
-      action: Verify or regenerate TurtleBot3 Waffle Pi artifacts.
-      command: HAKO_SKIP_FETCH=1 ./tools/forge.sh sources/turtlebot3_waffle_pi.yaml turtlebot3_description/urdf/turtlebot3_waffle_pi.urdf
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mbody-registry
-          path: bodies/turtlebot3_waffle_pi/generated
-          revision: 8b32f98
-
+      component: hakoniwa-business-pack
+      action: Verify Foundation, source, generated configuration, and binary prerequisites.
+      command: python tools/recipe/mujoco_turtlebot3_mbody.py doctor
     - order: 4
-      component: hakoniwa-mujoco-robots
-      action: Check runtime prerequisites.
-      command: ./doctor.bash
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: doctor.bash
-          revision: local-validation-2026-07-19
-
+      component: hakoniwa-business-pack
+      action: Start the viewer and joystick-free figure-eight route through the background Launcher lifecycle.
+      command: python tools/recipe/mujoco_turtlebot3_mbody.py start
     - order: 5
-      component: hakoniwa-mujoco-robots
-      action: Run the launcher-driven Waffle demo with MuJoCo viewer, LiDAR plot, and figure-eight route.
-      command: HAKO_TB3_MODEL=waffle HAKO_TB3_ROUTE_PATTERN=figure8 HAKO_TB3_ENABLE_VIEWER=1 ./tb3-mbody-demo.bash
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: tb3-mbody-demo-launch.json
-          revision: local-validation-2026-07-19
-
-    - order: 6
-      component: hakoniwa-mujoco-robots
-      action: Run the launcher-driven Waffle Pi demo with MuJoCo viewer, LiDAR plot, and figure-eight route.
-      command: HAKO_TB3_MODEL=waffle_pi HAKO_TB3_ROUTE_PATTERN=figure8 HAKO_TB3_ENABLE_VIEWER=1 ./tb3-mbody-demo.bash
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: config/assets/tb3-mbody-waffle-pi-asset.json
-          revision: a0b01db
-
-    - order: 7
-      component: hakoniwa-mujoco-robots
-      action: Optionally run the same demo with Burger.
-      command: HAKO_TB3_MODEL=burger HAKO_TB3_ROUTE_PATTERN=figure8 HAKO_TB3_ENABLE_VIEWER=1 ./tb3-mbody-demo.bash
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: config/assets/tb3-mbody-burger-asset.json
-          revision: local-validation-2026-07-19
+      component: hakoniwa-business-pack
+      action: Inspect the same session on either host OS.
+      command: python tools/recipe/mujoco_turtlebot3_mbody.py status
+  cleanup:
+    owner: hakoniwa-launcher
+    provider: hakoniwa-pdu-python
+    mode: background
+    target: work/recipes/mujoco-turtlebot3-mbody/runtime/launcher-session.json
+    trigger: python tools/recipe/mujoco_turtlebot3_mbody.py stop
+    expected_behavior:
+      - hako_launcher_ctl terminate invokes the Launcher normal termination path.
+      - Launcher records TERMINATED and stops only this Recipe's simulator and route assets.
+    verification_checks:
+      - Confirm the Launcher session reports TERMINATED.
+      - Confirm no Recipe-owned simulator or route process remains.
+    cautions:
+      - Do not replace the session-file terminate command with OS-specific kill, taskkill, or broad process cleanup.
   observability:
     success_signals:
       - MuJoCo viewer shows TurtleBot3 Burger, Waffle, or Waffle Pi moving through a scripted figure-eight route.
@@ -505,7 +513,7 @@ demo:
       - tb3-mbody-demo-launch.json starts the simulator before hako-cmd start and starts route/LiDAR assets after simulation start.
   verification_checks:
     lifecycle:
-      - doctor.bash reports 0 failures before the executable demo is launched.
+      - The cross-platform Recipe doctor reports READY before the executable demo is launched.
       - hako_launcher reports tb3_sim_mbody, lidar_visualizer, and route_demo assets.
       - hako-cmd start exits with status 0.
       - route_demo exit may intentionally trigger launcher abort-all shutdown after the route completes.

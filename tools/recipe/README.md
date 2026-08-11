@@ -31,6 +31,7 @@ Recipe固有ライフサイクルを実装する場合も、このディレク�
 - `drone_fleet_single_host.py`
 - `shadow_hand_foxglove.py`
 - `turtlebot3_godot_exhibition.py`
+- `mujoco_turtlebot3_mbody.py`
 - `unitree_go1_demo.py`
 - `ros2_service_add_two_ints.py`
 - `ros2_bridge_examples.py`
@@ -68,6 +69,27 @@ tick 20で同じ箱庭時刻を観測することを確認してから正常停�
 補助worker、probe、platform adapterと対応する`test_*.py`も同じディレクトリで
 管理します。CIは`tools/recipe/test_*.py`をdiscoverするため、新規テストを
 個別列挙する必要はありません。
+
+## TurtleBot3 MBody / MuJoCo
+
+`mujoco-turtlebot3-mbody.yaml`はmacOSとWindowsで共通です。OS別Recipeや
+OS別の公開手順は作らず、次の同じ操作を使用します。
+
+```bash
+python tools/recipe/mujoco_turtlebot3_mbody.py configure
+python tools/recipe/mujoco_turtlebot3_mbody.py build
+python tools/recipe/mujoco_turtlebot3_mbody.py doctor
+python tools/recipe/mujoco_turtlebot3_mbody.py start
+python tools/recipe/mujoco_turtlebot3_mbody.py status
+python tools/recipe/mujoco_turtlebot3_mbody.py stop
+```
+
+既定は`--model burger`です。WaffleとWaffle Piも同じRecipeと操作列を使い、各操作へ
+それぞれ`--model waffle`または`--model waffle_pi`を指定します。
+
+Windowsのvcpkg選択、実行ファイル拡張子、multi-config build配置、MSVC import
+library検査と、macOS/Linuxのloader pathはrunner内部で吸収します。生成物は
+どちらも`work/recipes/mujoco-turtlebot3-mbody/`配下に置かれます。
 
 ## ROS 2 Service / Action
 

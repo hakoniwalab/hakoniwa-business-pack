@@ -88,6 +88,19 @@ version、Capability、Receipt、smoke、Catalog、Recipeを伴うリリース�
 
 ## Inspectorと構築
 
+Windowsなどでvcpkgを明示的に選択する場合は、親shellの`VCPKG_ROOT`を
+書き換えず、Foundation設定として`work/foundation/config/toolchain.json`へ保存します。
+
+```bash
+python tools/foundation.py toolchain \
+  --recipe-id mujoco-turtlebot3-mbody \
+  --vcpkg-root C:\\project\\vcpkg
+```
+
+Foundationが生成するEndpoint、RPC、Bridgeのcomponent manifestはこのpathを使用します。
+component doctorは解決したvcpkg pathと必要headerを検証するため、ambientな別installを
+誤って選択した場合も出力から確認できます。
+
 Recipeの要求と現在のReceiptを比較するだけなら、`doctor`を使います。
 
 ```bash

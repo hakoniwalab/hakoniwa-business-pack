@@ -136,6 +136,17 @@ does not terminate Launcher-managed background processes. A running Recipe must
 execute its declared `stop` operation first. CI and other non-interactive
 callers may use `python tools/workspace.py run -- <command>`.
 
+If Foundation `doctor`, `plan`, or `build` rejects the selected Recipe because
+`foundation_requirements` is missing or invalid, stop and treat that result as
+a Recipe authoring or migration gap. Do not continue by invoking sibling
+components' local doctor, build, or install commands. Their standalone output
+does not establish the selected Foundation or composed Recipe state.
+
+An executable Recipe that declares `execution_environment.workspace.mode:
+managed` must also declare a non-empty `foundation_requirements` mapping. A
+legacy or architecture-only Recipe may omit both until it is intentionally
+migrated to the managed Workspace contract.
+
 ## Target Environment Requirement
 
 A Recipe can describe a platform-neutral composition, but an executable Demo or

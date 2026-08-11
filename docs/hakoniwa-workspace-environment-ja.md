@@ -141,3 +141,30 @@ Exit-HakoniwaWorkspace
 | Recipe / Launcher wrapper | `workspace.py run`または同じ環境契約でプロセスを起動する |
 
 必要なのはOSごとのactivation手順ではなく、選択したHakoniwa Foundationへ入って、作業後にその子シェルを終了する明確な運用です。
+
+## Recipe 境界を迂回しない
+
+Foundation の `doctor`、`plan`、`build` が、選択した Recipe の
+`foundation_requirements` 欠落や不正を報告した場合、その結果は Recipe の妥当性を
+示す停止条件です。兄弟 Component repository の `tools/hako.py`、doctor、build、
+install を直接実行して処理を続けてはいけません。
+
+Component repository は Recipe と Foundation が利用する source input です。
+Component-local な `.hako`、venv、build、install は、Recipe がその path の所有を
+明示していない限り、Foundation の状態や検証証跡にはなりません。
+
+管理対象の実行可能 Recipe は、次を宣言します。
+
+```yaml
+execution_environment:
+  workspace:
+    mode: managed
+
+foundation_requirements:
+  component-id:
+    capabilities:
+      required_capability: true
+```
+
+この宣言が揃ってから、`enter -> Foundation -> Recipe operations -> stop -> exit`
+の順に進みます。生成物と実行状態の正は Business Pack の `work/` 配下です。

@@ -110,6 +110,10 @@ target_environment:
 execution_environment:
   required_for: executable-demo
   status: unspecified
+  # Use managed only when Foundation and Recipe operations own execution under work/.
+  # A managed Recipe must also declare non-empty foundation_requirements below.
+  workspace:
+    mode: managed
   os: macOS | Linux | Windows | WSL2 | unknown
   os_version: unknown
   architecture: arm64 | x86_64 | unknown
