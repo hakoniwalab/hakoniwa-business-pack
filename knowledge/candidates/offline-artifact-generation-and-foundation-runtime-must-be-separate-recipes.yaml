@@ -1,0 +1,99 @@
+id: offline-artifact-generation-and-foundation-runtime-must-be-separate-recipes
+title: Offline artifact generation and Foundation runtime validation must be separate Recipe contracts
+status: validating
+
+knowledge_type:
+  - architectural_principle
+  - usage_pattern
+  - known_pitfall
+  - validation_rule
+
+summary: >
+  A Recipe that combines offline model generation with a Core/SHM runtime demo
+  cannot accurately express whether Foundation is required. Separate the
+  artifact-generation Recipe from the managed runtime Recipe so each has one
+  truthful environment, ownership, SOABI, and validation contract.
+
+observation:
+  context: >
+    Auditing Foundation-unmanaged Recipes after the cross-platform TurtleBot3
+    MBody validation exposed mixed responsibilities in the AgileX Tracer Recipe.
+  details:
+    - MBody source materialization and MJCF generation do not execute Core, SHM, hako-cmd, or hakopy.
+    - The downstream Tracer Twist demo does execute all of those runtime facilities and requires Foundation Python 3.12 with matching SOABI evidence.
+    - One Recipe previously described both stages, retained /usr/local/hakoniwa metadata, and could not truthfully be classified as Foundation-required or not-required.
+    - Splitting the Recipe removed one legacy Foundation warning without imposing Core installation on the offline conversion workflow.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: recipes/examples/agilex-tracer-urdf-to-mujoco.yaml
+      revision: working-tree-2026-08-11
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: recipes/examples/agilex-tracer-hakoniwa-runtime.yaml
+      revision: working-tree-2026-08-11
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      path: examples/actuators/agilex_tracer/README.md
+      revision: main-2026-08-11
+  runtime_evidence:
+    - description: Recipe validator warnings fell from four legacy runtime Recipes to three after the conversion/runtime boundary was made explicit.
+  expert_input:
+    - source: Hakoniwa maintainer
+      statement: The MBody conversion is not TB3- or runtime-specific; dependencies and Recipe ownership should follow the repository and responsibility boundary.
+
+confidence: high
+
+contradictions:
+  - target: recipes/examples/agilex-tracer-urdf-to-mujoco.yaml
+    existing_claim: One Recipe can own both ROS-free model conversion and downstream Hakoniwa PDU runtime validation.
+    new_evidence: The two stages require different Python, Foundation, shared-memory, artifact, and validation contracts.
+
+validation:
+  status: partially_verified
+  required:
+    - Implement and run the managed AgileX runtime Recipe lifecycle.
+    - Apply the same responsibility test to the remaining legacy Recipes.
+  notes:
+    - The schema split and validator classification pass locally; runtime re-verification remains pending.
+
+tracking:
+  implementation_status: in_progress
+  issues:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      number: 116
+      relation: fix
+      status: open
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - agilex-tracer-urdf-to-mujoco
+    - agilex-tracer-hakoniwa-runtime
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      kind: validator
+      path: recipes/tools/validate_recipes.rb
+      mode: detect-and-suggest-remediation
+      notes:
+        - Detect runtime Foundation signals in an unclassified Recipe.
+
+promotion_rationale:
+  - The boundary belongs primarily in Recipe composition and validation rather than a component Catalog.
+  - A validator can detect mixed or unclassified runtime requirements before users follow stale system-prefix instructions.
+
+resolution:
+  status: pending
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      issue: 116
+      pull_request: null
+      revision: null
+  verified: false
+  promoted_to: []
+  executable_guardrails:
+    - recipes/tools/validate_recipes.rb
+  notes:
+    - Final resolution requires the managed runtime runner and re-verification.
