@@ -9,8 +9,8 @@ scale:
   # and verified 512-drone research profile; do not bypass this limit by only
   # increasing Foundation values.
   drone_count: auto
-  drones_per_process: 26
-  process_count: 1
+  drones_per_process: 50
+  process_count: 4
 
 runtime:
   mode: native

@@ -8,12 +8,12 @@ repository:
 distribution:
   channel: oss
   package: hakoniwa-pdu
-  version: 1.6.6
+  version: 1.6.8
   notes:
     - Public OSS Hakoniwa component distributed as hakoniwa-pdu on PyPI.
 verification:
-  verified_at: 2026-08-08
-  source_revision: 4e62403481afe3b5e0272eb822c47cbff9c38933
+  verified_at: 2026-08-11
+  source_revision: 6b9a8b520c4bbc36d10b3c282b5d07f0dafee3bc
   source_ref: main
 summary: Python PDU package providing generated type and offset-based binary conversion independently of Hakoniwa Core, with optional WebSocket, shared-memory, RPC, and Launcher runtime capabilities.
 category:
@@ -44,6 +44,15 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-pdu-python
         path: pyproject.toml
         revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
+  - name: PDU metadata initialization diagnostics
+    description: Version 1.6.8 and later expose PduMetaDataState and classify_pdu_metadata() so a caller can distinguish an all-zero, not-yet-written PDU from invalid metadata after typed decoding fails.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: src/hakoniwa_pdu/pdu_msgs/binary_io.py
+        revision: 6b9a8b520c4bbc36d10b3c282b5d07f0dafee3bc
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: pyproject.toml
+        revision: 6b9a8b520c4bbc36d10b3c282b5d07f0dafee3bc
   - name: Generated Action PDU types
     description: Version 1.6.6 and later include hako_action_msgs headers and sample_action_msgs/Fibonacci Goal, Feedback, Result, and Action packet converters used by the typed Action APIs.
     evidence:
@@ -116,6 +125,9 @@ interfaces:
     - name: Typed Action packet objects
       kind: api
       description: Generated Goal, Feedback, Result, ActionRequest, ActionResponse, and ActionFeedback Python objects; sample_action_msgs/Fibonacci requires hakoniwa-pdu 1.6.6 or later.
+    - name: PDU metadata classification state
+      kind: api
+      description: hakoniwa_pdu.pdu_msgs.binary_io.classify_pdu_metadata() returns INVALID, UNINITIALIZED, or VALID for supplemental diagnosis after a typed decode error; available in hakoniwa-pdu 1.6.8 or later.
   protocols:
     - name: WebSocket
       role: client
@@ -195,6 +207,12 @@ data_contracts:
       - repository: hakoniwalab/hakoniwa-pdu-python
         path: README.md
         revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
+  - name: PDU metadata diagnostic classification
+    description: After typed decoding raises an error, classify the original raw PDU bytes. UNINITIALIZED means the complete 24-byte metadata header is zero and usually indicates read-before-first-write or startup ordering. INVALID means missing, truncated, corrupt, or unsupported metadata. VALID means only that magic/version are accepted; preserve the original decode error because offsets, sizes, or body data may still be invalid.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: src/hakoniwa_pdu/pdu_msgs/binary_io.py
+        revision: 6b9a8b520c4bbc36d10b3c282b5d07f0dafee3bc
   - name: Launcher JSON contract
     description: The Launcher uses assets, activation timing, dependencies, environment operations, log paths, and lifecycle monitoring.
     source:
@@ -210,6 +228,7 @@ recipe_roles:
     description: Supports Python RPC and Launcher-managed demo lifecycle.
 typical_usecases:
   - Convert generated service or topic PDU packets without installing Hakoniwa Core.
+  - Diagnose typed decode failures as first-write startup ordering or invalid PDU metadata without changing existing converter behavior.
   - Build Python controllers, visualizers, or tools for Hakoniwa simulations.
   - Run WebSocket topic or RPC demos.
   - Use shared SHM RPC when a Core runtime is intentionally present.
@@ -263,6 +282,7 @@ operations:
       - python -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json
     notes:
       - Launcher runs require hako-cmd and referenced asset commands.
+      - On a typed decode error, call hakoniwa_pdu.pdu_msgs.binary_io.classify_pdu_metadata() with the original raw bytes as supplemental diagnosis. Do not replace a decode error when the classifier returns VALID.
 known_gaps:
   - Define Business Pack install profiles and Receipt capabilities for core_free_runtime, generated_service_types, offset_binary_conversion, and optional core_integrated_runtime.
   - Add an exact local core-free AddTwoInts conversion test command.
@@ -274,7 +294,7 @@ source_refs:
     description: Features, installation, quick starts, event handling, conversion, and project structure.
   - repository: hakoniwalab/hakoniwa-pdu-python
     path: pyproject.toml
-    revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
+    revision: 6b9a8b520c4bbc36d10b3c282b5d07f0dafee3bc
     description: Python package metadata and package data.
   - repository: hakoniwalab/hakoniwa-pdu-python
     path: docs/rpc/async_shared_runtime.md
