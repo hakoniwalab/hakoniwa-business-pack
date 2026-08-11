@@ -33,6 +33,10 @@ class TurtleBot3MBodyRecipeTest(unittest.TestCase):
             for value in resolved.values():
                 self.assertTrue(value.is_relative_to(root / "work"))
 
+    def test_mbody_tool_requirements_are_shared_by_repository(self) -> None:
+        self.assertEqual(recipe.MBODY_TOOL_REQUIREMENTS.name, "hakoniwa-mbody-registry.txt")
+        self.assertIn("PyYAML", recipe.MBODY_TOOL_REQUIREMENTS.read_text(encoding="utf-8"))
+
     def test_posix_configure_uses_managed_paths_without_windows_toolchain(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "business-pack"

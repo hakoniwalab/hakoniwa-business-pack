@@ -15,6 +15,12 @@ from pathlib import Path
 RECIPE_ID = "mujoco-turtlebot3-mbody"
 TOOLS_DIR = Path(__file__).resolve().parents[1]
 MODELS = ("burger", "waffle", "waffle_pi")
+MBODY_TOOL_REQUIREMENTS = (
+    Path(__file__).resolve().parents[2]
+    / "recipes"
+    / "requirements"
+    / "hakoniwa-mbody-registry.txt"
+)
 
 
 class RecipeError(RuntimeError):
@@ -272,11 +278,23 @@ def run(command: list[str], *, cwd: Path | None = None, check: bool = False) -> 
     return completed.returncode
 
 
+def install_mbody_tool_dependencies() -> None:
+    if not MBODY_TOOL_REQUIREMENTS.is_file():
+        raise RecipeError(f"MBody tool requirements not found: {MBODY_TOOL_REQUIREMENTS}")
+    command = [
+        str(foundation_python(paths()["prefix"])),
+        "-m", "pip", "install", "--disable-pip-version-check",
+        "--requirement", str(MBODY_TOOL_REQUIREMENTS),
+    ]
+    run(command, check=True)
+
+
 def configure(args: argparse.Namespace) -> None:
     state = require_ready(args)
     resolved = paths()
     for name in ("build", "deps", "config", "logs", "validation", "runtime", "assets"):
         resolved[name].mkdir(parents=True, exist_ok=True)
+    install_mbody_tool_dependencies()
     materialize_assets(args)
     write_json(resolved["config"] / "resolved.json", state)
     write_launch(args)
