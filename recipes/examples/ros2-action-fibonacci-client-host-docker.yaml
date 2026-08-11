@@ -41,6 +41,8 @@ target_environment:
     - {name: ROS 2, version: jazzy, path: container}
 
 execution_environment:
+  workspace:
+    mode: managed
   host: {role: Hakoniwa Typed Action Client, install_root: work/foundation/install}
   container: {role: ROS 2 Fibonacci Action Server and Action Client Bridge, platform: linux}
   boundary: {protocol: PDU-RPC TCP, listener: container, published_address: 127.0.0.1, port: 54014}
@@ -51,6 +53,10 @@ components:
   - {id: hakoniwa-pdu-endpoint, roles: [communication_infrastructure]}
   - {id: hakoniwa-pdu-python, roles: [language_binding]}
   - {id: hakoniwa-pdu-registry, roles: [data_model, registry]}
+
+foundation_contract:
+  mode: required
+  reason: This Recipe uses components installed and validated through the managed Business Pack Foundation.
 
 foundation_requirements:
   hakoniwa-pdu-rpc:

@@ -108,6 +108,8 @@ target_environment:
     - The route profile is the controller-free fallback.
 
 execution_environment:
+  workspace:
+    mode: managed
   required_for: executable-demo
   status: verified
   os: macOS
@@ -221,6 +223,10 @@ components:
       - simulation_core
       - time_sync
     purpose: Provide the Hakoniwa lifecycle, shared memory, and simulation time base.
+
+foundation_contract:
+  mode: required
+  reason: This Recipe uses components installed and validated through the managed Business Pack Foundation.
 
 foundation_requirements:
   hakoniwa-core-pro:

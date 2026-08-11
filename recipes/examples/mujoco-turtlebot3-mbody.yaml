@@ -179,6 +179,10 @@ execution_environment:
     - The runner defaults to Burger; Waffle and Waffle Pi use the same commands with --model waffle or --model waffle_pi.
     - Managed execution must use the Business Pack Workspace and keep generated state under work/recipes/mujoco-turtlebot3-mbody/.
 
+foundation_contract:
+  mode: required
+  reason: This Recipe uses components installed and validated through the managed Business Pack Foundation.
+
 foundation_requirements:
   hakoniwa-core-pro:
     capabilities:

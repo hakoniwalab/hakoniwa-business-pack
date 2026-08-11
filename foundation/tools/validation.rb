@@ -21,6 +21,55 @@ module FoundationValidation
 
   module_function
 
+  def foundation_usage_signals(execution_environment)
+    return [] unless execution_environment.is_a?(Hash)
+
+    signals = []
+    shared_memory = execution_environment.dig("shared_memory", "required")
+    signals << "shared_memory.required" if shared_memory == true || shared_memory.to_s.start_with?("required")
+    hakopy = execution_environment.dig("python", "hakopy_available")
+    signals << "python.hakopy_available" if hakopy == true || hakopy.to_s.start_with?("required")
+    hako_cmd = execution_environment.dig("hakoniwa", "hako_cmd_access")
+    signals << "hakoniwa.hako_cmd_access" if hako_cmd == true || hako_cmd.to_s.start_with?("required")
+    signals
+  end
+
+  def validate_foundation_contract(value, requirements, execution_environment, label:)
+    if value.nil?
+      return [] unless requirements.is_a?(Hash) && !requirements.empty?
+
+      return ["#{label}: foundation_requirements must be classified by foundation_contract"]
+    end
+    unless value.is_a?(Hash) && value.keys.to_set == Set.new(%w[mode reason])
+      return ["#{label}: foundation_contract must contain exactly mode and reason"]
+    end
+
+    mode = value["mode"]
+    reason = value["reason"]
+    errors = []
+    unless %w[required not_required].include?(mode)
+      errors << "#{label}: foundation_contract.mode must be required or not_required"
+    end
+    unless non_empty_string?(reason)
+      errors << "#{label}: foundation_contract.reason must be a non-empty string"
+    end
+
+    workspace_mode = execution_environment.is_a?(Hash) ? execution_environment.dig("workspace", "mode") : nil
+    has_requirements = requirements.is_a?(Hash) && !requirements.empty?
+    if mode == "required"
+      errors << "#{label}: required Foundation contract must define non-empty foundation_requirements" unless has_requirements
+      errors << "#{label}: required Foundation contract must use execution_environment.workspace.mode managed" unless workspace_mode == "managed"
+    elsif mode == "not_required"
+      errors << "#{label}: not_required Foundation contract must not define foundation_requirements" if has_requirements
+      errors << "#{label}: not_required Foundation contract must not use a managed Workspace" if workspace_mode == "managed"
+      signals = foundation_usage_signals(execution_environment)
+      unless signals.empty?
+        errors << "#{label}: not_required Foundation contract conflicts with runtime signals: #{signals.join(', ')}"
+      end
+    end
+    errors
+  end
+
   def validate_requirements(value, label:, catalog_ids:)
     errors = []
     return errors if value.nil?

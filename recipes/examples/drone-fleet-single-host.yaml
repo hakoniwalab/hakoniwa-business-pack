@@ -105,6 +105,8 @@ target_environment:
     - The single-host Recipe does not install or launch the distributed Hakoniwa Conductor Server/Client package.
 
 execution_environment:
+  workspace:
+    mode: managed
   required_for: executable-demo
   status: specified
   os: host-native
@@ -165,6 +167,10 @@ agency_boundary:
         - configure_above_200_drones
         - build_512_profile
         - simulation_execution_above_200_drones
+
+foundation_contract:
+  mode: required
+  reason: This Recipe uses components installed and validated through the managed Business Pack Foundation.
 
 foundation_requirements:
   hakoniwa-core-pro:

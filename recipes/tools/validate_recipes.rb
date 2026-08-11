@@ -248,6 +248,14 @@ recipe_paths.each do |path|
   end
 
   errors.concat(
+    FoundationValidation.validate_foundation_contract(
+      data["foundation_contract"],
+      data["foundation_requirements"],
+      data["execution_environment"],
+      label: label
+    )
+  )
+  errors.concat(
     FoundationValidation.validate_requirements(
       data["foundation_requirements"],
       label: label,
@@ -261,6 +269,12 @@ recipe_paths.each do |path|
       label: label
     )
   )
+  if data["foundation_contract"].nil?
+    signals = FoundationValidation.foundation_usage_signals(data["execution_environment"])
+    unless signals.empty?
+      warnings << "#{label}: legacy Recipe requires Foundation migration; runtime signals: #{signals.join(', ')}"
+    end
+  end
 end
 
 warnings.each { |message| warn "warning: #{message}" }

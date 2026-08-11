@@ -85,6 +85,10 @@ execution_environment:
   system_installation: forbidden
   long_running_processes: []
 
+foundation_contract:
+  mode: not_required
+  reason: This setup Recipe only downloads, verifies, and extracts the public binary package; it does not execute Core, SHM, hako-cmd, or hakopy.
+
 components:
   - id: hakoniwa-conductor
     roles: [simulation_core, control_plane, rd_runtime, time_sync]

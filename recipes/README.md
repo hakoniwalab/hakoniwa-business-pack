@@ -147,6 +147,36 @@ managed` must also declare a non-empty `foundation_requirements` mapping. A
 legacy or architecture-only Recipe may omit both until it is intentionally
 migrated to the managed Workspace contract.
 
+Migrated Recipes also declare their classification explicitly:
+
+```yaml
+foundation_contract:
+  mode: required
+  reason: This Recipe executes Core shared memory and hakopy.
+```
+
+or, for setup/package Recipes that do not execute Core, SHM, `hako-cmd`, or
+`hakopy`:
+
+```yaml
+foundation_contract:
+  mode: not_required
+  reason: This Recipe only verifies and extracts a binary package.
+```
+
+`required` must be paired with managed Workspace execution and non-empty
+`foundation_requirements`. `not_required` must not declare either. The reason
+is part of the machine-readable review boundary; it is not a generic escape
+hatch for legacy Recipes.
+
+A Recipe that imports `hakopy` must require
+`hakoniwa-core-pro.capabilities.python_binding: true`. Business Pack Foundation
+then narrows the Core build to CPython 3.12 with `python.soabi: true`, requires
+the Core Receipt to report `binding_mode: soabi` and a non-empty SOABI, and
+compares that SOABI with the exact Foundation interpreter before reuse. A
+system Python, untagged `hakopy.so`/`hakopy.pyd`, or an import from another venv
+is not compatible evidence.
+
 ## Target Environment Requirement
 
 A Recipe can describe a platform-neutral composition, but an executable Demo or

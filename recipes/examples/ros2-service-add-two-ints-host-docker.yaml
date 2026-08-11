@@ -132,6 +132,8 @@ target_environment:
     - The verified profile keeps the host RpcMuxServer as the listener and the Docker-side Service Bridge as the TCP client.
 
 execution_environment:
+  workspace:
+    mode: managed
   required_for: executable-demo
   status: specified
   domains:
@@ -207,6 +209,10 @@ components:
   - id: hakoniwa-pdu-registry
     roles: [data_model]
     purpose: Own generated Service definitions and offsets.
+
+foundation_contract:
+  mode: required
+  reason: This Recipe uses components installed and validated through the managed Business Pack Foundation.
 
 foundation_requirements:
   hakoniwa-pdu-rpc:

@@ -149,7 +149,14 @@ runtime_dependencies:
         version: 1.0.0
         purpose: Explain why this Recipe needs the package.
 
-# Optional. Add this section when the Recipe uses the reusable local Foundation.
+# Classify every migrated Recipe as Foundation-required or intentionally not required.
+# A not_required Recipe must explain why it does not execute Core, SHM, hako-cmd, or hakopy.
+foundation_contract:
+  mode: required # required | not_required
+  reason: This Recipe executes Hakoniwa Core shared memory through the managed Workspace.
+
+# Optional only when foundation_contract.mode is not_required.
+# Add this section when the Recipe uses the reusable local Foundation.
 # Declare only component minimum versions, capabilities, or build limits that the Recipe actually needs.
 # Omit this section for Recipes that intentionally use a legacy/system-installed runtime.
 foundation_requirements:

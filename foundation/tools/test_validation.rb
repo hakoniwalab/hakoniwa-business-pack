@@ -109,6 +109,63 @@ class FoundationValidationTest < Minitest::Test
     )
   end
 
+  def test_required_foundation_contract_accepts_managed_recipe
+    errors = FoundationValidation.validate_foundation_contract(
+      {"mode" => "required", "reason" => "Uses Core shared memory and hakopy."},
+      {"hakoniwa-core-pro" => {"capabilities" => {"python_binding" => true}}},
+      {"workspace" => {"mode" => "managed"}},
+      label: "recipe.yaml"
+    )
+    assert_empty errors
+  end
+
+  def test_required_foundation_contract_rejects_missing_requirements
+    errors = FoundationValidation.validate_foundation_contract(
+      {"mode" => "required", "reason" => "Uses hakopy."}, nil,
+      {"workspace" => {"mode" => "managed"}}, label: "recipe.yaml"
+    )
+    assert errors.any? { |error| error.include?("non-empty foundation_requirements") }
+  end
+
+  def test_foundation_requirements_require_explicit_contract_classification
+    errors = FoundationValidation.validate_foundation_contract(
+      nil,
+      {"hakoniwa-core-pro" => {"capabilities" => {"shared_memory" => true}}},
+      {"workspace" => {"mode" => "managed"}},
+      label: "recipe.yaml"
+    )
+    assert errors.any? { |error| error.include?("classified by foundation_contract") }
+  end
+
+  def test_not_required_foundation_contract_requires_reason_and_rejects_managed_workspace
+    errors = FoundationValidation.validate_foundation_contract(
+      {"mode" => "not_required", "reason" => ""}, nil,
+      {"workspace" => {"mode" => "managed"}}, label: "recipe.yaml"
+    )
+    assert errors.any? { |error| error.include?("reason must be a non-empty string") }
+    assert errors.any? { |error| error.include?("must not use a managed Workspace") }
+  end
+
+  def test_not_required_foundation_contract_rejects_hakopy_runtime_signal
+    errors = FoundationValidation.validate_foundation_contract(
+      {"mode" => "not_required", "reason" => "Setup only."}, nil,
+      {"python" => {"hakopy_available" => "required-for-runtime"}},
+      label: "recipe.yaml"
+    )
+    assert errors.any? { |error| error.include?("python.hakopy_available") }
+  end
+
+  def test_foundation_usage_signals_detect_runtime_dependencies
+    signals = FoundationValidation.foundation_usage_signals(
+      {
+        "shared_memory" => {"required" => true},
+        "python" => {"hakopy_available" => true},
+        "hakoniwa" => {"hako_cmd_access" => "required-for-demo"}
+      }
+    )
+    assert_equal %w[shared_memory.required python.hakopy_available hakoniwa.hako_cmd_access], signals
+  end
+
   def test_valid_receipt
     assert_empty FoundationValidation.validate_receipt(valid_receipt, label: "receipt.yaml")
   end

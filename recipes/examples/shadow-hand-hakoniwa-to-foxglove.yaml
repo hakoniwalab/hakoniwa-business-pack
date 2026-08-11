@@ -289,6 +289,8 @@ target_environment:
       - hakoniwa-mbody-registry
 
 execution_environment:
+  workspace:
+    mode: managed
   required_for: executable-demo
   status: verified
   gui:
@@ -355,6 +357,10 @@ components:
       - asset_generator
       - visualization_asset_source
     purpose: Expand the upstream ROS-origin Shadow Robot xacro without requiring a ROS installation.
+
+foundation_contract:
+  mode: required
+  reason: This Recipe uses components installed and validated through the managed Business Pack Foundation.
 
 foundation_requirements:
   hakoniwa-core-pro:

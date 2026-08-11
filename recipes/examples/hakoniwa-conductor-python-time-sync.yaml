@@ -98,6 +98,8 @@ target_environment:
     - The Foundation source revisions must match metadata/build-contract.txt in that package.
 
 execution_environment:
+  workspace:
+    mode: managed
   required_for: executable-demo
   status: specified
   os: macOS | Linux
@@ -118,6 +120,10 @@ execution_environment:
     hako_cmd_access: required
   notes:
     - TCP connects the logical nodes while each node owns an isolated local Core domain.
+
+foundation_contract:
+  mode: required
+  reason: This Recipe uses components installed and validated through the managed Business Pack Foundation.
 
 foundation_requirements:
   hakoniwa-core-pro:
