@@ -92,6 +92,13 @@ The check requires:
 - `sys.executable` and `sys.prefix` under the Foundation venv;
 - `hakopy`, `hakoniwa_pdu`, and `hakoniwa_pdu_endpoint` resolved from the Foundation workspace.
 
+The Business Pack Foundation Python contract is CPython 3.12. Before component
+build/install, `tools/foundation.py` validates that identity and requires Core's
+SOABI-tagged `hakopy`. Foundation `doctor` compares the active interpreter
+SOABI with the Python metadata recorded in the Core Component Receipt. A
+missing legacy Receipt or an ABI mismatch is `INCOMPATIBLE`, not an invitation
+to load an untagged extension.
+
 ## Low-level compatibility operations
 
 `prepare`, the POSIX activation script, and the PowerShell activation script remain available for compatibility and debugging, but they are not the standard user workflow.

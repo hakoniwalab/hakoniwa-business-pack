@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path, PureWindowsPath
+from unittest import mock
 
 FOUNDATION_SCRIPT = Path(__file__).with_name("foundation.py")
 SPEC = importlib.util.spec_from_file_location("business_pack_foundation", FOUNDATION_SCRIPT)
@@ -117,14 +118,102 @@ class FoundationWorkspaceTest(unittest.TestCase):
         self.assertTrue(data["recipe_root"].endswith("work/recipes/drone-threejs"))
 
 
+class FoundationPythonContractTest(unittest.TestCase):
+    def test_accepts_cpython_312_with_foundation_prefix(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            python_root = Path(temporary) / "install" / "python"
+            probe = {
+                "implementation": "CPython",
+                "executable": str(python_root / "bin" / "python"),
+                "prefix": str(python_root),
+                "version": "3.12.10",
+                "major": 3,
+                "minor": 12,
+                "soabi": "cpython-312-test",
+                "extension_suffix": ".cpython-312-test.so",
+            }
+
+            foundation.validate_foundation_python_probe(probe, python_root)
+
+    def test_rejects_python_313_and_314(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            python_root = Path(temporary) / "install" / "python"
+            for minor in (13, 14):
+                with self.subTest(minor=minor):
+                    probe = {
+                        "implementation": "CPython",
+                        "executable": str(python_root / "bin" / "python"),
+                        "prefix": str(python_root),
+                        "version": f"3.{minor}.0",
+                        "major": 3,
+                        "minor": minor,
+                        "soabi": f"cpython-3{minor}-test",
+                        "extension_suffix": f".cpython-3{minor}-test.so",
+                    }
+                    with self.assertRaisesRegex(
+                        foundation.FoundationError,
+                        "required=3.12",
+                    ):
+                        foundation.validate_foundation_python_probe(
+                            probe, python_root
+                        )
+
+    def test_missing_foundation_python_is_reported_without_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            prefix = Path(temporary) / "install"
+
+            result = foundation.inspect_foundation_python(prefix)
+
+            self.assertEqual(result["status"], "MISSING")
+            self.assertFalse(prefix.exists())
+
+    def test_python_313_fails_before_creating_foundation_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths = foundation.resolve_workspace(root, "test")
+            recipe = root / "recipe.yaml"
+            with mock.patch.object(
+                foundation.platform,
+                "python_implementation",
+                return_value="CPython",
+            ), mock.patch.object(foundation.sys, "version_info", (3, 13, 0)):
+                with self.assertRaisesRegex(
+                    foundation.FoundationError,
+                    "must be created with CPython 3.12",
+                ):
+                    foundation.ensure_foundation_python(paths, recipe)
+
+            self.assertFalse(paths.work_root.exists())
+
+    def test_build_catalog_declares_the_runtime_python_contract(self) -> None:
+        catalog = foundation.load_build_catalog(
+            FOUNDATION_SCRIPT.parent.parent / "catalog" / "foundation-components.json"
+        )
+
+        self.assertIn("hakoniwa-core-pro", catalog)
+
+
 class FoundationInspectorTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
         self.prefix = self.root / "install"
         self.recipe = self.root / "recipe.yaml"
+        self.python_patcher = mock.patch.object(
+            foundation,
+            "inspect_foundation_python",
+            return_value={
+                "status": "SATISFIED",
+                "executable": str(self.prefix / "python" / "bin" / "python"),
+                "version": "3.12.10",
+                "soabi": "cpython-312-test",
+                "reason": None,
+            },
+        )
+        self.python_patcher.start()
 
     def tearDown(self) -> None:
+        self.python_patcher.stop()
         self.temporary.cleanup()
 
     def write_recipe(self, body: str) -> None:
@@ -161,6 +250,19 @@ class FoundationInspectorTest(unittest.TestCase):
             artifact_path.parent.mkdir(parents=True, exist_ok=True)
             artifact_path.write_text("installed\n", encoding="utf-8")
         receipt = resolved.parent.parent / f"{component}.yaml"
+        python_receipt = (
+            "python:\n"
+            "  binding_mode: soabi\n"
+            "  implementation: CPython\n"
+            "  version: 3.12.10\n"
+            "  major: 3\n"
+            "  minor: 12\n"
+            "  soabi: cpython-312-test\n"
+            "  extension_suffix: .test.so\n"
+            f"  artifact: {artifact}\n"
+            if component == "hakoniwa-core-pro"
+            else ""
+        )
         receipt.write_text(
             "schema_version: 1\n"
             "component:\n"
@@ -180,6 +282,7 @@ class FoundationInspectorTest(unittest.TestCase):
             "artifacts:\n"
             f'  - path: "{artifact}"\n'
             "    kind: test\n"
+            f"{python_receipt}"
             "resolved_manifest: "
             f'"share/hakoniwa/receipts/resolved/{component}.yaml"\n',
             encoding="utf-8",
@@ -320,6 +423,44 @@ class FoundationInspectorTest(unittest.TestCase):
         self.assertIn("build_limits.asset_num.min", fields)
         self.assertIn("platform.os", fields)
         self.assertIn("artifacts.lib/component.marker", fields)
+
+    def test_core_receipt_soabi_must_match_foundation_python(self) -> None:
+        self.write_recipe(
+            "  hakoniwa-core-pro:\n"
+            "    capabilities:\n"
+            "      shared_memory: true\n"
+        )
+        self.write_receipt(
+            "hakoniwa-core-pro",
+            capabilities="  shared_memory: true\n",
+        )
+        receipt = (
+            self.prefix
+            / "share"
+            / "hakoniwa"
+            / "receipts"
+            / "hakoniwa-core-pro.yaml"
+        )
+        receipt.write_text(
+            receipt.read_text(encoding="utf-8").replace(
+                "soabi: cpython-312-test",
+                "soabi: cpython-313-test",
+            ),
+            encoding="utf-8",
+        )
+
+        result = foundation.inspect_foundation(self.recipe, self.prefix)
+        core = result["components"][0]
+
+        self.assertEqual(result["status"], "INCOMPATIBLE")
+        self.assertIn(
+            {
+                "field": "python.soabi",
+                "required": "cpython-312-test",
+                "installed": "cpython-313-test",
+            },
+            core["reasons"],
+        )
 
     def test_false_capability_requires_installed_false(self) -> None:
         self.write_recipe(
@@ -554,12 +695,16 @@ class FoundationInspectorTest(unittest.TestCase):
                 {"hakoniwa-pdu-bridge-core"},
             )
 
-    def test_core_build_uses_orchestrator_python(self) -> None:
+    def test_core_build_uses_foundation_python_and_soabi_manifest(self) -> None:
         paths = foundation.resolve_workspace(self.root, "test")
         source = self.root / "hakoniwa-core-pro"
         hako = source / "tools" / "hako.py"
         hako.parent.mkdir(parents=True)
         hako.write_text("# test\n", encoding="utf-8")
+        (source / "hakoniwa-build.yaml").write_text(
+            "version: 1\nlimits:\n  asset_num: 16\npython:\n  soabi: false\n",
+            encoding="utf-8",
+        )
 
         commands = foundation.component_commands(
             "hakoniwa-core-pro", source, ["build"], paths
@@ -567,7 +712,14 @@ class FoundationInspectorTest(unittest.TestCase):
 
         command = commands[0]
         python_index = command.index("--python-executable") + 1
-        self.assertEqual(command[python_index], foundation.sys.executable)
+        expected_python = foundation.foundation_python_executable(
+            paths.foundation_python
+        )
+        self.assertEqual(command[0], str(expected_python))
+        self.assertEqual(command[python_index], str(expected_python))
+        manifest_index = command.index("--config") + 1
+        manifest = Path(command[manifest_index])
+        self.assertIn("  soabi: true", manifest.read_text(encoding="utf-8"))
 
     def test_component_commands_keep_shared_python_before_endpoint_cffi(self) -> None:
         paths = foundation.resolve_workspace(self.root, "test")

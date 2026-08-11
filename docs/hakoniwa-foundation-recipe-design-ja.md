@@ -315,10 +315,18 @@ Foundation Pythonの`sys.executable`と`sys.prefix`、`pip show`の`Version`と
 
 Coreの`hakopy`とEndpointのCFFI package `hakoniwa_pdu_endpoint`も同じvenvからimportできるようにします。LauncherはこのvenvのPythonを使用するため、Core binding、Endpoint CFFI、PDU Pythonの組合せが一意になります。
 
-ここでの「同じPython」は、`3.12`というminor versionだけでなく、Foundation
-venvを作成したinterpreter実体を意味します。Coreのnative bindingとEndpoint
-CFFIもそのinterpreterでbuildし、別のpyenv/Homebrew/system Pythonが暗黙に
-選択されることを防ぎます。
+FoundationのPython契約はCPython 3.12です。CoreにはFoundationが生成した
+`hakoniwa-build.yaml`を渡し、`python.soabi: true`でnative bindingをbuildします。
+Core Receiptはimplementation、正確なversion、SOABI、extension suffix、artifactを
+記録します。`doctor`はFoundation PythonのSOABIとReceiptを比較し、異なる場合は
+`INCOMPATIBLE`とします。
+
+`hakopy`は通常のsite-packagesではなく、
+`<foundation-install-prefix>/share/hakoniwa/python`へ配置し、Foundation管理の
+import pathとして共通venvから参照します。ここでの「同じPython」は、`3.12`という
+minor versionだけでなく、Foundation venvを作成したinterpreter実体とSOABIが
+一致することを意味します。別のpyenv/Homebrew/system Pythonが暗黙に選択される
+ことを防ぎます。
 
 ### 5.2 Core configとmmap
 

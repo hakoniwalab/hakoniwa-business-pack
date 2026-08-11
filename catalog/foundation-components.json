@@ -2,6 +2,13 @@
   "schema_version": 1,
   "install_prefix": "work/foundation/install",
   "receipt_root": "share/hakoniwa/receipts",
+  "runtime": {
+    "python": {
+      "implementation": "CPython",
+      "major": 3,
+      "minor": 12
+    }
+  },
   "components": {
     "hakoniwa-core-pro": {
       "source": "../hakoniwa-core-pro",

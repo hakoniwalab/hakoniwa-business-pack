@@ -106,6 +106,13 @@ python tools/workspace.py doctor
 - `sys.prefix`がFoundation venv配下である
 - `hakopy`、`hakoniwa_pdu`、`hakoniwa_pdu_endpoint`がFoundation workspace配下から解決される
 
+Business Pack FoundationのPython契約はCPython 3.12です。
+`tools/foundation.py`はcomponentのbuild/install前にこのidentityを検証し、Coreには
+SOABI付き`hakopy`を要求します。Foundation `doctor`は、現在のinterpreterのSOABIと
+Core Component Receiptに記録されたPython metadataを比較します。古いReceiptに
+metadataがない場合やABIが一致しない場合は`INCOMPATIBLE`とし、untagged extensionへ
+暗黙fallbackしません。
+
 ## 互換用の低レベル操作
 
 `prepare`、POSIXの`activate`、PowerShellの`Activate.ps1`は互換性とデバッグのために残します。ただし、通常ユーザー向けの標準操作ではありません。
