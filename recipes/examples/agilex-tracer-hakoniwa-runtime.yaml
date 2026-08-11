@@ -19,10 +19,11 @@ feasibility:
 
 validation:
   status: partially_verified
-  verified_at: 2026-07-22
+  verified_at: 2026-08-11
   summary: >
-    The component-local runtime previously moved the rover with a positive Twist.
-    The split Foundation-aware Business Pack lifecycle has not yet been re-run.
+    The split Foundation-aware lifecycle was configured, built, checked, and run
+    successfully on native macOS with Python 3.12 and SOABI-tagged hakopy. Native
+    Linux and Windows execution remain to be verified.
   steps:
     - id: historical_component_runtime
       status: verified
@@ -31,8 +32,11 @@ validation:
           path: examples/actuators/agilex_tracer/README.md
           date: 2026-07-22
     - id: managed_recipe_runtime
-      status: not_tested
-      evidence: []
+      status: verified
+      evidence:
+        - platform: macOS arm64
+          date: 2026-08-11
+          result: Foundation SATISFIED; base.x advanced from 0.000 to 0.301 after a positive Twist command.
 
 constraints:
   - generated-mbody-input-required
@@ -152,7 +156,7 @@ connections:
       requires:
         - Foundation Core Receipt and shared-memory runtime are SATISFIED.
       validation_notes:
-        - Historical component-local execution exists; managed Recipe execution remains pending.
+        - Managed native macOS execution advanced the simulation under Foundation lifecycle control.
   - from: hakoniwa-pdu-python
     to: hakoniwa-pdu-endpoint
     interface: Python Endpoint API
@@ -163,7 +167,7 @@ connections:
         - Foundation Python and Core Receipt SOABI match.
         - Endpoint core_callback artifacts are installed.
       validation_notes:
-        - The sender and plant contract was previously exercised outside this split Recipe.
+        - Foundation Python 3.12 loaded the SOABI-tagged Core binding and sent Twist through Endpoint on macOS.
   - from: hakoniwa-pdu-endpoint
     to: hakoniwa-mujoco-robots
     interface: callback SHM PDU
@@ -173,7 +177,7 @@ connections:
       requires:
         - Endpoint and PDU definition agree on asset, PDU name, channel, and size.
       validation_notes:
-        - Positive linear.x previously produced positive rover displacement.
+        - Positive linear.x produced positive base.x displacement from 0.000 to 0.301 in the managed macOS run.
 
 data_flow:
   summary: A bounded Python Twist command drives the generated Tracer model through the Hakoniwa plant asset.
@@ -228,12 +232,36 @@ artifacts:
     purpose: Send a bounded positive Twist from Foundation Python.
 
 missing_pieces:
-  - Add the Recipe-owned cross-platform configure/build/doctor/start/status/stop runner.
-  - Re-run the split managed lifecycle on supported native platforms.
-  - Promote connection validation from historical component evidence to current Recipe evidence.
+  - Verify the same Recipe-owned lifecycle on native Linux and Windows.
+  - Add an automated behavioral assertion for positive base.x displacement if the shared-memory runtime becomes available in CI.
 
 demo:
-  status: not_implemented
+  objective: Build and run the generated AgileX Tracer as a Foundation-managed MuJoCo asset and verify forward motion from a bounded Twist command.
+  steps:
+    - order: 1
+      component: hakoniwa-business-pack
+      action: Stage the complete generated MBody artifact closure and write Recipe-owned build and Launcher configuration.
+      command: python3.12 tools/recipe/agilex_tracer_demo.py configure
+    - order: 2
+      component: hakoniwa-business-pack
+      action: Build the MuJoCo check and Hakoniwa plant under the Recipe workspace.
+      command: python3.12 tools/recipe/agilex_tracer_demo.py build
+    - order: 3
+      component: hakoniwa-business-pack
+      action: Verify Foundation Python 3.12, SOABI, runtime inputs, and binaries.
+      command: python3.12 tools/recipe/agilex_tracer_demo.py doctor
+    - order: 4
+      component: hakoniwa-business-pack
+      action: Validate the model and actuator configuration without starting shared memory.
+      command: python3.12 tools/recipe/agilex_tracer_demo.py step1
+    - order: 5
+      component: hakoniwa-business-pack
+      action: Start the bounded Twist run through the background Launcher lifecycle.
+      command: python3.12 tools/recipe/agilex_tracer_demo.py start
+    - order: 6
+      component: hakoniwa-business-pack
+      action: Inspect the persistent Launcher session state.
+      command: python3.12 tools/recipe/agilex_tracer_demo.py status
   readiness:
     lifecycle_state:
       source: Launcher session plus plant and sender logs
@@ -267,7 +295,7 @@ demo:
     provider: hakoniwa-pdu-python
     mode: session-file
     target: work/recipes/agilex-tracer-hakoniwa-runtime/runtime/launcher-session.json
-    trigger: Recipe stop command
+    trigger: python3.12 tools/recipe/agilex_tracer_demo.py stop
     expected_behavior:
       - Invoke LauncherService.terminate through the control CLI.
     verification_checks:

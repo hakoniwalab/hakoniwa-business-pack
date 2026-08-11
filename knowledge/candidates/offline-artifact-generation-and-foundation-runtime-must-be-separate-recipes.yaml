@@ -37,6 +37,7 @@ sources:
       revision: main-2026-08-11
   runtime_evidence:
     - description: Recipe validator warnings fell from four legacy runtime Recipes to three after the conversion/runtime boundary was made explicit.
+    - description: The managed macOS lifecycle built and ran the split runtime Recipe with Foundation Python 3.12 and moved the Tracer from base.x 0.000 to 0.301.
   expert_input:
     - source: Hakoniwa maintainer
       statement: The MBody conversion is not TB3- or runtime-specific; dependencies and Recipe ownership should follow the repository and responsibility boundary.
@@ -51,10 +52,10 @@ contradictions:
 validation:
   status: partially_verified
   required:
-    - Implement and run the managed AgileX runtime Recipe lifecycle.
+    - Verify the managed AgileX runtime Recipe lifecycle on native Linux and Windows.
     - Apply the same responsibility test to the remaining legacy Recipes.
   notes:
-    - The schema split and validator classification pass locally; runtime re-verification remains pending.
+    - The schema split, validator classification, and native macOS runtime pass locally.
 
 tracking:
   implementation_status: in_progress
@@ -96,4 +97,4 @@ resolution:
   executable_guardrails:
     - recipes/tools/validate_recipes.rb
   notes:
-    - Final resolution requires the managed runtime runner and re-verification.
+    - The macOS runtime runner is verified; final resolution requires the remaining legacy Recipe migrations and cross-platform evidence.
