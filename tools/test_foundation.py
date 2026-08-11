@@ -780,9 +780,74 @@ class FoundationInspectorTest(unittest.TestCase):
         )
         self.assertEqual(command[0], str(expected_python))
         self.assertEqual(command[python_index], str(expected_python))
+        mmap_index = command.index("--core-mmap-dir") + 1
+        self.assertEqual(command[mmap_index], paths.foundation_mmap.as_posix())
+        self.assertNotIn("\\", command[mmap_index])
         manifest_index = command.index("--config") + 1
         manifest = Path(command[manifest_index])
         self.assertIn("  soabi: true", manifest.read_text(encoding="utf-8"))
+
+    def test_normalize_core_config_repairs_unescaped_windows_path(self) -> None:
+        paths = foundation.resolve_workspace(self.root, "test")
+        config = paths.foundation_config / "cpp_core_config.json"
+        config.parent.mkdir(parents=True, exist_ok=True)
+        windows_path = paths.foundation_mmap.as_posix()
+        config.write_text(
+            '{\n  "shm_type": "mmap",\n'
+            f'  "core_mmap_path": "{windows_path.replace("/", chr(92))}",\n'
+            '  "asset_timeout_usec": 600000000\n}\n',
+            encoding="utf-8",
+        )
+
+        with mock.patch.object(foundation.platform, "system", return_value="Windows"):
+            foundation.normalize_core_config_for_windows(config, paths.foundation_mmap)
+
+        data = json.loads(config.read_text(encoding="utf-8"))
+        self.assertEqual(data["core_mmap_path"], windows_path)
+
+    def test_normalize_core_config_preserves_valid_escaped_windows_path(self) -> None:
+        paths = foundation.resolve_workspace(self.root, "test")
+        config = paths.foundation_config / "cpp_core_config.json"
+        config.parent.mkdir(parents=True, exist_ok=True)
+        windows_path = paths.foundation_mmap.as_posix()
+        config.write_text(
+            json.dumps({"shm_type": "mmap", "core_mmap_path": windows_path.replace("/", "\\")}),
+            encoding="utf-8",
+        )
+
+        with mock.patch.object(foundation.platform, "system", return_value="Windows"):
+            foundation.normalize_core_config_for_windows(config, paths.foundation_mmap)
+
+        data = json.loads(config.read_text(encoding="utf-8"))
+        self.assertEqual(data["core_mmap_path"], windows_path)
+
+    def test_core_runtime_config_inspection_rejects_invalid_json(self) -> None:
+        paths = foundation.resolve_workspace(self.root, "test")
+        config = paths.foundation_config / "cpp_core_config.json"
+        config.parent.mkdir(parents=True, exist_ok=True)
+        config.write_text(
+            '{"core_mmap_path": "C:\\project\\broken"}',
+            encoding="utf-8",
+        )
+
+        result = foundation.inspect_core_runtime_config(paths.install_prefix)
+
+        self.assertEqual(result["status"], "INCOMPATIBLE")
+        self.assertIn("not valid JSON", result["reason"])
+
+    def test_core_runtime_config_inspection_accepts_managed_mmap(self) -> None:
+        paths = foundation.resolve_workspace(self.root, "test")
+        config = paths.foundation_config / "cpp_core_config.json"
+        config.parent.mkdir(parents=True, exist_ok=True)
+        config.write_text(
+            json.dumps({"core_mmap_path": paths.foundation_mmap.as_posix()}),
+            encoding="utf-8",
+        )
+
+        result = foundation.inspect_core_runtime_config(paths.install_prefix)
+
+        self.assertEqual(result["status"], "SATISFIED")
+        self.assertEqual(result["core_mmap_path"], paths.foundation_mmap.as_posix())
 
     def test_component_commands_keep_shared_python_before_endpoint_cffi(self) -> None:
         paths = foundation.resolve_workspace(self.root, "test")

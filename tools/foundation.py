@@ -718,7 +718,47 @@ def inspect_foundation_python(prefix: Path) -> dict:
     }
 
 
-def inspect_foundation(recipe: Path, prefix: Path) -> dict:
+def inspect_core_runtime_config(prefix: Path) -> dict:
+    config = prefix.parent / "config" / "cpp_core_config.json"
+    expected_mmap = (prefix.parent / "runtime" / "mmap").as_posix()
+    if not config.is_file():
+        return {
+            "status": "MISSING",
+            "path": str(config),
+            "core_mmap_path": None,
+            "reason": "Core runtime config is missing",
+        }
+    try:
+        data = json.loads(config.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {
+            "status": "INCOMPATIBLE",
+            "path": str(config),
+            "core_mmap_path": None,
+            "reason": f"Core runtime config is not valid JSON: {exc}",
+        }
+    mmap_path = data.get("core_mmap_path") if isinstance(data, dict) else None
+    normalized = mmap_path.replace("\\", "/") if isinstance(mmap_path, str) else None
+    if normalized != expected_mmap:
+        return {
+            "status": "INCOMPATIBLE",
+            "path": str(config),
+            "core_mmap_path": normalized,
+            "reason": f"Core mmap path mismatch: required={expected_mmap}, installed={normalized}",
+        }
+    return {
+        "status": "SATISFIED",
+        "path": str(config),
+        "core_mmap_path": normalized,
+        "reason": None,
+    }
+
+
+def inspect_foundation(
+    recipe: Path,
+    prefix: Path,
+    validate_core_config: bool = False,
+) -> dict:
     requirements = load_foundation_requirements(recipe)
     all_receipts: dict[str, dict] = {}
     receipt_dir = prefix / "share" / "hakoniwa" / "receipts"
@@ -755,6 +795,10 @@ def inspect_foundation(recipe: Path, prefix: Path) -> dict:
                     break
     statuses = {component["status"] for component in components}
     statuses.add(runtime_python["status"])
+    core_config = None
+    if validate_core_config and "hakoniwa-core-pro" in requirements:
+        core_config = inspect_core_runtime_config(prefix)
+        statuses.add(core_config["status"])
     if "INCOMPATIBLE" in statuses:
         status = "INCOMPATIBLE"
     elif "UNKNOWN" in statuses:
@@ -768,7 +812,7 @@ def inspect_foundation(recipe: Path, prefix: Path) -> dict:
         "install_prefix": str(prefix),
         "status": status,
         "components": components,
-        "runtime": {"python": runtime_python},
+        "runtime": {"python": runtime_python, "core_config": core_config},
     }
 
 
@@ -1181,7 +1225,7 @@ def component_commands(
                         "--python-executable",
                         python,
                         "--core-mmap-dir",
-                        str(paths.foundation_mmap),
+                        paths.foundation_mmap.as_posix(),
                     ]
                 )
             elif operation == "install":
@@ -1222,6 +1266,55 @@ def component_commands(
     return commands
 
 
+def normalize_core_config_for_windows(
+    config: Path,
+    expected_mmap: Path | None = None,
+) -> None:
+    """Repair Core's Windows mmap JSON and enforce the Foundation-owned path."""
+    if platform.system() != "Windows" or not config.is_file():
+        return
+    content = config.read_text(encoding="utf-8")
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        pattern = r'("core_mmap_path"\s*:\s*")([^"]*)(")'
+        repaired, replacements = re.subn(
+            pattern,
+            lambda match: (
+                match.group(1)
+                + match.group(2).replace("\\", "/")
+                + match.group(3)
+            ),
+            content,
+            count=1,
+        )
+        if replacements != 1:
+            raise FoundationError(
+                f"core_mmap_path not found in invalid Core config: {config}"
+            )
+        try:
+            data = json.loads(repaired)
+        except json.JSONDecodeError as exc:
+            raise FoundationError(
+                f"Core config remains invalid after Windows path repair: {config}: {exc}"
+            ) from exc
+    if not isinstance(data, dict) or not isinstance(data.get("core_mmap_path"), str):
+        raise FoundationError(f"Core config has no string core_mmap_path: {config}")
+    normalized = data["core_mmap_path"].replace("\\", "/")
+    if expected_mmap is not None and normalized != expected_mmap.as_posix():
+        raise FoundationError(
+            "Core mmap path is outside the managed Foundation contract: "
+            f"required={expected_mmap.as_posix()}, generated={normalized}"
+        )
+    data["core_mmap_path"] = normalized
+    temporary = config.with_suffix(config.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(config)
+
+
 def execute_build_plan(plan: dict, paths: WorkspacePaths) -> dict:
     if plan["blocked"]:
         raise FoundationError(
@@ -1258,8 +1351,13 @@ def execute_build_plan(plan: dict, paths: WorkspacePaths) -> dict:
                     f"{action['component']} command failed "
                     f"with exit code {result.returncode}"
                 )
+            if action["component"] == "hakoniwa-core-pro":
+                normalize_core_config_for_windows(
+                    paths.foundation_config / "cpp_core_config.json",
+                    paths.foundation_mmap,
+                )
     final = inspect_foundation(
-        Path(plan["recipe"]), paths.install_prefix
+        Path(plan["recipe"]), paths.install_prefix, validate_core_config=True
     )
     if final["status"] != "SATISFIED":
         raise FoundationError(
@@ -1309,6 +1407,14 @@ def print_inspection(result: dict, json_output: bool) -> None:
             )
         )
         print(f"[{runtime_python.get('status')}] Foundation Python: {detail}")
+    core_config = result.get("runtime", {}).get("core_config")
+    if isinstance(core_config, dict):
+        detail = (
+            f"path={core_config.get('path')} mmap={core_config.get('core_mmap_path')}"
+            if core_config.get("status") == "SATISFIED"
+            else f"{core_config.get('reason')} path={core_config.get('path')}"
+        )
+        print(f"[{core_config.get('status')}] Core runtime config: {detail}")
     for component in result["components"]:
         print(f"[{component['status']}] {component['component']}")
         for reason in component["reasons"]:
@@ -1412,7 +1518,7 @@ def main(argv: list[str] | None = None) -> int:
                 final = execute_build_plan(result, paths)
                 print_inspection(final, False)
                 return 0
-            result = inspect_foundation(recipe, prefix)
+            result = inspect_foundation(recipe, prefix, validate_core_config=True)
             print_inspection(result, args.json_output)
             return 0 if result["status"] == "SATISFIED" else 1
         paths = resolve_workspace(repository_root(), args.recipe_id)
