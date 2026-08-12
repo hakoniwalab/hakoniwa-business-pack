@@ -1,0 +1,152 @@
+id: business-pack-host-plus-docker-recipe-substituted-by-wsl2
+title: A host-plus-docker Recipe can run as host-plus-WSL2 instead when Docker Desktop is absent, but only with WSL2 listening and Windows dialing out, and only after working around two orphaned-process/PYTHONPATH traps
+status: candidate
+
+knowledge_type:
+  - usage_pattern
+  - known_pitfall
+
+summary: >
+  business-pack Recipes such as ros2-action-fibonacci-client-host-docker assume
+  Docker Desktop on the Windows host. On a machine where Docker Desktop is not
+  installed but a WSL2 distro (Ubuntu-24.04, ROS 2 Jazzy) already has its own
+  Docker or none at all, the container half of the Recipe can be substituted by
+  building ROS 2 plus the bridge directly inside WSL2
+  (configs/action-bridge-wsl-win/) instead. This only works with the connection
+  direction reversed from what a container topology implies: WSL2 must listen
+  and Windows must dial out, reusing the same role-reversal principle as the
+  existing candidate pdu-rpc-tcp-role-reversal-works-but-client-pool-cannot-listen,
+  because a Windows-side listener reached from WSL2 was not reachable in this
+  environment, while Windows dialing out to a WSL2-side listener worked with no
+  extra firewall configuration.
+  Getting the substitution working also required two WSL2/ROS2-specific traps to
+  be worked around: `ros2 run`'s wrapper process is not exec-replaced, so killing
+  its PID orphans the real node and the Action Server ends up answering twice;
+  and putting hakoniwa-pdu-registry's path first on PYTHONPATH lets its stub
+  builtin_interfaces shadow rclpy's real one and breaks rclpy entirely.
+
+observation:
+  context: >
+    Standing up an Action-bridge equivalent of business-pack's
+    ros2-action-fibonacci-client-host-docker Recipe on a machine with Docker
+    Desktop absent from the Windows host, 2026-08-09 through 2026-08-11, using
+    WSL2 Ubuntu-24.04 with ROS 2 Jazzy as the substitute for the Recipe's
+    container half.
+  details:
+    - "Why the Recipe as written does not apply directly. The Recipe's
+      host-plus-docker shape assumes a container runtime is available on the
+      Windows host; this workspace's host has no Docker Desktop, only a WSL2
+      distro. WSL2 was used to build and run the ROS 2 + bridge side directly
+      (configs/action-bridge-wsl-win/), substituting for the container without
+      changing what crosses the boundary (PDU-RPC over TCP, as in the original
+      Recipe)."
+    - "The topology that succeeded: WSL2 listens, Windows dials out. This
+      reuses the role-reversal fact already recorded in
+      pdu-rpc-tcp-role-reversal-works-but-client-pool-cannot-listen -- the RPC
+      role and the TCP listen/connect role are independent -- but the direction
+      choice here is forced by the network, not merely convenient: WSL2-to-Windows
+      inbound access to a Windows-side listener was not reachable in this
+      environment, while Windows connecting to a WSL2 listener over the WSL2
+      localhost forwarding path worked without extra firewall configuration."
+    - "Trap 1: ros2 run does not exec-replace, so PID-based kill orphans the
+      real node. `ros2 run <pkg> <node>` forks a Python wrapper process that
+      then imports and runs the node without replacing itself via exec; killing
+      only the wrapper's PID (as returned by a naive process-launch helper)
+      leaves the actual ROS node running as an orphan. In this scenario that
+      meant a 'stopped' Action Server was still alive and still bound to the
+      same DDS topics, so the next test iteration's freshly started Action
+      Server received the same Goal twice and both instances answered,
+      corrupting the result. Fixed by starting the node with `setsid` and
+      killing the whole process group, not the wrapper PID."
+    - "Trap 2: hakoniwa-pdu-registry's PYTHONPATH entry must not be prepended.
+      hakoniwa-pdu-registry ships a stub builtin_interfaces module (used for
+      its own PDU-generation tooling). Placing hakoniwa-pdu-registry's path at
+      the front of PYTHONPATH -- the natural place to put a workspace-specific
+      path -- lets that stub shadow the real ROS 2 builtin_interfaces package
+      that rclpy depends on, and rclpy fails to import or behaves incorrectly
+      as a result. Appending hakoniwa-pdu-registry's path to the end of
+      PYTHONPATH instead resolves it, since Python then finds the real
+      builtin_interfaces first."
+    - "Validation covered both the positive and the negative direction. The
+      WSL2-listens/Windows-dials-out topology was exercised as the working
+      case; the reverse direction (Windows listens, WSL2 dials out) was also
+      attempted deliberately to confirm the network-level reason for the
+      choice, and failed to reach the Windows-side listener across two
+      separate attempts."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: recipes/ros2-action-fibonacci-client-host-docker
+      revision: unknown
+  runtime_evidence:
+    - description: >-
+        This workspace's own bring-up, Windows 11 Pro x64 host without Docker
+        Desktop, WSL2 Ubuntu-24.04 with ROS 2 Jazzy, 2026-08-09 through
+        2026-08-11, using configs/action-bridge-wsl-win/. Positive case
+        (WSL2 listens, Windows dials out): working end-to-end Action exchange
+        across two consecutive full bring-ups after both traps were worked
+        around. Negative case (Windows listens, WSL2 dials out): failed to
+        reach the Windows-side listener on two separate attempts.
+  expert_input: []
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - Not measured with Docker Desktop actually available on the same machine;
+      this candidate does not claim the WSL2 substitution is preferable when
+      Docker Desktop is present, only that it is a viable fallback when it is
+      not.
+    - The orphaned-node trap was observed with `ros2 run`; not separately
+      tested against a node launched via a ROS 2 launch file, which may use a
+      different process-management path.
+  notes:
+    - Verified across two consecutive positive bring-ups and two consecutive
+      negative (reversed-direction) attempts in this workspace, both using the
+      same configs/action-bridge-wsl-win/ configuration.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - ros2-action-fibonacci-client-host-docker
+  executable_guardrails: []
+
+promotion_rationale:
+  - >-
+    This is squarely a Recipe-authoring concern: a Recipe's mode should list
+    host-plus-wsl2 as a viable substitution for host-plus-docker on Windows
+    machines without Docker Desktop, since the underlying boundary contract
+    (PDU-RPC over TCP) is unchanged and only the container half is replaced.
+    It belongs with the Recipe rather than the runtime primer or a component
+    catalog entry because the two traps (ros2 run process-group kill,
+    PYTHONPATH ordering) are specific to standing up ROS 2 inside WSL2 for this
+    purpose, not to the RPC or endpoint components themselves.
+  - >-
+    No executable guardrail is proposed. Both traps are process-launch and
+    environment-ordering mistakes made by whoever writes the launch tooling,
+    not conditions the shipped components could detect at runtime.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - >-
+      No upstream issue filed yet; this is recorded as a usage pattern for the
+      Recipe rather than a defect. The two traps (ros2 run PID handling,
+      PYTHONPATH ordering) are workspace-side launch-tooling concerns and are
+      already worked around locally in configs/action-bridge-wsl-win/, not
+      something to report upstream as a bug.

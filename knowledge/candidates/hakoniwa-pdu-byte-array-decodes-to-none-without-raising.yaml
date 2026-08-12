@@ -1,0 +1,167 @@
+id: hakoniwa-pdu-byte-array-decodes-to-none-without-raising
+title: "pip hakoniwa-pdu 1.6.7 lists ROS2 byte[] as a supported array type, but the decode direction has no runtime branch for it and returns None silently instead of raising; uint8[] is the safe substitute and is wire-identical in ROS2"
+status: candidate
+
+knowledge_type:
+  - implementation_fact
+  - known_pitfall
+
+summary: >
+  pip package hakoniwa-pdu 1.6.7 accepts byte[] as a ROS2 array element type in
+  its type-generation allowlist, but its Python runtime type-conversion table
+  has no branch for 'byte' on the decode side. typeTobin_array('byte') (the
+  encode direction) correctly raises ValueError for the unhandled type, but
+  binToArrayValues('byte') (the decode direction) falls through without raising
+  and returns None instead -- a negative-path test would pass a value through
+  and get silence rather than an exception, which is a worse failure mode than
+  an explicit error because it can propagate a missing field deep into calling
+  code before anything notices. uint8[] is unaffected and behaves correctly in
+  both directions; since ROS2 byte and uint8 are wire-identical single-octet
+  types, uint8[] is a safe drop-in substitute with no protocol cost. No .msg
+  file anywhere in hakoniwa-pdu-registry actually uses byte[], which is
+  consistent with this being an unexercised code path rather than a
+  well-trodden and merely-undocumented one.
+
+observation:
+  context: >
+    Designing case T36 (MissionLikeItem / NestedBytesItem PDU types) for the
+    hako-research campaign and choosing between ROS2 byte[] and uint8[] for a
+    binary-blob-style field, 2026-08-10/08-11, against pip hakoniwa-pdu 1.6.7
+    on Windows.
+  details:
+    - "The generator-side allowlist includes byte[]. hakoniwa-pdu's type
+      generator accepts 'byte' as a valid ROS2 array element type when parsing
+      a .msg field declaration, alongside uint8 and the other primitive array
+      types; nothing at generation time rejects or warns about it."
+    - "The encode direction fails loudly, as expected for an unhandled type.
+      typeTobin_array('byte') raises ValueError when asked to encode a 'byte'
+      array, which is the correct behavior for a type the runtime does not
+      actually support -- a caller hits an immediate, attributable exception."
+    - "The decode direction fails silently instead. binToArrayValues('byte')
+      does not raise for the same unhandled type; it falls through the
+      type-dispatch table without matching a branch and returns None. A caller
+      decoding a PDU containing a byte[] field would receive None for that
+      field with no exception, no log line, and no other indication that
+      decoding did not actually happen for it."
+    - "uint8[] is unaffected. The same round trip (encode then decode) using
+      uint8[] instead of byte[] for an otherwise identical field works
+      correctly in both directions, and ROS2 defines byte and uint8 as the same
+      single-octet wire representation, so the substitution changes nothing
+      about what crosses the wire or how a non-Python consumer interprets it."
+    - "No existing .msg in hakoniwa-pdu-registry exercises byte[]. A search
+      across all .msg definitions in hakoniwa-pdu-registry found zero uses of
+      byte[] as a field type, which is consistent with this being a genuinely
+      unexercised path in practice (nobody has hit it in the registry's own
+      content) rather than a documented-but-broken feature people are working
+      around."
+    - "Practical resolution used in this workspace: case T36's
+      MissionLikeItem and NestedBytesItem PDU types were designed using
+      uint8[] rather than byte[] specifically because of this finding, and
+      their Windows-native generation plus round-trip test passed with exit
+      0, which is the positive control that confirms uint8[] is the safe
+      choice and that the round-trip harness itself is capable of catching a
+      decode-side silent failure of this shape."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu
+      path: python
+      revision: pip 1.6.7
+  runtime_evidence:
+    - description: >-
+        This workspace's own T36 case work, 2026-08-10/08-11, Windows native:
+        uint8[]-based MissionLikeItem/NestedBytesItem generation and
+        round-trip test, exit 0. A grep across hakoniwa-pdu-registry's .msg
+        files for byte[] usage returned zero matches.
+  expert_input: []
+
+confidence: medium
+
+contradictions: []
+
+validation:
+  status: partially_verified
+  required:
+    - Actually execute typeTobin_array('byte') and binToArrayValues('byte')
+      (or a full encode/decode round trip through a .msg field declared as
+      byte[]) in this workspace to confirm the None-without-raising behavior
+      directly, rather than relying on reading the type-dispatch source. This
+      workspace has read the conversion tables and inferred the fall-through,
+      but has not executed the byte[] decode path itself.
+    - Confirm the same behavior against a from-source build of hakoniwa-pdu,
+      not only the pinned pip 1.6.7 wheel, in case the runtime differs from
+      the packaged version this workspace inspected.
+  notes:
+    - >-
+      validation.status is partially_verified rather than not_tested because
+      the claim rests on direct reading of both conversion tables
+      (typeTobin_array and binToArrayValues) in the actual shipped source, not
+      on inference from documentation or by analogy -- the same standard of
+      evidence used for partially_verified in the existing
+      pdu-rpc-action-cannot-express-external-abort-or-preemption-cause
+      candidate, where source-and-test reading without this workspace's own
+      execution was likewise scored partially_verified rather than verified.
+      It is not scored not_tested because that would understate the concrete
+      evidence already gathered (an actual missing branch identified at an
+      actual line, contrasted against the sibling function's explicit raise).
+    - >-
+      It is deliberately not scored verified: this workspace has run and
+      confirmed the uint8[] side (T36's exit-0 round trip) but has not
+      executed the byte[] decode path itself to see the None returned in
+      practice, which is what verified would require.
+    - >-
+      confidence is medium, one step below the high used elsewhere in this
+      batch, specifically because the central claim (silent None on decode)
+      is inferred from reading the dispatch table's absence of a branch for
+      'byte' rather than observed directly, even though the encode-side
+      contrast (explicit ValueError) and the zero-usage-in-registry fact are
+      both directly confirmed.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog:
+    - hakoniwa-pdu
+  runtime_primer: true
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-pdu
+      kind: test
+      mode: detect-only
+      notes:
+        - >-
+          A unit test asserting that binToArrayValues('byte') either raises
+          (matching typeTobin_array's behavior) or is removed from the
+          generator's allowlist would close this gap at the source. Not
+          authored here since it belongs in the owning repository's own test
+          suite and this workspace has not yet executed the failing path
+          itself to anchor a regression test on.
+
+promotion_rationale:
+  - >-
+    Anyone designing a new PDU type with a binary-blob-style array field could
+    reasonably reach for ROS2's byte[] since it is accepted by the generator;
+    steering them to uint8[] instead, with the wire-identical substitution
+    explained, belongs in the runtime primer so this is learned before a field
+    is designed rather than after a silent decode failure is chased down.
+  - >-
+    No executable guardrail is authored in this candidate itself, since this
+    workspace has not executed the failing path to anchor a regression test on
+    it; the suggested guardrail is left as a note for the owning repository.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - >-
+      No upstream issue filed yet. This workspace's own mitigation is to use
+      uint8[] instead of byte[] for all new PDU array fields going forward,
+      which is already reflected in case T36's MissionLikeItem/NestedBytesItem
+      design.

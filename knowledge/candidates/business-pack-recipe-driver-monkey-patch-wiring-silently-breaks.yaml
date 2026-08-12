@@ -1,0 +1,270 @@
+id: business-pack-recipe-driver-monkey-patch-wiring-silently-breaks
+title: "Recipe driver's dir(impl)-copy API-preservation loop runs before the safe-symbol override, so the override becomes a self-assignment and silently reverts to the unsafe implementation; PR #110's Windows pid_alive fix never reached managed_host_alive as a result"
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - runtime_rule
+  - validation_rule
+
+summary: >
+  business-pack's Recipe driver modules (tools/recipe/ros2_service_add_two_ints.py
+  and its siblings) preserve their historical module API by copying every public
+  symbol from an `impl` module into the driver module's globals() via a
+  `for _name in dir(impl): globals()[_name] = getattr(impl, _name)` loop
+  (ros2_service_add_two_ints.py:12-14). When a later, narrower patch tries to
+  override just one symbol with a safer implementation -- as PR #110 did for
+  `pid_alive`, importing process_liveness.pid_alive at module top and then
+  writing `impl.pid_alive = pid_alive` (line 19) -- the ordering silently
+  defeats the override: the copy loop runs first and copies impl's OWN
+  `pid_alive` (ros2_service_add_two_ints_impl.py:577, the os.kill(pid, 0)-based
+  original) into globals()['pid_alive'], overwriting the safe import that had
+  been bound there by the top-of-file `from process_liveness import pid_alive`.
+  By the time line 19 executes, the bare name `pid_alive` on its right-hand side
+  resolves through globals() to impl's own original function, so
+  `impl.pid_alive = pid_alive` is a no-op self-assignment, not a replacement.
+  managed_host_alive (impl.py:587-599, used by start/status/stop) keeps calling
+  the original os.kill(pid, 0)-based check. This is not hypothetical: this
+  workspace confirmed the vendored driver (external/hakoniwa-business-pack,
+  revision 060907d) still has exactly this ordering today, and reproduced the
+  live consequence -- os.kill(pid, 0) on Windows enters the CTRL_C_EVENT path,
+  and when GenerateConsoleCtrlEvent fails, CPython's own fallthrough (see
+  cpython gh-58689) can reach OpenProcess/TerminateProcess, killing a live host
+  worker -- 3/3 on real hardware, 0/3 after correcting the ordering.
+
+observation:
+  context: >
+    Re-testing PR #110's Windows-safe pid_alive fix against the Recipe driver
+    modules used by business-pack's ros2-service-add-two-ints and
+    ros2-action-fibonacci Recipes, 2026-08-11/08-12, Windows 11 Pro x64, as part
+    of verifying that a previously reported liveness-probe defect (issue #105)
+    was actually fixed rather than merely patched around.
+  details:
+    - "Exact wiring read from source. ros2_service_add_two_ints.py:7 does
+      `from process_liveness import pid_alive`, binding the safe function into
+      the driver module's globals() at import time. Lines 12-14 then run
+      `for _name in dir(impl): if not _name.startswith('__'):
+      globals()[_name] = getattr(impl, _name)` -- and because
+      ros2_service_add_two_ints_impl.py:577 defines its own `pid_alive`, that
+      loop iteration overwrites globals()['pid_alive'] (the safe import) with
+      impl's original unsafe function. Line 19, `impl.pid_alive = pid_alive`,
+      then reads the RHS bare name from the now-overwritten globals(), so it
+      writes impl's own original function back onto itself."
+    - "Why managed_host_alive is exactly what breaks. impl.py:587-599's
+      managed_host_alive calls the bare name `pid_alive` (impl.py:598), which
+      Python resolves through impl's OWN module globals at call time -- not
+      through the driver module's globals(), and not through whatever the
+      driver module thinks it patched. Because the self-assignment at line 19
+      never actually replaced impl.pid_alive, managed_host_alive keeps calling
+      the original os.kill(pid, 0)-based implementation regardless of what the
+      driver module's own globals()['pid_alive'] now points to."
+    - "The Windows failure mode this reintroduces. os.kill(pid, 0) on Windows
+      does not merely probe existence the way it does on POSIX; it can route
+      through GenerateConsoleCtrlEvent(CTRL_C_EVENT, ...), and when that call
+      fails, CPython's own implementation (tracked upstream as cpython
+      gh-58689) can fall through to OpenProcess/TerminateProcess against the
+      target pid. Against a live host worker process, that fallthrough
+      terminates it -- the exact defect issue #105 originally reported and PR
+      #110 intended to fix."
+    - "Measured effect on real hardware. With the wiring as shipped (self-
+      assignment bug present), calling managed_host_alive against a live host
+      worker terminated it 3 times out of 3 attempts. After correcting the
+      ordering so the override actually lands on impl.pid_alive (verified by
+      an identity assertion, see below), the same scenario was 0/3 -- the host
+      worker survived every liveness check."
+    - "This is a recurring shape, not a one-off mistake. Two prior commits in
+      this same driver file already tried to solve a version of this problem:
+      08d44eb ('fix: preserve monkey-patchable recipe API') and e04f3d4
+      ('fix: preserve recipe module API'). Both were aimed at keeping the
+      historical dir(impl)-copy module API intact for tests and sibling Recipe
+      helpers that import the driver module directly and read its
+      constants/functions off of it. Neither commit's message mentions the
+      ordering hazard between 'copy everything from impl' and 'then override
+      one specific symbol', which is exactly the gap PR #110's pid_alive
+      override fell into."
+    - "Why mock-based tests do not catch this. A test written as
+      `patch.object(recipe, 'pid_alive', fake_pid_alive)` (or an equivalent
+      patch against the driver module's own attribute) replaces
+      globals()['pid_alive'] on the driver module directly, from outside the
+      module's own import-time execution order. It never exercises the actual
+      sequence of top-of-file import, dir(impl) copy loop, and
+      impl.pid_alive = pid_alive assignment that only runs once, at import
+      time, in the real process. Such a test can be green even when the real
+      wiring is broken, because it never asks whether impl.pid_alive -- the
+      thing managed_host_alive actually calls -- was ever really replaced."
+    - "Detecting it requires an identity assertion, not a behavioral one. The
+      test that actually catches this checks
+      `assert impl.pid_alive is process_liveness.pid_alive` (an `assertIs`,
+      not merely 'pid_alive(some_pid) returns the expected boolean'), because a
+      behavioral test can pass by coincidence when both the safe and unsafe
+      implementations happen to agree on the test's chosen pid values."
+    - "An in-process real-pid-probe test was also tried and found not to have
+      detection power, and this was confirmed by measurement rather than
+      assumed. Windows CTRL_C_EVENT delivery is topology-dependent (it depends
+      on console/process-group attachment), and a test that calls the
+      liveness probe against a real pid from within the same process as the
+      test runner does not reliably enter the destructive
+      GenerateConsoleCtrlEvent/OpenProcess path the way it does against a
+      separately spawned host worker process. This was measured directly in
+      this workspace: an in-process real-pid probe test passed regardless of
+      which pid_alive implementation was actually wired in, which is why the
+      identity assertion is the only guardrail this candidate recommends."
+    - "Blast radius. ros2_bridge_examples.py:17 does
+      `import ros2_service_add_two_ints as common` and drives the ROS 2
+      Service Client, Action Server, and Action Client Recipes through that
+      same module, so the defect is not confined to the AddTwoInts service
+      Recipe pair -- it reaches all four Recipes: ros2-service-add-two-ints-
+      host-docker, ros2-service-add-two-ints-client-host-docker,
+      ros2-action-fibonacci-server-host-docker, and
+      ros2-action-fibonacci-client-host-docker."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/recipe/ros2_service_add_two_ints.py
+      revision: 060907d
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/recipe/ros2_service_add_two_ints_impl.py
+      revision: 060907d
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/recipe/process_liveness.py
+      revision: 060907d
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/recipe/ros2_bridge_examples.py
+      revision: 060907d
+  runtime_evidence:
+    - description: >-
+        This workspace's own reproduction, Windows 11 Pro x64, 2026-08-11/08-12.
+        With the shipped ordering (copy-loop before override): 3/3 live host
+        worker terminations via managed_host_alive's liveness check. After
+        correcting the ordering locally so impl.pid_alive is genuinely replaced
+        (confirmed via an assertIs identity check): 0/3 terminations across
+        repeated trials. Separately confirmed that an in-process real-pid probe
+        test does not distinguish the two wirings, and that a mock-based
+        patch.object test on the driver module's own attribute stays green
+        under both wirings.
+  expert_input: []
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - >-
+      Confirm the fix landing in PR #121 (once merged) preserves the identity
+      assertion's guarantee -- i.e. that impl.pid_alive is process_liveness.pid_alive
+      after driver-module import -- and re-run the 3/3-vs-0/3 host-worker
+      liveness measurement against the merged revision, not only against this
+      workspace's local reordering.
+    - Confirm whether the same copy-loop-before-override hazard exists for any
+      other symbol beyond pid_alive in this driver, or in the analogous driver
+      for the Action Recipes, since only pid_alive was measured directly here.
+  notes:
+    - Verified by direct source reading of the exact ordering (import, copy
+      loop, override, and the impl-side bare-name call site) plus a live 3/3
+      vs 0/3 measurement in this workspace on real Windows hardware, not by
+      inference from the commit messages alone.
+
+tracking:
+  implementation_status: open
+  issues:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      number: 121
+      relation: fix
+      status: open
+    - repository: hakoniwalab/hakoniwa-business-pack
+      number: 105
+      relation: fix
+      status: closed
+
+promotion_targets:
+  catalog:
+    - hakoniwa-business-pack
+  runtime_primer: true
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - ros2-service-add-two-ints-host-docker
+    - ros2-service-add-two-ints-client-host-docker
+    - ros2-action-fibonacci-server-host-docker
+    - ros2-action-fibonacci-client-host-docker
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      kind: test
+      path: tools/recipe/test_ros2_service_add_two_ints.py
+      mode: detect-only
+      notes:
+        - >-
+          Per MAINTAINER.md's executable-knowledge-reflection ladder
+          (lines 134-150), this is a textbook case for a guardrail: the
+          failure condition (an override silently reverting to the original
+          via self-assignment) is deterministically detectable by software --
+          an assertIs identity check run once at driver-module import time --
+          and the preferred remediation (reorder so overrides run after the
+          copy loop, or make the copy loop skip names that have already been
+          explicitly overridden) is low-risk and software-only. Detect-only is
+          the right mode rather than detect-and-suggest-remediation, because
+          the correct reordering is a small, repository-owned source change
+          that should not be auto-applied by a generic guardrail.
+        - >-
+          A behavioral test (call pid_alive against a real or fake pid and
+          check the boolean) was deliberately rejected as the guardrail shape,
+          because this workspace measured that both a mock-based
+          patch.object test and an in-process real-pid probe test stay green
+          under the broken wiring. Only an identity assertion
+          (assertIs(impl.pid_alive, process_liveness.pid_alive) evaluated
+          after driver-module import) reliably distinguishes the two wirings.
+
+promotion_rationale:
+  - >-
+    The underlying shape -- "preserve a wrapper module's full public API by
+    copying everything from an implementation module, then separately try to
+    override one symbol" -- is a reusable pitfall for any Recipe driver or
+    similar wrapper module in this codebase, not specific to pid_alive or to
+    AddTwoInts. It belongs in the runtime primer so the next symbol override
+    (in this driver or a sibling one) does not repeat the same ordering
+    mistake, which is why runtime_primer is set rather than only catalog.
+  - >-
+    catalog is set to hakoniwa-business-pack itself, not to an external
+    component, because the defect lives in business-pack's own Recipe driver
+    tooling (tools/recipe/), not in a vendored dependency.
+  - >-
+    All four Recipes reachable through ros2_bridge_examples.py's `import
+    ros2_service_add_two_ints as common` are listed under recipes, since the
+    same managed_host_alive path backs start/status/stop for all of them, and
+    scoping this to only the AddTwoInts service pair would understate the
+    blast radius that was actually confirmed by reading ros2_bridge_examples.py.
+  - >-
+    An executable guardrail is proposed and justified in detail above, because
+    this is exactly the "runtime_rule / known_pitfall detectable by software"
+    case the ladder in MAINTAINER.md lines 134-150 describes, and because two
+    prior remediation attempts (08d44eb, e04f3d4) already failed to close this
+    gap through source changes alone without a guardrail catching regressions.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - >-
+      hakoniwalab/hakoniwa-business-pack PR #121
+      (https://github.com/hakoniwalab/hakoniwa-business-pack/pull/121) is open
+      but not yet merged, so resolution.status is pending and
+      resolution.verified is false. The fix's effect has already been measured
+      in this workspace against a local reordering (3/3 host-worker
+      terminations before, 0/3 after), but that is a workspace-side
+      reproduction of the intended fix, not a re-verification against the
+      actual merged upstream revision -- per MAINTAINER.md, closing an issue
+      or merging a PR is not by itself sufficient evidence, and this candidate
+      additionally has not yet reached even that merge point.
+    - >-
+      issue #105 (closed) is the original os.kill(pid, 0)-on-Windows report
+      that PR #110 was written against. It is tracked here, alongside the
+      still-open PR #121, because #105's closure is what makes this
+      candidate's finding notable: the wiring defect described here caused
+      PR #110's intended fix to never actually reach managed_host_alive,
+      despite #105 having been closed as resolved.
