@@ -80,7 +80,9 @@ class RecipeGuideTest(unittest.TestCase):
             self.assertIn("does not execute local commands", content)
             self.assertIn("python tools/workspace.py enter", content)
             self.assertIn("data-copy=\"exit\"", content)
-            self.assertIn("python tools/foundation.py doctor", content)
+            self.assertIn("python tools/recipe.py doctor", content)
+            self.assertIn("python tools/recipe.py plan", content)
+            self.assertIn("python tools/recipe.py configure", content)
             self.assertNotIn("python3.12 tools/foundation.py", content)
             self.assertLess(
                 content.index("python tools/workspace.py enter"),
@@ -105,19 +107,129 @@ class RecipeGuideTest(unittest.TestCase):
             values.count("python tools/recipe/drone_shibuya_gamepad.py configure"),
             1,
         )
-        self.assertTrue(any("foundation.py doctor" in value for value in values))
-        self.assertTrue(any("foundation.py plan" in value for value in values))
-        self.assertTrue(any("foundation.py build" in value for value in values))
+        self.assertTrue(any("recipe.py doctor" in value for value in values))
+        self.assertTrue(any("recipe.py plan" in value for value in values))
+        self.assertTrue(any("recipe.py configure" in value for value in values))
         self.assertTrue(all(not value.startswith("python3.12 ") for value in values))
 
     def test_cli_contract_requires_only_recipe_to_generate_a_guide(self) -> None:
         help_text = guide.parser().format_help()
         self.assertIn("guide", help_text)
+        self.assertIn("doctor", help_text)
+        self.assertIn("plan", help_text)
+        self.assertIn("configure", help_text)
         self.assertIn("--recipe", help_text)
         self.assertIn("--foundation-requirements", help_text)
         self.assertIn("--open", help_text)
-        self.assertNotIn("configure", help_text)
         self.assertNotIn("build", help_text)
+
+    def test_unversioned_local_requirements_remain_documentation_only(self) -> None:
+        data = {
+            "recipe_local_requirements": {
+                "legacy-component": {"role": "human-readable provenance"}
+            }
+        }
+        self.assertEqual(guide.validate_local_requirements(data), {})
+
+    def test_versioned_local_requirement_inspects_declared_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary) / "recipe-repository"
+            (repository / ".git").mkdir(parents=True)
+            (repository / "recipes").mkdir()
+            dependency = repository.parent / "viewer"
+            dependency.mkdir()
+            (dependency / "index.html").write_text("viewer", encoding="utf-8")
+            recipe_path = repository / "recipes" / "demo.yaml"
+            data = {
+                "recipe_local_requirements_schema_version": 1,
+                "recipe_local_requirements": {
+                    "viewer": {
+                        "root": {
+                            "default_path": "../viewer",
+                            "override_env": "HAKO_TEST_VIEWER_ROOT",
+                            "relative_to": "recipe_repository",
+                        },
+                        "source": {
+                            "type": "git",
+                            "url": "https://example.invalid/viewer.git",
+                        },
+                        "required_artifacts": [
+                            {"path": "index.html", "kind": "file"}
+                        ],
+                    }
+                },
+            }
+            result = guide.inspect_local_requirements(recipe_path, data, {})
+            self.assertEqual(result[0]["status"], "SATISFIED")
+
+    def test_recipe_plan_clones_only_missing_default_git_dependency(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary) / "recipe-repository"
+            (repository / ".git").mkdir(parents=True)
+            (repository / "recipes").mkdir()
+            recipe_path = repository / "recipes" / "demo.yaml"
+            data = {
+                "id": "demo",
+                "recipe_local_requirements_schema_version": 1,
+                "recipe_local_requirements": {
+                    "viewer": {
+                        "root": {
+                            "default_path": "../viewer",
+                            "override_env": "HAKO_TEST_VIEWER_ROOT",
+                            "relative_to": "recipe_repository",
+                        },
+                        "source": {
+                            "type": "git",
+                            "url": "https://example.invalid/viewer.git",
+                            "revision": "main",
+                        },
+                        "required_artifacts": [
+                            {"path": "index.html", "kind": "file"}
+                        ],
+                    }
+                },
+            }
+            with mock.patch.dict(guide.os.environ, {}, clear=True):
+                plan = guide.create_recipe_plan(recipe_path, data)
+            self.assertEqual(plan["local_sources"][0]["action"], "clone")
+            self.assertEqual(plan["local_sources"][0]["revision"], "main")
+
+    def test_recipe_plan_does_not_clone_into_missing_override_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary) / "recipe-repository"
+            (repository / ".git").mkdir(parents=True)
+            (repository / "recipes").mkdir()
+            recipe_path = repository / "recipes" / "demo.yaml"
+            selected = Path(temporary) / "operator-selected-viewer"
+            data = {
+                "id": "demo",
+                "recipe_local_requirements_schema_version": 1,
+                "recipe_local_requirements": {
+                    "viewer": {
+                        "root": {
+                            "default_path": "../viewer",
+                            "override_env": "HAKO_TEST_VIEWER_ROOT",
+                            "relative_to": "recipe_repository",
+                        },
+                        "source": {
+                            "type": "git",
+                            "url": "https://example.invalid/viewer.git",
+                        },
+                        "required_artifacts": [
+                            {"path": "index.html", "kind": "file"}
+                        ],
+                    }
+                },
+            }
+            with mock.patch.dict(
+                guide.os.environ,
+                {"HAKO_TEST_VIEWER_ROOT": str(selected)},
+                clear=True,
+            ):
+                plan = guide.create_recipe_plan(recipe_path, data)
+            self.assertEqual(
+                plan["local_sources"][0]["action"], "provide-overridden-path"
+            )
 
     def test_dynamic_experiment_guide_uses_declared_foundation_order(self) -> None:
         recipe_path = self.recipe_dir / "drone-fleet-single-host.yaml"

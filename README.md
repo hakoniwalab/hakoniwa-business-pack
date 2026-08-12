@@ -85,14 +85,19 @@ from the Business Pack root:
 python tools/workspace.py enter
 ```
 
-Confirm the `(hako)` prompt, then run Foundation and Recipe operations with the
-Workspace-owned `python`:
+Confirm the `(hako)` prompt, then use the Recipe as the user-facing environment
+contract:
 
 ```bash
-python tools/foundation.py doctor --recipe <recipe.yaml>
-python tools/foundation.py plan --recipe <recipe.yaml>
-python tools/foundation.py build --recipe <recipe.yaml>
+python tools/recipe.py doctor --recipe <recipe.yaml>
+python tools/recipe.py plan --recipe <recipe.yaml>
+python tools/recipe.py configure --recipe <recipe.yaml>
 ```
+
+`recipe.py` delegates Receipt inspection and component build/install to the
+Foundation engine, while also handling declared sibling repositories and Recipe
+Python requirements. Direct `foundation.py` commands are retained for component,
+CI, and Foundation-maintainer work.
 
 After stopping any Recipe-owned Launcher session, leave the child shell with:
 
@@ -362,7 +367,7 @@ python3.12 tools/recipe.py guide \
 ```
 
 このコマンドは説明ページを生成するだけで、Recipe内のコマンドを実行しません。
-Foundationが未準備の場合もページは生成され、必要な`doctor`、`plan`、`build`や
+Foundationが未準備の場合もページは生成され、Recipe共通の`doctor`、`plan`、`configure`や
 Recipe固有の`configure`以降の手順をページ内で確認できます。
 Recipe固有の`configure`は、同じ`index.html`を解決済みパスや生成物を含む
 実行ガイドへ更新する場合があります。

@@ -171,6 +171,25 @@ foundation_requirements:
       hakoniwa_core: true
       core_callback: true
 
+# Optional versioned contract for non-Foundation repositories or local inputs.
+# Generic `tools/recipe.py doctor` validates these paths and artifacts.
+# `tools/recipe.py configure` clones only missing git sources into a sibling
+# repository path; it never overwrites an existing or environment-selected path.
+recipe_local_requirements_schema_version: 1
+recipe_local_requirements:
+  sibling-component-id:
+    root:
+      default_path: ../sibling-repository
+      override_env: HAKO_SIBLING_COMPONENT_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/sibling-repository.git
+      revision: main
+    required_artifacts:
+      - path: path/to/required-file
+        kind: file
+
 process_topology:
   required_for: multi-process-demo
   conductor_owner: process-a

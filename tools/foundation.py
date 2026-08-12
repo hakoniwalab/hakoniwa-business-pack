@@ -892,10 +892,15 @@ def load_build_catalog(path: Path) -> dict[str, dict]:
         if not isinstance(component, dict):
             raise FoundationError(f"{component_id}: catalog entry must be a mapping")
         source = component.get("source")
+        repository = component.get("repository")
         dependencies = component.get("dependencies")
         operations = component.get("operations")
         if not isinstance(source, str) or not source:
             raise FoundationError(f"{component_id}: source must be a path")
+        if repository is not None and (
+            not isinstance(repository, str) or not repository
+        ):
+            raise FoundationError(f"{component_id}: repository must be a URL")
         if (
             not isinstance(dependencies, list)
             or not all(isinstance(item, str) for item in dependencies)

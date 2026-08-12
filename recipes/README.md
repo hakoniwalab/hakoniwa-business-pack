@@ -111,6 +111,32 @@ workflow.
 Foundation may be `MISSING`, `INCOMPATIBLE`, or `UNKNOWN`; this does not block
 guide generation. The generated page is the handoff point. Follow its commands
 to prepare Foundation and run the Recipe-specific workflow.
+
+Before executing those commands, use the generic Recipe doctor when the Recipe
+declares versioned local requirements:
+
+```bash
+python3.12 tools/recipe.py doctor --recipe path/to/<recipe-id>.yaml
+```
+
+The doctor is read-only. It checks both Foundation and
+`recipe_local_requirements`, including environment-variable path overrides and
+required files, directories, or executables. Use the unified plan to inspect
+missing sibling repositories, Foundation build actions, and Recipe Python
+packages, then configure them through the same user-facing entry point:
+
+```bash
+python3.12 tools/recipe.py plan --recipe path/to/<recipe-id>.yaml
+python3.12 tools/recipe.py configure --recipe path/to/<recipe-id>.yaml
+```
+
+`configure` clones only missing dependencies into declared sibling paths, calls
+the internal Foundation plan/build engine, and installs declared Recipe Python
+requirements into Foundation Python. It never overwrites an existing directory
+and never clones into a missing path selected through an override environment
+variable. Direct `foundation.py` commands remain available for component and CI
+maintenance, but Recipe users need only `recipe.py`. The contract is defined in
+[`recipes/schema.yaml`](schema.yaml).
 Recipe-specific `configure` implementations may enrich the same `index.html`
 with resolved paths and generated resources while preserving it as the common
 handoff surface. Recipe-specific executables live under
@@ -204,14 +230,18 @@ For Foundation-aware Recipes that use Hakoniwa shared memory, PDU, Python
 controllers, or the launcher, declare `foundation_requirements` and use:
 
 ```bash
-python3.12 tools/foundation.py doctor --recipe <recipe.yaml>
+python3.12 tools/recipe.py doctor --recipe <recipe.yaml>
+python3.12 tools/recipe.py plan --recipe <recipe.yaml>
+python3.12 tools/recipe.py configure --recipe <recipe.yaml>
 ```
 
-The Foundation doctor compares Recipe requirements with installed Component
-Receipts and never builds. Keep component build/install in the shared Foundation
-setup phase, and keep ports, processes, producers, browser state, and user gates
-in the Recipe runtime preflight. `bash tools/doctor.bash` remains available to
-Recipes that still explicitly use the legacy system install.
+The Recipe doctor delegates to the read-only Foundation inspection and also
+checks versioned Recipe-local dependencies. `plan` remains read-only;
+`configure` delegates component build/install to Foundation and prepares other
+declared environment dependencies. Keep ports, processes, producers, browser
+state, and user gates in the Recipe runtime preflight. Direct `foundation.py`
+commands are for Foundation/component maintenance. `bash tools/doctor.bash`
+remains available to Recipes that explicitly use the legacy system install.
 
 ## Recipe-Specific Python Dependencies
 

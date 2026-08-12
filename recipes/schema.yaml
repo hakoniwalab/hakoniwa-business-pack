@@ -1,0 +1,71 @@
+schema_version: 0.1
+description: Machine-readable contracts used by generic Business Pack Recipe tooling.
+
+recipe_local_requirements:
+  schema_version_field: recipe_local_requirements_schema_version
+  supported_schema_versions:
+    - 1
+  type: mapping
+  dependency_key: stable_dependency_id
+  dependency:
+    required_fields:
+      - root
+      - source
+      - required_artifacts
+    root:
+      required_fields:
+        - default_path
+        - override_env
+        - relative_to
+      default_path:
+        type: path
+      override_env:
+        type: environment_variable_name
+      relative_to:
+        allowed:
+          - recipe_repository
+    source:
+      required_fields:
+        - type
+      type:
+        allowed:
+          - local
+          - git
+      git_required_fields:
+        - url
+      optional_fields:
+        - url
+        - revision
+      configure_semantics:
+        local: Never materialized; an absent root is reported as missing.
+        git: Clone only through an explicit recipe.py configure operation.
+    required_artifacts:
+      type: non_empty_list
+      item:
+        required_fields:
+          - path
+          - kind
+        path:
+          type: dependency_root_relative_path
+        kind:
+          allowed:
+            - file
+            - directory
+            - executable
+
+doctor_contract:
+  mutation: none
+  checks:
+    - Foundation requirements and Receipts
+    - local dependency root resolution
+    - required local artifacts
+
+configure_contract:
+  mutation: explicit
+  behavior:
+    - Clone only missing git dependencies, including Foundation source repositories required by the plan.
+    - Place automatically cloned repositories beside the Recipe repository.
+    - Never overwrite an existing path.
+    - Do not clone into a missing path selected through an override environment variable.
+    - Execute the Foundation build plan through the internal Foundation engine.
+    - Install declared Recipe Python requirements into Foundation Python.
