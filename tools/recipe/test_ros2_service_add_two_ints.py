@@ -203,6 +203,13 @@ class WindowsLivenessWiringTests(unittest.TestCase):
     platform-safe process_liveness.pid_alive, both on itself and on the
     implementation module it delegates to, rather than silently falling
     back to the implementation's own os.kill(pid, 0)-based pid_alive.
+
+    The wiring regression itself is caught by the two assertIs tests below
+    (test_recipe_and_impl_expose_the_platform_safe_pid_alive and
+    test_managed_host_alive_resyncs_the_platform_safe_pid_alive), which
+    compare object identity against process_liveness.pid_alive directly.
+    test_driver_pid_alive_survives_repeated_probing_of_a_live_child does NOT
+    add wiring-regression coverage on its own -- see its docstring.
     """
 
     def test_recipe_and_impl_expose_the_platform_safe_pid_alive(self) -> None:
@@ -225,13 +232,30 @@ class WindowsLivenessWiringTests(unittest.TestCase):
         self.assertIs(recipe.impl.pid_alive, process_liveness.pid_alive)
 
     def test_driver_pid_alive_survives_repeated_probing_of_a_live_child(self) -> None:
-        # Regression for the Windows os.kill(pid, 0) => TerminateProcess
-        # fallthrough: probing a live process through the recipe driver's
-        # pid_alive must never terminate it, mirroring
+        # NOTE: this test does NOT detect the export/copy-ordering
+        # regression this file guards against. It probes recipe.pid_alive
+        # from inside the *same* long-lived test process as the child it
+        # spawns, and on Windows os.kill(pid, 0) resolves to
+        # GenerateConsoleCtrlEvent(CTRL_C_EVENT, pid); delivering that event
+        # depends on console/process-group topology that this in-process
+        # setup does not reproduce (confirmed experimentally: reverting the
+        # fix in tools/recipe/ros2_service_add_two_ints.py still leaves this
+        # test green). A genuine end-to-end repro of the unsafe path killing
+        # a live process needs a separate short-lived spawner process that
+        # exits before an unrelated prober process calls pid_alive -- see
+        # the PR description for that out-of-process evidence; it is
+        # intentionally not encoded as an in-repo CI test because CTRL+C
+        # delivery on hosted CI runners (in particular windows-latest) is
+        # not something we want this suite's stability to depend on.
+        #
+        # What this test DOES verify: recipe.pid_alive can be called
+        # repeatedly against a live child without raising and without ever
+        # reporting it as dead, mirroring
         # tools/tests/test_process_liveness.py::
         # test_repeated_probe_does_not_terminate_live_child but going
         # through the driver-installed reference instead of importing
-        # process_liveness directly.
+        # process_liveness directly. The wiring regression itself is caught
+        # by the two assertIs tests above.
         child = subprocess.Popen(
             [sys.executable, "-c", "import time; time.sleep(30)"]
         )
