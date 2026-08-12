@@ -171,6 +171,10 @@ visual-state publisherの欠落を報告した場合も、この操作後に`doc
 確認し、最後に必ず`stop`してください。既定では着陸せず、文字を表示した状態で
 実験シーケンスだけが完了します。`open-viewer`は解決済み総機体数を
 `maxDynamicDrones`としてURLへ自動設定します。
+WSL2ではLinux側の`xdg-open`にブラウザがなくても、`wslview`または
+`explorer.exe`を使ってWindows側の既定ブラウザを開きます。どちらも利用できない場合は、
+表示されたURLをWindows側のブラウザへコピーしてください。通常のWSL localhost転送により
+HTTPの8000番とWebSocketの8765番へ接続します。
 各実行のwall/Core phase時間とReal Time Factorは
 `validation/execution-summary.json`へ記録されます。matrix展開、反復実行、
 実験ごとの結果保持、集計済み`results/`は次段階です。

@@ -369,5 +369,33 @@ results:
         self.assertIn("templateDroneIndex=0", url)
         self.assertIn("maxDynamicDrones=26", url)
 
+    def test_open_browser_uses_windows_explorer_on_wsl(self) -> None:
+        with mock.patch.object(recipe, "is_wsl", return_value=True), mock.patch.object(
+            recipe.shutil,
+            "which",
+            side_effect=lambda name: "/mnt/c/Windows/explorer.exe"
+            if name == "explorer.exe"
+            else None,
+        ), mock.patch.object(recipe.subprocess, "run") as run, mock.patch.object(
+            recipe.webbrowser, "open"
+        ) as web_open:
+            run.return_value.returncode = 0
+            self.assertTrue(recipe.open_browser("http://127.0.0.1:8000/test?a=1&b=2"))
+        run.assert_called_once_with(
+            [
+                "/mnt/c/Windows/explorer.exe",
+                "http://127.0.0.1:8000/test?a=1&b=2",
+            ],
+            check=False,
+        )
+        web_open.assert_not_called()
+
+    def test_open_browser_reports_manual_wsl_fallback(self) -> None:
+        with mock.patch.object(recipe, "is_wsl", return_value=True), mock.patch.object(
+            recipe.shutil, "which", return_value=None
+        ), mock.patch.object(recipe.webbrowser, "open") as web_open:
+            self.assertFalse(recipe.open_browser("http://127.0.0.1:8000"))
+        web_open.assert_not_called()
+
 if __name__ == "__main__":
     unittest.main()

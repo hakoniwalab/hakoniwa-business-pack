@@ -1383,6 +1383,34 @@ def viewer_url(drone_count: int) -> str:
     )
 
 
+def is_wsl() -> bool:
+    if os.environ.get("WSL_DISTRO_NAME") or os.environ.get("WSL_INTEROP"):
+        return True
+    try:
+        return "microsoft" in Path("/proc/sys/kernel/osrelease").read_text(
+            encoding="utf-8"
+        ).lower()
+    except OSError:
+        return False
+
+
+def open_browser(url: str) -> bool:
+    if is_wsl():
+        for executable in (shutil.which("wslview"), shutil.which("explorer.exe")):
+            if executable:
+                completed = subprocess.run([executable, url], check=False)
+                if completed.returncode == 0:
+                    return True
+        print(
+            "Unable to open the Windows browser from WSL2. Copy the URL above "
+            "into a Windows browser; WSL localhost forwarding exposes ports "
+            "8000 and 8765 to the host.",
+            file=sys.stderr,
+        )
+        return False
+    return webbrowser.open(url)
+
+
 def open_viewer(experiment_path: Path) -> int:
     experiment = resolve_experiment(experiment_path)
     if not experiment.visualization:
@@ -1392,7 +1420,7 @@ def open_viewer(experiment_path: Path) -> int:
         )
     url = viewer_url(experiment.drone_count)
     print(f"Opening {url}")
-    return 0 if webbrowser.open(url) else 1
+    return 0 if open_browser(url) else 1
 
 
 def parser() -> argparse.ArgumentParser:

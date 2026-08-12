@@ -638,7 +638,7 @@ demo:
     - order: 8
       id: open_viewer
       component: hakoniwa-threejs-drone
-      action: When runtime.visualization=true, open the browser viewer and observe takeoff followed by the HAKONIWA formation; skip this step in headless mode.
+      action: When runtime.visualization=true, open the browser viewer and observe takeoff followed by the HAKONIWA formation; WSL2 opens the Windows host browser through wslview or explorer.exe, while headless mode skips this step.
       command: python tools/recipe/drone_fleet_single_host.py open-viewer
       agency: agent_action
     - order: 9
