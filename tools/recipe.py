@@ -561,7 +561,10 @@ def recipe_python_requirements(recipe_path: Path, data: dict) -> Path | None:
 def _clone_repository(url: str, target: Path, *, revision: str | None = None) -> None:
     if target.exists():
         raise RecipeGuideError(f"refusing to overwrite clone target: {target}")
-    command = ["git", "clone"]
+    # Recipe dependencies are runtime source trees, not shallow file bundles.
+    # Their declared artifacts may live in nested submodules, so every managed
+    # clone materializes the complete pinned repository graph by default.
+    command = ["git", "clone", "--recurse-submodules"]
     if revision:
         command.extend(["--branch", revision, "--single-branch"])
     command.extend([url, str(target)])

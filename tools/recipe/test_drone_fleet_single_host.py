@@ -369,51 +369,35 @@ results:
         self.assertIn("templateDroneIndex=0", url)
         self.assertIn("maxDynamicDrones=26", url)
 
-    def test_open_browser_uses_windows_explorer_on_wsl(self) -> None:
-        with mock.patch.object(recipe, "is_wsl", return_value=True), mock.patch.object(
-            recipe.shutil,
-            "which",
-            side_effect=lambda name: "/mnt/c/Windows/explorer.exe"
-            if name == "explorer.exe"
-            else None,
-        ), mock.patch.object(recipe.subprocess, "run") as run, mock.patch.object(
-            recipe.webbrowser, "open"
-        ) as web_open:
-            run.return_value.returncode = 0
+    def test_open_browser_only_prints_url(self) -> None:
+        with mock.patch.object(recipe, "is_wsl", return_value=False), mock.patch(
+            "builtins.print"
+        ) as output:
             self.assertTrue(recipe.open_browser("http://127.0.0.1:8000/test?a=1&b=2"))
-        run.assert_called_once_with(
-            [
-                "/mnt/c/Windows/explorer.exe",
-                "http://127.0.0.1:8000/test?a=1&b=2",
-            ],
-            check=False,
+        output.assert_called_once_with(
+            "Open this URL in a browser: http://127.0.0.1:8000/test?a=1&b=2"
         )
-        web_open.assert_not_called()
 
-    def test_open_browser_reports_manual_wsl_fallback(self) -> None:
-        with mock.patch.object(recipe, "is_wsl", return_value=True), mock.patch.object(
-            recipe.shutil, "which", return_value=None
-        ), mock.patch.object(recipe.Path, "is_file", return_value=False), mock.patch.object(
-            recipe.webbrowser, "open"
-        ) as web_open:
-            self.assertFalse(recipe.open_browser("http://127.0.0.1:8000"))
-        web_open.assert_not_called()
+    def test_prepare_viewer_updates_existing_submodules(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            viewer_root = Path(temporary) / "hakoniwa-threejs-drone"
+            (viewer_root / ".git").mkdir(parents=True)
+            for required in recipe.viewer_required_files(viewer_root):
+                required.parent.mkdir(parents=True, exist_ok=True)
+                required.touch()
+            with mock.patch.object(recipe, "_run_checked") as run:
+                self.assertEqual(recipe.prepare_viewer(viewer_root), 0)
+            run.assert_called_once_with(
+                ["git", "submodule", "update", "--init", "--recursive"],
+                cwd=viewer_root,
+            )
 
-    def test_open_browser_uses_standard_wsl_explorer_when_path_is_not_inherited(
-        self,
-    ) -> None:
-        with mock.patch.object(recipe, "is_wsl", return_value=True), mock.patch.object(
-            recipe.shutil, "which", return_value=None
-        ), mock.patch.object(recipe.Path, "is_file", return_value=True), mock.patch.object(
-            recipe.subprocess, "run"
-        ) as run, mock.patch.object(recipe.webbrowser, "open") as web_open:
-            run.return_value.returncode = 0
-            self.assertTrue(recipe.open_browser("http://127.0.0.1:8000"))
-        run.assert_called_once_with(
-            ["/mnt/c/Windows/explorer.exe", "http://127.0.0.1:8000"],
-            check=False,
-        )
-        web_open.assert_not_called()
+    def test_prepare_viewer_rejects_incomplete_checkout(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            viewer_root = Path(temporary) / "hakoniwa-threejs-drone"
+            viewer_root.mkdir()
+            with self.assertRaisesRegex(recipe.RecipeError, "pdu-javascript"):
+                recipe.prepare_viewer(viewer_root)
 
 if __name__ == "__main__":
     unittest.main()

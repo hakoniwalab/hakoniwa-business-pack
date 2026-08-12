@@ -445,15 +445,20 @@ class RecipeGuideTest(unittest.TestCase):
         prepare_native = (
             "python tools/recipe/drone_fleet_single_host.py prepare-native"
         )
+        prepare_viewer = (
+            "python tools/recipe/drone_fleet_single_host.py prepare-viewer"
+        )
         configure = "python tools/recipe/drone_fleet_single_host.py configure"
         generated_doctor = (
             "python tools/foundation.py doctor --recipe "
             "work/recipes/drone-fleet-single-host/config/foundation-requirements.yaml"
         )
         self.assertIn(prepare_native, commands)
+        self.assertIn(prepare_viewer, commands)
         self.assertIn(configure, commands)
         self.assertIn(generated_doctor, commands)
         self.assertLess(commands.index(prepare_native), commands.index(configure))
+        self.assertLess(commands.index(prepare_viewer), commands.index(configure))
         self.assertLess(commands.index(configure), commands.index(generated_doctor))
         self.assertNotIn(
             "python tools/foundation.py doctor --recipe "
@@ -464,6 +469,31 @@ class RecipeGuideTest(unittest.TestCase):
         rendered = "\n".join(f"{item.label}: {item.value}" for item in configuration)
         self.assertIn("drones_per_process", rendered)
         self.assertIn("process_count*drones_per_process", rendered)
+
+    def test_managed_git_clone_is_recursive(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "dependency"
+            completed = mock.Mock(returncode=0)
+            with mock.patch.object(guide.subprocess, "run", return_value=completed) as run:
+                guide._clone_repository(
+                    "https://example.invalid/dependency.git",
+                    target,
+                    revision="v1.0.0",
+                )
+            run.assert_called_once_with(
+                [
+                    "git",
+                    "clone",
+                    "--recurse-submodules",
+                    "--branch",
+                    "v1.0.0",
+                    "--single-branch",
+                    "https://example.invalid/dependency.git",
+                    str(target),
+                ],
+                cwd=target.parent,
+                check=False,
+            )
 
     def test_readiness_and_background_handoff_are_rendered_as_notes(self) -> None:
         notes = guide._agency_notes(

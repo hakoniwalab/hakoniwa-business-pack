@@ -24,7 +24,6 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
-import webbrowser
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -52,6 +51,7 @@ RECOMMENDED_DRONES_PER_STROKE = 2
 GENERAL_USER_MAX_DRONES = 200
 PUBLIC_DRONE_RELEASE = "v4.0.0"
 PUBLIC_DRONE_REPOSITORY = "https://github.com/toppers/hakoniwa-drone-core.git"
+THREEJS_VIEWER_REPOSITORY = "https://github.com/hakoniwalab/hakoniwa-threejs-drone.git"
 PUBLIC_DRONE_ARCHIVES = {
     "Darwin": (
         "mac.zip",
@@ -141,6 +141,7 @@ def prepare_native_distribution(drone_root: Path, system_name: str) -> int:
             [
                 "git",
                 "clone",
+                "--recurse-submodules",
                 "--branch",
                 PUBLIC_DRONE_RELEASE,
                 "--depth",
@@ -200,6 +201,45 @@ def prepare_native_distribution(drone_root: Path, system_name: str) -> int:
     print(f"[OK] native drone service: {service}")
     print(f"[OK] visual-state publisher: {vsp}")
     print(f"[OK] SHA-256: {expected_sha256}")
+    return 0
+
+
+def viewer_required_files(viewer_root: Path) -> tuple[Path, ...]:
+    pdu_root = viewer_root / "thirdparty" / "hakoniwa-pdu-javascript" / "src" / "pdu_msgs"
+    return (
+        viewer_root / "index.html",
+        pdu_root / "hako_msgs" / "pdu_jstype_Disturbance.js",
+        pdu_root / "hako_msgs" / "pdu_jstype_DisturbanceUserCustom.js",
+        pdu_root / "geometry_msgs" / "pdu_conv_Twist.js",
+        pdu_root / "hako_mavlink_msgs" / "pdu_conv_HakoHilActuatorControls.js",
+    )
+
+
+def prepare_viewer(viewer_root: Path) -> int:
+    if not viewer_root.exists():
+        viewer_root.parent.mkdir(parents=True, exist_ok=True)
+        _run_checked(
+            [
+                "git",
+                "clone",
+                "--recurse-submodules",
+                THREEJS_VIEWER_REPOSITORY,
+                str(viewer_root),
+            ],
+            cwd=viewer_root.parent,
+        )
+    elif (viewer_root / ".git").exists():
+        _run_checked(
+            ["git", "submodule", "update", "--init", "--recursive"],
+            cwd=viewer_root,
+        )
+    missing = [path for path in viewer_required_files(viewer_root) if not path.is_file()]
+    if missing:
+        raise RecipeError(
+            "Three.js viewer is incomplete after submodule preparation; missing: "
+            + ", ".join(str(path) for path in missing)
+        )
+    print(f"[OK] Three.js viewer and PDU JavaScript: {viewer_root}")
     return 0
 
 
@@ -1203,8 +1243,20 @@ def doctor(
         checks.append(("WebBridge", bridge.is_file(), str(bridge)))
         bridge_config = bridge_config_root(paths)
         checks.append(("WebBridge config", bridge_config.is_dir(), str(bridge_config)))
-        viewer_index = viewer_root / "index.html"
-        checks.append(("Three.js viewer", viewer_index.is_file(), str(viewer_index)))
+        missing_viewer_files = [
+            path for path in viewer_required_files(viewer_root) if not path.is_file()
+        ]
+        checks.append(
+            (
+                "Three.js viewer and PDU JavaScript",
+                not missing_viewer_files,
+                str(viewer_root)
+                if not missing_viewer_files
+                else "missing: "
+                + ", ".join(str(path) for path in missing_viewer_files)
+                + "; run 'python tools/recipe/drone_fleet_single_host.py prepare-viewer'",
+            )
+        )
     for port in ((8000, 8765, 54111) if experiment.visualization else (54111,)):
         available = _port_available(port)
         if available is None:
@@ -1395,28 +1447,13 @@ def is_wsl() -> bool:
 
 
 def open_browser(url: str) -> bool:
+    print(f"Open this URL in a browser: {url}")
     if is_wsl():
-        candidates = [shutil.which("wslview"), shutil.which("explorer.exe")]
-        windows_explorer = Path("/mnt/c/Windows/explorer.exe")
-        if windows_explorer.is_file():
-            candidates.append(str(windows_explorer))
-        for executable in candidates:
-            if not executable:
-                continue
-            try:
-                completed = subprocess.run([executable, url], check=False)
-            except OSError:
-                continue
-            if completed.returncode == 0:
-                return True
         print(
-            "Unable to open the Windows browser from WSL2. Copy the URL above "
-            "into a Windows browser; WSL localhost forwarding exposes ports "
-            "8000 and 8765 to the host.",
-            file=sys.stderr,
+            "WSL2: open the URL in a Windows browser. WSL localhost forwarding "
+            "exposes HTTP port 8000 and WebSocket port 8765 to the host."
         )
-        return False
-    return webbrowser.open(url)
+    return True
 
 
 def open_viewer(experiment_path: Path) -> int:
@@ -1427,7 +1464,6 @@ def open_viewer(experiment_path: Path) -> int:
             "VSP, WebBridge, or the Three.js viewer"
         )
     url = viewer_url(experiment.drone_count)
-    print(f"Opening {url}")
     return 0 if open_browser(url) else 1
 
 
@@ -1439,6 +1475,7 @@ def parser() -> argparse.ArgumentParser:
         "command",
         choices=[
             "prepare-native",
+            "prepare-viewer",
             "configure",
             "doctor",
             "start",
@@ -1467,6 +1504,8 @@ def main(argv: list[str] | None = None) -> int:
         viewer_root = args.viewer_root.absolute()
         if args.command == "prepare-native":
             return prepare_native_distribution(drone_root, platform.system())
+        if args.command == "prepare-viewer":
+            return prepare_viewer(viewer_root)
         if args.command == "configure":
             return configure(experiment_path, drone_root)
         if args.command == "doctor":

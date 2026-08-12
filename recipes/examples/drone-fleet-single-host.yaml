@@ -599,56 +599,63 @@ demo:
       command: python tools/recipe/drone_fleet_single_host.py prepare-native
       agency: agent_action
     - order: 2
+      id: prepare_viewer
+      component: hakoniwa-threejs-drone
+      action: Clone the Three.js viewer recursively when missing, or initialize and update its pinned PDU JavaScript submodule in an existing checkout.
+      description: Ensure the browser's required generated PDU JavaScript modules exist before doctor and startup; this step is required when visualization is enabled.
+      command: python tools/recipe/drone_fleet_single_host.py prepare-viewer
+      agency: agent_action
+    - order: 3
       id: configure
       component: hakoniwa-pdu-python
       action: Resolve the experiment and generate Recipe-local configuration.
       command: python tools/recipe/drone_fleet_single_host.py configure
       agency: agent_action
-    - order: 3
+    - order: 4
       id: prepare_foundation
       component: hakoniwa-core-pro
       action: Inspect and, when necessary, rebuild Foundation from the generated capacity requirements.
       command: python tools/foundation.py doctor --recipe work/recipes/drone-fleet-single-host/config/foundation-requirements.yaml
       agency: agent_action
-    - order: 4
+    - order: 5
       id: plan_foundation
       component: hakoniwa-core-pro
       action: If Foundation is not satisfied, inspect the rebuild plan generated from the resolved fleet size.
       command: python tools/foundation.py plan --recipe work/recipes/drone-fleet-single-host/config/foundation-requirements.yaml
       agency: agent_action
-    - order: 5
+    - order: 6
       id: build_foundation
       component: hakoniwa-core-pro
       action: Build and install the generated Foundation plan only when doctor reports an unsatisfied requirement.
       command: python tools/foundation.py build --recipe work/recipes/drone-fleet-single-host/config/foundation-requirements.yaml
       agency: agent_action
-    - order: 6
+    - order: 7
       id: doctor
       component: hakoniwa-pdu-python
       action: Validate the native Drone binary, Foundation, Python imports, and generated artifacts; validate VSP/WebBridge/Viewer only when visualization is enabled.
       command: python tools/recipe/drone_fleet_single_host.py doctor
       agency: agent_action
-    - order: 7
+    - order: 8
       id: start
       component: hakoniwa-pdu-python
       action: Start the native multi-process runtime in one managed background Launcher session.
       description: Start all native processes and automatically begin SetReady, synchronized takeoff, HAKONIWA placement, and hold.
       command: python tools/recipe/drone_fleet_single_host.py start
       agency: agent_action
-    - order: 8
+    - order: 9
       id: open_viewer
       component: hakoniwa-threejs-drone
-      action: When runtime.visualization=true, open the browser viewer and observe takeoff followed by the HAKONIWA formation; WSL2 opens the Windows host browser through wslview or explorer.exe, while headless mode skips this step.
+      action: When runtime.visualization=true, print the viewer URL for the operator to open in a browser and observe takeoff followed by the HAKONIWA formation; headless mode skips this step.
       command: python tools/recipe/drone_fleet_single_host.py open-viewer
       agency: agent_action
-    - order: 9
+    - order: 10
       id: smoke
       component: hakoniwa-drone-core
       action: Verify the workload already started by start; do not start another flight.
       description: Wait up to 300 wall-clock seconds for execution-summary.json, require status=done, and print observed prepare, takeoff, HAKONIWA, and total execution times.
       command: python tools/recipe/drone_fleet_single_host.py smoke
       agency: agent_action
-    - order: 10
+    - order: 11
       id: stop
       component: hakoniwa-pdu-python
       action: Terminate the Launcher session through its normal control path.
