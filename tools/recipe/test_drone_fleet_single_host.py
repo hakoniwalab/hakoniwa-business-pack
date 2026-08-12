@@ -109,6 +109,71 @@ results:
             self.assertEqual(experiment.process_count, 3)
             self.assertEqual(experiment.drones_per_process, 34)
 
+    def test_explicit_process_count_accepts_auto_drones_per_process(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = self._experiment(Path(temporary), drones=200, per_process=10)
+            content = path.read_text(encoding="utf-8")
+            content = content.replace("  drones_per_process: 10", "  drones_per_process: auto")
+            content = content.replace("  process_count: auto", "  process_count: 3")
+            path.write_text(content, encoding="utf-8")
+            experiment = recipe.resolve_experiment(path)
+            self.assertEqual(experiment.drone_count, 200)
+            self.assertEqual(experiment.process_count, 3)
+            self.assertEqual(experiment.drones_per_process, 67)
+
+    def test_partition_counts_assign_remainder_to_last_process(self) -> None:
+        expected = {
+            1: [200],
+            2: [100, 100],
+            3: [66, 66, 68],
+            4: [50, 50, 50, 50],
+            5: [40, 40, 40, 40, 40],
+            6: [33, 33, 33, 33, 33, 35],
+            8: [25] * 8,
+            20: [10] * 20,
+        }
+        for process_count, counts in expected.items():
+            with self.subTest(process_count=process_count):
+                self.assertEqual(
+                    recipe.expected_partition_counts(200, process_count), counts
+                )
+
+    def test_materialized_experiment_rejects_missing_process_partition(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths = foundation.resolve_workspace(root, recipe.RECIPE_ID)
+            foundation.prepare_workspace(paths)
+            path = self._experiment(root, drones=200, per_process=25)
+            content = path.read_text(encoding="utf-8").replace(
+                "  process_count: auto", "  process_count: 8"
+            )
+            path.write_text(content, encoding="utf-8")
+            experiment = recipe.resolve_experiment(path)
+            recipe.write_simple_yaml(
+                paths.recipe_config / "resolved-experiment.yaml",
+                recipe.resolved_experiment_dict(experiment),
+            )
+            errors = recipe.validate_materialized_experiment(paths, experiment)
+            self.assertTrue(
+                any("missing process 5 fleet partition" in error for error in errors),
+                errors,
+            )
+
+    def test_start_does_not_launch_when_doctor_rejects_stale_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            experiment_path = self._experiment(root, drones=200, per_process=25)
+            with mock.patch.object(recipe, "doctor", return_value=1) as doctor, mock.patch.object(
+                recipe, "_run"
+            ) as run:
+                self.assertEqual(
+                    recipe.start(experiment_path, root / "drone", root / "viewer"), 1
+                )
+            doctor.assert_called_once_with(
+                experiment_path, root / "drone", root / "viewer"
+            )
+            run.assert_not_called()
+
     def test_total_drone_count_is_derived_from_process_shape(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = self._experiment(Path(temporary), drones=100, per_process=10)

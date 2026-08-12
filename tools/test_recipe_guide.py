@@ -468,7 +468,8 @@ class RecipeGuideTest(unittest.TestCase):
         configuration = guide._configuration_items(data)
         rendered = "\n".join(f"{item.label}: {item.value}" for item in configuration)
         self.assertIn("drones_per_process", rendered)
-        self.assertIn("process_count*drones_per_process", rendered)
+        self.assertIn("drone_count=200", rendered)
+        self.assertIn("remainder to process N", rendered)
 
     def test_managed_git_clone_is_recursive(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

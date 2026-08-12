@@ -406,14 +406,16 @@ def resolve_experiment(path: Path) -> Experiment:
             raise RecipeError(
                 "scale.process_count must be auto or an integer in [1, drone_count]"
             )
-        if drones_per_process is None:
+        if drones_per_process is None or drones_per_process == "auto":
             drones_per_process = math.ceil(drone_count / process_count)
         elif (
             not isinstance(drones_per_process, int)
             or isinstance(drones_per_process, bool)
             or drones_per_process < 1
         ):
-            raise RecipeError("scale.drones_per_process must be an integer >= 1")
+            raise RecipeError(
+                "scale.drones_per_process must be auto or an integer >= 1"
+            )
     else:
         raise RecipeError(
             "scale.drone_count must be auto or an integer"
@@ -578,6 +580,106 @@ def resolved_experiment_dict(experiment: Experiment) -> dict[str, Any]:
         },
         "resolved": {"foundation_build_limits": required_build_limits(experiment)},
     }
+
+
+def expected_partition_counts(drone_count: int, process_count: int) -> list[int]:
+    """Distribute drones evenly, assigning any remainder to the last process."""
+    if process_count < 1 or process_count > drone_count:
+        raise RecipeError("process_count must be in [1, drone_count]")
+    base = drone_count // process_count
+    remainder = drone_count % process_count
+    counts = [base] * process_count
+    counts[-1] += remainder
+    return counts
+
+
+def validate_materialized_experiment(paths, experiment: Experiment) -> list[str]:
+    """Return actionable errors for stale or incomplete generated Recipe state."""
+    errors: list[str] = []
+    resolved_path = paths.recipe_config / "resolved-experiment.yaml"
+    if resolved_path.is_file():
+        try:
+            actual_resolved = load_simple_yaml(resolved_path)
+        except RecipeError as exc:
+            errors.append(f"invalid {resolved_path}: {exc}")
+        else:
+            if actual_resolved != resolved_experiment_dict(experiment):
+                errors.append(
+                    "experiment YAML differs from the configured Recipe workspace; "
+                    "run configure after changing scale or runtime settings"
+                )
+
+    fleet_root = paths.recipe_config / "drone" / "fleets"
+    service_root = fleet_root / "services"
+    if experiment.process_count == 1:
+        fleet_paths = [fleet_root / "api-current.json"]
+        service_paths = [service_root / "api-current-service.json"]
+    else:
+        fleet_paths = [
+            fleet_root / f"api-current-part{index}.json"
+            for index in range(1, experiment.process_count + 1)
+        ]
+        service_paths = [
+            service_root / f"api-current-service-part{index}.json"
+            for index in range(1, experiment.process_count + 1)
+        ]
+
+    expected_counts = expected_partition_counts(
+        experiment.drone_count, experiment.process_count
+    )
+    observed_names: list[str] = []
+    for index, (fleet_path, service_path, expected_count) in enumerate(
+        zip(fleet_paths, service_paths, expected_counts), start=1
+    ):
+        if not fleet_path.is_file():
+            errors.append(f"missing process {index} fleet partition: {fleet_path}")
+            continue
+        if not service_path.is_file():
+            errors.append(f"missing process {index} service partition: {service_path}")
+            continue
+        try:
+            fleet_payload = json.loads(fleet_path.read_text(encoding="utf-8"))
+            service_payload = json.loads(service_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            errors.append(f"invalid process {index} partition: {exc}")
+            continue
+        drones = fleet_payload.get("drones")
+        services = service_payload.get("services")
+        if not isinstance(drones, list):
+            errors.append(f"process {index} fleet partition has no drones list")
+            continue
+        if len(drones) != expected_count:
+            errors.append(
+                f"process {index} fleet partition has {len(drones)} drones; "
+                f"expected {expected_count}"
+            )
+        if not isinstance(services, list) or len(services) != expected_count * 5:
+            actual_service_count = len(services) if isinstance(services, list) else 0
+            errors.append(
+                f"process {index} service partition has {actual_service_count} "
+                f"services; expected {expected_count * 5}"
+            )
+        for drone in drones:
+            name = drone.get("name") if isinstance(drone, dict) else None
+            if not isinstance(name, str) or not name:
+                errors.append(f"process {index} fleet partition has an invalid drone name")
+                continue
+            observed_names.append(name)
+
+    if len(observed_names) != len(set(observed_names)):
+        errors.append("fleet partitions contain duplicate drone names")
+    expected_names = {f"Drone-{index}" for index in range(1, experiment.drone_count + 1)}
+    observed_name_set = set(observed_names)
+    if observed_name_set != expected_names:
+        missing = sorted(expected_names - observed_name_set)
+        unexpected = sorted(observed_name_set - expected_names)
+        detail: list[str] = []
+        if missing:
+            detail.append("missing=" + ",".join(missing[:5]))
+        if unexpected:
+            detail.append("unexpected=" + ",".join(unexpected[:5]))
+        errors.append("fleet partition coverage mismatch" + (": " + " ".join(detail) if detail else ""))
+    return errors
 
 
 def write_foundation_requirements(path: Path, experiment: Experiment) -> None:
@@ -1296,6 +1398,17 @@ def doctor(
     ):
         path = paths.recipe_root / relative
         checks.append((relative, path.is_file(), str(path)))
+    materialization_errors = validate_materialized_experiment(paths, experiment)
+    checks.append(
+        (
+            f"process partitions ({experiment.process_count})",
+            not materialization_errors,
+            "configured experiment matches all process partitions"
+            if not materialization_errors
+            else "; ".join(materialization_errors)
+            + "; run 'python tools/recipe/drone_fleet_single_host.py configure'",
+        )
+    )
     failed = inspection["status"] != "SATISFIED"
     for label, ok, detail in checks:
         print(f"[{'OK' if ok else 'NG'}] {label}: {detail}")

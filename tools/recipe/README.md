@@ -129,10 +129,14 @@ Action Recipeは`hakoniwa-pdu >= 1.6.6`を要求します。この版から
 ## Native Single-host Multi-drone
 
 任意の機体数を複数のDrone simulator processへ分割するRecipeは、実験条件を
-YAMLで受け取ります。現在のMVP既定値は1 processあたり50機、4 process
-（合計200機）です。`scale.process_count`と`scale.drones_per_process`を変更すると、
-同じ正規手順で規模を変更できます。総機体数を直接指定して均等分割する構成や、
-`process_count: auto`と`drones_per_process`の組み合わせも利用できます。
+YAMLで受け取ります。現在のMVP既定値は200機、4 processです。
+`scale.drone_count: 200`と`scale.drones_per_process: auto`を維持したまま、
+`scale.process_count`だけを1〜20へ変更することで、総機体数を固定した比較実験を
+実行できます。均等に割り切れない機体は最後のprocessへ割り当てます。
+総機体数をprocess形状から求める`drone_count: auto`や、process数を求める
+`process_count: auto`も利用できます。設定変更後は`configure`が必要であり、
+`start`は内部で`doctor`を実行して、実験YAMLと生成済みpartitionが一致しなければ
+起動を拒否します。
 MVPはDockerを使わず、macOS / Linux / Windowsのnative
 Drone binaryを選択します。全機の離陸完了を待ってからHAKONIWAの文字配置へ
 移り、全機の配置完了後に一定時間保持します。文字を欠損なく構成する最小数は

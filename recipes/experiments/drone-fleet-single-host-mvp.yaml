@@ -8,8 +8,11 @@ scale:
   # at most 200 drones. Experiments above 200 must use the separately built
   # and verified 512-drone research profile; do not bypass this limit by only
   # increasing Foundation values.
-  drone_count: auto
-  drones_per_process: 50
+  # Keep the fleet size fixed for scalability comparisons. Change only
+  # process_count (1..200); configure divides the fleet evenly and assigns an
+  # indivisible remainder to the last process.
+  drone_count: 200
+  drones_per_process: auto
   process_count: 4
 
 runtime:

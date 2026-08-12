@@ -275,8 +275,9 @@ experiment_contract:
     - scenario.timeout_sec
     - scenario.land
   resolution:
-    - The current MVP default is process_count=4 and drones_per_process=50, producing 200 total drones.
-    - Changing only process_count to 2 or 3 produces 52 or 78 total drones while preserving 26 drones per process.
+    - The current MVP fixes drone_count=200 and derives drones_per_process from process_count.
+    - Changing only process_count from 1 through 20 preserves the 200-drone workload for scalability comparisons.
+    - Explicit process_count splitting assigns the base count to process 1..N-1 and any indivisible remainder to process N.
     - drone_count=auto resolves to process_count*drones_per_process.
     - process_count=auto resolves to ceil(drone_count/drones_per_process).
     - An explicit process_count must be between 1 and drone_count and uses balanced fleet splitting.
@@ -541,9 +542,10 @@ implementation_plan:
   - Extend the same contract with experiment matrices and results in a later revision.
 
 acceptance_criteria:
-  - A user can scale total drones by changing process_count while keeping drones_per_process fixed in one YAML file.
+  - A user can keep drone_count fixed and change only process_count for a comparable scalability series.
   - The default profile runs 200 drones in four simulator processes.
-  - Generated fleet partitions are balanced and cover every drone exactly once.
+  - Generated fleet partitions are balanced, assign any remainder to the last process, and cover every drone exactly once.
+  - start runs doctor and refuses to launch when the experiment YAML and generated process partitions differ.
   - Exactly one built-in Conductor in drone-service-1 owns time advancement; only drone-service-2..N disable theirs.
   - All generated mutable artifacts stay under work/recipes/drone-fleet-single-host.
   - HAKONIWA requires at least 26 drones; 26-51 is accepted with a readability warning and 52 or more is recommended.
