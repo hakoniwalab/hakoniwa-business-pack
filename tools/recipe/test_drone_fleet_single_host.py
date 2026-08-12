@@ -125,10 +125,10 @@ results:
         expected = {
             1: [200],
             2: [100, 100],
-            3: [66, 66, 68],
+            3: [66, 67, 67],
             4: [50, 50, 50, 50],
             5: [40, 40, 40, 40, 40],
-            6: [33, 33, 33, 33, 33, 35],
+            6: [33, 33, 33, 33, 34, 34],
             8: [25] * 8,
             20: [10] * 20,
         }
@@ -194,11 +194,19 @@ results:
             )
             self.assertFalse(experiment.visualization)
 
-    def test_rejects_too_few_drones_for_hakoniwa_strokes(self) -> None:
+    def test_accepts_one_drone_with_partial_hakoniwa_formation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            with self.assertRaisesRegex(recipe.RecipeError, ">= 26"):
+            experiment = recipe.resolve_experiment(
+                self._experiment(Path(temporary), drones=1, per_process=1)
+            )
+            self.assertEqual(experiment.drone_count, 1)
+            self.assertEqual(experiment.process_count, 1)
+
+    def test_rejects_zero_drones(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaisesRegex(recipe.RecipeError, ">= 1"):
                 recipe.resolve_experiment(
-                    self._experiment(Path(temporary), drones=25, per_process=10)
+                    self._experiment(Path(temporary), drones=0, per_process=1)
                 )
 
     def test_rejects_more_than_general_user_binary_profile(self) -> None:

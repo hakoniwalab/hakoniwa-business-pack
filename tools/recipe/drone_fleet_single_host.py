@@ -386,6 +386,8 @@ def resolve_experiment(path: Path) -> Experiment:
         and not isinstance(configured_drone_count, bool)
     ):
         drone_count = configured_drone_count
+        if drone_count < 1:
+            raise RecipeError("scale.drone_count must be >= 1")
         if configured_process_count == "auto":
             if (
                 not isinstance(drones_per_process, int)
@@ -420,10 +422,8 @@ def resolve_experiment(path: Path) -> Experiment:
         raise RecipeError(
             "scale.drone_count must be auto or an integer"
         )
-    if drone_count < HAKONIWA_STROKE_COUNT:
-        raise RecipeError(
-            "resolved scale.drone_count must be >= 26 for the HAKONIWA formation"
-        )
+    if drone_count < 1:
+        raise RecipeError("resolved scale.drone_count must be >= 1")
     if drone_count > GENERAL_USER_MAX_DRONES:
         raise RecipeError(
             "resolved scale.drone_count exceeds the general-user limit of "
@@ -583,13 +583,14 @@ def resolved_experiment_dict(experiment: Experiment) -> dict[str, Any]:
 
 
 def expected_partition_counts(drone_count: int, process_count: int) -> list[int]:
-    """Distribute drones evenly, assigning any remainder to the last process."""
+    """Distribute drones evenly, assigning one extra to each final process."""
     if process_count < 1 or process_count > drone_count:
         raise RecipeError("process_count must be in [1, drone_count]")
     base = drone_count // process_count
     remainder = drone_count % process_count
     counts = [base] * process_count
-    counts[-1] += remainder
+    for index in range(process_count - remainder, process_count):
+        counts[index] += 1
     return counts
 
 
@@ -873,7 +874,13 @@ def write_generated_scenario(paths, drone_root: Path, experiment: Experiment) ->
         >= HAKONIWA_STROKE_COUNT * RECOMMENDED_DRONES_PER_STROKE
         else 1
     )
-    if minimum_points == 1:
+    if experiment.drone_count < HAKONIWA_STROKE_COUNT:
+        print(
+            "[WARN] HAKONIWA has 26 stroke segments; with fewer than 26 "
+            "drones, evenly sampled strokes are used and the complete word "
+            "will not be visible."
+        )
+    elif minimum_points == 1:
         print(
             "[WARN] HAKONIWA formation uses fewer than two drones per stroke; "
             "52 or more drones are recommended for readability."

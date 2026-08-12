@@ -277,7 +277,7 @@ experiment_contract:
   resolution:
     - The current MVP fixes drone_count=200 and derives drones_per_process from process_count.
     - Changing only process_count from 1 through 20 preserves the 200-drone workload for scalability comparisons.
-    - Explicit process_count splitting assigns the base count to process 1..N-1 and any indivisible remainder to process N.
+    - Explicit process_count splitting assigns one extra drone to each final process until the indivisible remainder is exhausted.
     - drone_count=auto resolves to process_count*drones_per_process.
     - process_count=auto resolves to ceil(drone_count/drones_per_process).
     - An explicit process_count must be between 1 and drone_count and uses balanced fleet splitting.
@@ -295,7 +295,7 @@ experiment_contract:
     - The public/default native Drone binary profile is a general-user contract capped at 200 drones; configure rejects 201 or more before generating runnable artifacts.
     - A 201-512 drone research run requires Hakoniwa Drone PRO license/source access and a separately built and verified 512-drone Core/Drone/VSP/Foundation profile. Increasing only Foundation limits does not satisfy the binary contract.
     - For fair scalability comparisons, every measurement point in one experiment series, including points at or below 200 drones, must use the same 512-drone binary profile when the series includes a point above 200.
-    - HAKONIWA has 26 stroke segments, so the scenario requires at least 26 drones.
+    - The scenario accepts one or more drones; counts from 1 through 25 select evenly spaced subsets of HAKONIWA's 26 stroke segments, so the complete word is not visible.
     - Counts from 26 through 51 use one or more drones per stroke and emit a readability warning; 52 or more are recommended.
     - After the per-stroke minimum is reserved, remaining drones are allocated in proportion to stroke length.
     - The resolved experiment is written under the Recipe workspace before execution.
@@ -544,11 +544,11 @@ implementation_plan:
 acceptance_criteria:
   - A user can keep drone_count fixed and change only process_count for a comparable scalability series.
   - The default profile runs 200 drones in four simulator processes.
-  - Generated fleet partitions are balanced, assign any remainder to the last process, and cover every drone exactly once.
+  - Generated fleet partitions differ by at most one drone, assign extras to the final processes, and cover every drone exactly once.
   - start runs doctor and refuses to launch when the experiment YAML and generated process partitions differ.
   - Exactly one built-in Conductor in drone-service-1 owns time advancement; only drone-service-2..N disable theirs.
   - All generated mutable artifacts stay under work/recipes/drone-fleet-single-host.
-  - HAKONIWA requires at least 26 drones; 26-51 is accepted with a readability warning and 52 or more is recommended.
+  - The Recipe accepts at least one drone; 1-25 uses sampled strokes, 26-51 is accepted with a readability warning, and 52 or more is recommended.
   - The general-user Recipe rejects a resolved count above 200 and explains that a separately verified 512-drone profile is required.
   - A scalability series that includes more than 200 drones does not mix the public/default profile and the 512-drone profile across measurement points.
   - Foundation incompatibility is reported before native startup with the required build limits.
