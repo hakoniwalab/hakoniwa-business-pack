@@ -1396,11 +1396,19 @@ def is_wsl() -> bool:
 
 def open_browser(url: str) -> bool:
     if is_wsl():
-        for executable in (shutil.which("wslview"), shutil.which("explorer.exe")):
-            if executable:
+        candidates = [shutil.which("wslview"), shutil.which("explorer.exe")]
+        windows_explorer = Path("/mnt/c/Windows/explorer.exe")
+        if windows_explorer.is_file():
+            candidates.append(str(windows_explorer))
+        for executable in candidates:
+            if not executable:
+                continue
+            try:
                 completed = subprocess.run([executable, url], check=False)
-                if completed.returncode == 0:
-                    return True
+            except OSError:
+                continue
+            if completed.returncode == 0:
+                return True
         print(
             "Unable to open the Windows browser from WSL2. Copy the URL above "
             "into a Windows browser; WSL localhost forwarding exposes ports "
