@@ -98,6 +98,43 @@ results:
             )
             self.assertEqual(experiment.process_count, 11)
 
+    def test_asset_limit_boundaries_match_single_host_launcher_assets(self) -> None:
+        def resolve(root: Path, process_count: int, visualization: bool):
+            path = self._experiment(
+                root,
+                drones=100,
+                per_process=10,
+                visualization=visualization,
+            )
+            content = path.read_text(encoding="utf-8")
+            content = content.replace(
+                "  drones_per_process: 10", "  drones_per_process: auto"
+            )
+            content = content.replace(
+                "  process_count: auto", f"  process_count: {process_count}"
+            )
+            path.write_text(content, encoding="utf-8")
+            return recipe.resolve_experiment(path)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.assertEqual(
+                recipe.required_build_limits(resolve(root, 15, False))["asset_num"],
+                16,
+            )
+            self.assertEqual(
+                recipe.required_build_limits(resolve(root, 16, False))["asset_num"],
+                32,
+            )
+            self.assertEqual(
+                recipe.required_build_limits(resolve(root, 13, True))["asset_num"],
+                16,
+            )
+            self.assertEqual(
+                recipe.required_build_limits(resolve(root, 14, True))["asset_num"],
+                32,
+            )
+
     def test_explicit_process_count_does_not_require_drones_per_process(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = self._experiment(Path(temporary), drones=100, per_process=10)

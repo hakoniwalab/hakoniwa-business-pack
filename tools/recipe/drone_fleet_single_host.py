@@ -503,10 +503,11 @@ def next_pow2(value: int) -> int:
 def required_build_limits(experiment: Experiment) -> dict[str, int]:
     service_total = 5 * experiment.drone_count
     channel_total = 19 * experiment.drone_count + 2 * service_total + 4
-    # Drone services + Conductor Client + ShowRunner, plus VSP + WebBridge when
-    # visualization is enabled. The Server has its own Core domain, and the
+    # Drone services + ShowRunner, plus VSP + WebBridge when visualization is
+    # enabled. The first Drone service owns the built-in Conductor; this
+    # single-host topology launches no separate Conductor Client asset. The
     # after-start HTTP server is not a Hakoniwa asset.
-    runtime_assets = experiment.process_count + 2 + (2 if experiment.visualization else 0)
+    runtime_assets = experiment.process_count + 1 + (2 if experiment.visualization else 0)
     return {
         "asset_num": max(16, next_pow2(runtime_assets)),
         "pdu_channel_max": next_pow2(channel_total),

@@ -138,6 +138,11 @@ YAMLで受け取ります。現在のMVP既定値は200機、4 processです。
 `process_count: auto`も利用できます。設定変更後は`configure`が必要であり、
 `start`は内部で`doctor`を実行して、実験YAMLと生成済みpartitionが一致しなければ
 起動を拒否します。
+既定の`asset_num=16`では、Single-host構成の上限は可視化なしで15 process、
+可視化ありで13 processです。内訳はDrone simulator processにShowRunnerを加え、
+可視化時だけVSPとWebBridgeを加えたものです。最初のDrone simulatorが内蔵Conductorを
+所有するため、独立したConductor Clientは数えません。これを超える場合は、同じbuild
+limitで揃えたFoundationとDroneバイナリが必要です。
 MVPはDockerを使わず、macOS / Linux / Windowsのnative
 Drone binaryを選択します。全機の離陸完了を待ってからHAKONIWAの文字配置へ
 移り、全機の配置完了後に一定時間保持します。実行可能な最小数は1機です。

@@ -287,6 +287,8 @@ experiment_contract:
     - runtime.visualization=false does not pass --real-sleep-msec to any Drone service; the native default is 0, so simulator-loop real sleep is disabled.
     - The current MVP also leaves --real-sleep-msec unspecified when runtime.visualization=true. Visualization selection and simulator pacing are not silently coupled.
     - The first Drone Simulator process owns the built-in Conductor; process 2..N receive --disable-conductor.
+    - No separate Conductor Client asset is launched in this single-host topology; asset_num counts N Drone services plus ShowRunner, and adds VSP plus WebBridge only when visualization is enabled.
+    - With the default asset_num=16 contract, the maximum is 15 Drone processes headless or 13 with visualization; the next process requires an asset_num=32-compatible Foundation and Drone binary profile.
     - External Conductor Server/Client belongs to the future multi-host Recipe and must not be co-located in this single-host topology.
     - runtime.show_runner_real_time_sync=true enables cumulative wall-clock pacing after each successful hakopy.usleep().
     - The pacer sleeps only while Hakoniwa simulation time is ahead of aligned wall time; it does not add a fixed sleep when computation is already slower than real time.
