@@ -137,6 +137,30 @@ and never clones into a missing path selected through an override environment
 variable. Direct `foundation.py` commands remain available for component and CI
 maintenance, but Recipe users need only `recipe.py`. The contract is defined in
 [`recipes/schema.yaml`](schema.yaml).
+
+When a Recipe declares `recipe_runtime_schema_version: 1`, `configure` also
+materializes a resolved runtime contract:
+
+```text
+work/recipes/<recipe-id>/
+├── environment.json
+├── activate
+├── Activate.ps1
+└── config/launcher.json
+```
+
+Start its generated Launcher directly through the Recipe entry point:
+
+```bash
+python tools/recipe.py launch --recipe path/to/<recipe-id>.yaml
+```
+
+`launch` composes the Workspace and Recipe environments internally, so the
+Launcher terminal does not need to source `activate`. Additional operator or
+client terminals first run `workspace.py enter`, then source the generated
+Recipe activation when they require the same resolved runtime paths. Secrets,
+tokens, passwords, credentials, and API keys must not be persisted in this
+runtime contract.
 Recipe-specific `configure` implementations may enrich the same `index.html`
 with resolved paths and generated resources while preserving it as the common
 handoff surface. Recipe-specific executables live under

@@ -53,6 +53,28 @@ recipe_local_requirements:
             - directory
             - executable
 
+recipe_runtime:
+  schema_version_field: recipe_runtime_schema_version
+  supported_schema_versions:
+    - 1
+  required_fields:
+    - environment
+    - launcher
+  environment:
+    type: non_empty_mapping
+    values: strings expanded from RECIPE_REPOSITORY, RECIPE_WORKSPACE, FOUNDATION_ROOT, FOUNDATION_INSTALL, FOUNDATION_PYTHON, or DEPENDENCY:<id>
+    secrets: forbidden
+  launcher:
+    required_fields:
+      - template
+      - output
+      - mode
+    mode:
+      allowed:
+        - immediate
+        - activate-only
+        - serve
+
 doctor_contract:
   mutation: none
   checks:
@@ -69,3 +91,10 @@ configure_contract:
     - Do not clone into a missing path selected through an override environment variable.
     - Execute the Foundation build plan through the internal Foundation engine.
     - Install declared Recipe Python requirements into Foundation Python.
+    - Atomically generate environment.json, POSIX and PowerShell activation, and the declared Launcher file.
+
+launch_contract:
+  behavior:
+    - Compose the Workspace environment with the generated Recipe environment.
+    - Validate the generated Launcher command, cwd, and library paths.
+    - Invoke Hakoniwa Launcher directly with Foundation Python.

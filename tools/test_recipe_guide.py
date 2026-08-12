@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 SCRIPT = Path(__file__).with_name("recipe.py")
@@ -230,6 +232,146 @@ class RecipeGuideTest(unittest.TestCase):
             self.assertEqual(
                 plan["local_sources"][0]["action"], "provide-overridden-path"
             )
+
+    def test_recipe_runtime_rejects_secret_like_environment_variables(self) -> None:
+        data = {
+            "recipe_runtime_schema_version": 1,
+            "recipe_runtime": {
+                "environment": {"SERVICE_TOKEN": "must-not-be-persisted"},
+                "launcher": {
+                    "template": "recipes/launcher/demo.json",
+                    "output": "config/launcher.json",
+                    "mode": "immediate",
+                },
+            },
+        }
+        with self.assertRaisesRegex(guide.RecipeGuideError, "must not persist"):
+            guide.validate_recipe_runtime(data)
+
+    def test_materialize_recipe_runtime_generates_environment_activation_and_launcher(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary) / "recipe-repository"
+            (repository / ".git").mkdir(parents=True)
+            (repository / "recipes" / "launcher").mkdir(parents=True)
+            recipe_path = repository / "recipes" / "demo.yaml"
+            template = repository / "recipes" / "launcher" / "demo.json"
+            template.write_text('{"version":"0.1","assets":[]}', encoding="utf-8")
+            workspace = Path(temporary) / "work" / "recipes" / "demo"
+            paths = SimpleNamespace(recipe_root=workspace)
+            data = {
+                "id": "demo",
+                "recipe_runtime_schema_version": 1,
+                "recipe_runtime": {
+                    "environment": {"DEMO_ROOT": "${RECIPE_REPOSITORY}"},
+                    "launcher": {
+                        "template": "recipes/launcher/demo.json",
+                        "output": "config/launcher.json",
+                        "mode": "immediate",
+                    },
+                },
+            }
+            with mock.patch.object(
+                guide,
+                "resolve_recipe_environment",
+                return_value=({"DEMO_ROOT": str(repository)}, paths),
+            ):
+                payload = guide.materialize_recipe_runtime(recipe_path, data)
+            self.assertIsNotNone(payload)
+            environment = json.loads(
+                (workspace / "environment.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(environment["variables"]["DEMO_ROOT"], str(repository))
+            self.assertTrue((workspace / "activate").is_file())
+            self.assertTrue((workspace / "Activate.ps1").is_file())
+            self.assertEqual(
+                (workspace / "config" / "launcher.json").read_text(encoding="utf-8"),
+                template.read_text(encoding="utf-8"),
+            )
+
+    def test_launch_recipe_uses_foundation_python_and_composed_environment(self) -> None:
+        data = {
+            "id": "demo",
+            "recipe_runtime_schema_version": 1,
+            "recipe_runtime": {
+                "environment": {"DEMO_ROOT": "${RECIPE_REPOSITORY}"},
+                "launcher": {
+                    "template": "recipes/launcher/demo.json",
+                    "output": "config/launcher.json",
+                    "mode": "immediate",
+                },
+            },
+        }
+        paths = SimpleNamespace(
+            recipe_root=Path("/tmp/recipe-runtime"),
+            foundation_python=Path("/tmp/foundation-python"),
+        )
+        foundation = SimpleNamespace(
+            foundation_python_executable=lambda value: Path("/foundation/bin/python")
+        )
+        process = mock.Mock()
+        process.wait.return_value = 0
+        with mock.patch.object(
+            guide,
+            "inspect_recipe_runtime",
+            return_value={"status": "SATISFIED", "reasons": []},
+        ), mock.patch.object(
+            guide,
+            "resolve_recipe_environment",
+            return_value=({"DEMO_ROOT": "/demo"}, paths),
+        ), mock.patch.object(
+            guide, "load_foundation_module", return_value=foundation
+        ), mock.patch.object(
+            guide,
+            "_launcher_environment",
+            return_value={"HAKONIWA_WORKSPACE_ACTIVE": "1", "DEMO_ROOT": "/demo"},
+        ), mock.patch.object(
+            guide, "recipe_repository_root", return_value=Path("/recipe")
+        ), mock.patch.object(guide.subprocess, "Popen", return_value=process) as popen:
+            self.assertEqual(guide.launch_recipe(Path("demo.yaml"), data), 0)
+        command = popen.call_args.args[0]
+        self.assertEqual(command[0], str(Path("/foundation/bin/python")))
+        self.assertIn("hakoniwa_pdu.apps.launcher.hako_launcher", command)
+        self.assertEqual(popen.call_args.kwargs["env"]["DEMO_ROOT"], "/demo")
+
+    def test_launch_recipe_waits_for_launcher_after_keyboard_interrupt(self) -> None:
+        data = {
+            "id": "demo",
+            "recipe_runtime_schema_version": 1,
+            "recipe_runtime": {
+                "environment": {"DEMO_ROOT": "${RECIPE_REPOSITORY}"},
+                "launcher": {
+                    "template": "recipes/launcher/demo.json",
+                    "output": "config/launcher.json",
+                    "mode": "immediate",
+                },
+            },
+        }
+        paths = SimpleNamespace(
+            recipe_root=Path("/tmp/recipe-runtime"),
+            foundation_python=Path("/tmp/foundation-python"),
+        )
+        foundation = SimpleNamespace(
+            foundation_python_executable=lambda value: Path("/foundation/bin/python")
+        )
+        process = mock.Mock()
+        process.wait.side_effect = [KeyboardInterrupt(), 0]
+        with mock.patch.object(
+            guide,
+            "inspect_recipe_runtime",
+            return_value={"status": "SATISFIED", "reasons": []},
+        ), mock.patch.object(
+            guide,
+            "resolve_recipe_environment",
+            return_value=({"DEMO_ROOT": "/demo"}, paths),
+        ), mock.patch.object(
+            guide, "load_foundation_module", return_value=foundation
+        ), mock.patch.object(
+            guide, "_launcher_environment", return_value={}
+        ), mock.patch.object(
+            guide, "recipe_repository_root", return_value=Path("/recipe")
+        ), mock.patch.object(guide.subprocess, "Popen", return_value=process):
+            self.assertEqual(guide.launch_recipe(Path("demo.yaml"), data), 0)
+        process.wait.assert_has_calls([mock.call(), mock.call(timeout=10)])
 
     def test_dynamic_experiment_guide_uses_declared_foundation_order(self) -> None:
         recipe_path = self.recipe_dir / "drone-fleet-single-host.yaml"

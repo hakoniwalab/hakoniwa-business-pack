@@ -190,6 +190,19 @@ recipe_local_requirements:
       - path: path/to/required-file
         kind: file
 
+# Optional resolved runtime contract. `configure` generates environment.json,
+# activate/Activate.ps1, and the Recipe-owned Launcher under work/recipes/<id>/.
+recipe_runtime_schema_version: 1
+recipe_runtime:
+  environment:
+    HAKO_COMPONENT_ROOT: ${DEPENDENCY:sibling-component-id}
+    HAKO_RECIPE_WORKSPACE: ${RECIPE_WORKSPACE}
+    HAKO_FOUNDATION_INSTALL: ${FOUNDATION_INSTALL}
+  launcher:
+    template: recipes/launcher/<recipe-id>.launch.json
+    output: config/launcher.json
+    mode: immediate
+
 process_topology:
   required_for: multi-process-demo
   conductor_owner: process-a

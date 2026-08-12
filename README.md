@@ -99,6 +99,15 @@ Foundation engine, while also handling declared sibling repositories and Recipe
 Python requirements. Direct `foundation.py` commands are retained for component,
 CI, and Foundation-maintainer work.
 
+Recipes with a generated Launcher are started through the same entry point:
+
+```bash
+python tools/recipe.py launch --recipe <recipe.yaml>
+```
+
+This uses the Foundation Python and the resolved Recipe environment without
+falling back to system-installed binaries or libraries.
+
 After stopping any Recipe-owned Launcher session, leave the child shell with:
 
 ```bash
