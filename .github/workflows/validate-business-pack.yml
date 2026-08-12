@@ -47,6 +47,13 @@ jobs:
           -p "test_*.py"
           -v
 
+      - name: Test shared tools helpers
+        run: >-
+          python -m unittest discover
+          -s tools/tests
+          -p "test_*.py"
+          -v
+
       - name: Validate usecases
         run: ruby usecases/tools/validate_usecases.rb
 
@@ -76,4 +83,11 @@ jobs:
           python -m unittest
           tools/test_workspace.py
           tools/test_workspace_enter.py
+          -v
+
+      - name: Test shared tools helpers
+        run: >-
+          python -m unittest discover
+          -s tools/tests
+          -p "test_*.py"
           -v
