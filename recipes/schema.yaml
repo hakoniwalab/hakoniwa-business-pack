@@ -47,6 +47,9 @@ recipe_local_requirements:
           - kind
         path:
           type: dependency_root_relative_path
+          placeholders:
+            - NATIVE_BIN_PREFIX
+            - NATIVE_EXECUTABLE_SUFFIX
         kind:
           allowed:
             - file
@@ -62,7 +65,7 @@ recipe_runtime:
     - launcher
   environment:
     type: non_empty_mapping
-    values: strings expanded from RECIPE_REPOSITORY, RECIPE_WORKSPACE, FOUNDATION_ROOT, FOUNDATION_INSTALL, FOUNDATION_PYTHON, or DEPENDENCY:<id>
+    values: strings expanded from RECIPE_REPOSITORY, RECIPE_WORKSPACE, FOUNDATION_ROOT, FOUNDATION_INSTALL, FOUNDATION_PYTHON, NATIVE_BIN_PREFIX, NATIVE_EXECUTABLE_SUFFIX, or DEPENDENCY:<id>
     secrets: forbidden
   launcher:
     required_fields:

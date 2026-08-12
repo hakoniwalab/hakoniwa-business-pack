@@ -161,6 +161,11 @@ client terminals first run `workspace.py enter`, then source the generated
 Recipe activation when they require the same resolved runtime paths. Secrets,
 tokens, passwords, credentials, and API keys must not be persisted in this
 runtime contract.
+
+Cross-platform native Recipes may use `${NATIVE_BIN_PREFIX}` and
+`${NATIVE_EXECUTABLE_SUFFIX}` in declared local artifact paths and Recipe runtime
+environment values. They resolve to `mac`/empty, `linux`/empty, or `win`/`.exe`
+for macOS, Linux (including WSL2), and Windows respectively.
 Recipe-specific `configure` implementations may enrich the same `index.html`
 with resolved paths and generated resources while preserving it as the common
 handoff surface. Recipe-specific executables live under

@@ -230,6 +230,21 @@ def resolve_local_requirement_root(
     return selected.resolve(), bool(override)
 
 
+def native_platform_context() -> dict[str, str]:
+    if sys.platform == "darwin":
+        prefix = "mac"
+    elif sys.platform.startswith("linux"):
+        prefix = "linux"
+    elif sys.platform == "win32":
+        prefix = "win"
+    else:
+        raise RecipeGuideError(f"unsupported native Recipe platform: {sys.platform}")
+    return {
+        "NATIVE_BIN_PREFIX": prefix,
+        "NATIVE_EXECUTABLE_SUFFIX": ".exe" if sys.platform == "win32" else "",
+    }
+
+
 def validate_recipe_runtime(data: dict) -> dict:
     runtime = data.get("recipe_runtime")
     if runtime is None:
@@ -282,6 +297,7 @@ def _runtime_context(recipe_path: Path, data: dict) -> tuple[dict[str, str], obj
             foundation.foundation_python_executable(paths.foundation_python)
         ),
     }
+    context.update(native_platform_context())
     for dependency_id, requirement in validate_local_requirements(data).items():
         dependency_root, _ = resolve_local_requirement_root(recipe_path, requirement)
         context[f"DEPENDENCY:{dependency_id}"] = str(dependency_root)
@@ -466,6 +482,7 @@ def inspect_local_requirements(
     environ: dict[str, str] | None = None,
 ) -> list[dict]:
     requirements = validate_local_requirements(data)
+    platform_context = native_platform_context()
     results: list[dict] = []
     for dependency_id, requirement in requirements.items():
         dependency_root, overridden = resolve_local_requirement_root(
@@ -476,7 +493,12 @@ def inspect_local_requirements(
             missing.append("dependency root")
         else:
             for artifact in requirement["required_artifacts"]:
-                target = dependency_root / artifact["path"]
+                artifact_path = _expand_runtime_value(
+                    artifact["path"],
+                    platform_context,
+                    f"recipe_local_requirements.{dependency_id}.required_artifacts.path",
+                )
+                target = dependency_root / artifact_path
                 kind = artifact["kind"]
                 satisfied = (
                     target.is_file()
@@ -486,7 +508,7 @@ def inspect_local_requirements(
                     else target.is_file() and os.access(target, os.X_OK)
                 )
                 if not satisfied:
-                    missing.append(f"{kind}:{artifact['path']}")
+                    missing.append(f"{kind}:{artifact_path}")
         results.append(
             {
                 "dependency": dependency_id,

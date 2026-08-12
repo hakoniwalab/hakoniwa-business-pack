@@ -164,6 +164,71 @@ class RecipeGuideTest(unittest.TestCase):
             result = guide.inspect_local_requirements(recipe_path, data, {})
             self.assertEqual(result[0]["status"], "SATISFIED")
 
+    def test_native_platform_placeholders_resolve_for_local_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary) / "recipe-repository"
+            (repository / ".git").mkdir(parents=True)
+            (repository / "recipes").mkdir()
+            dependency = repository.parent / "runtime"
+            binary = dependency / "bin" / "linux-simulator"
+            binary.parent.mkdir(parents=True)
+            binary.write_text("runtime", encoding="utf-8")
+            binary.chmod(0o755)
+            recipe_path = repository / "recipes" / "demo.yaml"
+            data = {
+                "recipe_local_requirements_schema_version": 1,
+                "recipe_local_requirements": {
+                    "runtime": {
+                        "root": {
+                            "default_path": "../runtime",
+                            "override_env": "HAKO_TEST_RUNTIME_ROOT",
+                            "relative_to": "recipe_repository",
+                        },
+                        "source": {"type": "local"},
+                        "required_artifacts": [
+                            {
+                                "path": "bin/${NATIVE_BIN_PREFIX}-simulator${NATIVE_EXECUTABLE_SUFFIX}",
+                                "kind": "executable",
+                            }
+                        ],
+                    }
+                },
+            }
+            with mock.patch.object(guide.sys, "platform", "linux"):
+                result = guide.inspect_local_requirements(recipe_path, data, {})
+            self.assertEqual(result[0]["status"], "SATISFIED")
+
+    def test_native_platform_placeholders_expand_in_recipe_runtime(self) -> None:
+        data = {
+            "id": "demo",
+            "recipe_runtime_schema_version": 1,
+            "recipe_runtime": {
+                "environment": {
+                    "DEMO_BIN": "${RECIPE_REPOSITORY}/bin/${NATIVE_BIN_PREFIX}-demo${NATIVE_EXECUTABLE_SUFFIX}"
+                },
+                "launcher": {
+                    "template": "recipes/launcher/demo.json",
+                    "output": "config/launcher.json",
+                    "mode": "immediate",
+                },
+            },
+        }
+        paths = SimpleNamespace(recipe_root=Path("/tmp/recipe-runtime"))
+        foundation = SimpleNamespace(
+            resolve_workspace=lambda _root, _recipe_id: paths,
+            foundation_python_executable=lambda _value: Path("/foundation/bin/python"),
+        )
+        paths.foundation_root = Path("/foundation")
+        paths.install_prefix = Path("/foundation/install")
+        paths.foundation_python = Path("/foundation/python")
+        with mock.patch.object(guide.sys, "platform", "linux"), mock.patch.object(
+            guide, "load_foundation_module", return_value=foundation
+        ), mock.patch.object(
+            guide, "recipe_repository_root", return_value=Path("/recipe")
+        ):
+            variables, _ = guide.resolve_recipe_environment(Path("demo.yaml"), data)
+        self.assertEqual(variables["DEMO_BIN"], "/recipe/bin/linux-demo")
+
     def test_recipe_plan_clones_only_missing_default_git_dependency(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             repository = Path(temporary) / "recipe-repository"
