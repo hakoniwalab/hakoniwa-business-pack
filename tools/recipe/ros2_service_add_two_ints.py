@@ -4,11 +4,16 @@
 from __future__ import annotations
 
 import ros2_service_add_two_ints_impl as impl
-from process_liveness import pid_alive
+from process_liveness import pid_alive as safe_pid_alive
 
 
 # Preserve the historical module API because tests and sibling Recipe helpers
-# import this file directly and access its constants/functions.
+# import this file directly and access its constants/functions. Note that
+# impl also defines its own (platform-unsafe) pid_alive, so this loop copies
+# that name into globals() too; the override below runs afterward and must
+# use a distinct alias (safe_pid_alive) rather than the module-level
+# `pid_alive` name, otherwise it would just reassign impl's own value to
+# itself instead of installing the platform-safe helper.
 for _name in dir(impl):
     if not _name.startswith("__"):
         globals()[_name] = getattr(impl, _name)
@@ -16,8 +21,8 @@ for _name in dir(impl):
 # Override only the liveness primitive. The implementation resolves pid_alive
 # through its module globals, so status/stop use the platform-safe helper while
 # every other public symbol remains unchanged.
-impl.pid_alive = pid_alive
-globals()["pid_alive"] = pid_alive
+impl.pid_alive = safe_pid_alive
+globals()["pid_alive"] = safe_pid_alive
 
 
 def _sync_impl(*names: str) -> None:
