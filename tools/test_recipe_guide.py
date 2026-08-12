@@ -442,13 +442,18 @@ class RecipeGuideTest(unittest.TestCase):
         recipe_path = self.recipe_dir / "drone-fleet-single-host.yaml"
         data = guide.load_recipe(recipe_path)
         commands = [item.command for item in guide._command_items(data, recipe_path)]
+        prepare_native = (
+            "python tools/recipe/drone_fleet_single_host.py prepare-native"
+        )
         configure = "python tools/recipe/drone_fleet_single_host.py configure"
         generated_doctor = (
             "python tools/foundation.py doctor --recipe "
             "work/recipes/drone-fleet-single-host/config/foundation-requirements.yaml"
         )
+        self.assertIn(prepare_native, commands)
         self.assertIn(configure, commands)
         self.assertIn(generated_doctor, commands)
+        self.assertLess(commands.index(prepare_native), commands.index(configure))
         self.assertLess(commands.index(configure), commands.index(generated_doctor))
         self.assertNotIn(
             "python tools/foundation.py doctor --recipe "

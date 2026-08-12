@@ -129,9 +129,9 @@ Action Recipeは`hakoniwa-pdu >= 1.6.6`を要求します。この版から
 ## Native Single-host Multi-drone
 
 任意の機体数を複数のDrone simulator processへ分割するRecipeは、実験条件を
-YAMLで受け取ります。既定値は1 processあたり26機、1 process（合計26機）です。
-`scale.process_count`を2、3と変更すると、1 processあたり26機を維持したまま、
-合計機体数が52、78へ増えます。総機体数を直接指定して均等分割する構成や、
+YAMLで受け取ります。現在のMVP既定値は1 processあたり50機、4 process
+（合計200機）です。`scale.process_count`と`scale.drones_per_process`を変更すると、
+同じ正規手順で規模を変更できます。総機体数を直接指定して均等分割する構成や、
 `process_count: auto`と`drones_per_process`の組み合わせも利用できます。
 MVPはDockerを使わず、macOS / Linux / Windowsのnative
 Drone binaryを選択します。全機の離陸完了を待ってからHAKONIWAの文字配置へ
@@ -148,6 +148,7 @@ Core、Drone simulator、VSP、Endpoint、Bridgeを同一の512機向けbuild li
 200機以下の測定点にも同じ512機向けバイナリプロファイルを使用します。
 
 ```bash
+python tools/recipe/drone_fleet_single_host.py prepare-native
 python tools/recipe/drone_fleet_single_host.py configure
 python tools/foundation.py doctor \
   --recipe work/recipes/drone-fleet-single-host/config/foundation-requirements.yaml
@@ -157,6 +158,12 @@ python tools/recipe/drone_fleet_single_host.py open-viewer
 python tools/recipe/drone_fleet_single_host.py smoke
 python tools/recipe/drone_fleet_single_host.py stop
 ```
+
+`prepare-native`は利用者が明示的に実行する取得操作です。兄弟ディレクトリの
+`hakoniwa-drone-core`がなければ公式公開リポジトリの`v4.0.0`をcloneし、OSに対応する
+公式ZIPを取得します。配布物のSHA-256を検証してから展開し、既に必要なバイナリが
+存在する場合は何も変更しません。`doctor`がnative Drone serviceまたは
+visual-state publisherの欠落を報告した場合も、この操作後に`doctor`を再実行します。
 
 入力は`recipes/experiments/drone-fleet-single-host-mvp.yaml`、生成物はすべて
 `work/recipes/drone-fleet-single-host/`配下です。`start`は背景起動後に復帰するため、

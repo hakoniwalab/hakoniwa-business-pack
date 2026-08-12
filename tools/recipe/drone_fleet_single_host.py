@@ -10,6 +10,7 @@ reserved for the later experiment runner.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import math
@@ -19,8 +20,12 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
+import urllib.error
+import urllib.request
 import webbrowser
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -45,6 +50,22 @@ RECOMMENDED_DRONES_PER_STROKE = 2
 # larger Foundation receipt is insufficient because the native Drone/VSP
 # artifacts belong to the same compile-time contract.
 GENERAL_USER_MAX_DRONES = 200
+PUBLIC_DRONE_RELEASE = "v4.0.0"
+PUBLIC_DRONE_REPOSITORY = "https://github.com/toppers/hakoniwa-drone-core.git"
+PUBLIC_DRONE_ARCHIVES = {
+    "Darwin": (
+        "mac.zip",
+        "c8f81a7aa0dc85d335c6568676dd4e958e30cf19d23668c1b96d2e4cebddbd3f",
+    ),
+    "Linux": (
+        "lnx.zip",
+        "d8ef1418e8754dcb4048d808a700568f21dd9b328966ae2806f70285e273fc60",
+    ),
+    "Windows": (
+        "win.zip",
+        "2931cb7844dbe74ec3dd5f4be5bb49f28757d268774010c90ea18e8266e59ac0",
+    ),
+}
 
 
 class RecipeError(RuntimeError):
@@ -94,6 +115,92 @@ def default_source(name: str) -> Path:
 
 def recipe_file() -> Path:
     return ROOT / "recipes" / "examples" / f"{RECIPE_ID}.yaml"
+
+
+def _safe_extract(archive: Path, destination: Path) -> None:
+    destination = destination.resolve()
+    with zipfile.ZipFile(archive) as package:
+        for member in package.infolist():
+            target = (destination / member.filename).resolve()
+            if target != destination and destination not in target.parents:
+                raise RecipeError(
+                    f"native Drone archive contains an unsafe path: {member.filename}"
+                )
+        package.extractall(destination)
+
+
+def prepare_native_distribution(drone_root: Path, system_name: str) -> int:
+    """Explicitly materialize the public Drone source and native distribution."""
+    profile = PUBLIC_DRONE_ARCHIVES.get(system_name)
+    if profile is None:
+        raise RecipeError(f"unsupported native operating system: {system_name}")
+
+    if not drone_root.exists():
+        drone_root.parent.mkdir(parents=True, exist_ok=True)
+        _run_checked(
+            [
+                "git",
+                "clone",
+                "--branch",
+                PUBLIC_DRONE_RELEASE,
+                "--depth",
+                "1",
+                PUBLIC_DRONE_REPOSITORY,
+                str(drone_root),
+            ],
+            cwd=drone_root.parent,
+        )
+    if not (drone_root / "tools" / "gen_fleet_scale_config.py").is_file():
+        raise RecipeError(
+            f"Hakoniwa Drone source is incomplete: {drone_root}; "
+            "use --drone-root to select a toppers/hakoniwa-drone-core checkout"
+        )
+
+    try:
+        service = resolve_drone_binary(drone_root, system_name)
+        vsp = resolve_visual_state_publisher(drone_root, system_name)
+        print(f"Native Drone distribution is already ready: {service}")
+        print(f"Visual-state publisher is already ready: {vsp}")
+        return 0
+    except RecipeError:
+        pass
+
+    archive_name, expected_sha256 = profile
+    url = (
+        "https://github.com/toppers/hakoniwa-drone-core/releases/download/"
+        f"{PUBLIC_DRONE_RELEASE}/{archive_name}"
+    )
+    print(f"Downloading official Hakoniwa Drone {PUBLIC_DRONE_RELEASE}: {url}")
+    try:
+        with tempfile.TemporaryDirectory(prefix="hakoniwa-drone-download-") as temporary:
+            archive = Path(temporary) / archive_name
+            with urllib.request.urlopen(url) as response:
+                with archive.open("wb") as output:
+                    while chunk := response.read(1024 * 1024):
+                        output.write(chunk)
+            digest = hashlib.sha256()
+            with archive.open("rb") as package:
+                while chunk := package.read(1024 * 1024):
+                    digest.update(chunk)
+            actual_sha256 = digest.hexdigest()
+            if actual_sha256 != expected_sha256:
+                raise RecipeError(
+                    f"native Drone archive SHA-256 mismatch: expected "
+                    f"{expected_sha256}, got {actual_sha256}"
+                )
+            _safe_extract(archive, drone_root)
+    except (OSError, urllib.error.URLError, zipfile.BadZipFile) as exc:
+        raise RecipeError(f"failed to prepare native Drone distribution: {exc}") from exc
+
+    for candidate in (*binary_candidates(drone_root, system_name), *visual_state_publisher_candidates(drone_root, system_name)):
+        if candidate.is_file() and system_name != "Windows":
+            candidate.chmod(candidate.stat().st_mode | 0o111)
+    service = resolve_drone_binary(drone_root, system_name)
+    vsp = resolve_visual_state_publisher(drone_root, system_name)
+    print(f"[OK] native drone service: {service}")
+    print(f"[OK] visual-state publisher: {vsp}")
+    print(f"[OK] SHA-256: {expected_sha256}")
+    return 0
 
 
 def _parse_scalar(value: str) -> Any:
@@ -727,6 +834,8 @@ def resolve_visual_state_publisher(drone_root: Path, system_name: str) -> Path:
         + ", ".join(
             str(path) for path in visual_state_publisher_candidates(drone_root, system_name)
         )
+        + "; run 'python tools/recipe/drone_fleet_single_host.py prepare-native' "
+        + "to install the pinned public distribution"
     )
 
 
@@ -768,6 +877,8 @@ def resolve_drone_binary(drone_root: Path, system_name: str) -> Path:
     raise RecipeError(
         "native Drone service binary not found; checked: "
         + ", ".join(str(path) for path in binary_candidates(drone_root, system_name))
+        + "; run 'python tools/recipe/drone_fleet_single_host.py prepare-native' "
+        + "to install the pinned public distribution"
     )
 
 
@@ -1291,6 +1402,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument(
         "command",
         choices=[
+            "prepare-native",
             "configure",
             "doctor",
             "start",
@@ -1317,6 +1429,8 @@ def main(argv: list[str] | None = None) -> int:
         experiment_path = args.experiment.absolute()
         drone_root = args.drone_root.absolute()
         viewer_root = args.viewer_root.absolute()
+        if args.command == "prepare-native":
+            return prepare_native_distribution(drone_root, platform.system())
         if args.command == "configure":
             return configure(experiment_path, drone_root)
         if args.command == "doctor":

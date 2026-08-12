@@ -2,11 +2,15 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
+import io
 import json
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
+from unittest import mock
 
 
 SCRIPT = Path(__file__).with_name("drone_fleet_single_host.py")
@@ -148,6 +152,46 @@ results:
                 self._experiment(Path(temporary), drones=200, per_process=10)
             )
             self.assertEqual(experiment.drone_count, 200)
+
+    def test_prepare_native_downloads_verifies_and_extracts_linux_release(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            drone_root = Path(temporary) / "hakoniwa-drone-core"
+            generator = drone_root / "tools" / "gen_fleet_scale_config.py"
+            generator.parent.mkdir(parents=True)
+            generator.touch()
+            payload = io.BytesIO()
+            with zipfile.ZipFile(payload, "w") as archive:
+                archive.writestr("lnx/linux-main_hako_drone_service", b"service")
+                archive.writestr("lnx/linux-drone_visual_state_publisher", b"vsp")
+            archive_bytes = payload.getvalue()
+            profile = {
+                "Linux": ("lnx.zip", hashlib.sha256(archive_bytes).hexdigest())
+            }
+            with mock.patch.object(recipe, "PUBLIC_DRONE_ARCHIVES", profile), mock.patch.object(
+                recipe.urllib.request, "urlopen", return_value=io.BytesIO(archive_bytes)
+            ) as urlopen:
+                self.assertEqual(
+                    recipe.prepare_native_distribution(drone_root, "Linux"), 0
+                )
+            urlopen.assert_called_once_with(
+                "https://github.com/toppers/hakoniwa-drone-core/releases/download/"
+                "v4.0.0/lnx.zip"
+            )
+            self.assertTrue(
+                (drone_root / "lnx" / "linux-main_hako_drone_service").is_file()
+            )
+            self.assertTrue(
+                (drone_root / "lnx" / "linux-drone_visual_state_publisher").is_file()
+            )
+
+    def test_prepare_native_rejects_archive_path_traversal(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive_path = root / "bad.zip"
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr("../outside", b"bad")
+            with self.assertRaisesRegex(recipe.RecipeError, "unsafe path"):
+                recipe._safe_extract(archive_path, root / "destination")
 
     def test_generated_launcher_uses_one_builtin_conductor_owner(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

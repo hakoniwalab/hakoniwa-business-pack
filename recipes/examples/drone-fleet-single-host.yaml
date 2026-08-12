@@ -275,7 +275,7 @@ experiment_contract:
     - scenario.timeout_sec
     - scenario.land
   resolution:
-    - The default is process_count=1 and drones_per_process=26, producing 26 total drones.
+    - The current MVP default is process_count=4 and drones_per_process=50, producing 200 total drones.
     - Changing only process_count to 2 or 3 produces 52 or 78 total drones while preserving 26 drones per process.
     - drone_count=auto resolves to process_count*drones_per_process.
     - process_count=auto resolves to ceil(drone_count/drones_per_process).
@@ -542,7 +542,7 @@ implementation_plan:
 
 acceptance_criteria:
   - A user can scale total drones by changing process_count while keeping drones_per_process fixed in one YAML file.
-  - The default profile runs 26 drones in one simulator process.
+  - The default profile runs 200 drones in four simulator processes.
   - Generated fleet partitions are balanced and cover every drone exactly once.
   - Exactly one built-in Conductor in drone-service-1 owns time advancement; only drone-service-2..N disable theirs.
   - All generated mutable artifacts stay under work/recipes/drone-fleet-single-host.
@@ -567,7 +567,7 @@ acceptance_criteria:
 
 demo:
   foundation_workflow: declared
-  objective: Run 26 drones in one native simulator process, wait for synchronized takeoff, and visibly form HAKONIWA in the browser.
+  objective: Run 200 drones in four native simulator processes, wait for synchronized takeoff, and visibly form HAKONIWA in the browser.
   readiness:
     lifecycle_state:
       source: launcher-session
@@ -592,56 +592,63 @@ demo:
         - open-viewer when runtime.visualization=true
   steps:
     - order: 1
+      id: prepare_native
+      component: hakoniwa-drone-core
+      action: Explicitly clone the official public Drone Core source when missing and download the pinned v4.0.0 native distribution for this operating system.
+      description: Verify the official release SHA-256, extract the native Drone service and visual-state publisher under the sibling hakoniwa-drone-core checkout, and rerun this command safely when the binaries already exist.
+      command: python tools/recipe/drone_fleet_single_host.py prepare-native
+      agency: agent_action
+    - order: 2
       id: configure
       component: hakoniwa-pdu-python
       action: Resolve the experiment and generate Recipe-local configuration.
       command: python tools/recipe/drone_fleet_single_host.py configure
       agency: agent_action
-    - order: 2
+    - order: 3
       id: prepare_foundation
       component: hakoniwa-core-pro
       action: Inspect and, when necessary, rebuild Foundation from the generated capacity requirements.
       command: python tools/foundation.py doctor --recipe work/recipes/drone-fleet-single-host/config/foundation-requirements.yaml
       agency: agent_action
-    - order: 3
+    - order: 4
       id: plan_foundation
       component: hakoniwa-core-pro
       action: If Foundation is not satisfied, inspect the rebuild plan generated from the resolved fleet size.
       command: python tools/foundation.py plan --recipe work/recipes/drone-fleet-single-host/config/foundation-requirements.yaml
       agency: agent_action
-    - order: 4
+    - order: 5
       id: build_foundation
       component: hakoniwa-core-pro
       action: Build and install the generated Foundation plan only when doctor reports an unsatisfied requirement.
       command: python tools/foundation.py build --recipe work/recipes/drone-fleet-single-host/config/foundation-requirements.yaml
       agency: agent_action
-    - order: 5
+    - order: 6
       id: doctor
       component: hakoniwa-pdu-python
       action: Validate the native Drone binary, Foundation, Python imports, and generated artifacts; validate VSP/WebBridge/Viewer only when visualization is enabled.
       command: python tools/recipe/drone_fleet_single_host.py doctor
       agency: agent_action
-    - order: 6
+    - order: 7
       id: start
       component: hakoniwa-pdu-python
       action: Start the native multi-process runtime in one managed background Launcher session.
       description: Start all native processes and automatically begin SetReady, synchronized takeoff, HAKONIWA placement, and hold.
       command: python tools/recipe/drone_fleet_single_host.py start
       agency: agent_action
-    - order: 7
+    - order: 8
       id: open_viewer
       component: hakoniwa-threejs-drone
       action: When runtime.visualization=true, open the browser viewer and observe takeoff followed by the HAKONIWA formation; skip this step in headless mode.
       command: python tools/recipe/drone_fleet_single_host.py open-viewer
       agency: agent_action
-    - order: 8
+    - order: 9
       id: smoke
       component: hakoniwa-drone-core
       action: Verify the workload already started by start; do not start another flight.
       description: Wait up to 300 wall-clock seconds for execution-summary.json, require status=done, and print observed prepare, takeoff, HAKONIWA, and total execution times.
       command: python tools/recipe/drone_fleet_single_host.py smoke
       agency: agent_action
-    - order: 9
+    - order: 10
       id: stop
       component: hakoniwa-pdu-python
       action: Terminate the Launcher session through its normal control path.
@@ -688,7 +695,7 @@ demo:
       - Always run stop before leaving the Workspace shell.
 
 expected_result: >
-  The default experiment runs 26 drones in one native simulator process
+  The default experiment runs 200 drones in four native simulator processes
   on one host. The first Drone Simulator process owns built-in Conductor time advancement,
   subsequent Drone processes disable their embedded Conductor, and all application assets share one Core
   simulation time, and the generated ShowRunnerAsset drives every drone through
