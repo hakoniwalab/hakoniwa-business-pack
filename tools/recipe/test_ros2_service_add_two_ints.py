@@ -235,9 +235,12 @@ class WindowsLivenessWiringTests(unittest.TestCase):
         # NOTE: this test does NOT detect the export/copy-ordering
         # regression this file guards against. It probes recipe.pid_alive
         # from inside the *same* long-lived test process as the child it
-        # spawns, and on Windows os.kill(pid, 0) resolves to
-        # GenerateConsoleCtrlEvent(CTRL_C_EVENT, pid); delivering that event
-        # depends on console/process-group topology that this in-process
+        # spawns. On Windows, os.kill(pid, 0) enters CPython's
+        # CTRL_C_EVENT path and first calls
+        # GenerateConsoleCtrlEvent(CTRL_C_EVENT, pid); if that fails, CPython's
+        # behavior documented in gh-58689 can fall through to the
+        # OpenProcess/TerminateProcess path. Whether the destructive path is
+        # reached depends on console/process-group topology that this in-process
         # setup does not reproduce (confirmed experimentally: reverting the
         # fix in tools/recipe/ros2_service_add_two_ints.py still leaves this
         # test green). A genuine end-to-end repro of the unsafe path killing
