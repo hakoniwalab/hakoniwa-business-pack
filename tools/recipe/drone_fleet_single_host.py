@@ -2,9 +2,10 @@
 """Configure and operate the native single-host multi-drone Recipe.
 
 The MVP intentionally accepts a small, dependency-free YAML subset consisting
-of nested mappings and scalar values.  This lets ``configure`` run before the
-Foundation Python environment exists.  Matrix expansion and measurements are
-reserved for the later experiment runner.
+of nested mappings, scalar values, and inline scalar lists.  This lets
+``configure`` run before the Foundation Python environment exists.  A matrix
+section is ignored by the single-condition operator and consumed by its
+dedicated experiment runner.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from typing import Any
 
 
 RECIPE_ID = "drone-fleet-single-host"
+OPERATOR_NAME = "drone_fleet_single_host.py"
 TOOLS_DIR = Path(__file__).absolute().parents[1]
 ROOT = Path(__file__).absolute().parents[2]
 DEFAULT_EXPERIMENT = (
@@ -73,6 +75,32 @@ class RecipeError(RuntimeError):
 
 
 @dataclass(frozen=True)
+class PerformanceMeasurement:
+    mode: str
+    series: str
+    configuration_id: str
+    attempt: int
+    protocol_status: str
+    sampling_interval_sec: float
+    preflight_duration_sec: float
+    preflight_max_cpu_average_percent: float
+    preflight_max_memory_used_percent: float
+    minimum_virtual_time_sec: float
+    minimum_cpu_sample_count: int
+    minimum_machine_sample_count: int
+    maximum_virtual_time_sec: float
+    maximum_wall_time_sec: float
+    warmup_virtual_time_sec: float
+    drone_delta_time_usec: int
+    fleet_delta_time_usec: int
+    conductor_delta_time_usec: int
+    conductor_max_delay_time_usec: int
+    conductor_real_sleep_msec: int
+    simtime_publish_mode: str
+    conductor_implementation: str
+
+
+@dataclass(frozen=True)
 class Experiment:
     experiment_id: str
     drone_count: int
@@ -94,6 +122,11 @@ class Experiment:
     land: bool
     results_enabled: bool
     results_directory: str
+    measurement: PerformanceMeasurement | None = None
+
+
+def operator_command(command: str) -> str:
+    return f"python tools/recipe/{OPERATOR_NAME} {command}"
 
 
 def load_foundation_module():
@@ -255,6 +288,14 @@ def _parse_scalar(value: str) -> Any:
         value.startswith("'") and value.endswith("'")
     ):
         return value[1:-1]
+    if value.startswith("[") and value.endswith("]"):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise RecipeError(f"invalid inline list: {value}") from exc
+        if not isinstance(parsed, list):
+            raise RecipeError(f"inline value must be a list: {value}")
+        return parsed
     try:
         return int(value)
     except ValueError:
@@ -266,7 +307,7 @@ def _parse_scalar(value: str) -> Any:
 
 
 def load_simple_yaml(path: Path) -> dict[str, Any]:
-    """Load the mapping-only YAML subset used by the MVP experiment file."""
+    """Load the dependency-free YAML subset used by the experiment files."""
     if not path.is_file():
         raise RecipeError(f"experiment YAML not found: {path}")
     root: dict[str, Any] = {}
@@ -280,7 +321,7 @@ def load_simple_yaml(path: Path) -> dict[str, Any]:
         text = raw.strip()
         if text.startswith("-") or ":" not in text:
             raise RecipeError(
-                f"{path}:{line_number}: MVP experiment YAML supports mappings and scalars only"
+                f"{path}:{line_number}: experiment YAML supports mappings, scalars, and inline lists only"
             )
         key, value = text.split(":", 1)
         key = key.strip()
@@ -318,7 +359,10 @@ def resolve_experiment(path: Path) -> Experiment:
     _require_fields(
         root,
         "root",
-        {"version", "experiment", "scale", "runtime", "scenario", "results"},
+        {
+            "version", "experiment", "scale", "runtime", "scenario", "results",
+            "measurement", "matrix",
+        },
     )
     if root.get("version") != 1:
         raise RecipeError("experiment version must be 1")
@@ -327,6 +371,7 @@ def resolve_experiment(path: Path) -> Experiment:
     runtime = _mapping(root, "runtime")
     scenario = _mapping(root, "scenario")
     results = _mapping(root, "results")
+    measurement_raw = root.get("measurement")
     _require_fields(identity, "experiment", {"id"})
     _require_fields(
         scale, "scale", {"drone_count", "drones_per_process", "process_count"}
@@ -472,6 +517,175 @@ def resolve_experiment(path: Path) -> Experiment:
     if Path(results_directory).is_absolute() or ".." in Path(results_directory).parts:
         raise RecipeError("results.directory must stay inside the Recipe workspace")
 
+    measurement: PerformanceMeasurement | None = None
+    if measurement_raw is not None:
+        if not isinstance(measurement_raw, dict):
+            raise RecipeError("experiment.measurement must be a mapping")
+        _require_fields(
+            measurement_raw,
+            "measurement",
+            {
+                "enabled", "mode", "series", "configuration_id", "attempt",
+                "protocol_status", "sampling_interval_sec", "warmup_virtual_time_sec",
+                "preflight_duration_sec", "stop_conditions",
+                "invalid_conditions", "time_coordination",
+            },
+        )
+        enabled = measurement_raw.get("enabled")
+        if not isinstance(enabled, bool):
+            raise RecipeError("measurement.enabled must be boolean")
+        if enabled:
+            coordination = _mapping(measurement_raw, "time_coordination")
+            stop_conditions = _mapping(measurement_raw, "stop_conditions")
+            invalid_conditions = _mapping(measurement_raw, "invalid_conditions")
+            _require_fields(
+                coordination,
+                "measurement.time_coordination",
+                {
+                    "drone_delta_time_usec", "fleet_delta_time_usec",
+                    "conductor_delta_time_usec", "conductor_max_delay_time_usec",
+                    "conductor_real_sleep_msec", "simtime_publish_mode",
+                    "conductor_implementation",
+                },
+            )
+            _require_fields(
+                stop_conditions,
+                "measurement.stop_conditions",
+                {
+                    "minimum_virtual_time_sec", "minimum_cpu_sample_count",
+                    "minimum_machine_sample_count",
+                },
+            )
+            _require_fields(
+                invalid_conditions,
+                "measurement.invalid_conditions",
+                {
+                    "maximum_virtual_time_sec", "maximum_wall_time_sec",
+                    "preflight_max_cpu_average_percent",
+                    "preflight_max_memory_used_percent",
+                },
+            )
+            def positive_int(mapping: dict[str, Any], key: str, *, allow_zero: bool = False) -> int:
+                value = mapping.get(key)
+                minimum = 0 if allow_zero else 1
+                if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+                    raise RecipeError(f"measurement.time_coordination.{key} must be an integer >= {minimum}")
+                return value
+
+            def nonempty(key: str) -> str:
+                value = measurement_raw.get(key)
+                if not isinstance(value, str) or not value:
+                    raise RecipeError(f"measurement.{key} must be a non-empty string")
+                return value
+
+            attempt = measurement_raw.get("attempt")
+            if isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1:
+                raise RecipeError("measurement.attempt must be an integer >= 1")
+            sampling = measurement_raw.get("sampling_interval_sec")
+            preflight_duration = measurement_raw.get("preflight_duration_sec")
+            preflight_max_cpu = invalid_conditions.get("preflight_max_cpu_average_percent")
+            preflight_max_memory = invalid_conditions.get("preflight_max_memory_used_percent")
+            minimum_virtual_time = stop_conditions.get("minimum_virtual_time_sec")
+            minimum_cpu_samples = stop_conditions.get("minimum_cpu_sample_count")
+            minimum_machine_samples = stop_conditions.get("minimum_machine_sample_count")
+            maximum_virtual_time = invalid_conditions.get("maximum_virtual_time_sec")
+            maximum_wall_time = invalid_conditions.get("maximum_wall_time_sec")
+            warmup = measurement_raw.get("warmup_virtual_time_sec")
+            if isinstance(sampling, bool) or not isinstance(sampling, (int, float)) or sampling <= 0:
+                raise RecipeError("measurement.sampling_interval_sec must be > 0")
+            if (
+                isinstance(preflight_duration, bool)
+                or not isinstance(preflight_duration, (int, float))
+                or preflight_duration <= 0
+            ):
+                raise RecipeError("measurement.preflight_duration_sec must be > 0")
+            for key, value in (
+                ("preflight_max_cpu_average_percent", preflight_max_cpu),
+                ("preflight_max_memory_used_percent", preflight_max_memory),
+            ):
+                if (
+                    isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or not 0 <= value <= 100
+                ):
+                    raise RecipeError(f"measurement.{key} must be between 0 and 100")
+            if (
+                isinstance(minimum_virtual_time, bool)
+                or not isinstance(minimum_virtual_time, (int, float))
+                or minimum_virtual_time <= 0
+            ):
+                raise RecipeError("measurement.stop_conditions.minimum_virtual_time_sec must be > 0")
+            for key, value in (
+                ("minimum_cpu_sample_count", minimum_cpu_samples),
+                ("minimum_machine_sample_count", minimum_machine_samples),
+            ):
+                if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                    raise RecipeError(
+                        f"measurement.stop_conditions.{key} must be an integer >= 1"
+                    )
+            for key, value in (
+                ("maximum_virtual_time_sec", maximum_virtual_time),
+                ("maximum_wall_time_sec", maximum_wall_time),
+            ):
+                if (
+                    isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or value <= 0
+                ):
+                    raise RecipeError(f"measurement.invalid_conditions.{key} must be > 0")
+            if maximum_virtual_time <= minimum_virtual_time:
+                raise RecipeError(
+                    "measurement.invalid_conditions.maximum_virtual_time_sec must be greater than minimum_virtual_time_sec"
+                )
+            if isinstance(warmup, bool) or not isinstance(warmup, (int, float)) or warmup < 0:
+                raise RecipeError("measurement.warmup_virtual_time_sec must be >= 0")
+            fleet_delta = positive_int(coordination, "fleet_delta_time_usec")
+            warmup_usec = int(round(float(warmup) * 1_000_000))
+            if warmup_usec % fleet_delta:
+                raise RecipeError("measurement warmup must align with fleet_delta_time_usec")
+            if measurement_raw.get("mode") != "performance":
+                raise RecipeError("the single-host MVP supports measurement.mode=performance only")
+            if visualization or show_runner_real_time_sync or land or not results_enabled:
+                raise RecipeError(
+                    "performance measurement requires visualization=false, "
+                    "show_runner_real_time_sync=false, land=false, and results.enabled=true"
+                )
+            if fleet_delta != 20_000:
+                raise RecipeError("the current ShowRunner contract requires fleet_delta_time_usec=20000")
+            if coordination.get("conductor_implementation") != "embedded":
+                raise RecipeError("single-host measurement requires conductor_implementation=embedded")
+            if coordination.get("simtime_publish_mode") != "not_applicable":
+                raise RecipeError("embedded single-host measurement requires simtime_publish_mode=not_applicable")
+            configuration_id = nonempty("configuration_id")
+            if configuration_id == "auto":
+                configuration_id = (
+                    f"uav-{drone_count:03d}-proc-{process_count:02d}"
+                )
+            measurement = PerformanceMeasurement(
+                mode="performance",
+                series=nonempty("series"),
+                configuration_id=configuration_id,
+                attempt=attempt,
+                protocol_status=nonempty("protocol_status"),
+                sampling_interval_sec=float(sampling),
+                preflight_duration_sec=float(preflight_duration),
+                preflight_max_cpu_average_percent=float(preflight_max_cpu),
+                preflight_max_memory_used_percent=float(preflight_max_memory),
+                minimum_virtual_time_sec=float(minimum_virtual_time),
+                minimum_cpu_sample_count=minimum_cpu_samples,
+                minimum_machine_sample_count=minimum_machine_samples,
+                maximum_virtual_time_sec=float(maximum_virtual_time),
+                maximum_wall_time_sec=float(maximum_wall_time),
+                warmup_virtual_time_sec=float(warmup),
+                drone_delta_time_usec=positive_int(coordination, "drone_delta_time_usec"),
+                fleet_delta_time_usec=fleet_delta,
+                conductor_delta_time_usec=positive_int(coordination, "conductor_delta_time_usec"),
+                conductor_max_delay_time_usec=positive_int(coordination, "conductor_max_delay_time_usec", allow_zero=True),
+                conductor_real_sleep_msec=positive_int(coordination, "conductor_real_sleep_msec", allow_zero=True),
+                simtime_publish_mode=str(coordination["simtime_publish_mode"]),
+                conductor_implementation=str(coordination["conductor_implementation"]),
+            )
+
     return Experiment(
         experiment_id=experiment_id,
         drone_count=drone_count,
@@ -493,6 +707,7 @@ def resolve_experiment(path: Path) -> Experiment:
         land=land,
         results_enabled=results_enabled,
         results_directory=results_directory,
+        measurement=measurement,
     )
 
 
@@ -549,7 +764,7 @@ def write_simple_yaml(path: Path, value: dict[str, Any]) -> None:
 
 
 def resolved_experiment_dict(experiment: Experiment) -> dict[str, Any]:
-    return {
+    resolved = {
         "version": 1,
         "experiment": {"id": experiment.experiment_id},
         "scale": {
@@ -581,6 +796,68 @@ def resolved_experiment_dict(experiment: Experiment) -> dict[str, Any]:
         },
         "resolved": {"foundation_build_limits": required_build_limits(experiment)},
     }
+    if experiment.measurement is not None:
+        measurement = experiment.measurement
+        resolved["measurement"] = {
+            "enabled": True,
+            "mode": measurement.mode,
+            "series": measurement.series,
+            "configuration_id": measurement.configuration_id,
+            "attempt": measurement.attempt,
+            "protocol_status": measurement.protocol_status,
+            "sampling_interval_sec": measurement.sampling_interval_sec,
+            "preflight_duration_sec": measurement.preflight_duration_sec,
+            "stop_conditions": {
+                "minimum_virtual_time_sec": measurement.minimum_virtual_time_sec,
+                "minimum_cpu_sample_count": measurement.minimum_cpu_sample_count,
+                "minimum_machine_sample_count": measurement.minimum_machine_sample_count,
+            },
+            "invalid_conditions": {
+                "maximum_virtual_time_sec": measurement.maximum_virtual_time_sec,
+                "maximum_wall_time_sec": measurement.maximum_wall_time_sec,
+                "preflight_max_cpu_average_percent": measurement.preflight_max_cpu_average_percent,
+                "preflight_max_memory_used_percent": measurement.preflight_max_memory_used_percent,
+            },
+            "warmup_virtual_time_sec": measurement.warmup_virtual_time_sec,
+            "time_coordination": {
+                "drone_delta_time_usec": measurement.drone_delta_time_usec,
+                "fleet_delta_time_usec": measurement.fleet_delta_time_usec,
+                "conductor_delta_time_usec": measurement.conductor_delta_time_usec,
+                "conductor_max_delay_time_usec": measurement.conductor_max_delay_time_usec,
+                "conductor_real_sleep_msec": measurement.conductor_real_sleep_msec,
+                "simtime_publish_mode": measurement.simtime_publish_mode,
+                "conductor_implementation": measurement.conductor_implementation,
+            },
+        }
+    return resolved
+
+
+def measurement_trial_dir(paths, experiment: Experiment) -> Path | None:
+    measurement = experiment.measurement
+    if measurement is None:
+        return None
+    return (
+        paths.recipe_root
+        / experiment.results_directory
+        / measurement.series
+        / measurement.configuration_id
+        / f"attempt-{measurement.attempt:02d}"
+    )
+
+
+def write_measurement_config(paths, experiment: Experiment) -> Path | None:
+    trial = measurement_trial_dir(paths, experiment)
+    if trial is None:
+        return None
+    payload = resolved_experiment_dict(experiment)["measurement"] | {
+        "experiment_id": experiment.experiment_id,
+        "drone_count": experiment.drone_count,
+        "process_count": experiment.process_count,
+        "trial_directory": str(trial),
+    }
+    output = paths.recipe_config / "measurement.json"
+    output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return output
 
 
 def expected_partition_counts(drone_count: int, process_count: int) -> list[int]:
@@ -690,7 +967,12 @@ def write_foundation_requirements(path: Path, experiment: Experiment) -> None:
     components = [
         (
             "hakoniwa-core-pro",
-            {"shared_memory": True, "hako_cmd": True, "python_binding": True},
+            {
+                "shared_memory": True,
+                "hako_cmd": True,
+                "python_binding": True,
+                **({"measurement_library": True} if experiment.measurement else {}),
+            },
         ),
         (
             "hakoniwa-pdu-python",
@@ -1092,8 +1374,17 @@ def write_launcher(
             asset["depends_on"] = [f"drone-service-{index - 1}"]
         service_assets.append(asset)
 
-    summary = paths.recipe_validation / "execution-summary.json"
-    show_runner = drone_root / "drone_api" / "external_rpc" / "apps" / "show_asset_runner.py"
+    trial = measurement_trial_dir(paths, experiment)
+    summary = (
+        trial / "execution-summary.json"
+        if trial is not None
+        else paths.recipe_validation / "execution-summary.json"
+    )
+    show_runner = (
+        ROOT / "tools" / "recipe" / "assets" / "drone_fleet_performance_runner.py"
+        if experiment.measurement is not None
+        else drone_root / "drone_api" / "external_rpc" / "apps" / "show_asset_runner.py"
+    )
     if not show_runner.is_file():
         raise RecipeError(f"Drone show runner not found: {show_runner}")
     show_args = [
@@ -1135,6 +1426,15 @@ def write_launcher(
         show_args.append("--real-time-sync")
     if experiment.land:
         show_args.append("--land")
+    show_env = shared_env
+    if experiment.measurement is not None:
+        show_env = {
+            "set": {
+                **shared_env["set"],
+                "HAKO_DRONE_ROOT": str(drone_root),
+                "HAKO_PERFORMANCE_CONFIG": str(paths.recipe_config / "measurement.json"),
+            }
+        }
     assets: list[dict[str, Any]] = service_assets + [
         {
             "name": "show-runner",
@@ -1142,7 +1442,7 @@ def write_launcher(
             "command": str(python),
             "args": show_args,
             "cwd": str(drone_root),
-            "env": shared_env,
+            "env": show_env,
             "depends_on": [service_assets[-1]["name"]],
             "delay_sec": 1,
         },
@@ -1277,6 +1577,7 @@ def configure(experiment_path: Path, drone_root: Path) -> int:
     requirements = paths.recipe_config / "foundation-requirements.yaml"
     write_simple_yaml(resolved, resolved_experiment_dict(experiment))
     write_foundation_requirements(requirements, experiment)
+    measurement_config = write_measurement_config(paths, experiment)
     # Launcher paths depend on the installed Foundation and Drone package,
     # so doctor/start materializes it after validating those artifacts. Never
     # leave a runnable-looking Launcher generated from an older experiment.
@@ -1308,11 +1609,14 @@ def configure(experiment_path: Path, drone_root: Path) -> int:
         + ("VSP + WebBridge + Three.js" if experiment.visualization else "disabled (headless)")
     )
     print("Scenario               : takeoff -> HAKONIWA -> hold -> finish")
+    if measurement_config is not None:
+        print(f"Measurement config     : {measurement_config}")
+        print(f"Measurement trial      : {measurement_trial_dir(paths, experiment)}")
     print("Next:")
     print(f"  python tools/foundation.py doctor --recipe {requirements}")
     print(f"  python tools/foundation.py plan --recipe {requirements}")
     print(
-        "  python tools/recipe/drone_fleet_single_host.py doctor "
+        f"  {operator_command('doctor')} "
         f"--experiment {experiment_path}"
     )
     return 0
@@ -1364,7 +1668,7 @@ def doctor(
                 if not missing_viewer_files
                 else "missing: "
                 + ", ".join(str(path) for path in missing_viewer_files)
-                + "; run 'python tools/recipe/drone_fleet_single_host.py prepare-viewer'",
+                + f"; run '{operator_command('prepare-viewer')}'",
             )
         )
     for port in ((8000, 8765, 54111) if experiment.visualization else (54111,)):
@@ -1379,9 +1683,12 @@ def doctor(
             [
                 str(python),
                 "-c",
-                "import sys; assert sys.version_info[:2] == (3, 12), sys.version; "
-                "import hakopy, hakoniwa_pdu; "
-                "import hakoniwa_pdu.apps.launcher.hako_launcher",
+                (
+                    "import sys; assert sys.version_info[:2] == (3, 12), sys.version; "
+                    "import hakopy, hakoniwa_pdu; "
+                    + ("import hakoniwa_measurement; " if experiment.measurement else "")
+                    + "import hakoniwa_pdu.apps.launcher.hako_launcher"
+                ),
             ],
             capture_output=True,
             text=True,
@@ -1403,6 +1710,7 @@ def doctor(
         "config/drone/fleets/api-current.json",
         "config/drone/fleets/services/api-current-service.json",
         "config/pdudef/drone-pdudef-current.json",
+        *(("config/measurement.json",) if experiment.measurement else ()),
     ):
         path = paths.recipe_root / relative
         checks.append((relative, path.is_file(), str(path)))
@@ -1414,7 +1722,7 @@ def doctor(
             "configured experiment matches all process partitions"
             if not materialization_errors
             else "; ".join(materialization_errors)
-            + "; run 'python tools/recipe/drone_fleet_single_host.py configure'",
+            + f"; run '{operator_command('configure')}'",
         )
     )
     failed = inspection["status"] != "SATISFIED"
@@ -1465,7 +1773,19 @@ def start(
         return 1
     experiment, _foundation, paths, _requirements = _load_workspace(experiment_path)
     system_name = platform.system()
-    summary = paths.recipe_validation / "execution-summary.json"
+    trial = measurement_trial_dir(paths, experiment)
+    if trial is not None:
+        results_root = paths.recipe_root / experiment.results_directory
+        if results_root not in trial.parents:
+            raise RecipeError(f"measurement trial escaped results root: {trial}")
+        if trial.exists():
+            shutil.rmtree(trial)
+        trial.mkdir(parents=True)
+    summary = (
+        trial / "execution-summary.json"
+        if trial is not None
+        else paths.recipe_validation / "execution-summary.json"
+    )
     if summary.exists():
         summary.unlink()
     command = _launcher_command(paths, system_name, "start")
@@ -1477,11 +1797,11 @@ def start(
     if rc == 0:
         print("The experiment continues in the background.")
         print("Next:")
-        print("  python tools/recipe/drone_fleet_single_host.py status")
-        print("  python tools/recipe/drone_fleet_single_host.py smoke")
+        print(f"  {operator_command('status')}")
+        print(f"  {operator_command('smoke')}")
         if experiment.visualization:
-            print("  python tools/recipe/drone_fleet_single_host.py open-viewer")
-        print("  python tools/recipe/drone_fleet_single_host.py stop")
+            print(f"  {operator_command('open-viewer')}")
+        print(f"  {operator_command('stop')}")
         print(f"Session: {session_file(paths)}")
         print(f"Logs   : {paths.recipe_logs}")
     return rc
@@ -1496,6 +1816,23 @@ def control(experiment_path: Path, drone_root: Path, operation: str) -> int:
 
 def smoke(experiment_path: Path, timeout_sec: float) -> int:
     experiment, _foundation, paths, _requirements = _load_workspace(experiment_path)
+    trial = measurement_trial_dir(paths, experiment)
+    if trial is not None:
+        result = trial / "result.json"
+        print(f"Measurement result: {result}")
+        deadline = time.monotonic() + timeout_sec
+        while time.monotonic() < deadline:
+            if result.is_file():
+                try:
+                    payload = json.loads(result.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    time.sleep(0.2)
+                    continue
+                print(json.dumps(payload, indent=2))
+                return 0 if payload.get("status") == "success" else 1
+            time.sleep(0.2)
+        print(f"[NG] measurement result was not produced within {timeout_sec}s: {result}")
+        return 1
     summary = paths.recipe_validation / "execution-summary.json"
     print(
         "Verifying the workload already started by 'start'; smoke does not start "

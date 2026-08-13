@@ -1,0 +1,132 @@
+id: drone-fleet-single-process-scaling
+title: Native Drone Fleet Single-process Performance Measurement
+recipe_version: 0.1
+goal:
+  user_request: 1台のホスト上で箱庭ドローンの機体数を変え、単一シミュレータプロセスの性能を再現可能な条件で測定したい
+  description: >
+    Run a headless single-process Drone Fleet performance series while changing
+    only the UAV count. Measurement executes in the existing ShowRunner asset
+    and stops after Formation completion plus the configured minimum virtual
+    time and machine-sample conditions.
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - The native Drone Fleet Recipe supports the declared UAV-count matrix with one process.
+    - Core PRO provides cross-platform measurement, output, and validation APIs.
+validation:
+  status: partially_verified
+  summary: Single-process measurements through 128 UAVs are verified on native macOS; the complete automated matrix remains to be executed.
+  steps:
+    - id: macos_preflight
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-business-pack
+          path: tools/recipe/test_drone_fleet_performance.py
+          revision: local-working-tree
+    - id: linux_preflight
+      status: not_tested
+      evidence: []
+constraints:
+  - single-host
+  - native-execution-only
+  - single-simulator-process
+  - headless-performance-mode
+  - no-real-time-pacing
+  - generated-results-stay-under-business-pack-work
+target_environment:
+  required_for: performance-measurement
+  status: specified
+  os: macOS | Linux
+  os_version: current-supported-host
+  architecture: host-native
+  execution_mode: native
+  runtimes:
+    - name: Python
+      required: true
+      version: "3.12"
+      path: work/foundation/install/python
+  hakoniwa:
+    install_prefix: work/foundation/install
+    components_built:
+      - hakoniwa-core-pro
+      - hakoniwa-pdu-python
+      - hakoniwa-pdu-endpoint
+execution_environment:
+  workspace:
+    mode: managed
+  required_for: performance-measurement
+  status: specified
+  os: host-native
+  os_version: current-supported-host
+  architecture: host-native
+  execution_mode: native
+  gui:
+    required: false
+    status: disabled
+  shared_memory:
+    required: true
+    access: local-host
+  python:
+    environment: foundation-venv
+    path: work/foundation/install/python
+    version: "3.12"
+    hakopy_available: required
+  hakoniwa:
+    install_prefix: work/foundation/install
+    hako_cmd_access: required
+foundation_contract:
+  mode: required
+  reason: The runner requires hakopy and the Core PRO measurement library from the managed Foundation.
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      shared_memory: true
+      hako_cmd: true
+      python_binding: true
+      measurement_library: true
+  hakoniwa-pdu-python:
+    version:
+      min: 1.6.5
+    capabilities:
+      hako_launcher: true
+      launcher_background_lifecycle: true
+      shm_backend: true
+      external_rpc: true
+  hakoniwa-pdu-endpoint:
+    capabilities:
+      hakoniwa_core: true
+      core_callback: true
+components:
+  - id: hakoniwa-core-pro
+    roles: []
+  - id: hakoniwa-pdu-python
+    roles: []
+  - id: hakoniwa-pdu-endpoint
+    roles: []
+connections: []
+data_flow:
+  - experiment YAML -> generated fleet, show, and measurement configuration
+  - ShowRunner measurement boundary -> raw machine samples and validated result JSON
+time_model:
+  mode: virtual-time-performance
+  notes:
+    - Performance mode disables real-time pacing and temporal observation.
+    - Time-coordination parameters are recorded in every result.
+artifact_sets: {}
+artifacts: []
+missing_pieces:
+  - Linux execution of the complete Experiment A matrix remains to be verified.
+demo:
+  steps:
+    - command: python3.12 tools/recipe/drone_fleet_performance_a.py plan
+    - command: python3.12 tools/recipe/drone_fleet_performance_a.py run
+    - command: python3.12 tools/recipe/drone_fleet_performance_a.py summarize
+expected_result: >
+  result.json reports status=success, aligned virtual-time steps, finite RTF,
+  valid CPU and memory samples, and passed validation.
+source_catalogs:
+  - component_id: hakoniwa-core-pro
+  - component_id: hakoniwa-pdu-python
+  - component_id: hakoniwa-pdu-endpoint
+source_artifacts: []

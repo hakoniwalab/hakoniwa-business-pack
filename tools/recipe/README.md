@@ -4,6 +4,102 @@
 Foundation、Catalog、workspace全体を管理する汎用ツールは親の`tools/`に置き、
 Recipe固有のプロセス構成、Docker構成、smoke testはここへ分離します。
 
+## Drone Fleet性能測定
+
+ブラウザ表示用のDrone Fleetデモとは分離し、可視化なし、実時間同期なしで
+測定します。単一条件の確認では、Business Pack workspaceへ入ってから次を
+実行します。
+
+```bash
+python3.12 tools/recipe/drone_fleet_performance.py configure
+python3.12 tools/foundation.py plan \
+  --recipe work/recipes/drone-fleet-single-process-scaling/config/foundation-requirements.yaml
+python3.12 tools/foundation.py build \
+  --recipe work/recipes/drone-fleet-single-process-scaling/config/foundation-requirements.yaml
+python3.12 tools/recipe/drone_fleet_performance.py doctor
+python3.12 tools/recipe/drone_fleet_performance.py start
+python3.12 tools/recipe/drone_fleet_performance.py smoke
+python3.12 tools/recipe/drone_fleet_performance.py stop
+```
+
+`start`は選択されたattemptディレクトリだけを消してから起動するため、以前の
+raw sampleが新しい試行へ混入しません。最小パスの結果は次へ保存されます。
+
+```text
+work/recipes/drone-fleet-single-process-scaling/results/
+  single-process-scaling/uav-001-proc-01/attempt-01/
+    preflight-machine-samples.jsonl
+    machine-samples.jsonl
+    result.json
+```
+
+全アセット起動後、Takeoff投入前に、測定区間とは独立したマシン負荷の
+preflightを行います。CPU使用率とメモリ使用量・使用率のraw sampleは
+`preflight-machine-samples.jsonl`、集約値は`result.json`の
+`machine_preflight`へ保存します。実験YAMLの
+`invalid_conditions.preflight_max_cpu_average_percent`または
+`invalid_conditions.preflight_max_memory_used_percent`を超えた試行は`invalid`となり、性能値を
+採用しません。preflightの実時間はRTFや1ステップ平均実行時間には含みません。
+CPU使用率は累積カウンタの差分を必要とするため、測定区間がOSのカウンタ更新
+周期より短い場合は`cpu_sample_count: 0`、CPU集約値は`null`となり、その試行を
+validationで無効とします。監視周期を過度に短くして測定対象へ負荷を加えるのでは
+なく、本測定ではCPUサンプルが得られるだけの測定区間を確保してください。
+
+測定区間はTakeoff投入から始まります。Formation完了後、`stop_conditions`の最小virtual time、CPU有効
+サンプル数、マシンサンプル数をすべて満たした時点で終了します。条件未達のまま
+`invalid_conditions`のvirtual-timeまたはwall-time上限へ達した試行は無効です。
+Fleet処理と測定全体の合否は、次のログだけでも確認できます。
+
+```bash
+grep '^RESULT:' \
+  work/recipes/drone-fleet-single-process-scaling/logs/show-runner.out
+```
+
+各phaseには対象機数、成功数、失敗数、失敗した機体名が出力され、最後の
+`drone_fleet_performance`行はFleet、測定、validationをまとめて`PASS`または
+`FAIL`で示します。同じphase集約は`result.json`の
+`metadata.fleet_phase_results`にも保存されます。
+
+### Experiment A：機体数の連続測定
+
+単一シミュレータプロセスのまま機体数だけを変える系列は、実験YAMLの
+`matrix.drone_count`を順番に実行します。
+
+```bash
+python3.12 tools/recipe/drone_fleet_performance_a.py plan
+python3.12 tools/recipe/drone_fleet_performance_a.py run
+python3.12 tools/recipe/drone_fleet_performance_a.py summarize
+```
+
+`run`は各条件について既存operatorの`configure -> doctor -> start -> smoke -> stop`
+を実行します。既存の`result.json`が一つでもある場合、通常実行は暗黙の上書きを
+避けるため開始しません。中断後は次で、記録済みattemptを保存してスキップします。
+
+```bash
+python3.12 tools/recipe/drone_fleet_performance_a.py run --resume
+```
+
+マシン負荷preflightが失敗した場合は、その後の条件も比較不能になるため系列全体を
+停止します。個別条件の測定・validation失敗は結果を保存し、後続条件を継続します。
+集約結果は次に生成されます。
+
+```text
+work/recipes/drone-fleet-single-process-scaling/results/
+  single-process-scaling/summary/
+    experiment-a.json
+    experiment-a.csv
+```
+
+集約後、RTF、1ステップ平均実行時間、CPU、メモリを独立した縮尺の4区画へ
+まとめた1枚のSVGを生成できます。RTFとステップ時間には対数縮尺を使用するため、
+小規模条件と大規模条件を同じ図で比較できます。
+
+```bash
+python3.12 tools/recipe/drone_fleet_performance_plot.py
+open work/recipes/drone-fleet-single-process-scaling/results/\
+single-process-scaling/summary/plots/scaling-overview.svg
+```
+
 ## 配置規約
 
 `tools/`直下には、複数Recipeから共通利用する次の責務だけを置きます。
