@@ -31,6 +31,38 @@ class RecipeGuideTest(unittest.TestCase):
                 self.assertEqual(data["id"], path.stem)
                 self.assertIn("demo", data)
 
+    def test_drone_performance_guides_cover_linux_preparation_and_temporal_run(self) -> None:
+        recipe_a = self.recipe_dir / "drone-fleet-single-process-scaling.yaml"
+        data_a = guide.load_recipe(recipe_a)
+        commands_a = [item.command for item in guide._command_items(data_a, recipe_a)]
+        self.assertIn(
+            "python tools/recipe/drone_fleet_single_host.py prepare-native",
+            commands_a,
+        )
+        self.assertIn(
+            "python tools/recipe/drone_fleet_performance_a.py run", commands_a
+        )
+        self.assertIn(
+            "python tools/recipe/drone_fleet_performance.py stop", commands_a
+        )
+
+        recipe_b = self.recipe_dir / "drone-fleet-multi-process-scaling.yaml"
+        data_b = guide.load_recipe(recipe_b)
+        commands_b = [item.command for item in guide._command_items(data_b, recipe_b)]
+        self.assertIn(
+            "python tools/recipe/drone_fleet_single_host.py prepare-native",
+            commands_b,
+        )
+        self.assertIn(
+            "python tools/recipe/drone_fleet_performance_b.py run", commands_b
+        )
+        self.assertIn(
+            "python tools/recipe/drone_fleet_temporal_b.py run", commands_b
+        )
+        self.assertIn(
+            "python tools/recipe/drone_fleet_performance_b.py stop", commands_b
+        )
+
     def test_top_level_tools_are_repository_wide_contracts(self) -> None:
         expected = {
             "catalog_doctor.rb",

@@ -86,7 +86,7 @@ class DroneFleetPerformanceTest(unittest.TestCase):
                 foundation_python=root / "python",
             )
             paths.recipe_config.mkdir(parents=True)
-            binary = root / "drone-service"
+            binary = root / "linux-main_hako_drone_service"
             python = root / "python3"
             binary.touch()
             python.touch()
@@ -94,7 +94,7 @@ class DroneFleetPerformanceTest(unittest.TestCase):
                 recipe, "resolve_foundation_python", return_value=python
             ):
                 launcher_path = recipe.write_launcher(
-                    paths, root / "drone", root / "viewer", experiment, "Darwin"
+                    paths, root / "drone", root / "viewer", experiment, "Linux"
                 )
             launcher = json.loads(launcher_path.read_text(encoding="utf-8"))
             show = next(asset for asset in launcher["assets"] if asset["name"] == "show-runner")
@@ -102,6 +102,10 @@ class DroneFleetPerformanceTest(unittest.TestCase):
             self.assertIn("HAKO_PERFORMANCE_CONFIG", show["env"]["set"])
             summary_index = show["args"].index("--summary-json") + 1
             self.assertIn("attempt-01/execution-summary.json", show["args"][summary_index])
+            service = next(
+                asset for asset in launcher["assets"] if asset["name"] == "drone-service-1"
+            )
+            self.assertEqual(service["command"], str(binary))
 
     def test_experiment_a_matrix_is_ordered_and_single_process(self) -> None:
         base, counts, attempts = matrix.load_matrix(EXPERIMENT)

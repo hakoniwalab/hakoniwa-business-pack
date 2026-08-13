@@ -294,6 +294,28 @@ results:
                 (drone_root / "lnx" / "linux-drone_visual_state_publisher").is_file()
             )
 
+    def test_linux_runtime_resolves_distribution_and_ld_library_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths = foundation.resolve_workspace(root, recipe.RECIPE_ID)
+            foundation.prepare_workspace(paths)
+            python = paths.foundation_python / "bin" / "python3"
+            python.parent.mkdir(parents=True, exist_ok=True)
+            python.touch()
+            drone_root = root / "hakoniwa-drone-core"
+            binary = drone_root / "lnx" / "linux-main_hako_drone_service"
+            binary.parent.mkdir(parents=True)
+            binary.touch()
+
+            self.assertEqual(
+                recipe.resolve_drone_binary(drone_root, "Linux"), binary.absolute()
+            )
+            with mock.patch.dict(recipe.os.environ, {"PATH": "/usr/bin"}, clear=True):
+                environment = recipe.runtime_environment(paths, drone_root, "Linux")
+            self.assertIn(str(paths.install_prefix / "lib"), environment["LD_LIBRARY_PATH"])
+            self.assertIn(str(drone_root / "lib"), environment["LD_LIBRARY_PATH"])
+            self.assertNotIn("DYLD_LIBRARY_PATH", environment)
+
     def test_prepare_native_rejects_archive_path_traversal(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

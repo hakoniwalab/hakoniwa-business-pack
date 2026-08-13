@@ -16,7 +16,7 @@ feasibility:
     - Core PRO provides cross-platform measurement, output, and validation APIs.
 validation:
   status: partially_verified
-  summary: Single-process measurements through 128 UAVs are verified on native macOS; the complete automated matrix remains to be executed.
+  summary: The complete eight-condition preflight matrix is verified on native macOS; WSL2/Ubuntu execution remains to be verified.
   steps:
     - id: macos_preflight
       status: verified
@@ -116,12 +116,49 @@ time_model:
 artifact_sets: {}
 artifacts: []
 missing_pieces:
-  - Linux execution of the complete Experiment A matrix remains to be verified.
+  - WSL2/Ubuntu execution of the complete Experiment A matrix remains to be verified.
+experiment_contract:
+  source: recipes/experiments/drone-fleet-performance/single-process-scaling.yaml
+  user_inputs:
+    - matrix.drone_count
+    - matrix.attempts
+    - measurement.protocol_status
+    - measurement.invalid_conditions
+  resolution:
+    - Every matrix condition uses one native Drone simulator process.
+    - Results are stored under the managed Business Pack workspace and are never overwritten implicitly.
 demo:
+  prerequisites:
+    - id: prepare_native
+      command: python tools/recipe/drone_fleet_single_host.py prepare-native
+      expected: Clone the pinned public Drone Core source when missing and install the official host-native macOS or Linux distribution.
   steps:
-    - command: python3.12 tools/recipe/drone_fleet_performance_a.py plan
-    - command: python3.12 tools/recipe/drone_fleet_performance_a.py run
-    - command: python3.12 tools/recipe/drone_fleet_performance_a.py summarize
+    - id: inspect_matrix
+      command: python tools/recipe/drone_fleet_performance_a.py plan
+      expected: Show all eight UAV-count conditions without starting a simulation.
+    - id: run_matrix
+      command: python tools/recipe/drone_fleet_performance_a.py run
+      expected: Execute every pending condition and preserve one validated result per UAV count.
+    - id: resume_matrix
+      command: python tools/recipe/drone_fleet_performance_a.py run --resume
+      expected: Preserve recorded results and continue only pending conditions after interruption.
+    - id: summarize_matrix
+      command: python tools/recipe/drone_fleet_performance_a.py summarize
+      expected: Generate the Experiment A JSON and CSV summaries.
+    - id: plot_results
+      command: python tools/recipe/drone_fleet_performance_plot.py
+      expected: Generate the dependency-free SVG containing RTF, step time, CPU, and memory panels.
+    - id: emergency_stop
+      command: python tools/recipe/drone_fleet_performance.py stop
+      expected: Terminate the current single-condition Launcher session after an interrupted matrix run.
+  cleanup:
+    expected_behavior:
+      - The current Launcher session reaches a terminal state without deleting recorded measurement results.
+    verification_checks:
+      - Confirm the current Launcher session is no longer RUNNING before restarting the matrix.
+      - Confirm no native Drone service from the interrupted condition remains.
+    cautions:
+      - If a matrix run is interrupted while a condition is active, run the single-condition stop command before restarting.
 expected_result: >
   result.json reports status=success, aligned virtual-time steps, finite RTF,
   valid CPU and memory samples, and passed validation.

@@ -61,6 +61,14 @@ class DroneFleetPerformancePlotTest(unittest.TestCase):
         self.assertIn("Whole-machine Memory", svg)
         self.assertIn("RTF = 1", svg)
 
+    def test_process_count_plot_uses_multi_process_title(self) -> None:
+        payload = row(128, 2.0)
+        payload["process_count"] = 4
+        rows, rejected = plot.aggregate([payload], "process_count")
+        svg = plot.render_svg(rows, "process_count", rejected)
+        self.assertIn("Drone Fleet Multi-process Scaling", svg)
+        self.assertNotIn("Drone Fleet Single-process Scaling", svg)
+
     def test_main_writes_default_plot_beside_summary(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -75,6 +83,26 @@ class DroneFleetPerformancePlotTest(unittest.TestCase):
             output = root / "plots" / "scaling-overview.svg"
             self.assertTrue(output.is_file())
         self.assertEqual(rc, 0)
+
+    def test_main_rejects_non_svg_output_extension(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            summary = root / "experiment-b.json"
+            summary.write_text(
+                '{"results": [' + __import__("json").dumps(row(128, 2.0)) + "]}",
+                encoding="utf-8",
+            )
+            rc = plot.main(
+                [
+                    str(summary),
+                    "--x-field",
+                    "process_count",
+                    "--output",
+                    str(root / "experiment-b.png"),
+                ]
+            )
+            self.assertFalse((root / "experiment-b.png").exists())
+        self.assertEqual(rc, 2)
 
 
 if __name__ == "__main__":

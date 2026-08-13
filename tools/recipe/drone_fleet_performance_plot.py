@@ -316,6 +316,11 @@ def render_svg(rows: list[dict[str, Any]], x_field: str, rejected: int) -> str:
         (outer, top_header + panel_height + gap, panel_width, panel_height),
         (outer + panel_width + gap, top_header + panel_height + gap, panel_width, panel_height),
     ]
+    main_title = (
+        "Drone Fleet Multi-process Scaling"
+        if x_field == "process_count"
+        else "Drone Fleet Single-process Scaling"
+    )
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{WIDTH}" height="{HEIGHT}" viewBox="0 0 {WIDTH} {HEIGHT}" role="img" aria-labelledby="title desc">',
         '<title id="title">Drone Fleet scaling overview</title>',
@@ -336,7 +341,7 @@ def render_svg(rows: list[dict[str, Any]], x_field: str, rejected: int) -> str:
         .reference-label { font-size: 11px; fill: #4b5563; }
         </style>""",
         f'<rect class="background" width="{WIDTH}" height="{HEIGHT}"/>',
-        text(WIDTH / 2, 32, "Drone Fleet Single-process Scaling", text_anchor="middle", class_="main-title"),
+        text(WIDTH / 2, 32, main_title, text_anchor="middle", class_="main-title"),
         text(WIDTH / 2, 56, subtitle, text_anchor="middle", class_="subtitle"),
     ]
     parts += render_panel(
@@ -420,6 +425,10 @@ def main(argv: list[str] | None = None) -> int:
             if args.output is not None
             else summary.parent / "plots" / "scaling-overview.svg"
         )
+        if output.suffix.lower() != ".svg":
+            raise PlotError(
+                f"plot output must use the .svg extension; the renderer writes SVG: {output}"
+            )
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(render_svg(rows, args.x_field, rejected), encoding="utf-8")
         print(f"Scaling overview: {output}")

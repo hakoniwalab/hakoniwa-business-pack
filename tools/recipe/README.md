@@ -96,9 +96,105 @@ work/recipes/drone-fleet-single-process-scaling/results/
 
 ```bash
 python3.12 tools/recipe/drone_fleet_performance_plot.py
-open work/recipes/drone-fleet-single-process-scaling/results/\
+```
+
+生成後は次のSVGをmacOS、Linux、またはWindows側のブラウザ／画像ビューアで開きます。
+
+```text
+work/recipes/drone-fleet-single-process-scaling/results/
 single-process-scaling/summary/plots/scaling-overview.svg
 ```
+
+### Experiment B：プロセス数の連続測定
+
+同一ホスト上で128機の論理ワークロードを固定し、シミュレータプロセス数だけを
+`1, 2, 4, 6, 8, 12, 15`へ変える系列です。Experiment Aと同じ組み込み
+Conductorを使用し、外部Conductor PROはマルチホストのExperiment Cから使用します。
+各条件では128機をプロセス間へ可能な限り均等に静的分割します。
+
+```bash
+python3.12 tools/recipe/drone_fleet_performance_b.py plan
+python3.12 tools/recipe/drone_fleet_performance_b.py run
+python3.12 tools/recipe/drone_fleet_performance_b.py summarize
+```
+
+`run`は系列全体を前景で管理します。別端末から現在のLauncher sessionを確認・停止
+する場合は、`status`または`stop`を使用できます。
+
+```bash
+python3.12 tools/recipe/drone_fleet_performance_b.py status
+python3.12 tools/recipe/drone_fleet_performance_b.py stop
+```
+
+中断後に記録済みattemptを保持して再開する場合は、次を使用します。
+
+```bash
+python3.12 tools/recipe/drone_fleet_performance_b.py run --resume
+```
+
+Experiment Bのマシン負荷preflightは、プロセス数そのものの負荷を外部負荷と
+誤認しないよう、各条件のDrone Serviceを起動する前に実施します。不合格または
+failedのattemptは`--resume`だけでは再利用しません。該当attemptを`rejected/`へ
+退避して再測定し、成功済み条件から続ける場合は次を使用します。
+
+```bash
+python3.12 tools/recipe/drone_fleet_performance_b.py run \
+  --resume --rerun-invalid
+```
+
+集約結果は`work/recipes/drone-fleet-multi-process-scaling/results/`以下に保存され、
+各プロセス数の中央値、最小・最大ステップ時間、相対ばらつき、追加試行の要否を
+`experiment-b.json`と`experiment-b-aggregate.csv`へ記録します。現在の
+各条件は3試行します。各試行の開始前には、最大60秒の範囲で1秒preflight窓を
+繰り返し、設定されたCPU・メモリ閾値内へ落ち着いてからAssetを起動します。
+ステップ時間の相対ばらつきが5%を超えるかfailureを含む条件だけ5試行へ増やします。
+必要回数が揃うまでは代表プロセス数を選定せず、
+`selection_status: additional_runs_required`とします。測定契約を変更して全条件を
+取り直す場合は、既存系列を削除せず退避する`--restart-series`を使用します。
+
+3試行の集計後、追加対象だけattempt 4・5を実行するには`extend`を使用します。
+`extend`は初期3試行を変更せず、`escalation_required: true`のプロセス数だけを
+追加測定して5試行で再集計します。
+
+```bash
+python3.12 tools/recipe/drone_fleet_performance_b.py extend
+```
+
+各attemptの開始前には、前回のnative Drone Serviceが残っていないことも検査します。
+Launcherが`TERMINATED`を返した後も今回起動したプロセスが残った場合は、PID差分で
+Recipe所有プロセスだけを終了し、実プロセスの消滅を確認してから次attemptへ進みます。
+
+```bash
+python3.12 tools/recipe/drone_fleet_performance_b.py run --restart-series
+```
+
+```bash
+python3.12 tools/recipe/drone_fleet_performance_plot.py \
+  work/recipes/drone-fleet-multi-process-scaling/results/\
+multi-process-scaling/summary/experiment-b.json \
+  --x-field process_count
+```
+
+生成後は次のSVGをmacOS、Linux、またはWindows側のブラウザ／画像ビューアで開きます。
+
+```text
+work/recipes/drone-fleet-multi-process-scaling/results/
+multi-process-scaling/summary/plots/scaling-overview.svg
+```
+
+Experiment Bのperformance runは公平性のため時刻observerを無効にします。性能系列の
+完了後、128機の2プロセスと15プロセスについて、専用Temporal Validationを実行します。
+
+```bash
+python3.12 tools/recipe/drone_fleet_temporal_b.py plan
+python3.12 tools/recipe/drone_fleet_temporal_b.py run
+python3.12 tools/recipe/drone_fleet_temporal_b.py summarize
+```
+
+時刻観測結果はperformance系列と混在させず、`single-host-temporal-validation/`へ
+保存します。各runは`temporal-samples.jsonl`、lagのmedian / p95 / maximum、
+accepted / rejected sample数、acceptance ratioを記録します。Temporal Validationの
+wall-clock値はExperiment Bの代表性能値には使用しません。
 
 ## 配置規約
 
@@ -125,6 +221,10 @@ Recipe固有ライフサイクルを実装する場合も、このディレク�
 - `drone_gamepad_exhibition.py`
 - `drone_shibuya_gamepad.py`
 - `drone_fleet_single_host.py`
+- `drone_fleet_multi_process.py`
+- `drone_fleet_performance_a.py`
+- `drone_fleet_performance_b.py`
+- `drone_fleet_temporal_b.py`
 - `shadow_hand_foxglove.py`
 - `turtlebot3_godot_exhibition.py`
 - `mujoco_turtlebot3_mbody.py`

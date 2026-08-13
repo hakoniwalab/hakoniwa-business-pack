@@ -82,7 +82,9 @@ class PerformanceMeasurement:
     attempt: int
     protocol_status: str
     sampling_interval_sec: float
+    temporal_sampling_interval_usec: int | None
     preflight_duration_sec: float
+    preflight_settle_timeout_sec: float
     preflight_max_cpu_average_percent: float
     preflight_max_memory_used_percent: float
     minimum_virtual_time_sec: float
@@ -527,7 +529,9 @@ def resolve_experiment(path: Path) -> Experiment:
             {
                 "enabled", "mode", "series", "configuration_id", "attempt",
                 "protocol_status", "sampling_interval_sec", "warmup_virtual_time_sec",
-                "preflight_duration_sec", "stop_conditions",
+                "temporal_sampling_interval_usec",
+                "preflight_duration_sec", "preflight_settle_timeout_sec",
+                "stop_conditions",
                 "invalid_conditions", "time_coordination",
             },
         )
@@ -583,6 +587,9 @@ def resolve_experiment(path: Path) -> Experiment:
                 raise RecipeError("measurement.attempt must be an integer >= 1")
             sampling = measurement_raw.get("sampling_interval_sec")
             preflight_duration = measurement_raw.get("preflight_duration_sec")
+            preflight_settle_timeout = measurement_raw.get(
+                "preflight_settle_timeout_sec", preflight_duration
+            )
             preflight_max_cpu = invalid_conditions.get("preflight_max_cpu_average_percent")
             preflight_max_memory = invalid_conditions.get("preflight_max_memory_used_percent")
             minimum_virtual_time = stop_conditions.get("minimum_virtual_time_sec")
@@ -599,6 +606,15 @@ def resolve_experiment(path: Path) -> Experiment:
                 or preflight_duration <= 0
             ):
                 raise RecipeError("measurement.preflight_duration_sec must be > 0")
+            if (
+                isinstance(preflight_settle_timeout, bool)
+                or not isinstance(preflight_settle_timeout, (int, float))
+                or preflight_settle_timeout < preflight_duration
+            ):
+                raise RecipeError(
+                    "measurement.preflight_settle_timeout_sec must be >= "
+                    "preflight_duration_sec"
+                )
             for key, value in (
                 ("preflight_max_cpu_average_percent", preflight_max_cpu),
                 ("preflight_max_memory_used_percent", preflight_max_memory),
@@ -643,8 +659,31 @@ def resolve_experiment(path: Path) -> Experiment:
             warmup_usec = int(round(float(warmup) * 1_000_000))
             if warmup_usec % fleet_delta:
                 raise RecipeError("measurement warmup must align with fleet_delta_time_usec")
-            if measurement_raw.get("mode") != "performance":
-                raise RecipeError("the single-host MVP supports measurement.mode=performance only")
+            mode = measurement_raw.get("mode")
+            if mode not in {"performance", "temporal"}:
+                raise RecipeError(
+                    "single-host measurement.mode must be performance or temporal"
+                )
+            temporal_sampling = measurement_raw.get(
+                "temporal_sampling_interval_usec"
+            )
+            if mode == "temporal":
+                if (
+                    isinstance(temporal_sampling, bool)
+                    or not isinstance(temporal_sampling, int)
+                    or temporal_sampling < fleet_delta
+                    or temporal_sampling % fleet_delta
+                ):
+                    raise RecipeError(
+                        "temporal measurement requires "
+                        "temporal_sampling_interval_usec to be a positive multiple "
+                        "of fleet_delta_time_usec"
+                    )
+            elif temporal_sampling is not None:
+                raise RecipeError(
+                    "performance measurement must not set "
+                    "temporal_sampling_interval_usec"
+                )
             if visualization or show_runner_real_time_sync or land or not results_enabled:
                 raise RecipeError(
                     "performance measurement requires visualization=false, "
@@ -662,13 +701,15 @@ def resolve_experiment(path: Path) -> Experiment:
                     f"uav-{drone_count:03d}-proc-{process_count:02d}"
                 )
             measurement = PerformanceMeasurement(
-                mode="performance",
+                mode=str(mode),
                 series=nonempty("series"),
                 configuration_id=configuration_id,
                 attempt=attempt,
                 protocol_status=nonempty("protocol_status"),
                 sampling_interval_sec=float(sampling),
+                temporal_sampling_interval_usec=temporal_sampling,
                 preflight_duration_sec=float(preflight_duration),
+                preflight_settle_timeout_sec=float(preflight_settle_timeout),
                 preflight_max_cpu_average_percent=float(preflight_max_cpu),
                 preflight_max_memory_used_percent=float(preflight_max_memory),
                 minimum_virtual_time_sec=float(minimum_virtual_time),
@@ -807,6 +848,9 @@ def resolved_experiment_dict(experiment: Experiment) -> dict[str, Any]:
             "protocol_status": measurement.protocol_status,
             "sampling_interval_sec": measurement.sampling_interval_sec,
             "preflight_duration_sec": measurement.preflight_duration_sec,
+            "preflight_settle_timeout_sec": (
+                measurement.preflight_settle_timeout_sec
+            ),
             "stop_conditions": {
                 "minimum_virtual_time_sec": measurement.minimum_virtual_time_sec,
                 "minimum_cpu_sample_count": measurement.minimum_cpu_sample_count,
@@ -829,6 +873,10 @@ def resolved_experiment_dict(experiment: Experiment) -> dict[str, Any]:
                 "conductor_implementation": measurement.conductor_implementation,
             },
         }
+        if measurement.temporal_sampling_interval_usec is not None:
+            resolved["measurement"]["temporal_sampling_interval_usec"] = (
+                measurement.temporal_sampling_interval_usec
+            )
     return resolved
 
 

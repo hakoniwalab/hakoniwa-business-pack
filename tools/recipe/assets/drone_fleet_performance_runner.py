@@ -6,6 +6,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -28,7 +29,9 @@ def _load_upstream():
 upstream = _load_upstream()
 
 from hakoniwa_measurement import (  # noqa: E402
+    HakoniwaTimeObserver,
     JsonLinesWriter,
+    MachineResourceResult,
     MachineResourceMonitor,
     MeasurementResultSet,
     SimulationExecutionMeter,
@@ -49,10 +52,22 @@ class PerformanceShowStateMachine(upstream.AssetShowStateMachine):
         self.machine_monitor = MachineResourceMonitor(
             float(self.measurement_config["sampling_interval_sec"])
         )
+        self.measurement_mode = str(self.measurement_config["mode"])
+        self.temporal_observer = (
+            HakoniwaTimeObserver.from_hakopy()
+            if self.measurement_mode == "temporal"
+            else None
+        )
+        self.temporal_samples_writer: JsonLinesWriter | None = None
+        self.temporal_sampling_interval_usec = self.measurement_config.get(
+            "temporal_sampling_interval_usec"
+        )
+        self.next_temporal_sample_world_usec: int | None = None
         self.samples_writer: JsonLinesWriter | None = None
         self.machine_preflight = None
         self.preflight_passed: bool | None = None
         self.preflight_collected = False
+        self.preflight_boundary_start = "after_asset_activation_before_takeoff"
         self.measurement_target_world_usec: int | None = None
         self.measurement_minimum_world_usec: int | None = None
         self.measurement_start_monotonic_ns: int | None = None
@@ -135,11 +150,42 @@ class PerformanceShowStateMachine(upstream.AssetShowStateMachine):
         self.measurement_start_monotonic_ns = now_ns
         self.machine_monitor.start(now_ns)
         self.samples_writer = JsonLinesWriter(self.trial_dir / "machine-samples.jsonl")
+        if self.temporal_observer is not None:
+            self.temporal_samples_writer = JsonLinesWriter(
+                self.trial_dir / "temporal-samples.jsonl"
+            )
+            self.next_temporal_sample_world_usec = world_usec
         self.measurement_started = True
         print(f"INFO: performance_measurement_start world_usec={world_usec}")
 
     def _collect_machine_preflight(self) -> None:
         if self.preflight_collected:
+            return
+        external_path = self.measurement_config.get("host_preflight_result_path")
+        if external_path is not None:
+            payload = json.loads(Path(external_path).read_text(encoding="utf-8"))
+            machine = payload.get("machine")
+            if not isinstance(machine, dict):
+                raise RuntimeError("host preflight result does not contain machine data")
+            self.machine_preflight = MachineResourceResult(**machine)
+            self.preflight_passed = payload.get("passed") is True
+            self.preflight_boundary_start = str(
+                payload.get("boundary", "before_asset_activation")
+            )
+            samples_path = payload.get("samples_path")
+            if isinstance(samples_path, str):
+                shutil.copyfile(
+                    samples_path,
+                    self.trial_dir / "preflight-machine-samples.jsonl",
+                )
+            self.preflight_collected = True
+            print(
+                "RESULT: machine_preflight "
+                f"samples={self.machine_preflight.sample_count} "
+                f"cpu_average_percent={self.machine_preflight.cpu_average_percent} "
+                "source=before_asset_activation "
+                f"status={'PASS' if self.preflight_passed else 'FAIL'}"
+            )
             return
         duration_sec = float(self.measurement_config["preflight_duration_sec"])
         interval_sec = float(self.measurement_config["sampling_interval_sec"])
@@ -192,6 +238,25 @@ class PerformanceShowStateMachine(upstream.AssetShowStateMachine):
         if sample is not None and self.samples_writer is not None:
             self.samples_writer.write(sample)
 
+    def _poll_temporal(self) -> None:
+        if (
+            not self.measurement_started
+            or self.measurement_finished
+            or self.temporal_observer is None
+            or self.temporal_samples_writer is None
+            or self.next_temporal_sample_world_usec is None
+        ):
+            return
+        world_usec = int(upstream.hakopy.simulation_time())
+        if world_usec < self.next_temporal_sample_world_usec:
+            return
+        sample = self.temporal_observer.observe()
+        self.temporal_samples_writer.write(sample)
+        interval = int(self.temporal_sampling_interval_usec)
+        self.next_temporal_sample_world_usec = (
+            (world_usec // interval) + 1
+        ) * interval
+
     def _finish_measurement(self) -> None:
         if not self.measurement_started or self.measurement_finished:
             return
@@ -201,13 +266,15 @@ class PerformanceShowStateMachine(upstream.AssetShowStateMachine):
         if self.samples_writer is not None:
             self.samples_writer.write(sample)
             self.samples_writer.close()
+        if self.temporal_samples_writer is not None:
+            self.temporal_samples_writer.close()
         machine_result = self.machine_monitor.finish()
         result = MeasurementResultSet(
             run_id=(
                 f"{self.measurement_config['configuration_id']}-"
                 f"attempt-{int(self.measurement_config['attempt']):02d}"
             ),
-            mode="performance",
+            mode=self.measurement_mode,
             minimum_machine_cpu_sample_count=int(
                 self.measurement_config["stop_conditions"]
                 ["minimum_cpu_sample_count"]
@@ -224,6 +291,11 @@ class PerformanceShowStateMachine(upstream.AssetShowStateMachine):
             performance=self.performance_meter.finish(world_usec, now_ns),
             machine_preflight=self.machine_preflight,
             machine=machine_result,
+            temporal=(
+                self.temporal_observer.result()
+                if self.temporal_observer is not None
+                else None
+            ),
             metadata={
                 **self.measurement_config,
                 "measurement_boundary": {
@@ -237,12 +309,12 @@ class PerformanceShowStateMachine(upstream.AssetShowStateMachine):
                     "invalid_reason": self.invalid_reason,
                 },
                 "preflight_boundary": {
-                    "start": "after_asset_activation_before_takeoff",
+                    "start": self.preflight_boundary_start,
                     "duration_sec": self.measurement_config["preflight_duration_sec"],
                     "included_in_performance_measurement": False,
                     "passed": self.preflight_passed,
                 },
-                "temporal_observer_enabled": False,
+                "temporal_observer_enabled": self.temporal_observer is not None,
                 "host": {"platform": sys.platform},
                 "fleet_phase_results": self.fleet_phase_results,
             },
@@ -348,6 +420,7 @@ class PerformanceShowStateMachine(upstream.AssetShowStateMachine):
                 float(self.measurement_config["warmup_virtual_time_sec"]) * 1_000_000
             )
         self._poll_machine()
+        self._poll_temporal()
         if (
             had_pending
             and previous_index == len(self.phases) - 1
