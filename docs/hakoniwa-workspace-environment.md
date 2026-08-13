@@ -92,6 +92,13 @@ The check requires:
 - `sys.executable` and `sys.prefix` under the Foundation venv;
 - `hakopy`, `hakoniwa_pdu`, and `hakoniwa_pdu_endpoint` resolved from the Foundation workspace.
 
+The Business Pack Foundation Python contract is CPython 3.12. Before component
+build/install, `tools/foundation.py` validates that identity and requires Core's
+SOABI-tagged `hakopy`. Foundation `doctor` compares the active interpreter
+SOABI with the Python metadata recorded in the Core Component Receipt. A
+missing legacy Receipt or an ABI mismatch is `INCOMPATIBLE`, not an invitation
+to load an untagged extension.
+
 ## Low-level compatibility operations
 
 `prepare`, the POSIX activation script, and the PowerShell activation script remain available for compatibility and debugging, but they are not the standard user workflow.
@@ -120,3 +127,32 @@ Normal users should use the OS-independent `enter` and `exit` lifecycle.
 | Recipe / Launcher wrapper | Use `workspace.py run` or the same environment contract |
 
 The goal is not an OS-specific activation procedure. It is a clear lifecycle: enter the selected Hakoniwa Foundation, work inside it, and discard the child shell with `exit`.
+
+## Do not bypass the Recipe boundary
+
+If Foundation `doctor`, `plan`, or `build` reports that the selected Recipe has
+missing or invalid `foundation_requirements`, treat that result as a Recipe
+validity stop condition. Do not continue by invoking sibling component
+repositories' `tools/hako.py`, doctor, build, or install commands directly.
+
+Component repositories are source inputs selected by the Recipe and
+Foundation. Component-local `.hako`, venv, build, or install state is not
+Foundation state or validation evidence unless the Recipe explicitly owns that
+path.
+
+A managed executable Recipe declares both:
+
+```yaml
+execution_environment:
+  workspace:
+    mode: managed
+
+foundation_requirements:
+  component-id:
+    capabilities:
+      required_capability: true
+```
+
+Only after both declarations are valid should execution continue through
+`enter -> Foundation -> Recipe operations -> stop -> exit`. The authoritative
+generated state remains under the Business Pack `work/` directory.

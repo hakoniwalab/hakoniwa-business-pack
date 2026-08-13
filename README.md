@@ -1,5 +1,7 @@
 # hakoniwa-business-pack
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/hakoniwalab/hakoniwa-business-pack)
+
 > **A catalog and recipe hub for composing Hakoniwa components with AI to turn user ideas into working demos and products.**
 
 ## 箱庭ビジネスパックの全体像
@@ -83,14 +85,28 @@ from the Business Pack root:
 python tools/workspace.py enter
 ```
 
-Confirm the `(hako)` prompt, then run Foundation and Recipe operations with the
-Workspace-owned `python`:
+Confirm the `(hako)` prompt, then use the Recipe as the user-facing environment
+contract:
 
 ```bash
-python tools/foundation.py doctor --recipe <recipe.yaml>
-python tools/foundation.py plan --recipe <recipe.yaml>
-python tools/foundation.py build --recipe <recipe.yaml>
+python tools/recipe.py doctor --recipe <recipe.yaml>
+python tools/recipe.py plan --recipe <recipe.yaml>
+python tools/recipe.py configure --recipe <recipe.yaml>
 ```
+
+`recipe.py` delegates Receipt inspection and component build/install to the
+Foundation engine, while also handling declared sibling repositories and Recipe
+Python requirements. Direct `foundation.py` commands are retained for component,
+CI, and Foundation-maintainer work.
+
+Recipes with a generated Launcher are started through the same entry point:
+
+```bash
+python tools/recipe.py launch --recipe <recipe.yaml>
+```
+
+This uses the Foundation Python and the resolved Recipe environment without
+falling back to system-installed binaries or libraries.
 
 After stopping any Recipe-owned Launcher session, leave the child shell with:
 
@@ -202,7 +218,7 @@ Product / Service
 - PDU Bridge Core
 - PDU RPC
 - Core PRO
-- Conductor PRO / Conductor Light
+- Hakoniwa Conductor / Conductor Light
 - JSON を中心とした宣言型のシステム構成
 
 ### Component / Asset Guide
@@ -230,7 +246,7 @@ Catalog にある主要コンポーネントがエコシステムのどこに位
 ### Simulation Core
 
 - `hakoniwa-core-pro`
-- `hakoniwa-conductor-pro`
+- `hakoniwa-conductor`
 - `hakoniwa-conductor-light`
 
 ### Physics / Environment / Domain
@@ -360,7 +376,7 @@ python3.12 tools/recipe.py guide \
 ```
 
 このコマンドは説明ページを生成するだけで、Recipe内のコマンドを実行しません。
-Foundationが未準備の場合もページは生成され、必要な`doctor`、`plan`、`build`や
+Foundationが未準備の場合もページは生成され、Recipe共通の`doctor`、`plan`、`configure`や
 Recipe固有の`configure`以降の手順をページ内で確認できます。
 Recipe固有の`configure`は、同じ`index.html`を解決済みパスや生成物を含む
 実行ガイドへ更新する場合があります。

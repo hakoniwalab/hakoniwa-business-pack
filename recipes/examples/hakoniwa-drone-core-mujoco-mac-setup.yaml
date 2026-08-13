@@ -118,6 +118,10 @@ execution_environment:
     - Network access is needed only when release binaries or MuJoCo are not already present.
     - otool and install_name_tool must be available.
 
+foundation_contract:
+  mode: not_required
+  reason: This setup Recipe only installs MuJoCo and patches distributed Mach-O binaries; it does not execute Core, SHM, hako-cmd, or hakopy.
+
 components:
   - id: hakoniwa-drone-core
     roles:

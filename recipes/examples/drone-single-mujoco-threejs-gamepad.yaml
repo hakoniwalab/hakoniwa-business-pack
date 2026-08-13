@@ -137,6 +137,8 @@ target_environment:
     - The WebBridge configuration is reused from work/foundation/install/share/hakoniwa-pdu-bridge/config/web_bridge_disturb.
 
 execution_environment:
+  workspace:
+    mode: managed
   required_for: executable-demo
   status: specified
   os: host-native
@@ -254,6 +256,10 @@ components:
     roles:
       - visualizer
     purpose: Render the simulated drone and provide wind and rotor-fault controls through viewer-config-disturb.json.
+
+foundation_contract:
+  mode: required
+  reason: This Recipe uses components installed and validated through the managed Business Pack Foundation.
 
 foundation_requirements:
   hakoniwa-core-pro:

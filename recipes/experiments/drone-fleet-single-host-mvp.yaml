@@ -1,0 +1,45 @@
+version: 1
+
+experiment:
+  id: drone-fleet-single-host-mvp
+
+scale:
+  # General-user contract: the public/default Drone binary profile supports
+  # at most 200 drones. Experiments above 200 must use the separately built
+  # and verified 512-drone research profile; do not bypass this limit by only
+  # increasing Foundation values.
+  # Keep the fleet size fixed for scalability comparisons. Change only
+  # process_count (1..200); configure divides the fleet evenly and assigns one
+  # extra drone to each final process until the remainder is exhausted.
+  drone_count: 200
+  drones_per_process: auto
+  process_count: 4
+
+runtime:
+  mode: native
+  # true: VSP/WebBridge/Three.jsを起動する目視確認モード
+  # false: 可視化プロセスを起動しないheadless実験モード。
+  #        Drone serviceへ--real-sleep-msecを渡さず、native既定値0で
+  #        simulator-loop real sleepを無効化する。
+  # 現MVPはtrueの場合も--real-sleep-msecを指定せず、既定値0を使う。
+  visualization: true
+  # true: hakopy.usleep()成功後、累積シミュレーション時刻に壁時計を同期する。
+  # false: 壁時計待機を入れず、計算可能な速度で実行する。
+  show_runner_real_time_sync: true
+
+scenario:
+  type: hakoniwa-word
+  word: HAKONIWA
+  letter_width_m: 2.0
+  letter_height_m: 4.0
+  letter_gap_m: 0.9
+  altitude_m: 4.0
+  duration_sec: 6.0
+  hold_sec: 10.0
+  speed_m_s: 3.0
+  timeout_sec: 120.0
+  land: false
+
+results:
+  enabled: false
+  directory: results

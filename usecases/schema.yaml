@@ -20,11 +20,14 @@ controlled_fields:
       - control-software-developer
       - demonstration-owner
       - development-team
+      - distributed-simulation-developer
       - manufacturing-engineering-team
+      - ros2-application-developer
       - robot-control-developer
       - robot-development-team
       - robot-system-integrator
       - technical-sales
+      - web-visualization-developer
     authoring_notes:
       - Reuse an existing value when it represents the same audience role.
       - Add a new value to this list before using it in a Usecase.

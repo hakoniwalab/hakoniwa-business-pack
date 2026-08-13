@@ -208,13 +208,13 @@ PDU RPC は、箱庭の上位サービスを構築するための基盤として
 
 詳細については、Catalog の `hakoniwa-core-pro` を参照してください。
 
-### Conductor PRO
+### Hakoniwa Conductor
 
-複数のコンピュータに箱庭アセットを分散配置するシミュレーション向けの商用コンポーネントです。
+複数のコンピュータに箱庭アセットを分散配置するシミュレーション向けのコンポーネントです。無償版は非商用向けバイナリとして公開され、商用利用とソース提供はHakoniwa Conductor PROの契約対象です。
 
 ノード間で箱庭時刻を協調させ、分散シミュレーションを構成するために利用します。
 
-詳細については、Catalog の `hakoniwa-conductor-pro` を参照してください。
+詳細については、Catalog の `hakoniwa-conductor` を参照してください。
 
 ### Conductor Light
 
@@ -224,7 +224,7 @@ Conductor Light は、時刻同期機能を軽量な独立サービスとして�
 
 これにより、より疎結合な構成で時刻同期 Capability を利用できます。
 
-Core PRO、Conductor PRO、Conductor Light は、いずれも「複数の実行主体の時間進行を協調させる」という共通の目的を持ちますが、想定するシステム構成と実現方式が異なります。
+Core PRO、Hakoniwa Conductor、Conductor Light は、いずれも「複数の実行主体の時間進行を協調させる」という共通の目的を持ちますが、想定するシステム構成と実現方式が異なります。
 
 詳細については、Catalog の `hakoniwa-conductor-light` を参照してください。
 
@@ -241,7 +241,7 @@ Core PRO、Conductor PRO、Conductor Light は、いずれも「複数の実行�
 | PDU Bridge Core | Endpoint 間の PDU 転送、ルーティング、転送ポリシーを制御する |
 | PDU RPC | PDU 通信上で Request / Response 型の処理呼び出しを実現する |
 | Core PRO | 単一 PC・共有メモリ環境でシミュレーション実行と時刻同期を支える |
-| Conductor PRO | 分散ノード間のシミュレーション時刻を協調させる |
+| Hakoniwa Conductor | 分散ノード間のシミュレーション時刻と実行責任を協調させる |
 | Conductor Light | 時刻同期 Capability を軽量な独立サービスとして提供する |
 
 役割で見ると、箱庭のベースエコシステムは次のように捉えることができます。
@@ -266,7 +266,7 @@ Core PRO、Conductor PRO、Conductor Light は、いずれも「複数の実行�
 ### 時間を協調させる
 
 - Core PRO
-- Conductor PRO
+- Hakoniwa Conductor
 - Conductor Light
 
 このベースエコシステムの上に、MuJoCo、Godot、Hakoniwa Drone、Athrill などのシミュレーションアセットや、ROS 2、Foxglove、Three.js などの外部システムとの連携コンポーネントを組み合わせることで、目的に応じたシミュレーションシステムを構成できます。

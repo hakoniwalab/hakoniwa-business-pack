@@ -13,11 +13,12 @@ feasibility:
 
 validation:
   status: partially_verified
-  verified_at: 2026-08-08
-  summary: macOS arm64 hostの箱庭Action ClientからDocker Linux arm64のROS 2 Fibonacci ServerへGoalを送り、Feedback、Result、正常停止を確認した。
+  verified_at: 2026-08-09
+  summary: macOS arm64 hostの箱庭Action ClientからDocker Linux arm64のROS 2 Fibonacci ServerへGoalを送り、Feedback、Result、Cancel Reject後の継続、同一TCP sessionでの次Goal、正常停止を確認した。
   steps:
     - {id: configure, status: verified, evidence: [{path: tools/recipe/ros2_bridge_examples.py}]}
     - {id: end_to_end, status: verified, evidence: [{source: local-macos-arm64-e2e, date: 2026-08-08}]}
+    - {id: cancel_reject, status: verified, evidence: [{source: local-macos-docker-cancel-reject-10-iterations, date: 2026-08-09}, {path: work/recipes/ros2-action-fibonacci-client-host-docker/validation/cancel-reject-evidence.json}]}
 
 constraints: [host-hakoniwa-action-client, docker-ros2-action-server, tcp-only, loopback-published-listener, hakoniwa-pdu-1.6.6-or-later]
 
@@ -40,6 +41,10 @@ target_environment:
     - {name: ROS 2, version: jazzy, path: container}
 
 execution_environment:
+  workspace:
+    mode: managed
+  hakoniwa:
+    install_prefix: work/foundation/install
   host: {role: Hakoniwa Typed Action Client, install_root: work/foundation/install}
   container: {role: ROS 2 Fibonacci Action Server and Action Client Bridge, platform: linux}
   boundary: {protocol: PDU-RPC TCP, listener: container, published_address: 127.0.0.1, port: 54014}
@@ -50,6 +55,10 @@ components:
   - {id: hakoniwa-pdu-endpoint, roles: [communication_infrastructure]}
   - {id: hakoniwa-pdu-python, roles: [language_binding]}
   - {id: hakoniwa-pdu-registry, roles: [data_model, registry]}
+
+foundation_contract:
+  mode: required
+  reason: This Recipe uses components installed and validated through the managed Business Pack Foundation.
 
 foundation_requirements:
   hakoniwa-pdu-rpc:
@@ -88,7 +97,8 @@ artifacts:
     - {path: hakoniwa-pdu-python/src/hakoniwa_pdu/pdu_msgs/sample_action_msgs, owner: hakoniwa-pdu-python}
 
 missing_pieces:
-  - Cancelの手動デモは後続Recipeで扱う。
+  - Windows/WSL2上のIssue #20構成ではCancel Reject時のTCP切断が報告されており、platform境界の切り分けが残る。
+  - TCPの正常closeと異常切断を区別できるEndpoint observabilityが必要。
 
 demo:
   operator: python tools/recipe/ros2_bridge_examples.py action-client
@@ -98,6 +108,7 @@ demo:
     - {id: doctor, command: python tools/recipe/ros2_bridge_examples.py action-client doctor}
     - {id: start, command: python tools/recipe/ros2_bridge_examples.py action-client start}
     - {id: smoke, command: python tools/recipe/ros2_bridge_examples.py action-client smoke}
+    - {id: cancel_smoke, command: python tools/recipe/ros2_bridge_examples.py action-client cancel-smoke --iterations 10 --order 8 --next-order 2}
     - {id: status, command: python tools/recipe/ros2_bridge_examples.py action-client status}
     - {id: stop, command: python tools/recipe/ros2_bridge_examples.py action-client stop}
   readiness:
@@ -111,11 +122,11 @@ demo:
     cautions: [Stop only the Recipe-owned container]
 
 expected_result:
-  observable: Host CLI prints Fibonacci sequence through the requested order (order 10 ends in 55).
-  success_conditions: [Goal accepted, Result sequence correct, cleanup terminates]
+  observable: Host CLI prints Fibonacci Results and reports every Cancel Reject iteration with a successful next Goal.
+  success_conditions: [Goal accepted, Result sequence correct, Cancel rejected, Feedback and Result continue, next Goal succeeds in the same TCP session, cleanup terminates]
 
-implementation_plan: [Generate config, start container listener, call from host TypedActionClient, stop cleanly.]
-acceptance_criteria: [One Action Binding serves both directions, host receives the correct Fibonacci Result, published port is loopback-only.]
+implementation_plan: [Generate config, start container listener, call from host TypedActionClient, exercise Cancel Reject and slot reuse, stop cleanly.]
+acceptance_criteria: [One Action Binding serves both directions, host receives the correct Fibonacci Result, Cancel Reject is followed by normal completion and a successful next Goal, published port is loopback-only.]
 
 source_catalogs:
   - {component_id: hakoniwa-pdu-ros, path: catalog/components/hakoniwa-pdu-ros.yaml}

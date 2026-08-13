@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path, PureWindowsPath
+from unittest import mock
 
 FOUNDATION_SCRIPT = Path(__file__).with_name("foundation.py")
 SPEC = importlib.util.spec_from_file_location("business_pack_foundation", FOUNDATION_SCRIPT)
@@ -117,14 +118,144 @@ class FoundationWorkspaceTest(unittest.TestCase):
         self.assertTrue(data["recipe_root"].endswith("work/recipes/drone-threejs"))
 
 
+class FoundationPythonContractTest(unittest.TestCase):
+    def test_accepts_cpython_312_with_foundation_prefix(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            python_root = Path(temporary) / "install" / "python"
+            probe = {
+                "implementation": "CPython",
+                "executable": str(python_root / "bin" / "python"),
+                "prefix": str(python_root),
+                "version": "3.12.10",
+                "major": 3,
+                "minor": 12,
+                "soabi": "cpython-312-test",
+                "extension_suffix": ".cpython-312-test.so",
+            }
+
+            foundation.validate_foundation_python_probe(probe, python_root)
+
+    def test_rejects_python_313_and_314(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            python_root = Path(temporary) / "install" / "python"
+            for minor in (13, 14):
+                with self.subTest(minor=minor):
+                    probe = {
+                        "implementation": "CPython",
+                        "executable": str(python_root / "bin" / "python"),
+                        "prefix": str(python_root),
+                        "version": f"3.{minor}.0",
+                        "major": 3,
+                        "minor": minor,
+                        "soabi": f"cpython-3{minor}-test",
+                        "extension_suffix": f".cpython-3{minor}-test.so",
+                    }
+                    with self.assertRaisesRegex(
+                        foundation.FoundationError,
+                        "required=3.12",
+                    ):
+                        foundation.validate_foundation_python_probe(
+                            probe, python_root
+                        )
+
+    def test_missing_foundation_python_is_reported_without_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            prefix = Path(temporary) / "install"
+
+            result = foundation.inspect_foundation_python(prefix)
+
+            self.assertEqual(result["status"], "MISSING")
+            self.assertFalse(prefix.exists())
+
+    def test_python_313_fails_before_creating_foundation_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths = foundation.resolve_workspace(root, "test")
+            recipe = root / "recipe.yaml"
+            with mock.patch.object(
+                foundation.platform,
+                "python_implementation",
+                return_value="CPython",
+            ), mock.patch.object(foundation.sys, "version_info", (3, 13, 0)):
+                with self.assertRaisesRegex(
+                    foundation.FoundationError,
+                    "must be created with CPython 3.12",
+                ):
+                    foundation.ensure_foundation_python(paths, recipe)
+
+            self.assertFalse(paths.work_root.exists())
+
+    def test_build_catalog_declares_the_runtime_python_contract(self) -> None:
+        catalog = foundation.load_build_catalog(
+            FOUNDATION_SCRIPT.parent.parent / "catalog" / "foundation-components.json"
+        )
+
+        self.assertIn("hakoniwa-core-pro", catalog)
+
+    def test_python_probe_strips_windows_extension_from_soabi_fallback(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0,
+            stdout=json.dumps({
+                "implementation": "CPython", "executable": "python.exe", "prefix": "python",
+                "version": "3.12.10", "major": 3, "minor": 12,
+                "soabi": "", "extension_suffix": ".cp312-win_amd64.pyd",
+            }),
+            stderr="",
+        )
+        with mock.patch.object(foundation.subprocess, "run", return_value=completed):
+            probe = foundation.probe_python(Path("python.exe"))
+        self.assertEqual(probe["soabi"], "cp312-win_amd64")
+
+    def test_untagged_extension_does_not_invent_soabi(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0,
+            stdout=json.dumps({
+                "implementation": "CPython", "executable": "python", "prefix": "python",
+                "version": "3.12.10", "major": 3, "minor": 12,
+                "soabi": "", "extension_suffix": ".so",
+            }),
+            stderr="",
+        )
+        with mock.patch.object(foundation.subprocess, "run", return_value=completed):
+            probe = foundation.probe_python(Path("python"))
+        self.assertFalse(probe["soabi"])
+
+    def test_toolchain_selection_is_persisted_under_foundation_config(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths = foundation.resolve_workspace(root, "test-recipe")
+            vcpkg = root / "external" / "vcpkg"
+            vcpkg.mkdir(parents=True)
+            (vcpkg / ("vcpkg.exe" if sys.platform == "win32" else "vcpkg")).write_text("test\n", encoding="utf-8")
+            cmake = vcpkg / "scripts" / "buildsystems" / "vcpkg.cmake"
+            cmake.parent.mkdir(parents=True)
+            cmake.write_text("# test\n", encoding="utf-8")
+            output = foundation.configure_foundation_toolchain(paths, vcpkg)
+            self.assertEqual(output, paths.foundation_config / "toolchain.json")
+            self.assertEqual(foundation.load_foundation_toolchain(paths)["vcpkg_root"], str(vcpkg.resolve()))
+
+
 class FoundationInspectorTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
         self.prefix = self.root / "install"
         self.recipe = self.root / "recipe.yaml"
+        self.python_patcher = mock.patch.object(
+            foundation,
+            "inspect_foundation_python",
+            return_value={
+                "status": "SATISFIED",
+                "executable": str(self.prefix / "python" / "bin" / "python"),
+                "version": "3.12.10",
+                "soabi": "cpython-312-test",
+                "reason": None,
+            },
+        )
+        self.python_patcher.start()
 
     def tearDown(self) -> None:
+        self.python_patcher.stop()
         self.temporary.cleanup()
 
     def write_recipe(self, body: str) -> None:
@@ -146,6 +277,8 @@ class FoundationInspectorTest(unittest.TestCase):
         create_artifact: bool = True,
     ) -> None:
         os_name, architecture = foundation._host_contract()
+        if component == "hakoniwa-core-pro" and artifact == "lib/component.marker":
+            artifact = "share/hakoniwa/python/hakopy.cpython-312-test.so"
         resolved = (
             self.prefix
             / "share"
@@ -161,6 +294,19 @@ class FoundationInspectorTest(unittest.TestCase):
             artifact_path.parent.mkdir(parents=True, exist_ok=True)
             artifact_path.write_text("installed\n", encoding="utf-8")
         receipt = resolved.parent.parent / f"{component}.yaml"
+        python_receipt = (
+            "python:\n"
+            "  binding_mode: soabi\n"
+            "  implementation: CPython\n"
+            "  version: 3.12.10\n"
+            "  major: 3\n"
+            "  minor: 12\n"
+            "  soabi: cpython-312-test\n"
+            "  extension_suffix: .cpython-312-test.so\n"
+            f"  artifact: {artifact}\n"
+            if component == "hakoniwa-core-pro"
+            else ""
+        )
         receipt.write_text(
             "schema_version: 1\n"
             "component:\n"
@@ -180,6 +326,7 @@ class FoundationInspectorTest(unittest.TestCase):
             "artifacts:\n"
             f'  - path: "{artifact}"\n'
             "    kind: test\n"
+            f"{python_receipt}"
             "resolved_manifest: "
             f'"share/hakoniwa/receipts/resolved/{component}.yaml"\n',
             encoding="utf-8",
@@ -258,6 +405,27 @@ class FoundationInspectorTest(unittest.TestCase):
             result["components"][0]["reasons"][0]["field"], "receipt"
         )
 
+    def test_shared_python_runtime_does_not_imply_pdu_python_install(self) -> None:
+        self.write_recipe(
+            "  hakoniwa-pdu-python:\n"
+            "    capabilities:\n"
+            "      shm_backend: true\n"
+        )
+        (self.prefix / "python" / "Lib" / "site-packages").mkdir(parents=True)
+        result = foundation.inspect_foundation(self.recipe, self.prefix)
+        self.assertEqual(result["components"][0]["status"], "MISSING")
+
+    def test_pdu_owned_package_without_receipt_is_unknown(self) -> None:
+        self.write_recipe(
+            "  hakoniwa-pdu-python:\n"
+            "    capabilities:\n"
+            "      shm_backend: true\n"
+        )
+        package = self.prefix / "python" / "Lib" / "site-packages" / "hakoniwa_pdu"
+        package.mkdir(parents=True)
+        result = foundation.inspect_foundation(self.recipe, self.prefix)
+        self.assertEqual(result["components"][0]["status"], "UNKNOWN")
+
     def test_malformed_receipt_is_unknown_instead_of_crashing(self) -> None:
         self.write_recipe(
             "  component-a:\n"
@@ -320,6 +488,92 @@ class FoundationInspectorTest(unittest.TestCase):
         self.assertIn("build_limits.asset_num.min", fields)
         self.assertIn("platform.os", fields)
         self.assertIn("artifacts.lib/component.marker", fields)
+
+    def test_core_receipt_soabi_must_match_foundation_python(self) -> None:
+        self.write_recipe(
+            "  hakoniwa-core-pro:\n"
+            "    capabilities:\n"
+            "      shared_memory: true\n"
+        )
+        self.write_receipt(
+            "hakoniwa-core-pro",
+            capabilities="  shared_memory: true\n",
+        )
+        receipt = (
+            self.prefix
+            / "share"
+            / "hakoniwa"
+            / "receipts"
+            / "hakoniwa-core-pro.yaml"
+        )
+        receipt.write_text(
+            receipt.read_text(encoding="utf-8").replace(
+                "soabi: cpython-312-test",
+                "soabi: cpython-313-test",
+            ),
+            encoding="utf-8",
+        )
+
+        result = foundation.inspect_foundation(self.recipe, self.prefix)
+        core = result["components"][0]
+
+        self.assertEqual(result["status"], "INCOMPATIBLE")
+        self.assertIn(
+            {
+                "field": "python.soabi",
+                "required": "cpython-312-test",
+                "installed": "cpython-313-test",
+            },
+            core["reasons"],
+        )
+
+    def test_core_receipt_rejects_legacy_untagged_hakopy_alongside_soabi_artifact(self) -> None:
+        self.write_recipe(
+            "  hakoniwa-core-pro:\n"
+            "    capabilities:\n"
+            "      shared_memory: true\n"
+        )
+        self.write_receipt(
+            "hakoniwa-core-pro",
+            capabilities="  shared_memory: true\n",
+        )
+        legacy = self.prefix / "share/hakoniwa/python/hakopy.so"
+        legacy.write_text("legacy\n", encoding="utf-8")
+
+        result = foundation.inspect_foundation(self.recipe, self.prefix)
+        core = result["components"][0]
+
+        self.assertEqual(result["status"], "INCOMPATIBLE")
+        self.assertTrue(
+            any(reason["field"] == "python.artifacts.unique" for reason in core["reasons"])
+        )
+
+    def test_core_receipt_rejects_python_artifact_not_derived_from_extension_suffix(self) -> None:
+        self.write_recipe(
+            "  hakoniwa-core-pro:\n"
+            "    capabilities:\n"
+            "      shared_memory: true\n"
+        )
+        self.write_receipt(
+            "hakoniwa-core-pro",
+            capabilities="  shared_memory: true\n",
+        )
+        receipt = self.prefix / "share/hakoniwa/receipts/hakoniwa-core-pro.yaml"
+        receipt.write_text(
+            receipt.read_text(encoding="utf-8").replace(
+                "artifact: share/hakoniwa/python/hakopy.cpython-312-test.so",
+                "artifact: share/hakoniwa/python/hakopy.so",
+            ),
+            encoding="utf-8",
+        )
+
+        result = foundation.inspect_foundation(self.recipe, self.prefix)
+        core = result["components"][0]
+
+        self.assertEqual(result["status"], "INCOMPATIBLE")
+        self.assertTrue(
+            any(reason["field"] == "python.artifact" for reason in core["reasons"])
+        )
 
     def test_false_capability_requires_installed_false(self) -> None:
         self.write_recipe(
@@ -554,12 +808,16 @@ class FoundationInspectorTest(unittest.TestCase):
                 {"hakoniwa-pdu-bridge-core"},
             )
 
-    def test_core_build_uses_orchestrator_python(self) -> None:
+    def test_core_build_uses_foundation_python_and_soabi_manifest(self) -> None:
         paths = foundation.resolve_workspace(self.root, "test")
         source = self.root / "hakoniwa-core-pro"
         hako = source / "tools" / "hako.py"
         hako.parent.mkdir(parents=True)
         hako.write_text("# test\n", encoding="utf-8")
+        (source / "hakoniwa-build.yaml").write_text(
+            "version: 1\nlimits:\n  asset_num: 16\npython:\n  soabi: false\n",
+            encoding="utf-8",
+        )
 
         commands = foundation.component_commands(
             "hakoniwa-core-pro", source, ["build"], paths
@@ -567,7 +825,79 @@ class FoundationInspectorTest(unittest.TestCase):
 
         command = commands[0]
         python_index = command.index("--python-executable") + 1
-        self.assertEqual(command[python_index], foundation.sys.executable)
+        expected_python = foundation.foundation_python_executable(
+            paths.foundation_python
+        )
+        self.assertEqual(command[0], str(expected_python))
+        self.assertEqual(command[python_index], str(expected_python))
+        mmap_index = command.index("--core-mmap-dir") + 1
+        self.assertEqual(command[mmap_index], paths.foundation_mmap.as_posix())
+        self.assertNotIn("\\", command[mmap_index])
+        manifest_index = command.index("--config") + 1
+        manifest = Path(command[manifest_index])
+        self.assertIn("  soabi: true", manifest.read_text(encoding="utf-8"))
+
+    def test_normalize_core_config_repairs_unescaped_windows_path(self) -> None:
+        paths = foundation.resolve_workspace(self.root, "test")
+        config = paths.foundation_config / "cpp_core_config.json"
+        config.parent.mkdir(parents=True, exist_ok=True)
+        windows_path = paths.foundation_mmap.as_posix()
+        config.write_text(
+            '{\n  "shm_type": "mmap",\n'
+            f'  "core_mmap_path": "{windows_path.replace("/", chr(92))}",\n'
+            '  "asset_timeout_usec": 600000000\n}\n',
+            encoding="utf-8",
+        )
+
+        with mock.patch.object(foundation.platform, "system", return_value="Windows"):
+            foundation.normalize_core_config_for_windows(config, paths.foundation_mmap)
+
+        data = json.loads(config.read_text(encoding="utf-8"))
+        self.assertEqual(data["core_mmap_path"], windows_path)
+
+    def test_normalize_core_config_preserves_valid_escaped_windows_path(self) -> None:
+        paths = foundation.resolve_workspace(self.root, "test")
+        config = paths.foundation_config / "cpp_core_config.json"
+        config.parent.mkdir(parents=True, exist_ok=True)
+        windows_path = paths.foundation_mmap.as_posix()
+        config.write_text(
+            json.dumps({"shm_type": "mmap", "core_mmap_path": windows_path.replace("/", "\\")}),
+            encoding="utf-8",
+        )
+
+        with mock.patch.object(foundation.platform, "system", return_value="Windows"):
+            foundation.normalize_core_config_for_windows(config, paths.foundation_mmap)
+
+        data = json.loads(config.read_text(encoding="utf-8"))
+        self.assertEqual(data["core_mmap_path"], windows_path)
+
+    def test_core_runtime_config_inspection_rejects_invalid_json(self) -> None:
+        paths = foundation.resolve_workspace(self.root, "test")
+        config = paths.foundation_config / "cpp_core_config.json"
+        config.parent.mkdir(parents=True, exist_ok=True)
+        config.write_text(
+            '{"core_mmap_path": "C:\\project\\broken"}',
+            encoding="utf-8",
+        )
+
+        result = foundation.inspect_core_runtime_config(paths.install_prefix)
+
+        self.assertEqual(result["status"], "INCOMPATIBLE")
+        self.assertIn("not valid JSON", result["reason"])
+
+    def test_core_runtime_config_inspection_accepts_managed_mmap(self) -> None:
+        paths = foundation.resolve_workspace(self.root, "test")
+        config = paths.foundation_config / "cpp_core_config.json"
+        config.parent.mkdir(parents=True, exist_ok=True)
+        config.write_text(
+            json.dumps({"core_mmap_path": paths.foundation_mmap.as_posix()}),
+            encoding="utf-8",
+        )
+
+        result = foundation.inspect_core_runtime_config(paths.install_prefix)
+
+        self.assertEqual(result["status"], "SATISFIED")
+        self.assertEqual(result["core_mmap_path"], paths.foundation_mmap.as_posix())
 
     def test_component_commands_keep_shared_python_before_endpoint_cffi(self) -> None:
         paths = foundation.resolve_workspace(self.root, "test")

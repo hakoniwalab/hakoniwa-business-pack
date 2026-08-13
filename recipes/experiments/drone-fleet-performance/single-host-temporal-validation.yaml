@@ -1,0 +1,55 @@
+version: 1
+experiment:
+  id: drone-fleet-single-host-temporal-validation
+scale:
+  drone_count: 128
+  drones_per_process: auto
+  process_count: 15
+runtime:
+  mode: native
+  visualization: false
+  show_runner_real_time_sync: false
+scenario:
+  type: hakoniwa-word
+  word: HAKONIWA
+  letter_width_m: 2.0
+  letter_height_m: 4.0
+  letter_gap_m: 0.9
+  altitude_m: 4.0
+  duration_sec: 6.0
+  hold_sec: 0.0
+  speed_m_s: 0.5
+  timeout_sec: 120.0
+  land: false
+results:
+  enabled: true
+  directory: results
+measurement:
+  enabled: true
+  mode: temporal
+  series: single-host-temporal-validation
+  configuration_id: auto
+  attempt: 1
+  protocol_status: preflight
+  sampling_interval_sec: 0.05
+  temporal_sampling_interval_usec: 20000
+  preflight_duration_sec: 1.0
+  preflight_settle_timeout_sec: 60.0
+  stop_conditions:
+    minimum_virtual_time_sec: 10.0
+    minimum_cpu_sample_count: 5
+    minimum_machine_sample_count: 5
+  invalid_conditions:
+    maximum_virtual_time_sec: 180.0
+    maximum_wall_time_sec: 300.0
+    preflight_max_cpu_average_percent: 50.0
+    preflight_max_memory_used_percent: 90.0
+  warmup_virtual_time_sec: 1.0
+  time_coordination:
+    drone_delta_time_usec: 1000
+    fleet_delta_time_usec: 20000
+    conductor_delta_time_usec: 1000
+    conductor_max_delay_time_usec: 20000
+    conductor_real_sleep_msec: 0
+    simtime_publish_mode: not_applicable
+    conductor_implementation: embedded

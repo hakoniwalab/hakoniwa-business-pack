@@ -40,6 +40,10 @@ target_environment:
     - {name: ROS 2, version: jazzy, path: container}
 
 execution_environment:
+  workspace:
+    mode: managed
+  hakoniwa:
+    install_prefix: work/foundation/install
   host: {role: Hakoniwa Typed Action Server, install_root: work/foundation/install}
   container: {role: ROS 2 Action Server Bridge and ros2 action client, platform: linux}
   boundary: {protocol: PDU-RPC TCP, listener: host, address: host.docker.internal, port: 54013}
@@ -50,6 +54,10 @@ components:
   - {id: hakoniwa-pdu-endpoint, roles: [communication_infrastructure]}
   - {id: hakoniwa-pdu-python, roles: [language_binding]}
   - {id: hakoniwa-pdu-registry, roles: [data_model, registry]}
+
+foundation_contract:
+  mode: required
+  reason: This Recipe uses components installed and validated through the managed Business Pack Foundation.
 
 foundation_requirements:
   hakoniwa-pdu-rpc:

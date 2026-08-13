@@ -1,0 +1,332 @@
+id: agilex-tracer-hakoniwa-runtime
+title: AgileX Tracer MuJoCo Hakoniwa Twist Runtime
+recipe_version: 0.1
+
+goal:
+  user_request: MBodyで生成したAgileX Tracerを箱庭管理下のMuJoCo assetとして起動し、PythonからTwist指令を送って走行確認したい
+  description: >
+    Consume the generated Tracer minimal-world MJCF, build the MuJoCo-only and
+    Hakoniwa Twist assets against the managed Foundation, then run a bounded
+    geometry_msgs/Twist command through the Foundation Python environment.
+
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - hakoniwa-mujoco-robots already provides the Tracer rover check, Hakoniwa plant asset, and Python Twist sender.
+    - The MBody Recipe owns model generation, while this Recipe owns runtime composition and validation.
+    - Core, hakopy, PDU Python, and Endpoint can be reused from the managed Foundation.
+
+validation:
+  status: verified
+  verified_at: 2026-08-11
+  summary: >
+    The split Foundation-aware lifecycle was configured, built, checked, and run
+    successfully with the MuJoCo viewer on native macOS and Windows x64 with
+    Python 3.12 and SOABI-tagged hakopy. Native Linux execution remains to be verified.
+  steps:
+    - id: historical_component_runtime
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-mujoco-robots
+          path: examples/actuators/agilex_tracer/README.md
+          date: 2026-07-22
+    - id: managed_recipe_runtime
+      status: verified
+      evidence:
+        - platform: macOS arm64
+          date: 2026-08-11
+          result: Foundation SATISFIED; MuJoCo viewer opened; base.x advanced from 0.000 to 0.300 after a positive Twist command; Launcher reached TERMINATED.
+        - platform: Windows x64
+          date: 2026-08-11
+          result: User-confirmed Foundation-managed configure, build, viewer execution, and Launcher lifecycle after the Windows portability fixes.
+
+constraints:
+  - generated-mbody-input-required
+  - simulation-only
+  - single-host
+  - foundation-python-3-12
+  - soabi-tagged-hakopy-required
+  - no-system-install-fallback
+
+target_environment:
+  required_for: executable-demo
+  status: specified
+  os: macOS | Linux | Windows
+  os_version: unknown
+  architecture: arm64 | x86_64
+  execution_mode: native
+  runtimes:
+    - name: Python
+      required: true
+      version: "3.12"
+      path: work/foundation/install/python
+    - name: MuJoCo
+      required: true
+      version: repository-defined
+      path: hakoniwa-mujoco-robots/vendor/mujoco
+  hakoniwa:
+    install_prefix: work/foundation/install
+    components_built:
+      - hakoniwa-core-pro
+      - hakoniwa-pdu-python
+      - hakoniwa-pdu-endpoint
+
+execution_environment:
+  required_for: executable-demo
+  status: specified
+  workspace:
+    mode: managed
+  os: macOS | Linux | Windows
+  architecture: arm64 | x86_64
+  execution_mode: native
+  gui:
+    required: conditional
+    status: viewer-enabled-unless-headless
+  shared_memory:
+    required: true
+    access: local-host
+  python:
+    environment: foundation-venv
+    path: work/foundation/install/python
+    version: "3.12"
+    hakopy_available: required
+    hakoniwa_pdu_available: required
+  hakoniwa:
+    install_prefix: work/foundation/install
+    hako_cmd_access: required
+  notes:
+    - The exact Foundation interpreter must import hakopy, hakoniwa_pdu, and hakoniwa_pdu_endpoint.
+    - The Core Receipt SOABI must match the Foundation interpreter before build or start.
+
+foundation_contract:
+  mode: required
+  reason: This Recipe executes Core shared memory, hako-cmd, SOABI-tagged hakopy, PDU Python, and Endpoint callback transport.
+
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      shared_memory: true
+      hako_cmd: true
+      python_binding: true
+  hakoniwa-pdu-python:
+    version:
+      min: 1.6.5
+    capabilities:
+      hako_launcher: true
+      launcher_background_lifecycle: true
+      shm_backend: true
+  hakoniwa-pdu-endpoint:
+    capabilities:
+      python_binding: true
+      hakoniwa_core: true
+      core_callback: true
+
+components:
+  - id: hakoniwa-mbody-registry
+    roles: [asset_generator, data_model]
+    purpose: Provide the generated Tracer minimal-world MJCF and its source provenance.
+  - id: hakoniwa-mujoco-robots
+    roles: [physics_runtime, simulation_core]
+    purpose: Provide the MuJoCo rover check, Hakoniwa plant asset, and Twist sender.
+  - id: hakoniwa-core-pro
+    roles: [simulation_core, time_sync, control_plane]
+    purpose: Provide lifecycle, shared memory, hako-cmd, simulation time, and SOABI-tagged hakopy.
+  - id: hakoniwa-pdu-endpoint
+    roles: [communication_infrastructure, integration_boundary]
+    purpose: Carry cmd_vel between the Python sender and the MuJoCo plant through callback SHM.
+  - id: hakoniwa-pdu-python
+    roles: [language_binding, control_plane]
+    purpose: Provide the managed Python launcher, generated Twist type, and sender runtime.
+
+connections:
+  - from: hakoniwa-mbody-registry
+    to: hakoniwa-mujoco-robots
+    interface: generated-artifact
+    data: [tracer_v1.minimal_world.xml]
+    contract:
+      status: verified
+      requires:
+        - The conversion Recipe completes successfully.
+      validation_notes:
+        - The generated model was previously loaded by the Tracer examples.
+  - from: hakoniwa-mujoco-robots
+    to: hakoniwa-core-pro
+    interface: asset lifecycle and simulation time
+    data: [registration, start, manual timing]
+    contract:
+      status: partially_verified
+      requires:
+        - Foundation Core Receipt and shared-memory runtime are SATISFIED.
+      validation_notes:
+        - Managed native macOS execution advanced the simulation under Foundation lifecycle control.
+  - from: hakoniwa-pdu-python
+    to: hakoniwa-pdu-endpoint
+    interface: Python Endpoint API
+    data: [geometry_msgs/Twist cmd_vel]
+    contract:
+      status: partially_verified
+      requires:
+        - Foundation Python and Core Receipt SOABI match.
+        - Endpoint core_callback artifacts are installed.
+      validation_notes:
+        - Foundation Python 3.12 loaded the SOABI-tagged Core binding and sent Twist through Endpoint on macOS.
+  - from: hakoniwa-pdu-endpoint
+    to: hakoniwa-mujoco-robots
+    interface: callback SHM PDU
+    data: [RoverTwistAsset/cmd_vel]
+    contract:
+      status: partially_verified
+      requires:
+        - Endpoint and PDU definition agree on asset, PDU name, channel, and size.
+      validation_notes:
+        - Positive linear.x produced positive base.x displacement from 0.000 to 0.301 in the managed macOS run.
+
+data_flow:
+  summary: A bounded Python Twist command drives the generated Tracer model through the Hakoniwa plant asset.
+  steps:
+    - from: hakoniwa-mbody-registry
+      to: hakoniwa-mujoco-robots
+      data: [generated minimal-world MJCF]
+      description: Stage the conversion-owned model into Recipe work without rebuilding Foundation.
+    - from: hakoniwa-pdu-python
+      to: hakoniwa-pdu-endpoint
+      data: [encoded geometry_msgs/Twist]
+      description: Send a bounded command using the exact Foundation Python.
+    - from: hakoniwa-pdu-endpoint
+      to: hakoniwa-mujoco-robots
+      data: [cmd_vel PDU]
+      description: Deliver the command to the registered rover plant asset.
+
+time_model:
+  owner: hakoniwa-mujoco-robots
+  source: hakoniwa-core-pro
+  delta_usec: model-defined
+  notes:
+    - The plant owns conductor startup for this single-host runtime.
+    - hako-cmd start is issued only after plant and sender readiness.
+
+artifact_sets:
+  physics_artifacts:
+    status: verified
+    artifacts: [tracer_v1.minimal_world.xml]
+  visualization_artifacts:
+    status: verified
+    artifacts: [MuJoCo viewer]
+  pdu_artifacts:
+    status: verified
+    artifacts: [rover-twist-pdudef-compact.json, rover_twist_endpoint.json, geometry_msgs/Twist]
+  runtime_artifacts:
+    status: verified
+    artifacts: [agilex-tracer-rover-example, rover-twist-hakoniwa-asset, send_rover_twist.py]
+
+artifacts:
+  - name: Tracer minimal world
+    owner: hakoniwa-mbody-registry
+    path: bodies/agilex_tracer/generated/tracer_v1.minimal_world.xml
+    purpose: Physics input generated by the conversion Recipe.
+  - name: Rover Twist plant
+    owner: hakoniwa-mujoco-robots
+    path: examples/actuators/agilex_tracer/rover-twist-hakoniwa-asset.cpp
+    purpose: Receive cmd_vel and advance the Tracer simulation.
+  - name: Rover Twist sender
+    owner: hakoniwa-mujoco-robots
+    path: examples/actuators/agilex_tracer/send_rover_twist.py
+    purpose: Send a bounded positive Twist from Foundation Python.
+
+missing_pieces:
+  - Verify the same Recipe-owned lifecycle on native Linux and Windows.
+  - Add an automated behavioral assertion for positive base.x displacement if the shared-memory runtime becomes available in CI.
+
+demo:
+  objective: Build and run the generated AgileX Tracer as a Foundation-managed MuJoCo asset and verify forward motion from a bounded Twist command.
+  steps:
+    - order: 1
+      component: hakoniwa-business-pack
+      action: Stage the complete generated MBody artifact closure and write Recipe-owned build and Launcher configuration.
+      command: python3.12 tools/recipe/agilex_tracer_demo.py configure
+    - order: 2
+      component: hakoniwa-business-pack
+      action: Build the MuJoCo check and Hakoniwa plant under the Recipe workspace.
+      command: python3.12 tools/recipe/agilex_tracer_demo.py build
+    - order: 3
+      component: hakoniwa-business-pack
+      action: Verify Foundation Python 3.12, SOABI, runtime inputs, and binaries.
+      command: python3.12 tools/recipe/agilex_tracer_demo.py doctor
+    - order: 4
+      component: hakoniwa-business-pack
+      action: Validate the model and actuator configuration without starting shared memory.
+      command: python3.12 tools/recipe/agilex_tracer_demo.py step1
+    - order: 5
+      component: hakoniwa-business-pack
+      action: Start the bounded Twist run through the background Launcher lifecycle.
+      command: python3.12 tools/recipe/agilex_tracer_demo.py start
+    - order: 6
+      component: hakoniwa-business-pack
+      action: Inspect the persistent Launcher session state.
+      command: python3.12 tools/recipe/agilex_tracer_demo.py status
+  readiness:
+    lifecycle_state:
+      source: Launcher session plus plant and sender logs
+      required: RUNNING with both assets waiting before hako-cmd start
+      sufficient: false
+    checks:
+      - id: foundation
+        kind: receipt
+        target: work/foundation/install
+        expected: SATISFIED with matching Python SOABI
+      - id: motion
+        kind: log
+        target: RoverTwistAsset base.x
+        expected: positive displacement after positive linear.x
+    operator_handoff:
+      background: true
+      explain_command_return: true
+      next_actions: [status, inspect MuJoCo viewer or logs, stop]
+  success_signals:
+    - Plant and sender register and reach WAIT START.
+    - The runtime enters WAIT RUNNING after hako-cmd start.
+    - A positive linear.x command produces positive base.x displacement.
+    - stop leaves a TERMINATED Launcher session and no managed processes.
+  failure_signals:
+    - Foundation or SOABI mismatch
+    - generated model or PDU configuration missing
+    - plant or sender registration failure
+    - no positive displacement
+  cleanup:
+    owner: Recipe Launcher session
+    provider: hakoniwa-pdu-python
+    mode: session-file
+    target: work/recipes/agilex-tracer-hakoniwa-runtime/runtime/launcher-session.json
+    trigger: python3.12 tools/recipe/agilex_tracer_demo.py stop
+    expected_behavior:
+      - Invoke LauncherService.terminate through the control CLI.
+    verification_checks:
+      - Session state is TERMINATED.
+      - Plant and sender processes are absent.
+    cautions:
+      - Do not kill arbitrary Python or MuJoCo processes.
+
+expected_result: >
+  The generated Tracer model runs as a managed Hakoniwa asset and moves forward
+  from a bounded Twist command without using a system install or an ABI-unknown Python.
+
+source_catalogs:
+  - component_id: hakoniwa-mbody-registry
+    path: catalog/components/hakoniwa-mbody-registry.yaml
+  - component_id: hakoniwa-mujoco-robots
+    path: catalog/components/hakoniwa-mujoco-robots.yaml
+  - component_id: hakoniwa-core-pro
+    path: catalog/components/hakoniwa-core-pro.yaml
+  - component_id: hakoniwa-pdu-endpoint
+    path: catalog/components/hakoniwa-pdu-endpoint.yaml
+  - component_id: hakoniwa-pdu-python
+    path: catalog/components/hakoniwa-pdu-python.yaml
+
+source_artifacts:
+  - repository: hakoniwalab/hakoniwa-mbody-registry
+    path: bodies/agilex_tracer/generated/tracer_v1.minimal_world.xml
+    revision: local-validation-2026-07-22
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: examples/actuators/agilex_tracer
+    revision: local-validation-2026-07-22

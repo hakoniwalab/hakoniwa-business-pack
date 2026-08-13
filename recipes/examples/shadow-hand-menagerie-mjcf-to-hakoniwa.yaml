@@ -32,7 +32,9 @@ validation:
     Hakoniwa no-viewer PDU smoke then registered the Shadow Hand plant and Python
     sender, started via hako-cmd after both reached WAIT START, sent 20-element
     Float64MultiArray actuator targets, and observed tendon-coupled finger joints
-    moving through JointState readback/logged plant state.
+    moving through JointState readback/logged plant state. On 2026-08-11 the same
+    managed Foundation Recipe was verified on macOS arm64 and Windows x64,
+    including viewer execution on Windows.
   steps:
     - id: inspect_shadow_hand_license
       status: verified
@@ -113,6 +115,18 @@ validation:
         - Sender sent actuator_position_targets with 20 elements in stable actuator-name order.
         - Representative plant output showed FFJ0_target=1.739 with FFJ2=0.804 and FFJ1=0.901 at t=2.002, confirming tendon-coupled response through MuJoCo.
         - This validates bounded open-close PDU control, not natural grasping or closed-loop dexterous control.
+    - id: managed_foundation_runtime
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-business-pack
+          path: tools/recipe/shadow_hand_menagerie.py
+          revision: local-validation-2026-08-11
+      notes:
+        - The pinned Menagerie revision and model-local LICENSE were materialized under the Recipe workspace.
+        - The Shadow Hand target was built from hakoniwa-mujoco-robots source against work/foundation/install.
+        - A five-second headless Launcher run reached TERMINATED normally and logged 20-element actuator targets plus changing tendon-coupled JointState values.
+        - Foundation Python 3.12 decoded the first valid JointState after explicitly reporting and skipping the initial uninitialized packet.
+        - On 2026-08-11, Windows x64 materialization, short-path build, viewer execution, and Launcher lifecycle were confirmed by the user.
 
 agency_boundary:
   agent_actions:
@@ -155,8 +169,8 @@ constraints:
 target_environment:
   required_for: executable-demo
   status: partially_known
-  os: macOS | Linux
-  architecture: arm64 | x86_64
+  os: macOS | Linux | Windows
+  architecture: arm64 | x86_64 | x64
   execution_mode: native
   runtimes:
     - name: MuJoCo
@@ -169,10 +183,10 @@ target_environment:
       path: unknown
     - name: Python
       required: true
-      version: "3"
-      path: unknown
+      version: "3.12"
+      path: work/foundation/install/python
   hakoniwa:
-    install_prefix: /usr/local/hakoniwa
+    install_prefix: work/foundation/install
     components_built:
       - hakoniwa-core-pro
       - hakoniwa-mujoco-robots
@@ -182,19 +196,62 @@ target_environment:
 
 execution_environment:
   required_for: executable-demo
-  status: partially_known
+  status: specified
+  workspace:
+    mode: managed
   gui:
-    required: true
-    status: unknown
+    required: false
+    status: optional
   shared_memory:
     required: true
     access: required-for-hakoniwa-runtime
   python:
-    environment: venv
-    hakopy_available: required-for-hakoniwa-runtime
+    environment: foundation-venv
+    path: work/foundation/install/python
+    version: "3.12"
+    hakopy_available: true
   hakoniwa:
-    install_prefix: /usr/local/hakoniwa
-    hako_cmd_access: unknown
+    install_prefix: work/foundation/install
+    hako_cmd_access: requires-unsandboxed-command
+  notes:
+    - The same Recipe runner and command sequence are used on macOS and Windows; executable suffixes, CMake layout, and vcpkg selection are resolved internally.
+    - Menagerie source, license, runtime inputs, build output, logs, and Launcher session remain under work/recipes/shadow-hand-menagerie-mjcf-to-hakoniwa/.
+    - The exact Foundation Python must import SOABI-compatible hakopy, hakoniwa-pdu, and hakoniwa-pdu-endpoint.
+
+foundation_contract:
+  mode: required
+  reason: This Recipe executes Core shared memory, hako-cmd, SOABI-tagged hakopy, PDU Python, and Endpoint callback transport.
+
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      shared_memory: true
+      hako_cmd: true
+      python_binding: true
+  hakoniwa-pdu-python:
+    version:
+      min: 1.6.8
+    capabilities:
+      hako_launcher: true
+      launcher_background_lifecycle: true
+      shm_backend: true
+  hakoniwa-pdu-endpoint:
+    capabilities:
+      python_binding: true
+      hakoniwa_core: true
+      core_callback: true
+
+recipe_local_requirements:
+  hakoniwa-mbody-registry:
+    role: pinned Menagerie source materializer
+    required_artifacts:
+      - sources/shadow_hand.yaml
+      - tools/fetch.py
+  hakoniwa-mujoco-robots:
+    build_entrypoint: source CMake configured by the Recipe runner
+    required_artifacts:
+      - shadow-hand-hakoniwa-asset
+      - send_shadow_hand_targets.py
 
 components:
   - id: hakoniwa-mujoco-robots
@@ -367,9 +424,8 @@ artifacts:
     path: config/shadow-hand-pdutypes.json
 
 missing_pieces:
-  - Pin an upstream Menagerie revision for reproducibility.
   - Decide whether to keep the copied Shadow Hand subtree as the long-term distribution shape or replace it with a reproducible import script.
-  - Add an automated noninteractive Hakoniwa smoke if the local environment can provide shared-memory access without manual process orchestration.
+  - Validate the same managed configure, build, doctor, and start commands on Windows x64.
   - Optionally add a MuJoCo viewer demo and tune camera/pose for presentation.
 
 demo:
@@ -387,23 +443,34 @@ demo:
           path: shadow_hand/LICENSE
           revision: main
     - order: 2
-      id: run_common_preflight
-      component: hakoniwa-core-pro
-      action: Check common Hakoniwa runtime assumptions.
-      command: bash tools/doctor.bash
+      id: configure_managed_recipe
+      component: hakoniwa-business-pack
+      action: Materialize the pinned Menagerie source, retain its license, and configure the Recipe-owned build.
+      command: python3.12 tools/recipe/shadow_hand_menagerie.py configure
       agency: agent_action
-      requires_gates: []
+      requires_gates:
+        - shadow_hand_license_checked
     - order: 3
-      id: mujoco_joint_smoke
+      id: build_shadow_hand_asset
       component: hakoniwa-mujoco-robots
-      action: Load scene_right.xml, log actuator names, and execute bounded open-close targets.
+      action: Build the Shadow Hand Hakoniwa asset in the managed Recipe workspace.
+      command: python3.12 tools/recipe/shadow_hand_menagerie.py build
       agency: agent_action
       requires_gates:
         - shadow_hand_license_checked
     - order: 4
+      id: run_managed_preflight
+      component: hakoniwa-business-pack
+      action: Validate Foundation, source inputs, toolchain, and generated runtime artifacts.
+      command: python3.12 tools/recipe/shadow_hand_menagerie.py doctor
+      agency: agent_action
+      requires_gates:
+        - shadow_hand_license_checked
+    - order: 5
       id: hakoniwa_joint_pdu_smoke
       component: hakoniwa-pdu-python
       action: Publish scripted joint targets and verify JointState-compatible output changes after hako-cmd start.
+      command: python3.12 tools/recipe/shadow_hand_menagerie.py start
       agency: agent_action
       requires_gates:
         - shadow_hand_license_checked
@@ -423,6 +490,8 @@ demo:
       - Scripted open pose and bounded close pose.
     automation:
       - Use deterministic scripted targets for v0.
+      - Use python3.12 tools/recipe/shadow_hand_menagerie.py status to inspect the owned Launcher session.
+      - Use python3.12 tools/recipe/shadow_hand_menagerie.py stop for early normal termination.
   verification_checks:
     lifecycle:
       - MuJoCo scene loads.

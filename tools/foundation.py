@@ -31,8 +31,9 @@ ARTIFACT_PROBES = {
         "bin/hakoniwa-pdu-web-bridge",
         "bin/hakoniwa-pdu-web-bridge.exe",
     ),
-    "hakoniwa-pdu-python": ("python",),
 }
+FOUNDATION_PYTHON_IMPLEMENTATION = "CPython"
+FOUNDATION_PYTHON_VERSION = (3, 12)
 
 
 class FoundationError(RuntimeError):
@@ -126,6 +127,159 @@ def resolve_workspace(
 def prepare_workspace(paths: WorkspacePaths) -> None:
     for directory in paths.directories():
         directory.mkdir(parents=True, exist_ok=True)
+
+
+def foundation_toolchain_path(paths: WorkspacePaths) -> Path:
+    return paths.foundation_config / "toolchain.json"
+
+
+def configure_foundation_toolchain(paths: WorkspacePaths, vcpkg_root: Path) -> Path:
+    root = vcpkg_root.expanduser().resolve()
+    executable = root / ("vcpkg.exe" if sys.platform == "win32" else "vcpkg")
+    toolchain = root / "scripts" / "buildsystems" / "vcpkg.cmake"
+    missing = [str(path) for path in (executable, toolchain) if not path.is_file()]
+    if missing:
+        raise FoundationError("invalid vcpkg root; missing required files: " + ", ".join(missing))
+    output = foundation_toolchain_path(paths)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = output.with_suffix(".json.tmp")
+    temporary.write_text(
+        json.dumps({"schema_version": 1, "vcpkg_root": str(root)}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(output)
+    return output
+
+
+def load_foundation_toolchain(paths: WorkspacePaths) -> dict[str, str]:
+    path = foundation_toolchain_path(paths)
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise FoundationError(f"cannot read Foundation toolchain config {path}: {exc}") from exc
+    if set(data) != {"schema_version", "vcpkg_root"} or data["schema_version"] != 1:
+        raise FoundationError(f"unsupported Foundation toolchain config: {path}")
+    value = data["vcpkg_root"]
+    if not isinstance(value, str) or not value:
+        raise FoundationError(f"Foundation toolchain vcpkg_root is invalid: {path}")
+    root = Path(value).resolve()
+    if not (root / "scripts" / "buildsystems" / "vcpkg.cmake").is_file():
+        raise FoundationError(f"Foundation toolchain vcpkg_root is not usable: {root}")
+    return {"vcpkg_root": str(root)}
+
+
+def foundation_python_executable(python_root: Path) -> Path:
+    return python_root / (
+        "Scripts/python.exe" if sys.platform == "win32" else "bin/python"
+    )
+
+
+def probe_python(executable: Path) -> dict:
+    probe = (
+        "import json, platform, sys, sysconfig; "
+        "print(json.dumps({"
+        "'implementation': platform.python_implementation(), "
+        "'executable': sys.executable, "
+        "'prefix': sys.prefix, "
+        "'version': platform.python_version(), "
+        "'major': sys.version_info.major, "
+        "'minor': sys.version_info.minor, "
+        "'soabi': sysconfig.get_config_var('SOABI') or '', "
+        "'extension_suffix': sysconfig.get_config_var('EXT_SUFFIX') or ''}))"
+    )
+    result = subprocess.run(
+        [str(executable), "-c", probe],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise FoundationError(
+            f"Foundation Python probe failed for {executable}: "
+            f"{result.stderr.strip()}"
+        )
+    try:
+        metadata = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise FoundationError(
+            f"Foundation Python returned invalid metadata: {result.stdout.strip()}"
+        ) from exc
+    if not metadata.get("soabi"):
+        suffix = metadata.get("extension_suffix")
+        if isinstance(suffix, str):
+            name = suffix.lstrip(".")
+            for extension in (".pyd", ".so"):
+                if name.endswith(extension):
+                    name = name[: -len(extension)]
+                    break
+            # An untagged suffix (plain .so/.pyd) does not prove an ABI contract.
+            if name not in {"so", "pyd"}:
+                metadata["soabi"] = name
+    return metadata
+
+
+def validate_foundation_python_probe(probe: dict, python_root: Path) -> None:
+    expected_major, expected_minor = FOUNDATION_PYTHON_VERSION
+    actual = (probe.get("major"), probe.get("minor"))
+    if probe.get("implementation") != FOUNDATION_PYTHON_IMPLEMENTATION:
+        raise FoundationError(
+            "Foundation Python implementation mismatch: "
+            f"required={FOUNDATION_PYTHON_IMPLEMENTATION}, "
+            f"selected={probe.get('implementation')}"
+        )
+    if actual != FOUNDATION_PYTHON_VERSION:
+        raise FoundationError(
+            "Foundation Python version mismatch: "
+            f"required={expected_major}.{expected_minor}, "
+            f"selected={probe.get('version')} ({probe.get('executable')})"
+        )
+    prefix = probe.get("prefix")
+    if not isinstance(prefix, str) or Path(prefix).resolve() != python_root.resolve():
+        raise FoundationError(
+            "Foundation Python prefix mismatch: "
+            f"required={python_root}, selected={prefix}"
+        )
+    if not probe.get("soabi") or not probe.get("extension_suffix"):
+        raise FoundationError(
+            f"Foundation Python does not expose SOABI metadata: {probe.get('executable')}"
+        )
+
+
+def ensure_foundation_python(paths: WorkspacePaths, recipe: Path) -> tuple[Path, dict]:
+    executable = foundation_python_executable(paths.foundation_python)
+    rerun = (
+        f"{executable} tools/foundation.py build --recipe {recipe}"
+        if executable.is_file()
+        else f"python3.12 tools/foundation.py build --recipe {recipe}"
+    )
+    if not executable.is_file():
+        if (
+            platform.python_implementation() != FOUNDATION_PYTHON_IMPLEMENTATION
+            or sys.version_info[:2] != FOUNDATION_PYTHON_VERSION
+        ):
+            raise FoundationError(
+                "Foundation Python is not initialized and must be created with "
+                "CPython 3.12 before any Foundation changes. Re-run with: "
+                + rerun
+            )
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "venv", str(paths.foundation_python)],
+                check=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            raise FoundationError(
+                "Foundation Python 3.12 environment creation failed: "
+                f"{paths.foundation_python}"
+            ) from exc
+    try:
+        selected = probe_python(executable)
+        validate_foundation_python_probe(selected, paths.foundation_python)
+    except FoundationError as exc:
+        raise FoundationError(f"{exc}. Re-run with: {rerun}") from exc
+    return executable, selected
 
 
 def print_paths(paths: WorkspacePaths, json_output: bool) -> None:
@@ -317,6 +471,14 @@ def _receipt_path(prefix: Path, component_id: str) -> Path:
 
 
 def _probe_artifact(prefix: Path, component_id: str) -> bool:
+    if component_id == "hakoniwa-pdu-python":
+        site_packages = [prefix / "python" / "Lib" / "site-packages"]
+        site_packages.extend((prefix / "python" / "lib").glob("python*/site-packages"))
+        return any(
+            (site / "hakoniwa_pdu").exists()
+            or any(site.glob("hakoniwa_pdu-*.dist-info"))
+            for site in site_packages
+        )
     return any(
         (prefix / relative).exists()
         for relative in ARTIFACT_PROBES.get(component_id, ())
@@ -415,6 +577,76 @@ def evaluate_component(
         reasons.append(
             _reason("install.prefix", str(prefix), installed_prefix)
         )
+    if component_id == "hakoniwa-core-pro":
+        installed_python = receipt.get("python")
+        if not isinstance(installed_python, dict):
+            reasons.append(
+                _reason(
+                    "python",
+                    "SOABI-tagged Foundation Python binding metadata",
+                    installed_python or "missing",
+                )
+            )
+        else:
+            expected_python = {
+                "binding_mode": "soabi",
+                "implementation": FOUNDATION_PYTHON_IMPLEMENTATION,
+                "major": FOUNDATION_PYTHON_VERSION[0],
+                "minor": FOUNDATION_PYTHON_VERSION[1],
+            }
+            for field, expected in expected_python.items():
+                installed = installed_python.get(field)
+                if installed != expected:
+                    reasons.append(
+                        _reason(f"python.{field}", expected, installed)
+                    )
+            if not installed_python.get("soabi"):
+                reasons.append(
+                    _reason("python.soabi", "non-empty SOABI", "missing")
+                )
+            extension_suffix = installed_python.get("extension_suffix")
+            expected_artifact = (
+                f"share/hakoniwa/python/hakopy{extension_suffix}"
+                if isinstance(extension_suffix, str) and extension_suffix
+                else None
+            )
+            installed_artifact = installed_python.get("artifact")
+            if expected_artifact is None or installed_artifact != expected_artifact:
+                reasons.append(
+                    _reason(
+                        "python.artifact",
+                        expected_artifact or "SOABI-tagged hakopy artifact",
+                        installed_artifact or "missing",
+                    )
+                )
+            artifact_paths = {
+                artifact.get("path")
+                for artifact in receipt.get("artifacts", [])
+                if isinstance(artifact, dict)
+            }
+            if installed_artifact not in artifact_paths:
+                reasons.append(
+                    _reason(
+                        "python.artifact.receipt",
+                        "listed in artifacts",
+                        installed_artifact or "missing",
+                    )
+                )
+            python_dir = prefix / "share" / "hakoniwa" / "python"
+            installed_bindings = sorted(
+                path.name
+                for path in python_dir.glob("hakopy*")
+                if path.is_file() and path.suffix.lower() in {".so", ".pyd"}
+            )
+            expected_name = Path(expected_artifact).name if expected_artifact else None
+            if installed_bindings != ([expected_name] if expected_name else []):
+                reasons.append(
+                    _reason(
+                        "python.artifacts.unique",
+                        [expected_name] if expected_name else ["one SOABI-tagged hakopy"],
+                        installed_bindings,
+                    )
+                )
     for capability, enabled in required.get("capabilities", {}).items():
         installed = receipt.get("capabilities", {}).get(capability)
         if isinstance(enabled, bool) and installed is not enabled:
@@ -498,7 +730,78 @@ def evaluate_component(
     }
 
 
-def inspect_foundation(recipe: Path, prefix: Path) -> dict:
+def inspect_foundation_python(prefix: Path) -> dict:
+    python_root = prefix / "python"
+    executable = foundation_python_executable(python_root)
+    if not executable.is_file():
+        return {
+            "status": "MISSING",
+            "executable": str(executable),
+            "version": None,
+            "soabi": None,
+            "reason": "Foundation Python executable is missing",
+        }
+    try:
+        selected = probe_python(executable)
+        validate_foundation_python_probe(selected, python_root)
+    except FoundationError as exc:
+        return {
+            "status": "INCOMPATIBLE",
+            "executable": str(executable),
+            "version": None,
+            "soabi": None,
+            "reason": str(exc),
+        }
+    return {
+        "status": "SATISFIED",
+        "executable": str(executable),
+        "version": selected["version"],
+        "soabi": selected["soabi"],
+        "reason": None,
+    }
+
+
+def inspect_core_runtime_config(prefix: Path) -> dict:
+    config = prefix.parent / "config" / "cpp_core_config.json"
+    expected_mmap = (prefix.parent / "runtime" / "mmap").as_posix()
+    if not config.is_file():
+        return {
+            "status": "MISSING",
+            "path": str(config),
+            "core_mmap_path": None,
+            "reason": "Core runtime config is missing",
+        }
+    try:
+        data = json.loads(config.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {
+            "status": "INCOMPATIBLE",
+            "path": str(config),
+            "core_mmap_path": None,
+            "reason": f"Core runtime config is not valid JSON: {exc}",
+        }
+    mmap_path = data.get("core_mmap_path") if isinstance(data, dict) else None
+    normalized = mmap_path.replace("\\", "/") if isinstance(mmap_path, str) else None
+    if normalized != expected_mmap:
+        return {
+            "status": "INCOMPATIBLE",
+            "path": str(config),
+            "core_mmap_path": normalized,
+            "reason": f"Core mmap path mismatch: required={expected_mmap}, installed={normalized}",
+        }
+    return {
+        "status": "SATISFIED",
+        "path": str(config),
+        "core_mmap_path": normalized,
+        "reason": None,
+    }
+
+
+def inspect_foundation(
+    recipe: Path,
+    prefix: Path,
+    validate_core_config: bool = False,
+) -> dict:
     requirements = load_foundation_requirements(recipe)
     all_receipts: dict[str, dict] = {}
     receipt_dir = prefix / "share" / "hakoniwa" / "receipts"
@@ -517,7 +820,28 @@ def inspect_foundation(recipe: Path, prefix: Path) -> dict:
         evaluate_component(prefix, component_id, required, all_receipts)
         for component_id, required in requirements.items()
     ]
+    runtime_python = inspect_foundation_python(prefix)
+    core_receipt = all_receipts.get("hakoniwa-core-pro")
+    if runtime_python["status"] == "SATISFIED" and core_receipt is not None:
+        installed_soabi = core_receipt.get("python", {}).get("soabi")
+        if installed_soabi != runtime_python["soabi"]:
+            for component in components:
+                if component["component"] == "hakoniwa-core-pro":
+                    component["status"] = "INCOMPATIBLE"
+                    component["reasons"].append(
+                        _reason(
+                            "python.soabi",
+                            runtime_python["soabi"],
+                            installed_soabi,
+                        )
+                    )
+                    break
     statuses = {component["status"] for component in components}
+    statuses.add(runtime_python["status"])
+    core_config = None
+    if validate_core_config and "hakoniwa-core-pro" in requirements:
+        core_config = inspect_core_runtime_config(prefix)
+        statuses.add(core_config["status"])
     if "INCOMPATIBLE" in statuses:
         status = "INCOMPATIBLE"
     elif "UNKNOWN" in statuses:
@@ -531,6 +855,7 @@ def inspect_foundation(recipe: Path, prefix: Path) -> dict:
         "install_prefix": str(prefix),
         "status": status,
         "components": components,
+        "runtime": {"python": runtime_python, "core_config": core_config},
     }
 
 
@@ -543,6 +868,17 @@ def load_build_catalog(path: Path) -> dict[str, dict]:
         data.get("components"), dict
     ):
         raise FoundationError(f"unsupported Foundation catalog: {path}")
+    python_contract = data.get("runtime", {}).get("python", {})
+    expected_python = {
+        "implementation": FOUNDATION_PYTHON_IMPLEMENTATION,
+        "major": FOUNDATION_PYTHON_VERSION[0],
+        "minor": FOUNDATION_PYTHON_VERSION[1],
+    }
+    if python_contract != expected_python:
+        raise FoundationError(
+            "Foundation catalog Python contract does not match the runtime: "
+            f"required={expected_python}, catalog={python_contract}"
+        )
     components = data["components"]
     known_operations = {
         "doctor",
@@ -556,10 +892,15 @@ def load_build_catalog(path: Path) -> dict[str, dict]:
         if not isinstance(component, dict):
             raise FoundationError(f"{component_id}: catalog entry must be a mapping")
         source = component.get("source")
+        repository = component.get("repository")
         dependencies = component.get("dependencies")
         operations = component.get("operations")
         if not isinstance(source, str) or not source:
             raise FoundationError(f"{component_id}: source must be a path")
+        if repository is not None and (
+            not isinstance(repository, str) or not repository
+        ):
+            raise FoundationError(f"{component_id}: repository must be a URL")
         if (
             not isinstance(dependencies, list)
             or not all(isinstance(item, str) for item in dependencies)
@@ -738,7 +1079,13 @@ def create_build_plan(
         "status": (
             "BLOCKED"
             if blocked
-            else ("NEEDS_BUILD" if actions else "SATISFIED")
+            else (
+                "NEEDS_BUILD"
+                if actions
+                or inspected.get("runtime", {}).get("python", {}).get("status")
+                != "SATISFIED"
+                else "SATISFIED"
+            )
         ),
         "dependency_order": order,
         "resolved_dependencies": resolved_dependencies,
@@ -755,18 +1102,53 @@ def _yaml_string(value: Path | str) -> str:
     return json.dumps(str(value))
 
 
+def _core_foundation_manifest(source_manifest: Path) -> str:
+    if not source_manifest.is_file():
+        raise FoundationError(
+            f"hakoniwa-core-pro build manifest not found: {source_manifest}"
+        )
+    lines = source_manifest.read_text(encoding="utf-8").splitlines()
+    python_index: int | None = None
+    soabi_index: int | None = None
+    active_section: str | None = None
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if not line.startswith((" ", "\t")) and stripped.endswith(":"):
+            active_section = stripped[:-1]
+            if active_section == "python":
+                python_index = index
+            continue
+        if active_section == "python" and re.match(r"^\s+soabi\s*:", line):
+            soabi_index = index
+    if soabi_index is not None:
+        indentation = lines[soabi_index][: len(lines[soabi_index]) - len(lines[soabi_index].lstrip())]
+        lines[soabi_index] = f"{indentation}soabi: true"
+    elif python_index is not None:
+        lines.insert(python_index + 1, "  soabi: true")
+    else:
+        if lines and lines[-1] != "":
+            lines.append("")
+        lines.extend(["python:", "  soabi: true"])
+    return "\n".join(lines) + "\n"
+
+
 def write_component_manifest(
     component_id: str,
+    source: Path,
     paths: WorkspacePaths,
     required: dict | None = None,
 ) -> Path | None:
     build_dir = paths.foundation_build / component_id
     manifest = paths.foundation_build / f"{component_id}.yaml"
     prefix = paths.install_prefix
+    toolchain = load_foundation_toolchain(paths)
+    vcpkg_root = toolchain.get("vcpkg_root", "")
     required_capabilities = (required or {}).get("capabilities", {})
     if component_id == "hakoniwa-core-pro":
-        return None
-    if component_id == "hakoniwa-pdu-endpoint":
+        content = _core_foundation_manifest(source / "hakoniwa-build.yaml")
+    elif component_id == "hakoniwa-pdu-endpoint":
         core_free = (
             required_capabilities.get("core_free_runtime") is True
             or required_capabilities.get("hakoniwa_core") is False
@@ -800,7 +1182,7 @@ validation:
 
 paths:
   hakoniwa_core_root: {_yaml_string(prefix) if core_enabled else '""'}
-  vcpkg_root: ""
+  vcpkg_root: {_yaml_string(vcpkg_root)}
 """
     elif component_id == "hakoniwa-pdu-rpc":
         content = f"""version: 1
@@ -812,7 +1194,7 @@ build:
 
 paths:
   pdu_endpoint_root: {_yaml_string(prefix)}
-  vcpkg_root: ""
+  vcpkg_root: {_yaml_string(vcpkg_root)}
 """
     elif component_id == "hakoniwa-pdu-bridge-core":
         content = f"""version: 1
@@ -836,7 +1218,7 @@ validation:
 paths:
   pdu_endpoint_root: {_yaml_string(prefix)}
   hakoniwa_core_root: {_yaml_string(prefix)}
-  vcpkg_root: ""
+  vcpkg_root: {_yaml_string(vcpkg_root)}
 """
     elif component_id == "hakoniwa-pdu-python":
         content = f"""version: 1
@@ -867,15 +1249,16 @@ def component_commands(
     hako = source / "tools" / "hako.py"
     if not hako.is_file():
         raise FoundationError(f"{component_id}: hako.py not found: {hako}")
-    manifest = write_component_manifest(component_id, paths, required)
-    python = sys.executable
+    manifest = write_component_manifest(component_id, source, paths, required)
+    python = str(foundation_python_executable(paths.foundation_python))
     build_dir = paths.foundation_build / component_id
     commands: list[list[str]] = []
     for operation in operations:
         if component_id == "hakoniwa-core-pro":
             command = [python, str(hako), operation]
             if operation in {"doctor", "build", "install"}:
-                command.extend(["--config", str(source / "hakoniwa-build.yaml")])
+                assert manifest is not None
+                command.extend(["--config", str(manifest)])
             if operation == "build":
                 command.extend(
                     [
@@ -890,7 +1273,7 @@ def component_commands(
                         "--python-executable",
                         python,
                         "--core-mmap-dir",
-                        str(paths.foundation_mmap),
+                        paths.foundation_mmap.as_posix(),
                     ]
                 )
             elif operation == "install":
@@ -931,26 +1314,70 @@ def component_commands(
     return commands
 
 
+def normalize_core_config_for_windows(
+    config: Path,
+    expected_mmap: Path | None = None,
+) -> None:
+    """Repair Core's Windows mmap JSON and enforce the Foundation-owned path."""
+    if platform.system() != "Windows" or not config.is_file():
+        return
+    content = config.read_text(encoding="utf-8")
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        pattern = r'("core_mmap_path"\s*:\s*")([^"]*)(")'
+        repaired, replacements = re.subn(
+            pattern,
+            lambda match: (
+                match.group(1)
+                + match.group(2).replace("\\", "/")
+                + match.group(3)
+            ),
+            content,
+            count=1,
+        )
+        if replacements != 1:
+            raise FoundationError(
+                f"core_mmap_path not found in invalid Core config: {config}"
+            )
+        try:
+            data = json.loads(repaired)
+        except json.JSONDecodeError as exc:
+            raise FoundationError(
+                f"Core config remains invalid after Windows path repair: {config}: {exc}"
+            ) from exc
+    if not isinstance(data, dict) or not isinstance(data.get("core_mmap_path"), str):
+        raise FoundationError(f"Core config has no string core_mmap_path: {config}")
+    normalized = data["core_mmap_path"].replace("\\", "/")
+    if expected_mmap is not None and normalized != expected_mmap.as_posix():
+        raise FoundationError(
+            "Core mmap path is outside the managed Foundation contract: "
+            f"required={expected_mmap.as_posix()}, generated={normalized}"
+        )
+    data["core_mmap_path"] = normalized
+    temporary = config.with_suffix(config.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(config)
+
+
 def execute_build_plan(plan: dict, paths: WorkspacePaths) -> dict:
     if plan["blocked"]:
         raise FoundationError(
             "Foundation plan is blocked by UNKNOWN components: "
             + ", ".join(plan["blocked"])
         )
+    python, python_contract = ensure_foundation_python(
+        paths, Path(plan["recipe"])
+    )
+    print(
+        "Foundation Python: "
+        f"{python_contract['version']} ({python}) "
+        f"SOABI={python_contract['soabi']}"
+    )
     prepare_workspace(paths)
-    if any(
-        action["component"] == "hakoniwa-pdu-rpc"
-        for action in plan["actions"]
-    ) and not (
-        paths.foundation_python
-        / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
-    ).is_file():
-        if sys.version_info < (3, 12):
-            raise FoundationError("Python 3.12 or newer is required")
-        subprocess.run(
-            [sys.executable, "-m", "venv", str(paths.foundation_python)],
-            check=True,
-        )
     for action in plan["actions"]:
         source = Path(action["source"])
         for command in component_commands(
@@ -960,6 +1387,11 @@ def execute_build_plan(plan: dict, paths: WorkspacePaths) -> dict:
             paths,
             action.get("requirements"),
         ):
+            if Path(command[0]) != python:
+                raise FoundationError(
+                    f"{action['component']}: component command does not use "
+                    f"Foundation Python: {command[0]}"
+                )
             print(f"> {subprocess.list2cmdline(command)}", flush=True)
             result = subprocess.run(command, cwd=source, check=False)
             if result.returncode != 0:
@@ -967,8 +1399,13 @@ def execute_build_plan(plan: dict, paths: WorkspacePaths) -> dict:
                     f"{action['component']} command failed "
                     f"with exit code {result.returncode}"
                 )
+            if action["component"] == "hakoniwa-core-pro":
+                normalize_core_config_for_windows(
+                    paths.foundation_config / "cpp_core_config.json",
+                    paths.foundation_mmap,
+                )
     final = inspect_foundation(
-        Path(plan["recipe"]), paths.install_prefix
+        Path(plan["recipe"]), paths.install_prefix, validate_core_config=True
     )
     if final["status"] != "SATISFIED":
         raise FoundationError(
@@ -986,7 +1423,10 @@ def print_build_plan(plan: dict, json_output: bool) -> None:
     if plan["blocked"]:
         print(f"Blocked by UNKNOWN: {', '.join(plan['blocked'])}")
     if not plan["actions"]:
-        print("Actions: none (installed Foundation is reusable)")
+        if plan["status"] == "NEEDS_BUILD":
+            print("Actions: initialize or validate Foundation Python 3.12")
+        else:
+            print("Actions: none (installed Foundation is reusable)")
         return
     print("Actions:")
     for action in plan["actions"]:
@@ -1002,6 +1442,27 @@ def print_inspection(result: dict, json_output: bool) -> None:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
     print(f"Foundation: {result['status']}")
+    runtime_python = result.get("runtime", {}).get("python")
+    if isinstance(runtime_python, dict):
+        detail = (
+            f"{runtime_python.get('version')} "
+            f"SOABI={runtime_python.get('soabi')} "
+            f"executable={runtime_python.get('executable')}"
+            if runtime_python.get("status") == "SATISFIED"
+            else (
+                f"{runtime_python.get('reason')} "
+                f"executable={runtime_python.get('executable')}"
+            )
+        )
+        print(f"[{runtime_python.get('status')}] Foundation Python: {detail}")
+    core_config = result.get("runtime", {}).get("core_config")
+    if isinstance(core_config, dict):
+        detail = (
+            f"path={core_config.get('path')} mmap={core_config.get('core_mmap_path')}"
+            if core_config.get("status") == "SATISFIED"
+            else f"{core_config.get('reason')} path={core_config.get('path')}"
+        )
+        print(f"[{core_config.get('status')}] Core runtime config: {detail}")
     for component in result["components"]:
         print(f"[{component['status']}] {component['component']}")
         for reason in component["reasons"]:
@@ -1024,6 +1485,13 @@ def build_parser() -> argparse.ArgumentParser:
         subparser = subparsers.add_parser(command, help=help_text)
         subparser.add_argument("--recipe-id", required=True)
         subparser.add_argument("--json", action="store_true", dest="json_output")
+
+    toolchain = subparsers.add_parser(
+        "toolchain",
+        help="persist explicit host toolchain selection under work/foundation/config",
+    )
+    toolchain.add_argument("--recipe-id", required=True)
+    toolchain.add_argument("--vcpkg-root", required=True)
 
     doctor = subparsers.add_parser(
         "doctor",
@@ -1098,10 +1566,15 @@ def main(argv: list[str] | None = None) -> int:
                 final = execute_build_plan(result, paths)
                 print_inspection(final, False)
                 return 0
-            result = inspect_foundation(recipe, prefix)
+            result = inspect_foundation(recipe, prefix, validate_core_config=True)
             print_inspection(result, args.json_output)
             return 0 if result["status"] == "SATISFIED" else 1
         paths = resolve_workspace(repository_root(), args.recipe_id)
+        if args.command == "toolchain":
+            output = configure_foundation_toolchain(paths, Path(args.vcpkg_root))
+            print(f"Foundation toolchain: {output}")
+            print(f"vcpkg_root: {load_foundation_toolchain(paths)['vcpkg_root']}")
+            return 0
         if args.command == "prepare":
             prepare_workspace(paths)
         print_paths(paths, args.json_output)

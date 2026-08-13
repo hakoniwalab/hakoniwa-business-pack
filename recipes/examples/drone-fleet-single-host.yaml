@@ -1,0 +1,769 @@
+id: drone-fleet-single-host
+title: Native Single-host Multi-process Hakoniwa Drone Fleet
+recipe_version: 0.1
+
+goal:
+  user_request: 任意数の箱庭ドローンを1台のホスト上で複数のシミュレータプロセスへ分割し、macOS・Linux・Windowsで同じ実験設定から実行したい
+  description: >
+    Run one temporally coordinated Hakoniwa Drone simulation on a single native
+    host. An experiment YAML declares the drone count and either an explicit
+    process count or a drones-per-process target. Business Pack generates the
+    fleet, service, PDU, scenario, Foundation-capacity, and Launcher artifacts
+    under the Recipe workspace without modifying Drone Core. The MVP executes a
+    synchronized takeoff followed by a generated HAKONIWA formation and records
+    a completion summary. runtime.visualization selects either browser observation
+    through VSP/WebBridge/Three.js or a headless runtime without those processes.
+    Per-run wall/Core phase timing and Real Time Factor are recorded in the
+    completion summary. Automated experiment matrices and result aggregation
+    are later extensions.
+
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - Drone Core provides arbitrary fleet generation, balanced fleet splitting, native macOS/Linux/Windows binaries, and the shared RPC show runner.
+    - Drone Core supports one built-in Conductor owner with additional local simulator processes joining the same Core domain.
+    - Core PRO supports multiple local assets sharing one simulation time and exposes build limits through Foundation Receipts.
+    - PDU Python provides the cross-platform Launcher and session-file background lifecycle.
+    - Business Pack can derive process count and Foundation capacity from one experiment YAML before runtime startup.
+
+validation:
+  status: partially_verified
+  summary: >
+    Native macOS validation covers 26 drones in one and two simulator
+    processes, visualization and headless modes, cumulative real-time pacing,
+    and a 200-drone/four-process headless run. Linux and Windows remain to be
+    verified.
+  steps:
+    - id: experiment_resolution
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-business-pack
+          path: tools/recipe/test_drone_fleet_single_host.py
+          revision: main
+      notes:
+        - Unit tests cover automatic process count, capacity calculation, one built-in Conductor owner, follower-process ordering, and generated Launcher ownership.
+    - id: native_macos_mvp
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-business-pack
+          path: work/recipes/drone-fleet-single-host/validation/execution-summary.json
+          revision: local-runtime-evidence
+      notes:
+        - Verified 26 drones in one simulator process with its built-in Conductor and VSP/WebBridge enabled.
+        - execution-summary recorded status=done, drone_count=26, proc_count=1, and the complete HAKONIWA workload.
+        - Verified 26 drones split across two simulator processes with exactly one built-in Conductor owner.
+        - With real-time pacing disabled, RTF improved from 3.510 for one process to 6.964 for two processes, approximately 1.984x speedup and 99.2 percent parallel efficiency.
+        - With real-time pacing enabled for 26 drones/two processes, simulation elapsed 18.04 sec and aligned wall elapsed 18.044 sec, producing RTF 0.99978.
+        - A 200-drone/four-process headless run completed with simulation elapsed 21.52 sec, aligned wall elapsed 23.40 sec, and RTF approximately 0.92 on the tested Mac.
+    - id: native_linux_mvp
+      status: not_tested
+      evidence: []
+    - id: native_windows_mvp
+      status: not_tested
+      evidence: []
+
+constraints:
+  - single-host
+  - native-execution-only
+  - multi-process
+  - general-user-distribution-max-200-drones
+  - one-shared-simulation-time
+  - one-built-in-conductor-owner
+  - no-docker
+  - no-strong-cross-process-physical-coupling
+  - simulation-only
+  - automated-experiment-matrix-deferred
+  - generated-artifacts-stay-under-business-pack-work
+
+target_environment:
+  required_for: executable-demo
+  status: specified
+  os: macOS | Linux
+  os_version: current-supported-host
+  architecture: host-native
+  execution_mode: native
+  runtimes:
+    - name: Python
+      required: true
+      version: "3.12"
+      path: work/foundation/install/python
+    - name: Hakoniwa Drone native distribution
+      required: true
+      version: "4.x-compatible"
+      path: hakoniwa-drone-core/lib | hakoniwa-drone-core/mac | hakoniwa-drone-core/lnx | hakoniwa-drone-core/win
+  hakoniwa:
+    install_prefix: work/foundation/install
+    components_built:
+      - hakoniwa-core-pro
+      - hakoniwa-pdu-python
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-pdu-bridge-core
+  notes:
+    - The same experiment YAML and Python operator are used on all three operating systems.
+    - Platform differences are limited to native executable names and dynamic-library search paths.
+    - The single-host Recipe does not install or launch the distributed Hakoniwa Conductor Server/Client package.
+
+execution_environment:
+  workspace:
+    mode: managed
+  required_for: executable-demo
+  status: specified
+  os: host-native
+  os_version: current-supported-host
+  architecture: host-native
+  execution_mode: native
+  gui:
+    required: conditional
+    status: browser-viewer-when-runtime.visualization-is-true
+  shared_memory:
+    required: true
+    access: local-host
+  python:
+    environment: foundation-venv
+    path: work/foundation/install/python
+    version: "3.12"
+    hakopy_available: required
+    hakoniwa_pdu_available: required
+  hakoniwa:
+    install_prefix: work/foundation/install
+    hako_cmd_access: required
+  notes:
+    - runtime.visualization=true uses Three.js to make fleet takeoff and the HAKONIWA formation observable.
+    - runtime.visualization=false omits VSP, WebBridge, the HTTP server, and browser prerequisites for a headless experiment.
+    - Behavioral completion is independently validated through the generated execution summary.
+    - Foundation build limits are generated from the selected experiment before startup.
+
+agency_boundary:
+  agent_actions:
+    - id: generate_experiment_runtime
+      description: Resolve the experiment YAML and generate all Recipe-local configuration.
+      autonomous: true
+      preconditions:
+        - user_requested_execution
+    - id: run_native_simulation
+      description: Start, inspect, smoke-test, and stop the simulation-only native runtime.
+      autonomous: true
+      preconditions:
+        - user_requested_execution
+        - foundation_satisfied
+  human_decisions:
+    - id: approve_experiment_design
+      description: Decide whether the selected fleet sizes, process counts, repetitions, metrics, and host specifications support the paper claim.
+      status: required
+      required_before:
+        - paper_evaluation
+  human_actions: []
+  required_permissions:
+    - id: drone_core_license
+      description: Confirm that the intended use complies with the public non-commercial terms or an applicable Hakoniwa Drone PRO agreement.
+      status: required
+      required_before:
+        - simulation_execution
+    - id: drone_pro_512_profile
+      description: A run above 200 drones requires a Hakoniwa Drone PRO license, access to the private PRO source, and an approved 512-drone binary profile.
+      status: required
+      required_before:
+        - configure_above_200_drones
+        - build_512_profile
+        - simulation_execution_above_200_drones
+
+foundation_contract:
+  mode: required
+  reason: This Recipe uses components installed and validated through the managed Business Pack Foundation.
+
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      shared_memory: true
+      hako_cmd: true
+      python_binding: true
+    build_limits:
+      asset_num:
+        min: 16
+      pdu_channel_max:
+        min: 4096
+      recv_event_max:
+        min: 2048
+      service_client_max:
+        min: 128
+      service_max:
+        min: 512
+      client_name_len_max:
+        min: 64
+      service_name_len_max:
+        min: 128
+  hakoniwa-pdu-python:
+    version:
+      min: 1.6.5
+    capabilities:
+      hako_launcher: true
+      launcher_background_lifecycle: true
+      shm_backend: true
+      external_rpc: true
+    build_limits:
+      asset_num:
+        min: 16
+      pdu_channel_max:
+        min: 4096
+      recv_event_max:
+        min: 2048
+      service_client_max:
+        min: 128
+      service_max:
+        min: 512
+      client_name_len_max:
+        min: 64
+      service_name_len_max:
+        min: 128
+  hakoniwa-pdu-endpoint:
+    capabilities:
+      hakoniwa_core: true
+      core_callback: true
+    build_limits:
+      asset_num:
+        min: 16
+      pdu_channel_max:
+        min: 4096
+      recv_event_max:
+        min: 2048
+      service_client_max:
+        min: 128
+      service_max:
+        min: 512
+      client_name_len_max:
+        min: 64
+      service_name_len_max:
+        min: 128
+  hakoniwa-pdu-bridge-core:
+    capabilities:
+      hakoniwa_app: true
+      web_bridge: true
+      web_bridge_fleets_config_format: true
+    build_limits:
+      asset_num:
+        min: 16
+      pdu_channel_max:
+        min: 4096
+      recv_event_max:
+        min: 2048
+      service_client_max:
+        min: 128
+      service_max:
+        min: 512
+      client_name_len_max:
+        min: 64
+      service_name_len_max:
+        min: 128
+
+experiment_contract:
+  source: recipes/experiments/drone-fleet-single-host-mvp.yaml
+  user_inputs:
+    - scale.drone_count
+    - scale.drones_per_process
+    - scale.process_count
+    - runtime.visualization
+    - runtime.show_runner_real_time_sync
+    - scenario.altitude_m
+    - scenario.word
+    - scenario.letter_width_m
+    - scenario.letter_height_m
+    - scenario.letter_gap_m
+    - scenario.duration_sec
+    - scenario.hold_sec
+    - scenario.speed_m_s
+    - scenario.timeout_sec
+    - scenario.land
+  resolution:
+    - The current MVP fixes drone_count=200 and derives drones_per_process from process_count.
+    - Changing only process_count from 1 through 20 preserves the 200-drone workload for scalability comparisons.
+    - Explicit process_count splitting assigns one extra drone to each final process until the indivisible remainder is exhausted.
+    - drone_count=auto resolves to process_count*drones_per_process.
+    - process_count=auto resolves to ceil(drone_count/drones_per_process).
+    - An explicit process_count must be between 1 and drone_count and uses balanced fleet splitting.
+    - Foundation build limits are derived from the resolved drone and process counts.
+    - runtime.visualization=true generates and launches VSP, WebBridge, and the Three.js HTTP server.
+    - runtime.visualization=false omits their configuration, processes, ports, and Bridge Foundation requirement.
+    - runtime.visualization=false does not pass --real-sleep-msec to any Drone service; the native default is 0, so simulator-loop real sleep is disabled.
+    - The current MVP also leaves --real-sleep-msec unspecified when runtime.visualization=true. Visualization selection and simulator pacing are not silently coupled.
+    - The first Drone Simulator process owns the built-in Conductor; process 2..N receive --disable-conductor.
+    - No separate Conductor Client asset is launched in this single-host topology; asset_num counts N Drone services plus ShowRunner, and adds VSP plus WebBridge only when visualization is enabled.
+    - With the default asset_num=16 contract, the maximum is 15 Drone processes headless or 13 with visualization; the next process requires an asset_num=32-compatible Foundation and Drone binary profile.
+    - External Conductor Server/Client belongs to the future multi-host Recipe and must not be co-located in this single-host topology.
+    - runtime.show_runner_real_time_sync=true enables cumulative wall-clock pacing after each successful hakopy.usleep().
+    - The pacer sleeps only while Hakoniwa simulation time is ahead of aligned wall time; it does not add a fixed sleep when computation is already slower than real time.
+    - Empty RPC poll backoff is fixed to 0 in this Recipe and is independent of real-time synchronization.
+    - open-viewer is valid only when runtime.visualization=true; smoke remains the behavioral completion check in both modes.
+    - The public/default native Drone binary profile is a general-user contract capped at 200 drones; configure rejects 201 or more before generating runnable artifacts.
+    - A 201-512 drone research run requires Hakoniwa Drone PRO license/source access and a separately built and verified 512-drone Core/Drone/VSP/Foundation profile. Increasing only Foundation limits does not satisfy the binary contract.
+    - For fair scalability comparisons, every measurement point in one experiment series, including points at or below 200 drones, must use the same 512-drone binary profile when the series includes a point above 200.
+    - The scenario accepts one or more drones; counts from 1 through 25 select evenly spaced subsets of HAKONIWA's 26 stroke segments, so the complete word is not visible.
+    - Counts from 26 through 51 use one or more drones per stroke and emit a readability warning; 52 or more are recommended.
+    - After the per-stroke minimum is reserved, remaining drones are allocated in proportion to stroke length.
+    - The resolved experiment is written under the Recipe workspace before execution.
+    - Run configure again after every experiment YAML change; generated partitions, requirements, and this Portal are refreshed, and any stale Launcher is invalidated.
+    - doctor or start validates the installed Foundation and Drone binaries, then regenerates config/launcher.json from the resolved experiment.
+    - scenario.duration_sec is the configured formation-move duration, not total wall-clock execution time.
+    - smoke waits up to 300 wall-clock seconds by default and reports paired wall/Core phase durations, total elapsed time, authoritative Core simulation time, and Real Time Factor from execution-summary.json.
+  future_extensions:
+    - experiment matrix expansion
+    - repetitions and warmup
+    - per-run result preservation and aggregate statistics
+    - host and process CPU/memory observations
+    - temporal deviation and scheduled-event deviation
+    - raw and summarized results
+
+process_topology:
+  required_for: multi-process-demo
+  conductor_owner: drone-service-1-built-in-conductor
+  viewer_owner: threejs-viewer-webserver-when-visualization-enabled
+  simulator_processes:
+    - id: drone-service-1..N
+      asset_name: drone-1..N
+      conductor: enabled-only-for-drone-service-1; disabled-for-drone-service-2..N
+      viewer: disabled
+      real_robots:
+        - robot_name: balanced-subset-of-Drone-1..M
+          model: Hakoniwa Drone 6DoF
+          publishes:
+            - standard Drone PDU set
+      mirrored_robots: []
+  controller_processes:
+    - id: show-runner
+      target_robot: all-generated-drones
+      target_pdu: generated RPC service configuration
+  visualization_processes:
+    - id: visual-state-publisher
+      purpose: Aggregate all drone poses into fleet visualization packets.
+    - id: web-bridge-fleets
+      purpose: Publish fleet visualization packets over localhost WebSocket.
+    - id: threejs-viewer-webserver
+      purpose: Serve the browser viewer on localhost port 8000.
+  visualization_condition: runtime.visualization=true
+  notes:
+    - All processes run on one native host and use one Foundation Core mmap domain.
+    - drone-service-1 owns built-in Conductor startup.
+    - Only drone-service-2..N receive --disable-conductor.
+
+components:
+  - id: hakoniwa-drone-core
+    roles:
+      - physics_runtime
+      - simulation_core
+    purpose: Generate and simulate the configurable fleet and provide the RPC workload runner.
+  - id: hakoniwa-core-pro
+    roles:
+      - simulation_core
+      - time_sync
+    purpose: Provide the single-host shared-memory runtime, lifecycle, and common simulation time.
+  - id: hakoniwa-pdu-python
+    roles:
+      - language_binding
+      - control_plane
+    purpose: Provide Python 3.12 PDU access, Launcher, and session-file lifecycle control.
+  - id: hakoniwa-pdu-endpoint
+    roles:
+      - communication_infrastructure
+      - integration_boundary
+    purpose: Provide the callback endpoint used by VSP/WebBridge when visualization is enabled.
+  - id: hakoniwa-pdu-bridge-core
+    roles:
+      - bridge
+    purpose: Optionally forward fleet visual state from shared memory to WebSocket.
+  - id: hakoniwa-threejs-drone
+    roles:
+      - visualizer
+    purpose: Optionally render all generated drones and the HAKONIWA formation in a browser.
+
+connections:
+  - from: hakoniwa-drone-core
+    to: hakoniwa-core-pro
+    interface: pdu
+    data:
+      - generated per-drone PDU channels
+      - generated per-drone RPC services
+    contract:
+      status: partially_verified
+      requires:
+        - Foundation build limits satisfy the resolved experiment.
+        - All simulator processes use the same local Foundation Core configuration and mmap domain.
+        - drone-service-1 owns built-in Conductor startup.
+        - Only drone-service-2..N receive --disable-conductor.
+      validation_notes:
+        - Native macOS E2E completed with 26 drones in one and two processes and with 200 drones in four processes.
+        - Linux and Windows native E2E remain unverified.
+  - from: hakoniwa-pdu-python
+    to: hakoniwa-drone-core
+    interface: api
+    data:
+      - synchronized takeoff and HAKONIWA formation RPC commands
+      - completion summary
+    contract:
+      status: partially_verified
+      requires:
+        - The show runner and Launcher use the Foundation Python 3.12 environment.
+        - Service names and IDs are generated globally before fleet splitting.
+      validation_notes:
+        - The underlying Drone Core show runner is reused without copying its implementation.
+
+data_flow:
+  summary: Experiment YAML is resolved into runtime artifacts; the show runner controls all fleet partitions over the shared PDU/RPC runtime.
+  steps:
+    - from: experiment YAML
+      to: Business Pack Recipe operator
+      data:
+        - drone_count
+        - drones_per_process or process_count
+        - generated scenario parameters
+      description: Resolve one concrete native single-host experiment.
+    - from: Business Pack Recipe operator
+      to: hakoniwa-drone-core
+      data:
+        - full fleet and service configuration
+        - balanced per-process fleet configuration
+        - PDU definition
+        - Launcher topology
+      description: Generate all mutable artifacts under work/recipes/drone-fleet-single-host.
+    - from: show-runner
+      to: drone-service-1..N
+      data:
+        - SetReady
+        - TakeOff
+        - GoTo
+        - HAKONIWA formation and hold
+      description: Exercise every generated drone as one coordinated simulation workload.
+    - from: drone-service-1..N
+      to: visual-state-publisher
+      data:
+        - all generated drone poses
+      description: When visualization is enabled, aggregate native simulator state into fleet visualization packets.
+    - from: visual-state-publisher
+      to: hakoniwa-threejs-drone
+      data:
+        - DroneVisualStateArray over WebBridge WebSocket
+      description: When visualization is enabled, make synchronized fleet behavior observable in the browser.
+
+time_model:
+  mode: shared-simulation-time
+  components:
+    - hakoniwa-core-pro
+    - hakoniwa-drone-core
+    - hakoniwa-pdu-python
+  notes:
+    - One local Core PRO instance provides the common simulation time.
+    - Simulator processes are workload partitions, not independent simulation runs.
+    - Every generated Drone service omits --real-sleep-msec, selecting the native value 0 and disabling simulator-loop real sleep.
+    - runtime.visualization controls VSP/WebBridge/Three.js only; it does not currently enable real sleep in visualization mode.
+    - drone-service-1 advances the single-host simulation through its built-in Conductor; follower Drone processes do not start another Conductor.
+    - runtime.show_runner_real_time_sync controls whether ShowRunner paces wall time to the authoritative Core simulation clock after each 20msec hakopy.usleep step.
+    - Multi-host bounded time coordination belongs to the separate future drone-fleet-multi-host Recipe.
+
+artifact_sets:
+  physics_artifacts:
+    description: Generated fleet and type configuration consumed by native Drone services.
+    status: partially_verified
+    artifacts:
+      - config/drone/fleets/api-current.json
+      - config/drone/fleets/api-current-partN.json
+      - config/drone/fleets/types/api.json
+    notes:
+      - Generated under the Recipe workspace; Drone Core source files are not modified.
+      - Verified through native macOS runs at 26 and 200 drones.
+  visualization_artifacts:
+    description: VSP, WebBridge, and Three.js configuration for browser observation.
+    status: partially_verified
+    artifacts:
+      - config/assets/visual_state_publisher/visual_state_publisher.runtime.json
+      - config/scenario/formations/formation-HAKONIWA.json
+      - http://127.0.0.1:8000/index.html?viewerConfigPath=/config/viewer-config-fleets.json&wsUri=ws://127.0.0.1:8765&wireVersion=v2&dynamicSpawn=true&templateDroneIndex=0&maxDynamicDrones=26
+    notes:
+      - These artifacts and processes are required only when runtime.visualization=true.
+      - WebBridge uses the Foundation-installed web_bridge_fleets configuration.
+      - The viewer is served from the sibling hakoniwa-threejs-drone repository.
+      - Verified by observing the 26-drone HAKONIWA formation on macOS.
+  pdu_artifacts:
+    description: Generated PDU and RPC service definitions for all drones.
+    status: partially_verified
+    artifacts:
+      - config/pdudef/drone-pdudef-current.json
+      - config/pdudef/drone-pdutypes.json
+      - config/drone/fleets/services/api-current-service.json
+  runtime_artifacts:
+    description: Resolved experiment, capacity requirements, scenario, Launcher, logs, and completion summary.
+    status: partially_verified
+    artifacts:
+      - config/resolved-experiment.yaml
+      - config/foundation-requirements.yaml
+      - config/scenario/show.json
+      - config/launcher.json
+      - runtime/launcher-session.json
+      - validation/execution-summary.json
+
+artifacts:
+  - name: experiment-input
+    kind: config
+    producer: hakoniwa-business-pack
+    consumer:
+      - hakoniwa-business-pack
+    path: recipes/experiments/drone-fleet-single-host-mvp.yaml
+  - name: resolved-experiment
+    kind: config
+    producer: hakoniwa-business-pack
+    consumer:
+      - hakoniwa-core-pro
+      - hakoniwa-drone-core
+    path: work/recipes/drone-fleet-single-host/config/resolved-experiment.yaml
+  - name: native-launcher
+    kind: config
+    producer: hakoniwa-business-pack
+    consumer:
+      - hakoniwa-pdu-python
+    path: work/recipes/drone-fleet-single-host/config/launcher.json
+  - name: execution-summary
+    kind: file
+    producer: hakoniwa-drone-core
+    consumer:
+      - hakoniwa-business-pack
+    path: work/recipes/drone-fleet-single-host/validation/execution-summary.json
+
+missing_pieces:
+  - Execute the same resolved experiment on native Linux.
+  - Verify the native single-host runtime on Windows before restoring the Windows runtime claim.
+  - Add experiment matrix expansion, repeated trials, per-run result preservation, and results aggregation.
+  - Create the separate multi-host Recipe and host-placement contract for the 1024-drone experiment.
+  - Define a machine-verifiable Receipt for the 512-drone Core/Drone/VSP/Foundation binary profile before enabling 201-512 drone experiments.
+  - Resolve why the Drone PRO 512-drone documents select service_client_max=1024 while the current sizing calculator derives 512; the two-node 512+512 allocation is a hypothesis, not yet a fixed contract.
+
+implementation_plan:
+  - Define a strict dependency-free MVP experiment YAML contract.
+  - Resolve automatic process count and Foundation build limits.
+  - Generate fleet, PDU, service, HAKONIWA formation, and native Launcher artifacts under the Recipe workspace; generate VSP artifacts only when visualization is enabled.
+  - Run synchronized takeoff, wait for every drone, form HAKONIWA, and hold through a background Launcher session.
+  - Verify completion through execution-summary.json and cleanly terminate the owned session.
+  - Preserve and aggregate per-run measurements after the native Linux and Windows paths are validated.
+  - Extend the same contract with experiment matrices and results in a later revision.
+
+acceptance_criteria:
+  - A user can keep drone_count fixed and change only process_count for a comparable scalability series.
+  - The default profile runs 200 drones in four simulator processes.
+  - Generated fleet partitions differ by at most one drone, assign extras to the final processes, and cover every drone exactly once.
+  - start runs doctor and refuses to launch when the experiment YAML and generated process partitions differ.
+  - Exactly one built-in Conductor in drone-service-1 owns time advancement; only drone-service-2..N disable theirs.
+  - All generated mutable artifacts stay under work/recipes/drone-fleet-single-host.
+  - The Recipe accepts at least one drone; 1-25 uses sampled strokes, 26-51 is accepted with a readability warning, and 52 or more is recommended.
+  - The general-user Recipe rejects a resolved count above 200 and explains that a separately verified 512-drone profile is required.
+  - A scalability series that includes more than 200 drones does not mix the public/default profile and the 512-drone profile across measurement points.
+  - Foundation incompatibility is reported before native startup with the required build limits.
+  - runtime.visualization=false starts no VSP, WebBridge, or HTTP server and does not require their binaries, ports, or Bridge Foundation component.
+  - runtime.visualization=false passes no --real-sleep-msec option to Drone services, so the native default remains 0.
+  - Launcher contract tests prevent headless mode from accidentally enabling simulator-loop real sleep.
+  - ShowRunner receives --real-time-sync only when runtime.show_runner_real_time_sync=true; RPC empty-poll sleep remains disabled.
+  - start returns after a managed background Launcher session becomes available.
+  - open-viewer opens the localhost Three.js fleet viewer backed by VSP and WebBridge only when runtime.visualization=true.
+  - open-viewer reports a clear contract error when runtime.visualization=false.
+  - open-viewer derives maxDynamicDrones from the resolved experiment instead of fixing the browser count.
+  - smoke reports success only when all generated drones complete the configured workload.
+  - execution-summary.json records aligned wall_elapsed_sec and hakopy.simulation_time() endpoints, and derives real_time_factor as simulation_elapsed_sec / wall_elapsed_sec.
+  - When real-time synchronization is enabled, execution-summary.json records the actual pacing sleep count and accumulated wall-clock sleep duration.
+  - execution-summary.json records takeoff and each goto duration in both phase_times_sec (wall clock) and phase_simulation_times_sec (Hakoniwa Core clock).
+  - stop uses the Launcher session-file control path and leaves a terminal session state.
+  - The single-host experiment does not require the distributed Conductor package or a private Conductor PRO prefix.
+
+demo:
+  foundation_workflow: declared
+  objective: Run 200 drones in four native simulator processes, wait for synchronized takeoff, and visibly form HAKONIWA in the browser.
+  readiness:
+    lifecycle_state:
+      source: launcher-session
+      required: RUNNING
+      sufficient: false
+    checks:
+      - id: all-assets-registered
+        kind: log
+        target: work/recipes/drone-fleet-single-host/logs
+        expected: One drone-service asset and ShowRunnerAsset register without early process exit.
+      - id: workload-complete
+        kind: file
+        target: work/recipes/drone-fleet-single-host/validation/execution-summary.json
+        expected: status is done, drone_count/process_count match the resolved experiment, and simulation_time.elapsed_sec plus real_time_factor are present.
+    operator_handoff:
+      background: true
+      explain_command_return: true
+      next_actions:
+        - smoke
+        - status
+        - stop
+        - open-viewer when runtime.visualization=true
+  steps:
+    - order: 1
+      id: prepare_native
+      component: hakoniwa-drone-core
+      action: Explicitly clone the official public Drone Core source when missing and download the pinned v4.0.0 native distribution for this operating system.
+      description: Verify the official release SHA-256, extract the native Drone service and visual-state publisher under the sibling hakoniwa-drone-core checkout, and rerun this command safely when the binaries already exist.
+      command: python tools/recipe/drone_fleet_single_host.py prepare-native
+      agency: agent_action
+    - order: 2
+      id: prepare_viewer
+      component: hakoniwa-threejs-drone
+      action: Clone the Three.js viewer recursively when missing, or initialize and update its pinned PDU JavaScript submodule in an existing checkout.
+      description: Ensure the browser's required generated PDU JavaScript modules exist before doctor and startup; this step is required when visualization is enabled.
+      command: python tools/recipe/drone_fleet_single_host.py prepare-viewer
+      agency: agent_action
+    - order: 3
+      id: configure
+      component: hakoniwa-pdu-python
+      action: Resolve the experiment and generate Recipe-local configuration.
+      command: python tools/recipe/drone_fleet_single_host.py configure
+      agency: agent_action
+    - order: 4
+      id: prepare_foundation
+      component: hakoniwa-core-pro
+      action: Inspect and, when necessary, rebuild Foundation from the generated capacity requirements.
+      command: python tools/foundation.py doctor --recipe work/recipes/drone-fleet-single-host/config/foundation-requirements.yaml
+      agency: agent_action
+    - order: 5
+      id: plan_foundation
+      component: hakoniwa-core-pro
+      action: If Foundation is not satisfied, inspect the rebuild plan generated from the resolved fleet size.
+      command: python tools/foundation.py plan --recipe work/recipes/drone-fleet-single-host/config/foundation-requirements.yaml
+      agency: agent_action
+    - order: 6
+      id: build_foundation
+      component: hakoniwa-core-pro
+      action: Build and install the generated Foundation plan only when doctor reports an unsatisfied requirement.
+      command: python tools/foundation.py build --recipe work/recipes/drone-fleet-single-host/config/foundation-requirements.yaml
+      agency: agent_action
+    - order: 7
+      id: doctor
+      component: hakoniwa-pdu-python
+      action: Validate the native Drone binary, Foundation, Python imports, and generated artifacts; validate VSP/WebBridge/Viewer only when visualization is enabled.
+      command: python tools/recipe/drone_fleet_single_host.py doctor
+      agency: agent_action
+    - order: 8
+      id: start
+      component: hakoniwa-pdu-python
+      action: Start the native multi-process runtime in one managed background Launcher session.
+      description: Start all native processes and automatically begin SetReady, synchronized takeoff, HAKONIWA placement, and hold.
+      command: python tools/recipe/drone_fleet_single_host.py start
+      agency: agent_action
+    - order: 9
+      id: open_viewer
+      component: hakoniwa-threejs-drone
+      action: When runtime.visualization=true, print the viewer URL for the operator to open in a browser and observe takeoff followed by the HAKONIWA formation; headless mode skips this step.
+      command: python tools/recipe/drone_fleet_single_host.py open-viewer
+      agency: agent_action
+    - order: 10
+      id: smoke
+      component: hakoniwa-drone-core
+      action: Verify the workload already started by start; do not start another flight.
+      description: Wait up to 300 wall-clock seconds for execution-summary.json, require status=done, and print observed prepare, takeoff, HAKONIWA, and total execution times.
+      command: python tools/recipe/drone_fleet_single_host.py smoke
+      agency: agent_action
+    - order: 11
+      id: stop
+      component: hakoniwa-pdu-python
+      action: Terminate the Launcher session through its normal control path.
+      command: python tools/recipe/drone_fleet_single_host.py stop
+      agency: agent_action
+  observability:
+    success_signals:
+      - execution-summary.json records status done with the resolved drone and process counts.
+      - Show runner logs contain asset_show_done.
+      - When visualization is enabled, the browser receives fleet state over WebSocket.
+    failure_signals:
+      - Foundation reports MISSING, INCOMPATIBLE, or UNKNOWN.
+      - A native Drone service exits before the Launcher reaches RUNNING.
+      - execution-summary.json records failed or is not produced before the smoke timeout.
+    fixtures:
+      - Generated packed-ring fleet and HAKONIWA word formation.
+    automation:
+      - Experiment resolution, balanced split, scenario generation, Launcher generation, and smoke verification are automated.
+  verification_checks:
+    lifecycle:
+      - Launcher session reaches RUNNING and later TERMINATED.
+    behavior:
+      - Every configured drone completes SetReady, TakeOff, and GoTo before the HAKONIWA hold completes.
+      - When runtime.visualization=true, the browser receives fleet state over ws://127.0.0.1:8765.
+    logs:
+      - Inspect per-asset logs and execution-summary.json.
+  cleanup:
+    owner: hakoniwa-launcher
+    provider: hakoniwa-pdu-python
+    mode: background
+    target: work/recipes/drone-fleet-single-host/runtime/launcher-session.json
+    trigger: python tools/recipe/drone_fleet_single_host.py stop
+    expected_behavior:
+      - hako_launcher_ctl terminate invokes LauncherService.terminate.
+      - The session file remains and records a terminal state.
+      - Only Launcher-owned assets are terminated.
+    verification_checks:
+      - Confirm Launcher status is no longer RUNNING.
+      - Confirm no generated drone-service asset remains.
+      - Inspect the Launcher session log for incomplete cleanup.
+    cautions:
+      - Do not kill recorded PIDs directly or broadly kill all Drone/Python processes.
+      - Do not treat hako-cmd stop as process termination.
+      - Always run stop before leaving the Workspace shell.
+
+expected_result: >
+  The default experiment runs 200 drones in four native simulator processes
+  on one host. The first Drone Simulator process owns built-in Conductor time advancement,
+  subsequent Drone processes disable their embedded Conductor, and all application assets share one Core
+  simulation time, and the generated ShowRunnerAsset drives every drone through
+  SetReady, synchronized TakeOff, one generated HAKONIWA formation, and its hold. A completion summary is
+  written under the Recipe workspace. Visualization mode additionally launches
+  VSP/WebBridge/Three.js; headless mode leaves those processes out while retaining
+  the same built-in Conductor ownership and workload. Each run records paired wall/Core phase
+  durations and Real Time Factor. The same YAML and operator form the native macOS/Linux contract;
+  automated matrices, retained result sets, and aggregate statistics remain a later step.
+
+source_catalogs:
+  - component_id: hakoniwa-drone-core
+    purpose: Native multi-drone dynamics, configuration generators, and shared RPC workload runner.
+  - component_id: hakoniwa-core-pro
+    purpose: Single-host shared-memory execution and common simulation time.
+  - component_id: hakoniwa-pdu-python
+    purpose: Python 3.12 runtime, PDU/RPC client support, and Launcher lifecycle.
+  - component_id: hakoniwa-pdu-endpoint
+    purpose: Shared-memory/callback endpoint contract used by optional fleet visualization.
+  - component_id: hakoniwa-pdu-bridge-core
+    purpose: Optional installed WebBridge executable and fleet bridge configuration.
+  - component_id: hakoniwa-threejs-drone
+    purpose: Optional browser-based fleet observation.
+
+source_artifacts:
+  - repository: toppers/hakoniwa-drone-core
+    path: tools/gen_fleet_scale_config.py
+    relation: arbitrary-fleet-generator
+  - repository: toppers/hakoniwa-drone-core
+    path: tools/gen_fleet_split_config.py
+    relation: balanced-process-partition-generator
+  - repository: toppers/hakoniwa-drone-core
+    path: tools/calc_fleet_params.py
+    relation: foundation-capacity-sizing-reference
+  - repository: toppers/hakoniwa-drone-core
+    path: drone_api/external_rpc/apps/show_asset_runner.py
+    relation: arbitrary-count-workload-runner
+  - repository: toppers/hakoniwa-drone-core
+    path: tools/drone-show/gen_word_formation.py
+    relation: arbitrary-count-hakoniwa-formation-generator
+  - repository: hakoniwalab/hakoniwa-business-pack
+    path: tools/recipe/drone_fleet_single_host.py
+    relation: experiment-resolver-and-native-operator
+  - repository: hakoniwalab/hakoniwa-business-pack
+    path: recipes/experiments/drone-fleet-single-host-mvp.yaml
+    relation: reproducible-mvp-experiment-input
+  - url: https://qiita.com/kanetugu2018/items/3dfc169046bd8265e8ef
+    relation: published-single-host-scale-reference
+  - url: https://hakoniwa-lab.net/2026/03/13/news-35/
+    relation: future-multi-host-1024-drone-reference
+
+tags:
+  - hakoniwa
+  - drone
+  - multi-drone
+  - single-host
+  - multi-process
+  - scalability
+  - native
+  - experiment

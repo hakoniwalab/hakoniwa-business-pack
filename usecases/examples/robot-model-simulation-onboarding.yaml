@@ -1,0 +1,102 @@
+id: robot-model-simulation-onboarding
+title: 既存ロボットモデルの実行可能なシミュレーション資産化
+usecase_version: 0.1
+
+audience:
+  primary:
+    - robot-system-integrator
+    - robot-development-team
+  notes:
+    - The reference Recipes intentionally cover different source formats and different levels of downstream runtime validation.
+
+situation: >
+  A team has a robot description such as URDF, Xacro, or MJCF and wants to use it in a
+  controllable Hakoniwa/MuJoCo simulation. The source may come from a ROS-oriented
+  repository or MuJoCo Menagerie and may require robot-specific preparation.
+
+problem: >
+  Loading geometry is not enough to create a useful simulation asset. Source
+  provenance, mesh resolution, joints, actuators, collision behavior, PDU command and
+  state contracts, and runtime ownership must align. Treating conversion success as
+  complete integration hides robot-specific gaps until downstream testing.
+
+desired_outcome: >
+  Materialize a traceable robot source into prepared simulation artifacts, then
+  validate the appropriate command, motion, and state-feedback path while keeping
+  reusable generation contracts separate from robot-specific modeling decisions.
+
+status:
+  feasibility: feasible
+  validation: partially_verified
+  confidence: high
+  rationale:
+    - Existing Recipes cover Xacro/URDF and curated MJCF sources for mobile, quadruped, and articulated-hand robots.
+    - The references separate source materialization and structural validation from downstream MuJoCo and Hakoniwa/PDU runtime validation.
+    - Each robot still requires source-specific review; there is no evidence for a universal one-command conversion path.
+
+realized_by:
+  - recipe_id: agilex-tracer-urdf-to-mujoco
+    relationship: xacro_urdf_variant
+    validation_scope: >
+      A pinned AgileX Tracer ROS-origin source is normalized and prepared for MuJoCo;
+      wheel actuation and a Twist-compatible Hakoniwa runtime path have supporting
+      evidence.
+  - recipe_id: unitree-go1-menagerie-mjcf-to-hakoniwa
+    relationship: curated_mjcf_quadruped_variant
+    validation_scope: >
+      A MuJoCo Menagerie Go1 model is staged with a bounded joint-command and
+      JointState-compatible Hakoniwa plant; walking remains outside the verified
+      scope.
+  - recipe_id: shadow-hand-menagerie-mjcf-to-hakoniwa
+    relationship: curated_mjcf_articulated_variant
+    validation_scope: >
+      A MuJoCo Menagerie Shadow Hand model is connected to bounded joint control and
+      JointState-compatible observation.
+  - recipe_id: mujoco-turtlebot3-mbody
+    relationship: generated_mobile_robot_variant
+    validation_scope: >
+      MBody-generated TurtleBot3 artifacts are executed under MuJoCo with command,
+      motion, and LiDAR behavior in the recorded reference environment.
+
+supported_by:
+  - component_id: hakoniwa-mbody-registry
+    role: Materialize, normalize, generate, and prepare traceable robot-body artifacts.
+  - component_id: hakoniwa-mujoco-robots
+    role: Own downstream MuJoCo physics, actuator integration, and runtime behavior.
+  - component_id: hakoniwa-pdu-registry
+    role: Provide reusable command, state, and sensor data contracts and generation artifacts.
+  - component_id: hakoniwa-pdu-endpoint
+    role: Connect the prepared runtime asset to command and observation paths.
+  - component_id: hakoniwa-core-pro
+    role: Provide lifecycle and simulation-time ownership for Core-backed runtime validation.
+
+communication_notes:
+  safe_statements:
+    - Multiple robot-source formats and robot classes have traceable preparation and partial or full downstream runtime evidence.
+    - Structural conversion, target preparation, and runtime behavior are separate validation stages.
+    - Robot-specific adapters and modeling decisions remain visible when generic generation is insufficient.
+  avoid_statements:
+    - Any URDF, Xacro, or MJCF becomes a correct controllable simulation automatically.
+    - Successful model loading proves actuator behavior, collision fidelity, or physical accuracy.
+    - One robot's validated preparation applies unchanged to another robot.
+
+limitations:
+  - Source licenses, revisions, package dependencies, and mesh formats require per-source review.
+  - Actuators, collision/contact behavior, sensors, and controller semantics may require robot-specific work.
+  - Simulation behavior does not prove physical fidelity, safety, or real-world performance.
+  - Validation depth differs across the four reference Recipes and their recorded environments.
+
+next_steps:
+  - Define shared stage names and evidence requirements for source, structural, target-preparation, and runtime validation.
+  - Add another independently reproduced source onboarding to test which steps are truly generic.
+  - Record model-fidelity and physical-system decisions as explicit human review gates.
+
+tags:
+  - robot-model
+  - onboarding
+  - urdf
+  - xacro
+  - mjcf
+  - mujoco
+  - actuator
+  - pdu

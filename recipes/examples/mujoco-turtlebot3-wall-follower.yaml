@@ -21,13 +21,15 @@ feasibility:
     - Smooth obstacle following is feasible, but robust one-loop navigation depends on world fixture design and controller tuning.
 
 validation:
-  status: partially_verified
+  status: verified
+  verified_at: 2026-08-11
   summary: >
-    A wall-following controller and launcher were created and executed locally
-    with TurtleBot3 Waffle on macOS arm64. The improved controller ran for 20
-    seconds headless and 30 seconds with GUI, published smoother continuous
-    commands, and consumed LiDAR data. Completing one full loop around obstacles
-    has not yet been verified.
+    The managed Foundation Recipe was configured, built, and executed with
+    TurtleBot3 Waffle on macOS arm64 with the MuJoCo viewer and LiDAR visualizer
+    on 2026-08-11. A 10-second run reached FOLLOWING mode repeatedly and
+    terminated through the Launcher session. The Foundation-managed viewer
+    workflow was also verified on Windows x64. Completing one measured loop
+    around a dedicated obstacle fixture remains a separate validation extension.
   steps:
     - id: controller_implementation
       status: verified
@@ -60,6 +62,10 @@ validation:
           path: logs/tb3_sim_mbody.out
           revision: local-validation-2026-07-19
       notes:
+        - The managed Recipe used work/foundation/install Python and kept build, configuration, assets, logs, runtime session, and validation state under work/recipes/mujoco-turtlebot3-wall-follower/.
+        - On 2026-08-11, a 10-second macOS arm64 viewer-enabled run produced repeated FOLLOWING status lines and ended with Launcher state TERMINATED.
+        - On 2026-08-11, Windows x64 viewer execution and the Foundation-managed Launcher lifecycle were confirmed by the user after the portability fixes.
+        - hakoniwa-pdu 1.6.8 exposed the initial uninitialized LaserScan slot; the controller now logs that startup boundary and waits for the first valid packet.
         - Waffle demo ran headless for 20 seconds and with GUI for 30 seconds.
         - Runtime logs showed nonzero lidar_hits and changing robot pose.
         - Controller logs showed continuous FOLLOWING mode with bounded yaw instead of rapid corner-state toggling.
@@ -83,10 +89,10 @@ constraints:
 
 target_environment:
   required_for: executable-demo
-  status: recorded
-  os: macOS
+  status: specified
+  os: macOS | Linux | Windows
   os_version: unknown
-  architecture: arm64
+  architecture: arm64 | x86_64 | x64
   execution_mode: native
   runtimes:
     - name: MuJoCo
@@ -96,9 +102,9 @@ target_environment:
     - name: Python
       required: true
       version: "3.12"
-      path: unknown
+      path: work/foundation/install/python
   hakoniwa:
-    install_prefix: /usr/local/hakoniwa
+    install_prefix: work/foundation/install
     components_built:
       - hakoniwa-core-pro
       - hakoniwa-pdu-endpoint
@@ -108,10 +114,12 @@ target_environment:
 
 execution_environment:
   required_for: executable-demo
-  status: recorded
-  os: macOS
+  status: specified
+  workspace:
+    mode: managed
+  os: macOS | Linux | Windows
   os_version: unknown
-  architecture: arm64
+  architecture: arm64 | x86_64 | x64
   execution_mode: native
   gui:
     required: true
@@ -124,14 +132,64 @@ execution_environment:
       required: false
       available: not_required
   python:
-    environment: venv
+    environment: foundation-venv
+    path: work/foundation/install/python
+    version: "3.12"
     hakopy_available: true
   hakoniwa:
-    install_prefix: /usr/local/hakoniwa
+    install_prefix: work/foundation/install
     hako_cmd_access: requires-unsandboxed-command
   notes:
     - Python 3.12, hakopy, hakoniwa-pdu, PyQt5, matplotlib, and numpy must be available in the same Python environment.
     - The controller uses scripted PDU commands, so manual gamepad operation is not required.
+    - The exact Foundation Python must import hakopy and hakoniwa-pdu with a matching Core SOABI Receipt.
+    - Runtime inputs and generated state remain under work/recipes/mujoco-turtlebot3-wall-follower/.
+
+foundation_contract:
+  mode: required
+  reason: This Recipe executes Core shared memory, hako-cmd, SOABI-tagged hakopy, PDU Python, and Endpoint callback transport.
+
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      shared_memory: true
+      hako_cmd: true
+      python_binding: true
+  hakoniwa-pdu-python:
+    version:
+      min: 1.6.5
+    capabilities:
+      hako_launcher: true
+      launcher_background_lifecycle: true
+      shm_backend: true
+  hakoniwa-pdu-endpoint:
+    capabilities:
+      hakoniwa_core: true
+      core_callback: true
+
+recipe_local_requirements:
+  hakoniwa-mbody-registry:
+    role: generated-physics-artifact-source
+  hakoniwa-mujoco-robots:
+    build_entrypoint: source CMake configured by the Recipe runner
+    required_artifacts:
+      - tb3_sim_waffle
+      - tb3_obstacle_avoider.py
+
+runtime_dependencies:
+  python:
+    interpreter: work/foundation/install/python
+    requirements: recipes/requirements/mujoco-turtlebot3-wall-follower.txt
+    packages:
+      - name: numpy
+        version: 2.2.6
+        purpose: Process LaserScan arrays and wall-following sectors.
+      - name: matplotlib
+        version: 3.10.5
+        purpose: Render the optional LiDAR visualization window.
+      - name: PyQt5
+        version: 5.15.11
+        purpose: Provide the optional LiDAR visualization GUI.
 
 components:
   - id: hakoniwa-mujoco-robots
@@ -323,21 +381,35 @@ demo:
     controller and observe smoother obstacle-following motion plus LiDAR output.
   steps:
     - order: 1
-      component: hakoniwa-mujoco-robots
-      action: Check runtime prerequisites.
-      command: ./doctor.bash
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: doctor.bash
-          revision: local-validation-2026-07-19
+      component: hakoniwa-business-pack
+      action: Stage MBody and controller inputs and configure the Recipe-owned cross-platform build.
+      command: python3.12 tools/recipe/mujoco_turtlebot3_wall_follower.py configure
     - order: 2
-      component: hakoniwa-mujoco-robots
-      action: Run the Waffle wall-following demo with viewer and LiDAR plot.
-      command: HAKO_TB3_MODEL=waffle HAKO_TB3_DURATION_SEC=30 bash tb3-obstacle-avoidance-demo.bash
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: tb3-obstacle-avoidance-demo-launch.json
-          revision: local-validation-2026-07-19
+      component: hakoniwa-business-pack
+      action: Build the selected TB3 simulator against the managed Foundation.
+      command: python3.12 tools/recipe/mujoco_turtlebot3_wall_follower.py build
+    - order: 3
+      component: hakoniwa-business-pack
+      action: Verify Foundation Python/SOABI and runtime inputs.
+      command: python3.12 tools/recipe/mujoco_turtlebot3_wall_follower.py doctor
+    - order: 4
+      component: hakoniwa-business-pack
+      action: Run the bounded wall-following lifecycle with viewer and LiDAR plot.
+      command: python3.12 tools/recipe/mujoco_turtlebot3_wall_follower.py start
+  cleanup:
+    owner: hakoniwa-launcher
+    provider: hakoniwa-pdu-python
+    mode: background
+    target: work/recipes/mujoco-turtlebot3-wall-follower/runtime/launcher-session.json
+    trigger: python3.12 tools/recipe/mujoco_turtlebot3_wall_follower.py stop
+    expected_behavior:
+      - LauncherService.terminate stops only this Recipe's simulator, visualizer, and controller.
+      - The session remains observable as TERMINATED.
+    verification_checks:
+      - Confirm the Launcher session reports TERMINATED.
+      - Confirm no Recipe-owned process remains.
+    cautions:
+      - Do not replace session-file termination with OS-specific kill commands.
   observability:
     success_signals:
       - MuJoCo viewer shows TurtleBot3 Waffle moving without joystick input.

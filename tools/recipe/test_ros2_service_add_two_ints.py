@@ -3,17 +3,26 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import process_liveness
 
 MODULE_PATH = Path(__file__).with_name("ros2_service_add_two_ints.py")
 SPEC = importlib.util.spec_from_file_location("add_two_ints_recipe", MODULE_PATH)
 assert SPEC is not None and SPEC.loader is not None
 recipe = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(recipe)
+
+# recipe.impl is the same module object the recipe driver imported via
+# `import ros2_service_add_two_ints_impl as impl` (cached in sys.modules),
+# so asserting against it verifies the actual wiring the driver installed
+# rather than a freshly re-executed copy of the implementation file.
+recipe_impl = recipe.impl
 
 
 class ConfigurationTests(unittest.TestCase):
@@ -138,6 +147,15 @@ class LifecycleTests(unittest.TestCase):
             self.assertEqual(options, {"start_new_session": True})
 
     def test_managed_host_requires_matching_token_and_pid(self) -> None:
+        # managed_host_alive() reflects the patched recipe.pid_alive into
+        # recipe.impl.pid_alive via _sync_impl(); patch.object only restores
+        # recipe.pid_alive on exit, so without this cleanup the MagicMock
+        # installed below would leak into recipe.impl.pid_alive and
+        # contaminate later tests (e.g. the wiring assertions in
+        # WindowsLivenessWiringTests).
+        original_impl_pid_alive = recipe.impl.pid_alive
+        self.addCleanup(setattr, recipe.impl, "pid_alive", original_impl_pid_alive)
+
         with tempfile.TemporaryDirectory() as temporary:
             host_session = Path(temporary) / "host-session.json"
             recipe.atomic_json(
@@ -177,6 +195,80 @@ class LifecycleTests(unittest.TestCase):
             with patch.object(recipe, "paths", return_value=fake_paths):
                 with self.assertRaisesRegex(recipe.RecipeError, "start refused"):
                     recipe.start(args)
+
+
+class WindowsLivenessWiringTests(unittest.TestCase):
+    """Guard the export/copy ordering that has broken this wiring twice
+    before (see 08d44eb and e04f3d4): the driver must expose the
+    platform-safe process_liveness.pid_alive, both on itself and on the
+    implementation module it delegates to, rather than silently falling
+    back to the implementation's own os.kill(pid, 0)-based pid_alive.
+
+    The wiring regression itself is caught by the two assertIs tests below
+    (test_recipe_and_impl_expose_the_platform_safe_pid_alive and
+    test_managed_host_alive_resyncs_the_platform_safe_pid_alive), which
+    compare object identity against process_liveness.pid_alive directly.
+    test_driver_pid_alive_survives_repeated_probing_of_a_live_child does NOT
+    add wiring-regression coverage on its own -- see its docstring.
+    """
+
+    def test_recipe_and_impl_expose_the_platform_safe_pid_alive(self) -> None:
+        self.assertIs(recipe.pid_alive, process_liveness.pid_alive)
+        self.assertIs(recipe.impl.pid_alive, process_liveness.pid_alive)
+
+    def test_managed_host_alive_resyncs_the_platform_safe_pid_alive(self) -> None:
+        # managed_host_alive() re-syncs impl.pid_alive from recipe.pid_alive
+        # on every call; exercise that path explicitly rather than relying
+        # only on the static check above.
+        with tempfile.TemporaryDirectory() as temporary:
+            host_session = Path(temporary) / "host-session.json"
+            recipe.atomic_json(
+                host_session,
+                {"state": "RUNNING", "pid": 123, "token": "owner-token"},
+            )
+            recipe.managed_host_alive(
+                {"host_pid": 123, "host_token": "owner-token"}, host_session
+            )
+        self.assertIs(recipe.impl.pid_alive, process_liveness.pid_alive)
+
+    def test_driver_pid_alive_survives_repeated_probing_of_a_live_child(self) -> None:
+        # NOTE: this test does NOT detect the export/copy-ordering
+        # regression this file guards against. It probes recipe.pid_alive
+        # from inside the *same* long-lived test process as the child it
+        # spawns. On Windows, os.kill(pid, 0) enters CPython's
+        # CTRL_C_EVENT path and first calls
+        # GenerateConsoleCtrlEvent(CTRL_C_EVENT, pid); if that fails, CPython's
+        # behavior documented in gh-58689 can fall through to the
+        # OpenProcess/TerminateProcess path. Whether the destructive path is
+        # reached depends on console/process-group topology that this in-process
+        # setup does not reproduce (confirmed experimentally: reverting the
+        # fix in tools/recipe/ros2_service_add_two_ints.py still leaves this
+        # test green). A genuine end-to-end repro of the unsafe path killing
+        # a live process needs a separate short-lived spawner process that
+        # exits before an unrelated prober process calls pid_alive -- see
+        # the PR description for that out-of-process evidence; it is
+        # intentionally not encoded as an in-repo CI test because CTRL+C
+        # delivery on hosted CI runners (in particular windows-latest) is
+        # not something we want this suite's stability to depend on.
+        #
+        # What this test DOES verify: recipe.pid_alive can be called
+        # repeatedly against a live child without raising and without ever
+        # reporting it as dead, mirroring
+        # tools/tests/test_process_liveness.py::
+        # test_repeated_probe_does_not_terminate_live_child but going
+        # through the driver-installed reference instead of importing
+        # process_liveness directly. The wiring regression itself is caught
+        # by the two assertIs tests above.
+        child = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(30)"]
+        )
+        try:
+            for _ in range(20):
+                self.assertTrue(recipe.pid_alive(child.pid))
+                self.assertIsNone(child.poll())
+        finally:
+            child.terminate()
+            child.wait(timeout=10)
 
 
 if __name__ == "__main__":

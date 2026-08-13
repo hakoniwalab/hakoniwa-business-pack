@@ -1,0 +1,5 @@
+# Runtime dependencies for the Wall Follower controller and optional LiDAR GUI.
+# Installed idempotently into the shared Foundation Python by Recipe configure.
+numpy==2.2.6
+matplotlib==3.10.5
+PyQt5==5.15.11

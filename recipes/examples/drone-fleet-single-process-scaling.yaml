@@ -1,0 +1,169 @@
+id: drone-fleet-single-process-scaling
+title: Native Drone Fleet Single-process Performance Measurement
+recipe_version: 0.1
+goal:
+  user_request: 1台のホスト上で箱庭ドローンの機体数を変え、単一シミュレータプロセスの性能を再現可能な条件で測定したい
+  description: >
+    Run a headless single-process Drone Fleet performance series while changing
+    only the UAV count. Measurement executes in the existing ShowRunner asset
+    and stops after Formation completion plus the configured minimum virtual
+    time and machine-sample conditions.
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - The native Drone Fleet Recipe supports the declared UAV-count matrix with one process.
+    - Core PRO provides cross-platform measurement, output, and validation APIs.
+validation:
+  status: partially_verified
+  summary: The complete eight-condition preflight matrix is verified on native macOS; WSL2/Ubuntu execution remains to be verified.
+  steps:
+    - id: macos_preflight
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-business-pack
+          path: tools/recipe/test_drone_fleet_performance.py
+          revision: local-working-tree
+    - id: linux_preflight
+      status: not_tested
+      evidence: []
+constraints:
+  - single-host
+  - native-execution-only
+  - single-simulator-process
+  - headless-performance-mode
+  - no-real-time-pacing
+  - generated-results-stay-under-business-pack-work
+target_environment:
+  required_for: performance-measurement
+  status: specified
+  os: macOS | Linux
+  os_version: current-supported-host
+  architecture: host-native
+  execution_mode: native
+  runtimes:
+    - name: Python
+      required: true
+      version: "3.12"
+      path: work/foundation/install/python
+  hakoniwa:
+    install_prefix: work/foundation/install
+    components_built:
+      - hakoniwa-core-pro
+      - hakoniwa-pdu-python
+      - hakoniwa-pdu-endpoint
+execution_environment:
+  workspace:
+    mode: managed
+  required_for: performance-measurement
+  status: specified
+  os: host-native
+  os_version: current-supported-host
+  architecture: host-native
+  execution_mode: native
+  gui:
+    required: false
+    status: disabled
+  shared_memory:
+    required: true
+    access: local-host
+  python:
+    environment: foundation-venv
+    path: work/foundation/install/python
+    version: "3.12"
+    hakopy_available: required
+  hakoniwa:
+    install_prefix: work/foundation/install
+    hako_cmd_access: required
+foundation_contract:
+  mode: required
+  reason: The runner requires hakopy and the Core PRO measurement library from the managed Foundation.
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      shared_memory: true
+      hako_cmd: true
+      python_binding: true
+      measurement_library: true
+  hakoniwa-pdu-python:
+    version:
+      min: 1.6.5
+    capabilities:
+      hako_launcher: true
+      launcher_background_lifecycle: true
+      shm_backend: true
+      external_rpc: true
+  hakoniwa-pdu-endpoint:
+    capabilities:
+      hakoniwa_core: true
+      core_callback: true
+components:
+  - id: hakoniwa-core-pro
+    roles: []
+  - id: hakoniwa-pdu-python
+    roles: []
+  - id: hakoniwa-pdu-endpoint
+    roles: []
+connections: []
+data_flow:
+  - experiment YAML -> generated fleet, show, and measurement configuration
+  - ShowRunner measurement boundary -> raw machine samples and validated result JSON
+time_model:
+  mode: virtual-time-performance
+  notes:
+    - Performance mode disables real-time pacing and temporal observation.
+    - Time-coordination parameters are recorded in every result.
+artifact_sets: {}
+artifacts: []
+missing_pieces:
+  - WSL2/Ubuntu execution of the complete Experiment A matrix remains to be verified.
+experiment_contract:
+  source: recipes/experiments/drone-fleet-performance/single-process-scaling.yaml
+  user_inputs:
+    - matrix.drone_count
+    - matrix.attempts
+    - measurement.protocol_status
+    - measurement.invalid_conditions
+  resolution:
+    - Every matrix condition uses one native Drone simulator process.
+    - Results are stored under the managed Business Pack workspace and are never overwritten implicitly.
+demo:
+  prerequisites:
+    - id: prepare_native
+      command: python tools/recipe/drone_fleet_single_host.py prepare-native
+      expected: Clone the pinned public Drone Core source when missing and install the official host-native macOS or Linux distribution.
+  steps:
+    - id: inspect_matrix
+      command: python tools/recipe/drone_fleet_performance_a.py plan
+      expected: Show all eight UAV-count conditions without starting a simulation.
+    - id: run_matrix
+      command: python tools/recipe/drone_fleet_performance_a.py run
+      expected: Execute every pending condition and preserve one validated result per UAV count.
+    - id: resume_matrix
+      command: python tools/recipe/drone_fleet_performance_a.py run --resume
+      expected: Preserve recorded results and continue only pending conditions after interruption.
+    - id: summarize_matrix
+      command: python tools/recipe/drone_fleet_performance_a.py summarize
+      expected: Generate the Experiment A JSON and CSV summaries.
+    - id: plot_results
+      command: python tools/recipe/drone_fleet_performance_plot.py
+      expected: Generate the dependency-free SVG containing RTF, step time, CPU, and memory panels.
+    - id: emergency_stop
+      command: python tools/recipe/drone_fleet_performance.py stop
+      expected: Terminate the current single-condition Launcher session after an interrupted matrix run.
+  cleanup:
+    expected_behavior:
+      - The current Launcher session reaches a terminal state without deleting recorded measurement results.
+    verification_checks:
+      - Confirm the current Launcher session is no longer RUNNING before restarting the matrix.
+      - Confirm no native Drone service from the interrupted condition remains.
+    cautions:
+      - If a matrix run is interrupted while a condition is active, run the single-condition stop command before restarting.
+expected_result: >
+  result.json reports status=success, aligned virtual-time steps, finite RTF,
+  valid CPU and memory samples, and passed validation.
+source_catalogs:
+  - component_id: hakoniwa-core-pro
+  - component_id: hakoniwa-pdu-python
+  - component_id: hakoniwa-pdu-endpoint
+source_artifacts: []

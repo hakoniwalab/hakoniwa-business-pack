@@ -1,0 +1,238 @@
+id: hakoniwa-conductor-v1-0-0-binary-package
+title: Hakoniwa Conductor v1.0.0 Public Binary Package Setup
+recipe_version: 0.1
+
+goal:
+  user_request: 公開されたHakoniwa Conductor v1.0.0をBusiness Packのローカルwork領域へ安全に配置したい
+  description: >
+    Detect the supported host platform, download the corresponding public
+    Hakoniwa Conductor v1.0.0 binary ZIP and checksum, verify the distribution
+    contract, and extract it under this Business Pack's work directory. This is
+    a setup Recipe; it does not invent a runtime topology or start Conductor.
+
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - The public v1.0.0 Release provides macOS arm64 and Linux x86_64 ZIP packages with SHA-256 files.
+    - Each package has VERSION, metadata/build-contract.txt, and the same 11-command inventory.
+    - The setup can remain local to Business Pack work without writing to a system directory.
+
+validation:
+  status: partially_verified
+  verified_at: 2026-08-09
+  summary: >
+    Release metadata, asset names, checksums, and package contracts were
+    inspected. The Business Pack operator has platform-neutral unit coverage;
+    a real configure run remains an explicit operator action because it
+    requires license acknowledgement and network access.
+  steps:
+    - id: public_release
+      status: verified
+      evidence:
+        - source: https://github.com/hakoniwalab/hakoniwa-conductor/releases/tag/v1.0.0
+          date: 2026-08-09
+    - id: setup_operator_contract
+      status: verified
+      evidence:
+        - path: tools/recipe/hakoniwa_conductor.py
+          date: 2026-08-09
+    - id: real_package_materialization
+      status: not_tested
+      evidence: []
+
+constraints:
+  - binary-only-distribution
+  - noncommercial-license-or-commercial-entitlement-required
+  - explicit-license-acknowledgement
+  - macos-arm64-or-linux-x86_64
+  - business-pack-work-directory-only
+  - setup-only
+  - no-runtime-topology
+
+agency_boundary:
+  agent_may:
+    - Inspect public Release metadata and package contracts.
+    - Generate the setup guide and run network-free status or doctor checks.
+  human_decision_required:
+    - Read and accept the applicable Hakoniwa Conductor license before configure.
+    - Authorize network access when the Release assets are not locally available.
+  forbidden_automation:
+    - Add --accept-license without an explicit operator decision.
+    - Treat public binary availability as an open-source license grant.
+
+target_environment:
+  required_for: binary-package-setup
+  status: specified
+  os: macOS | Linux
+  os_version: macOS current | Ubuntu 24.04
+  architecture: arm64 | x86_64
+  execution_mode: native
+  runtimes:
+    - name: Python
+      required: true
+      version: "3.12"
+      path: system-or-foundation
+  notes:
+    - v1.0.0 publishes macOS arm64 and Linux x86_64 packages only.
+    - Windows and other architecture combinations are rejected rather than guessed.
+
+execution_environment:
+  required_for: binary-package-setup
+  status: specified
+  install_root: work/recipes/hakoniwa-conductor-v1-0-0-binary-package/runtime
+  download_root: work/recipes/hakoniwa-conductor-v1-0-0-binary-package/assets
+  system_installation: forbidden
+  long_running_processes: []
+
+foundation_contract:
+  mode: not_required
+  reason: This setup Recipe only downloads, verifies, and extracts the public binary package; it does not execute Core, SHM, hako-cmd, or hakopy.
+
+components:
+  - id: hakoniwa-conductor
+    roles: [simulation_core, control_plane, rd_runtime, time_sync]
+    purpose: Supply the public Conductor server, client, monitor, EU, and configuration-generator binaries.
+
+connections: []
+
+data_flow:
+  summary: Public Release assets become a verified local package in the Recipe work area.
+  steps:
+    - from: hakoniwalab/hakoniwa-conductor v1.0.0 Release
+      to: work/recipes/hakoniwa-conductor-v1-0-0-binary-package/assets
+      data: [platform ZIP, SHA-256 file]
+      description: Download only the package selected from the host OS and architecture.
+    - from: Recipe assets
+      to: work/recipes/hakoniwa-conductor-v1-0-0-binary-package/runtime
+      data: [verified binary package]
+      description: Verify the checksum and package contract before atomic placement.
+
+time_model:
+  mode: wall-clock
+  components: [hakoniwa-conductor]
+  notes:
+    - This setup Recipe does not start distributed simulation time.
+
+artifact_sets:
+  physics_artifacts:
+    description: No physics model is selected by this setup Recipe.
+    status: not_tested
+    artifacts: []
+  visualization_artifacts:
+    description: No visualization is started by this setup Recipe.
+    status: not_tested
+    artifacts: []
+  pdu_artifacts:
+    description: Runtime PDU and topology configuration remain a follow-up Recipe responsibility.
+    status: not_tested
+    artifacts: []
+  runtime_artifacts:
+    description: Verified platform ZIP, extracted package, and machine-readable validation receipt.
+    status: partially_verified
+    artifacts:
+      - work/recipes/hakoniwa-conductor-v1-0-0-binary-package/assets
+      - work/recipes/hakoniwa-conductor-v1-0-0-binary-package/runtime
+      - work/recipes/hakoniwa-conductor-v1-0-0-binary-package/validation/binary-package.json
+
+artifacts:
+  - name: public-release-archive
+    kind: binary-package
+    producer: hakoniwalab/hakoniwa-conductor
+    consumer: [hakoniwa-conductor]
+    path: work/recipes/hakoniwa-conductor-v1-0-0-binary-package/assets
+  - name: local-conductor-package
+    kind: runtime-package
+    producer: hakoniwa-business-pack
+    consumer: [hakoniwa-conductor]
+    path: work/recipes/hakoniwa-conductor-v1-0-0-binary-package/runtime
+  - name: package-validation-receipt
+    kind: validation-evidence
+    producer: hakoniwa-business-pack
+    consumer: [operator, ai-agent]
+    path: work/recipes/hakoniwa-conductor-v1-0-0-binary-package/validation/binary-package.json
+
+missing_pieces:
+  - Publish the user-facing topology schema and sample configuration required to start a distributed Conductor system.
+  - Add a Foundation-aware runtime Recipe that starts, validates, and stops an actual Conductor topology.
+  - Record macOS arm64 and Linux x86_64 real configure evidence from the Business Pack operator.
+
+demo:
+  objective: Prepare and inspect the Hakoniwa Conductor v1.0.0 binary package without starting a simulation.
+  operator: python tools/recipe/hakoniwa_conductor.py
+  steps:
+    - order: 1
+      component: hakoniwa-conductor
+      action: Read the applicable license and decide whether its terms cover the intended use.
+      evidence:
+        - source: https://github.com/hakoniwalab/hakoniwa-conductor/blob/v1.0.0/LICENSE-NC-ja.md
+    - order: 2
+      component: hakoniwa-conductor
+      action: Download, verify, and extract the selected package after explicit acceptance.
+      command: python tools/recipe/hakoniwa_conductor.py configure --accept-license
+    - order: 3
+      component: hakoniwa-conductor
+      action: Revalidate the local archive and extracted package without network access.
+      command: python tools/recipe/hakoniwa_conductor.py doctor
+    - order: 4
+      component: hakoniwa-conductor
+      action: Show the selected platform, paths, and readiness state.
+      command: python tools/recipe/hakoniwa_conductor.py status
+  observability:
+    success_signals:
+      - status reports READY.
+      - VERSION is v1.0.0 and the package platform matches the current host.
+      - The package contains exactly the documented 11 binaries.
+      - The validation receipt records the package path and SHA-256.
+    failure_signals:
+      - The platform has no published v1.0.0 package.
+      - License acknowledgement was omitted.
+      - The checksum, platform contract, or binary inventory does not match.
+    automation:
+      - configure is idempotent for a valid local package.
+      - doctor never requires network access.
+  verification_checks:
+    lifecycle:
+      - No long-running process is started.
+    behavior:
+      - The selected release is materialized only under the Recipe work directory.
+    logs:
+      - Errors identify the unsupported target or failed package contract.
+
+expected_result:
+  observable: >
+    The current host's v1.0.0 package is available under the Recipe runtime
+    directory and status reports READY; no Conductor process has been started.
+  success_conditions:
+    - Release checksum verified.
+    - Platform contract verified.
+    - All 11 commands verified.
+    - Package validation receipt written.
+
+implementation_plan:
+  - Detect the supported host target.
+  - Require explicit license acknowledgement.
+  - Download the ZIP and SHA-256 into Recipe assets.
+  - Verify and atomically extract the package into Recipe runtime.
+  - Provide network-free doctor and status operations.
+
+acceptance_criteria:
+  - No system directory is modified.
+  - Unsupported platforms fail clearly.
+  - License acceptance is never inferred.
+  - A corrupt or mismatched package is rejected.
+  - A successful setup leaves inspectable validation evidence.
+
+source_catalogs:
+  - component_id: hakoniwa-conductor
+    catalog_path: ../catalog/components/hakoniwa-conductor.yaml
+
+source_artifacts:
+  - repository: hakoniwalab/hakoniwa-conductor
+    path: releases/tag/v1.0.0
+    revision: v1.0.0
+    description: Public binary packages and SHA-256 files.
+  - repository: hakoniwalab/hakoniwa-conductor
+    path: docs/getting-started/binary-package-ja.md
+    revision: v1.0.0
+    description: Public binary package layout and usage boundary.

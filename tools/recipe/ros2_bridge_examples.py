@@ -81,15 +81,48 @@ def ensure_layout(item: Profile) -> dict[str, Path]:
     return result
 
 
-def write_transport(item: Profile, target: Path) -> None:
-    if item.direction == "server":
+def write_transport(
+    item: Profile, target: Path, tcp_direction: str = "default"
+) -> None:
+    host_listens = item.direction == "server"
+    if tcp_direction == "host-listens":
+        host_listens = True
+    elif tcp_direction == "bridge-listens":
+        host_listens = False
+
+    host_is_logical_server = item.direction == "server"
+    if host_listens and host_is_logical_server:
         client = {
             "role": "client",
-            "remote": {"address": "host.docker.internal", "port": item.port},
+            "remote": {
+                "address": "host.docker.internal",
+                "port": item.port,
+            },
         }
         server = {
             "role": "server",
             "local": {"address": "0.0.0.0", "port": item.port},
+        }
+    elif host_listens:
+        client = {
+            "role": "server",
+            "local": {"address": "0.0.0.0", "port": item.port},
+        }
+        server = {
+            "role": "client",
+            "remote": {
+                "address": "host.docker.internal",
+                "port": item.port,
+            },
+        }
+    elif host_is_logical_server:
+        client = {
+            "role": "server",
+            "local": {"address": "0.0.0.0", "port": item.port},
+        }
+        server = {
+            "role": "client",
+            "remote": {"address": "127.0.0.1", "port": item.port},
         }
     else:
         client = {
@@ -113,8 +146,10 @@ def write_transport(item: Profile, target: Path) -> None:
     })
 
 
-def write_binding(item: Profile, p: dict[str, Path]) -> None:
-    write_transport(item, p["transport"])
+def write_binding(
+    item: Profile, p: dict[str, Path], tcp_direction: str = "default"
+) -> None:
+    write_transport(item, p["transport"], tcp_direction)
     if item.kind == "service":
         common.atomic_json(p["binding"], {
             "$schema": str(common.sibling("hakoniwa-pdu-ros") / "schema" / "service-binding.schema.json"),
@@ -175,8 +210,16 @@ def dockerfile_text() -> str:
 
 def configure(args: argparse.Namespace) -> None:
     item = profile(args.profile)
+    if (
+        args.tcp_direction == "host-listens"
+        and not args.allow_non_loopback_listen
+    ):
+        raise RecipeError(
+            "host-listens binds a Host-reachable address; pass "
+            "--allow-non-loopback-listen after reviewing firewall exposure"
+        )
     p = ensure_layout(item)
-    write_binding(item, p)
+    write_binding(item, p, args.tcp_direction)
     (p["docker"] / "Dockerfile").write_text(dockerfile_text(), encoding="utf-8")
     (p["docker"] / "endpoint-build.yaml").write_text(
         """version: 1
@@ -282,7 +325,20 @@ def start(args: argparse.Namespace) -> None:
         "--add-host", "host.docker.internal:host-gateway",
         "--mount", f"type=bind,source={p['config']},target=/recipe/config",
     ]
-    if item.direction == "client":
+    transport = common.load_json(p["transport"])
+    bridge_node = (
+        "fibonacci-server"
+        if item.kind == "action" and item.direction == "client"
+        else (
+            "fibonacci-client"
+            if item.kind == "action"
+            else "server_node"
+        )
+    )
+    bridge_listens = (
+        transport["endpoints"][bridge_node]["role"] == "server"
+    )
+    if bridge_listens:
         command.extend(["--publish", f"127.0.0.1:{item.port}:{item.port}"])
     command.extend([IMAGE, "bash", "-lc", container_command(item)])
     try:
@@ -341,6 +397,28 @@ def smoke(args: argparse.Namespace) -> int:
     return result.returncode
 
 
+def cancel_smoke(args: argparse.Namespace) -> int:
+    item = profile(args.profile)
+    if item.kind != "action" or item.direction != "client":
+        raise RecipeError(
+            "cancel-smoke currently targets the Action Client Bridge profile"
+        )
+    p = paths(item)
+    env = runtime_env(item, p)
+    env["PYTHONUNBUFFERED"] = "1"
+    result = common.run([
+        str(common.foundation_python()),
+        str(common.root() / "tools" / "recipe" / "ros2_bridge_probe.py"),
+        "action-client-cancel-reject",
+        "--config-dir", str(p["config"]),
+        "--rpc-library", str(common.rpc_library(common.foundation_prefix())),
+        "--order", str(args.order),
+        "--next-order", str(args.next_order),
+        "--iterations", str(args.iterations),
+    ], check=False, env=env)
+    return result.returncode
+
+
 def status(args: argparse.Namespace) -> int:
     item = profile(args.profile); p = paths(item)
     if not p["session"].is_file():
@@ -390,15 +468,39 @@ def doctor(args: argparse.Namespace) -> int:
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument("profile", choices=PROFILES)
-    result.add_argument("command", choices=("configure", "build", "doctor", "start", "smoke", "status", "stop"))
+    result.add_argument(
+        "command",
+        choices=(
+            "configure", "build", "doctor", "start", "smoke",
+            "cancel-smoke", "status", "stop",
+        ),
+    )
     result.add_argument("--a", type=int, default=20); result.add_argument("--b", type=int, default=22)
+    result.add_argument("--order", type=int, default=8)
+    result.add_argument("--next-order", type=int, default=2)
+    result.add_argument("--iterations", type=int, default=1)
+    result.add_argument(
+        "--tcp-direction",
+        choices=("default", "bridge-listens", "host-listens"),
+        default="default",
+    )
+    result.add_argument("--allow-non-loopback-listen", action="store_true")
     return result
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
-        return int({"configure": configure, "build": build, "doctor": doctor, "start": start, "smoke": smoke, "status": status, "stop": stop}[args.command](args) or 0)
+        return int({
+            "configure": configure,
+            "build": build,
+            "doctor": doctor,
+            "start": start,
+            "smoke": smoke,
+            "cancel-smoke": cancel_smoke,
+            "status": status,
+            "stop": stop,
+        }[args.command](args) or 0)
     except (RecipeError, common.RecipeError) as error:
         print(f"error: {error}", file=sys.stderr); return 2
 

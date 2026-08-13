@@ -253,7 +253,7 @@ operations:
 known_gaps:
   - Catalog does not yet enumerate every bridge JSON schema field.
   - Monitor command details should be expanded from docs/tutorials/monitor.md.
-  - Full hakoniwa-conductor-pro runtime regression is separate from Bridge package-consumer compatibility validation.
+  - Full hakoniwa-conductor runtime regression is separate from Bridge package-consumer compatibility validation.
 
 source_refs:
   - repository: hakoniwalab/hakoniwa-pdu-bridge-core

@@ -110,6 +110,10 @@ target_environment:
 execution_environment:
   required_for: executable-demo
   status: unspecified
+  # Use managed only when Foundation and Recipe operations own execution under work/.
+  # A managed Recipe must also declare non-empty foundation_requirements below.
+  workspace:
+    mode: managed
   os: macOS | Linux | Windows | WSL2 | unknown
   os_version: unknown
   architecture: arm64 | x86_64 | unknown
@@ -145,7 +149,14 @@ runtime_dependencies:
         version: 1.0.0
         purpose: Explain why this Recipe needs the package.
 
-# Optional. Add this section when the Recipe uses the reusable local Foundation.
+# Classify every migrated Recipe as Foundation-required or intentionally not required.
+# A not_required Recipe must explain why it does not execute Core, SHM, hako-cmd, or hakopy.
+foundation_contract:
+  mode: required # required | not_required
+  reason: This Recipe executes Hakoniwa Core shared memory through the managed Workspace.
+
+# Optional only when foundation_contract.mode is not_required.
+# Add this section when the Recipe uses the reusable local Foundation.
 # Declare only component minimum versions, capabilities, or build limits that the Recipe actually needs.
 # Omit this section for Recipes that intentionally use a legacy/system-installed runtime.
 foundation_requirements:
@@ -159,6 +170,38 @@ foundation_requirements:
     capabilities:
       hakoniwa_core: true
       core_callback: true
+
+# Optional versioned contract for non-Foundation repositories or local inputs.
+# Generic `tools/recipe.py doctor` validates these paths and artifacts.
+# `tools/recipe.py configure` clones only missing git sources into a sibling
+# repository path; it never overwrites an existing or environment-selected path.
+recipe_local_requirements_schema_version: 1
+recipe_local_requirements:
+  sibling-component-id:
+    root:
+      default_path: ../sibling-repository
+      override_env: HAKO_SIBLING_COMPONENT_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/sibling-repository.git
+      revision: main
+    required_artifacts:
+      - path: path/to/required-file
+        kind: file
+
+# Optional resolved runtime contract. `configure` generates environment.json,
+# activate/Activate.ps1, and the Recipe-owned Launcher under work/recipes/<id>/.
+recipe_runtime_schema_version: 1
+recipe_runtime:
+  environment:
+    HAKO_COMPONENT_ROOT: ${DEPENDENCY:sibling-component-id}
+    HAKO_RECIPE_WORKSPACE: ${RECIPE_WORKSPACE}
+    HAKO_FOUNDATION_INSTALL: ${FOUNDATION_INSTALL}
+  launcher:
+    template: recipes/launcher/<recipe-id>.launch.json
+    output: config/launcher.json
+    mode: immediate
 
 process_topology:
   required_for: multi-process-demo

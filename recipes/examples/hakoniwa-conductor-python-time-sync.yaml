@@ -1,0 +1,400 @@
+id: hakoniwa-conductor-python-time-sync
+title: Hakoniwa Conductor Python 2-Asset Time Synchronization Smoke
+recipe_version: 0.1
+
+goal:
+  user_request: 公開バイナリと生成済み設定だけでHakoniwa Conductorの時刻同期を簡単に確認したい
+  description: >
+    Run two Python Hakoniwa assets behind two Conductor Clients and one
+    Conductor Server topology. The sample uses the generated configuration
+    published by hakoniwa-conductor, does not use Runtime Delegation, and
+    verifies that both assets reach the same tick at the same Hakoniwa time.
+
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - The public v1.0.0 package contains the required server and client binaries.
+    - The public repository contains generated runtime configuration and the Python asset source.
+    - Business Pack Foundation provides compatible Core, Endpoint, RPC, Bridge, hako-cmd, Python, and hakopy artifacts.
+
+validation:
+  status: partially_verified
+  verified_at: 2026-08-09
+  summary: >
+    The same public sample source and generated configuration passed the private
+    Ubuntu Docker smoke. The Business Pack-native macOS smoke then rebuilt the
+    local Foundation with Python 3.12, verified the exact v1.0.0 build contract,
+    and observed both public Python assets at tick 20 and 200000 usec.
+  steps:
+    - id: public_sample_contract
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-conductor
+          path: samples/python-time-sync
+          revision: main
+      notes:
+        - Generated config is included; users do not need to run a generator for the first smoke.
+        - No Runtime Delegation control artifacts are present.
+    - id: ubuntu_docker_reference_smoke
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-conductor-pro
+          path: work/time-sync-smoke/latest/result.yaml
+          revision: working-tree
+      notes:
+        - Both assets reached tick 20 at 200000 usec and all processes remained alive through validation.
+    - id: macos_business_pack_smoke
+      status: verified
+      evidence:
+        - path: work/recipes/hakoniwa-conductor-python-time-sync/validation/evidence.json
+          date: 2026-08-09
+      notes:
+        - The published macOS arm64 package and generated public fixture were used through the Business Pack operator.
+        - Both assets reached tick 20 at 200000 usec and cleanup completed.
+
+constraints:
+  - binary-only-conductor
+  - generated-config-published
+  - no-runtime-delegation
+  - two-python-assets
+  - single-host-native
+  - separate-shared-memory-domain-per-node
+  - business-pack-local-foundation
+  - bounded-smoke-and-normal-stop
+
+agency_boundary:
+  agent_may:
+    - Inspect the public sample and generated configuration.
+    - Configure Recipe-local runtime paths and execute the simulation-only smoke after prerequisites are satisfied.
+  human_decision_required:
+    - Accept the applicable Hakoniwa Conductor license before obtaining the binary package.
+  forbidden_automation:
+    - Infer license acceptance.
+    - Install binaries or Foundation libraries into a system directory.
+
+target_environment:
+  required_for: executable-demo
+  status: specified
+  os: macOS | Linux
+  os_version: macOS current | Ubuntu 24.04
+  architecture: arm64 | x86_64
+  execution_mode: native
+  runtimes:
+    - name: Python
+      required: true
+      version: "3.12"
+      path: work/foundation/install/python
+  hakoniwa:
+    install_prefix: work/foundation/install
+    components_built:
+      - hakoniwa-core-pro
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-pdu-rpc
+      - hakoniwa-pdu-bridge-core
+      - hakoniwa-pdu-python
+  notes:
+    - Use the platform package prepared by hakoniwa-conductor-v1-0-0-binary-package.
+    - The Foundation source revisions must match metadata/build-contract.txt in that package.
+
+execution_environment:
+  workspace:
+    mode: managed
+  required_for: executable-demo
+  status: specified
+  os: macOS | Linux
+  os_version: supported-host
+  architecture: arm64 | x86_64
+  execution_mode: native
+  gui:
+    required: false
+    status: not_required
+  shared_memory:
+    required: true
+    access: Recipe-local server, client-a, and client-b mmap roots
+  python:
+    environment: foundation-venv
+    path: work/foundation/install/python
+    version: "3.12"
+    hakopy_available: required
+  hakoniwa:
+    install_prefix: work/foundation/install
+    hako_cmd_access: required
+  notes:
+    - TCP connects the logical nodes while each node owns an isolated local Core domain.
+
+foundation_contract:
+  mode: required
+  reason: This Recipe uses components installed and validated through the managed Business Pack Foundation.
+
+foundation_requirements:
+  hakoniwa-core-pro:
+    version:
+      min: 1.0.0
+    capabilities:
+      shared_memory: true
+      hako_cmd: true
+      python_binding: true
+  hakoniwa-pdu-endpoint:
+    version:
+      min: 1.0.0
+    capabilities:
+      hakoniwa_core: true
+      core_callback: true
+      core_polling: true
+      tcp: true
+  hakoniwa-pdu-rpc:
+    capabilities:
+      rpc_client: true
+      rpc_server: true
+      tcp_mux: true
+      shared_native_library: true
+  hakoniwa-pdu-bridge-core:
+    version:
+      min: 1.0.0
+    capabilities:
+      library: true
+  hakoniwa-pdu-python:
+    version:
+      min: 1.6.6
+    capabilities:
+      shm_backend: true
+
+process_topology:
+  required_for: multi-process-demo
+  conductor_owner: server-01
+  simulator_processes:
+    - id: server-01
+      asset_name: none
+      conductor: owner
+      viewer: disabled
+    - id: server-02
+      asset_name: none
+      conductor: disabled
+      viewer: disabled
+    - id: client-a
+      asset_name: hello-asset-a
+      conductor: disabled
+      viewer: disabled
+    - id: client-b
+      asset_name: hello-asset-b
+      conductor: disabled
+      viewer: disabled
+  controller_processes: []
+  notes:
+    - server-01 and server-02 share the server Core domain.
+    - Each Client and its Python asset share one isolated local Core domain.
+
+components:
+  - id: hakoniwa-conductor
+    roles: [simulation_core, control_plane, time_sync]
+    purpose: Coordinate the two Client nodes and their Hakoniwa simulation time.
+  - id: hakoniwa-core-pro
+    roles: [simulation_core]
+    purpose: Supply local lifecycle, shared-memory, Python binding, and hako-cmd facilities.
+  - id: hakoniwa-pdu-endpoint
+    roles: [communication_infrastructure]
+    purpose: Supply Core-integrated local and TCP endpoint transport.
+  - id: hakoniwa-pdu-rpc
+    roles: [control_plane, communication_infrastructure]
+    purpose: Supply the distributed Conductor RPC transport.
+  - id: hakoniwa-pdu-bridge-core
+    roles: [bridge]
+    purpose: Satisfy the Conductor binary's bridge library contract.
+  - id: hakoniwa-pdu-python
+    roles: [language_binding]
+    purpose: Run the two public Python Hakoniwa assets in the Foundation interpreter.
+
+connections:
+  - from: hakoniwa-conductor
+    to: hakoniwa-core-pro
+    interface: api
+    data: [lifecycle, simulation-time]
+    contract:
+      status: partially_verified
+      requires:
+        - Foundation Receipt revisions match the binary metadata/build-contract.txt.
+        - Each logical node uses its declared HAKO_CONFIG_PATH.
+      validation_notes:
+        - The operator rejects mismatched Foundation revisions before process launch.
+    notes: Client and asset pairs share local Core state; different logical nodes do not share mmap files.
+  - from: hakoniwa-conductor
+    to: hakoniwa-pdu-endpoint
+    interface: endpoint
+    data: [distributed-control, time-coordination]
+    contract:
+      status: verified
+      requires:
+        - generated endpoint and name-resolver configuration
+        - localhost TCP ports 54011 and 54012
+      validation_notes:
+        - The public generated fixture passed the private Ubuntu Docker smoke.
+
+data_flow:
+  summary: The Conductor Server coordinates two Clients; each Client drives one local Python asset using the same synchronized Hakoniwa time.
+  steps:
+    - from: public generated configuration
+      to: Conductor server and clients
+      data: [conductor, endpoint, rpc, bridge, PDU configuration]
+      description: The Recipe copies the immutable public fixture into its work directory.
+    - from: Conductor Server
+      to: Conductor Client A and Conductor Client B
+      data: [simulation-time coordination]
+      description: TCP carries distributed control between the generated node endpoints.
+    - from: client local Core
+      to: hello Python asset
+      data: [lifecycle, simulation time]
+      description: Each asset observes its local Client's synchronized Hakoniwa time.
+
+time_model:
+  mode: shared-simulation-time
+  components: [hakoniwa-conductor, hakoniwa-core-pro]
+  notes:
+    - delta_time_usec is 10000.
+    - Success requires both assets to report the same sim_time_usec at tick 20.
+
+artifact_sets:
+  physics_artifacts:
+    description: No physics simulator is used.
+    status: verified
+    artifacts: []
+  visualization_artifacts:
+    description: No viewer is used; JSON Lines logs expose synchronized time.
+    status: verified
+    artifacts: []
+  pdu_artifacts:
+    description: Public generated Conductor, Endpoint, RPC, Bridge, and time PDU fixtures.
+    status: verified
+    artifacts:
+      - ../hakoniwa-conductor/samples/python-time-sync/config/generated
+  runtime_artifacts:
+    description: Recipe-local config, Core domains, logs, and validation evidence.
+    status: partially_verified
+    artifacts:
+      - work/recipes/hakoniwa-conductor-python-time-sync/config
+      - work/recipes/hakoniwa-conductor-python-time-sync/runtime/core
+      - work/recipes/hakoniwa-conductor-python-time-sync/logs
+      - work/recipes/hakoniwa-conductor-python-time-sync/validation/evidence.json
+
+artifacts:
+  - name: public-time-sync-fixture
+    kind: generated-config
+    producer: hakoniwa-conductor
+    consumer: [hakoniwa-conductor]
+    path: ../hakoniwa-conductor/samples/python-time-sync/config/generated
+  - name: public-python-asset
+    kind: source
+    producer: hakoniwa-conductor
+    consumer: [hakoniwa-pdu-python]
+    path: ../hakoniwa-conductor/samples/python-time-sync/asset/hello_asset.py
+  - name: smoke-evidence
+    kind: validation-evidence
+    producer: hakoniwa-business-pack
+    consumer: [operator, ai-agent]
+    path: work/recipes/hakoniwa-conductor-python-time-sync/validation/evidence.json
+
+missing_pieces:
+  - Record Ubuntu x86_64 Business Pack runtime evidence using the published ZIP.
+
+demo:
+  objective: Confirm that two Python Hakoniwa assets observe the same Conductor-coordinated simulation time.
+  operator: python tools/recipe/hakoniwa_conductor_time_sync.py
+  steps:
+    - order: 1
+      component: hakoniwa-conductor
+      action: Prepare the public v1.0.0 package after reading and accepting its license.
+      command: python tools/recipe/hakoniwa_conductor.py configure --accept-license
+    - order: 2
+      component: hakoniwa-core-pro
+      action: Inspect and, when required, rebuild the shared Foundation for this Recipe.
+      command: python tools/foundation.py plan --recipe recipes/examples/hakoniwa-conductor-python-time-sync.yaml
+    - order: 3
+      component: hakoniwa-conductor
+      action: Copy the public generated fixture and create the three Recipe-local Core domains.
+      command: python tools/recipe/hakoniwa_conductor_time_sync.py configure
+    - order: 4
+      component: hakoniwa-conductor
+      action: Verify the binary, exact Foundation build contract, Python asset, and generated config.
+      command: python tools/recipe/hakoniwa_conductor_time_sync.py doctor
+    - order: 5
+      component: hakoniwa-conductor
+      action: Start, validate, and normally stop the complete native topology.
+      command: python tools/recipe/hakoniwa_conductor_time_sync.py smoke
+  observability:
+    success_signals:
+      - Both assets register before start.
+      - Both assets reach tick 20 at sim_time_usec 200000.
+      - All managed processes remain alive through validation.
+      - hako-cmd stop and owned-process cleanup complete.
+    failure_signals:
+      - The binary package and Foundation build-contract revisions differ.
+      - A required process exits before readiness or tick validation.
+      - Asset simulation time differs or moves backwards.
+    automation:
+      - configure is idempotent and copies only public sample artifacts.
+      - configure clears only this Recipe's three mmap roots so stale runtime state is never reused.
+      - smoke owns all started process groups and performs bounded cleanup.
+  verification_checks:
+    lifecycle:
+      - The Conductor-owning server creates the server Core domain before the second server attaches.
+      - Simulation starts only after both clients have joined and both assets are registered.
+      - Normal stop is requested before process-group fallback cleanup.
+    behavior:
+      - hello-asset-a and hello-asset-b report equal Hakoniwa time at the required tick.
+    logs:
+      - Each process has a Recipe-local log and the final result is written atomically.
+
+expected_result:
+  observable: Both public Python assets reach tick 20 at 200000 usec under one Conductor-coordinated topology, followed by normal cleanup.
+  success_conditions:
+    - Exact binary/Foundation build contract verified.
+    - Both assets registered and reached the required tick.
+    - Simulation time matched at that tick.
+    - Validation evidence remained under the Recipe work directory.
+
+implementation_plan:
+  - Publish the minimal Python asset, generated config, and expected result in hakoniwa-conductor.
+  - Materialize the public fixture and three Core domains under Business Pack work.
+  - Validate binary and Foundation compatibility before launch.
+  - Start two servers, two clients, and two assets with bounded readiness checks.
+  - Compare observed times and stop all owned processes.
+
+acceptance_criteria:
+  - No RD implementation or private source is published.
+  - A first-time user does not need to generate configuration.
+  - No system directory is written.
+  - Foundation mismatch fails during doctor rather than at dynamic linking.
+  - Both assets visibly demonstrate synchronized Hakoniwa time.
+  - Cleanup is bounded and leaves validation evidence.
+
+source_catalogs:
+  - component_id: hakoniwa-conductor
+    catalog_path: ../catalog/components/hakoniwa-conductor.yaml
+  - component_id: hakoniwa-core-pro
+    catalog_path: ../catalog/components/hakoniwa-core-pro.yaml
+  - component_id: hakoniwa-pdu-endpoint
+    catalog_path: ../catalog/components/hakoniwa-pdu-endpoint.yaml
+  - component_id: hakoniwa-pdu-rpc
+    catalog_path: ../catalog/components/hakoniwa-pdu-rpc.yaml
+  - component_id: hakoniwa-pdu-bridge-core
+    catalog_path: ../catalog/components/hakoniwa-pdu-bridge-core.yaml
+  - component_id: hakoniwa-pdu-python
+    catalog_path: ../catalog/components/hakoniwa-pdu-python.yaml
+
+source_artifacts:
+  - repository: hakoniwalab/hakoniwa-conductor
+    path: samples/python-time-sync
+    revision: main
+    description: Public Python asset, generated fixture, and expected smoke result.
+  - repository: hakoniwalab/hakoniwa-conductor
+    path: releases/tag/v1.0.0
+    revision: v1.0.0
+    description: Public binary package and Foundation build contract.
+
+tags:
+  - hakoniwa
+  - conductor
+  - time-sync
+  - python
+  - generated-config
+  - binary

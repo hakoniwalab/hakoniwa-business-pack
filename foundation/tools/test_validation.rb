@@ -86,6 +86,140 @@ class FoundationValidationTest < Minitest::Test
     assert errors.any? { |error| error.include?("min must be a positive integer") }
   end
 
+  def test_managed_workspace_requires_foundation_requirements
+    errors = FoundationValidation.validate_workspace_contract(
+      {"workspace" => {"mode" => "managed"}}, nil, label: "recipe.yaml"
+    )
+    assert errors.any? { |error| error.include?("managed Workspace Recipe") }
+    assert errors.any? { |error| error.include?("do not bypass") }
+  end
+
+  def test_managed_workspace_accepts_non_empty_foundation_requirements
+    errors = FoundationValidation.validate_workspace_contract(
+      {"workspace" => {"mode" => "managed"}},
+      {"hakoniwa-core-pro" => {"capabilities" => {"shared_memory" => true}}},
+      label: "recipe.yaml"
+    )
+    assert_empty errors
+  end
+
+  def test_legacy_recipe_can_omit_workspace_and_foundation_requirements
+    assert_empty FoundationValidation.validate_workspace_contract(
+      {"required_for" => "executable-demo"}, nil, label: "recipe.yaml"
+    )
+  end
+
+  def test_required_foundation_contract_accepts_managed_recipe
+    errors = FoundationValidation.validate_foundation_contract(
+      {"mode" => "required", "reason" => "Uses Core shared memory and hakopy."},
+      {"hakoniwa-core-pro" => {"capabilities" => {"python_binding" => true}}},
+      {
+        "workspace" => {"mode" => "managed"},
+        "python" => {
+          "environment" => "foundation-venv",
+          "path" => "work/foundation/install/python",
+          "version" => "3.12",
+          "hakopy_available" => true
+        },
+        "hakoniwa" => {"install_prefix" => "work/foundation/install"}
+      },
+      label: "recipe.yaml"
+    )
+    assert_empty errors
+  end
+
+  def test_required_foundation_contract_rejects_missing_requirements
+    errors = FoundationValidation.validate_foundation_contract(
+      {"mode" => "required", "reason" => "Uses hakopy."}, nil,
+      {"workspace" => {"mode" => "managed"}}, label: "recipe.yaml"
+    )
+    assert errors.any? { |error| error.include?("non-empty foundation_requirements") }
+  end
+
+  def test_required_foundation_contract_rejects_system_prefix
+    errors = FoundationValidation.validate_foundation_contract(
+      {"mode" => "required", "reason" => "Uses Core."},
+      {"hakoniwa-core-pro" => {"capabilities" => {"shared_memory" => true}}},
+      {
+        "workspace" => {"mode" => "managed"},
+        "hakoniwa" => {"install_prefix" => "/usr/local/hakoniwa"}
+      },
+      label: "recipe.yaml"
+    )
+    assert errors.any? { |error| error.include?("work/foundation/install") }
+  end
+
+  def test_hakopy_runtime_rejects_non_foundation_python_and_missing_core_binding
+    errors = FoundationValidation.validate_foundation_contract(
+      {"mode" => "required", "reason" => "Uses hakopy."},
+      {"hakoniwa-core-pro" => {"capabilities" => {"shared_memory" => true}}},
+      {
+        "workspace" => {"mode" => "managed"},
+        "python" => {
+          "environment" => "venv",
+          "path" => ".venv",
+          "version" => "3.11",
+          "hakopy_available" => true
+        },
+        "hakoniwa" => {"install_prefix" => "work/foundation/install"}
+      },
+      label: "recipe.yaml"
+    )
+    assert errors.any? { |error| error.include?("python.environment foundation-venv") }
+    assert errors.any? { |error| error.include?("python.path work/foundation/install/python") }
+    assert errors.any? { |error| error.include?("Python 3.12") }
+    assert errors.any? { |error| error.include?("capability python_binding") }
+  end
+
+  def test_foundation_requirements_require_explicit_contract_classification
+    errors = FoundationValidation.validate_foundation_contract(
+      nil,
+      {"hakoniwa-core-pro" => {"capabilities" => {"shared_memory" => true}}},
+      {"workspace" => {"mode" => "managed"}},
+      label: "recipe.yaml"
+    )
+    assert errors.any? { |error| error.include?("classified by foundation_contract") }
+  end
+
+  def test_foundation_runtime_signals_require_explicit_contract_classification
+    errors = FoundationValidation.validate_foundation_contract(
+      nil, nil,
+      {"python" => {"hakopy_available" => "required-for-runtime"}},
+      label: "recipe.yaml"
+    )
+    assert errors.any? { |error| error.include?("Foundation runtime signals require explicit foundation_contract") }
+    assert errors.any? { |error| error.include?("python.hakopy_available") }
+  end
+
+  def test_not_required_foundation_contract_requires_reason_and_rejects_managed_workspace
+    errors = FoundationValidation.validate_foundation_contract(
+      {"mode" => "not_required", "reason" => ""}, nil,
+      {"workspace" => {"mode" => "managed"}}, label: "recipe.yaml"
+    )
+    assert errors.any? { |error| error.include?("reason must be a non-empty string") }
+    assert errors.any? { |error| error.include?("must not use a managed Workspace") }
+  end
+
+  def test_not_required_foundation_contract_rejects_hakopy_runtime_signal
+    errors = FoundationValidation.validate_foundation_contract(
+      {"mode" => "not_required", "reason" => "Setup only."}, nil,
+      {"python" => {"hakopy_available" => "required-for-runtime"}},
+      label: "recipe.yaml"
+    )
+    assert errors.any? { |error| error.include?("python.hakopy_available") }
+  end
+
+  def test_foundation_usage_signals_detect_runtime_dependencies
+    signals = FoundationValidation.foundation_usage_signals(
+      {
+        "shared_memory" => {"required" => true},
+        "python" => {"hakopy_available" => true},
+        "hakoniwa" => {"hako_cmd_access" => "required-for-demo"}
+      }
+    )
+    assert_equal %w[shared_memory.required python.hakopy_available hakoniwa.hako_cmd_access], signals
+  end
+
   def test_valid_receipt
     assert_empty FoundationValidation.validate_receipt(valid_receipt, label: "receipt.yaml")
   end
@@ -113,6 +247,45 @@ class FoundationValidationTest < Minitest::Test
 
     errors = FoundationValidation.validate_receipt(receipt, label: "receipt.yaml")
 
+    assert errors.any? { |error| error.include?("relative install-prefix path") }
+  end
+
+  def test_receipt_accepts_soabi_python_binding_metadata
+    receipt = valid_receipt.merge(
+      "python" => {
+        "binding_mode" => "soabi",
+        "implementation" => "CPython",
+        "executable" => "/usr/bin/python3.12",
+        "version" => "3.12.10",
+        "major" => 3,
+        "minor" => 12,
+        "soabi" => "cpython-312-test",
+        "extension_suffix" => ".cpython-312-test.so",
+        "artifact" => "share/hakoniwa/python/hakopy.cpython-312-test.so"
+      }
+    )
+
+    assert_empty FoundationValidation.validate_receipt(receipt, label: "receipt.yaml")
+  end
+
+  def test_receipt_rejects_legacy_python_binding_metadata
+    receipt = valid_receipt.merge(
+      "python" => {
+        "binding_mode" => "legacy",
+        "implementation" => "CPython",
+        "executable" => "python",
+        "version" => "3.12.10",
+        "major" => 3,
+        "minor" => 12,
+        "soabi" => "",
+        "extension_suffix" => ".so",
+        "artifact" => "/tmp/hakopy.so"
+      }
+    )
+
+    errors = FoundationValidation.validate_receipt(receipt, label: "receipt.yaml")
+    assert errors.any? { |error| error.include?("binding_mode must be soabi") }
+    assert errors.any? { |error| error.include?("soabi must be a non-empty string") }
     assert errors.any? { |error| error.include?("relative install-prefix path") }
   end
 

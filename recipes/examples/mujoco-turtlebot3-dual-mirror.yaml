@@ -22,10 +22,14 @@ feasibility:
 
 validation:
   status: verified
+  verified_at: 2026-08-11
   summary: >
-    The dual-process Burger/Waffle mirror demo was executed locally on macOS
-    arm64 with MuJoCo viewer, two joystick-free route controllers, bidirectional
-    mirror updates, and two LiDAR plot windows.
+    The dual-process Burger/Waffle mirror demo was re-run through the managed
+    Foundation Recipe on macOS arm64 with the MuJoCo viewer and both LiDAR
+    visualizers. Both robots moved, bidirectional mirror counters advanced beyond
+    8000, exactly one process owned Conductor startup, and the Launcher session
+    reached TERMINATED. The Foundation-managed viewer workflow was also verified
+    on Windows x64. Native Linux execution remains to be verified.
   steps:
     - id: dual_mjcf_load
       status: verified
@@ -74,6 +78,15 @@ validation:
       notes:
         - The launcher opened separate LiDAR visualizers for TB3_BURGER/laser_scan and TB3_WAFFLE/laser_scan.
         - Runtime logs showed nonzero lidar_hits for both robots.
+    - id: managed_foundation_dual_runtime
+      status: verified
+      evidence:
+        - platform: macOS arm64 with MuJoCo viewer and dual LiDAR visualizers
+          date: 2026-08-11
+          result: Burger/Waffle motion, bidirectional mirror updates, nonzero LiDAR hits, one Conductor owner, and TERMINATED session verified.
+        - platform: Windows x64 with MuJoCo viewer and dual LiDAR visualizers
+          date: 2026-08-11
+          result: User-confirmed Foundation-managed materialization, build, viewer execution, and Launcher lifecycle after the Windows portability fixes.
 
 constraints:
   - no-ros-runtime
@@ -85,10 +98,10 @@ constraints:
 
 target_environment:
   required_for: executable-demo
-  status: recorded
-  os: macOS
+  status: specified
+  os: macOS | Linux | Windows
   os_version: unknown
-  architecture: arm64
+  architecture: arm64 | x86_64 | x64
   execution_mode: native
   runtimes:
     - name: MuJoCo
@@ -98,9 +111,9 @@ target_environment:
     - name: Python
       required: true
       version: "3.12"
-      path: unknown
+      path: work/foundation/install/python
   hakoniwa:
-    install_prefix: /usr/local/hakoniwa
+    install_prefix: work/foundation/install
     components_built:
       - hakoniwa-core-pro
       - hakoniwa-pdu-endpoint
@@ -110,10 +123,12 @@ target_environment:
 
 execution_environment:
   required_for: executable-demo
-  status: recorded
-  os: macOS
+  status: specified
+  workspace:
+    mode: managed
+  os: macOS | Linux | Windows
   os_version: unknown
-  architecture: arm64
+  architecture: arm64 | x86_64 | x64
   execution_mode: native
   gui:
     required: true
@@ -126,14 +141,49 @@ execution_environment:
       required: false
       available: not_required
   python:
-    environment: venv
+    environment: foundation-venv
+    path: work/foundation/install/python
+    version: "3.12"
     hakopy_available: true
   hakoniwa:
-    install_prefix: /usr/local/hakoniwa
+    install_prefix: work/foundation/install
     hako_cmd_access: requires-unsandboxed-command
   notes:
     - Python 3.12, hakopy, PyQt5, matplotlib, and hakoniwa-pdu must be available in the same Python environment.
     - Route controllers are scripted, so gamepad input is intentionally not required.
+    - The exact Foundation interpreter must import hakopy and hakoniwa-pdu with a matching Core SOABI Receipt.
+    - Runtime inputs and generated state remain under work/recipes/mujoco-turtlebot3-dual-mirror/.
+    - TB3 sensor targets require a viewer-capable build even in headless mode; --headless disables runtime windows, not renderer linkage.
+
+foundation_contract:
+  mode: required
+  reason: This multi-process Recipe executes Core shared memory, hako-cmd, SOABI-tagged hakopy, PDU Python, and Endpoint callback transport.
+
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      shared_memory: true
+      hako_cmd: true
+      python_binding: true
+  hakoniwa-pdu-python:
+    version:
+      min: 1.6.5
+    capabilities:
+      hako_launcher: true
+      launcher_background_lifecycle: true
+      shm_backend: true
+  hakoniwa-pdu-endpoint:
+    capabilities:
+      hakoniwa_core: true
+      core_callback: true
+
+recipe_local_requirements:
+  hakoniwa-mujoco-robots:
+    build_entrypoint: source CMake configured by the Recipe runner
+    required_artifacts:
+      - tb3_sim_burger
+      - tb3_sim_waffle
+      - tb3_route_demo.py
 
 process_topology:
   required_for: multi-process-demo
@@ -393,6 +443,7 @@ missing_pieces:
   - Replace local-validation revisions with concrete commit SHAs after repository changes are pushed.
   - Decide whether to add a screenshot or short recording as visual validation evidence.
   - Consider whether mirror-body generation should be automated from MBody artifacts instead of hand-composed MJCF.
+  - Verify the managed Recipe on native Linux and Windows and re-run its GUI/LiDAR-window path.
 
 demo:
   objective: >
@@ -401,21 +452,35 @@ demo:
     visible.
   steps:
     - order: 1
-      component: hakoniwa-mujoco-robots
-      action: Check runtime prerequisites.
-      command: ./doctor.bash
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: doctor.bash
-          revision: local-validation-2026-07-19
+      component: hakoniwa-business-pack
+      action: Stage the dual-runtime input closure and configure a Recipe-owned cross-platform build.
+      command: python3.12 tools/recipe/mujoco_turtlebot3_dual_mirror.py configure
     - order: 2
-      component: hakoniwa-mujoco-robots
-      action: Run the dual mirror launcher with viewer and LiDAR plots.
-      command: HAKO_TB3_ROUTE_LOOPS=1 HAKO_TB3_HOLD_SEC=4 ./tb3-dual-mirror-demo.bash
-      evidence:
-        - repository: hakoniwalab/hakoniwa-mujoco-robots
-          path: tb3-dual-mirror-demo.bash
-          revision: local-validation-2026-07-19
+      component: hakoniwa-business-pack
+      action: Build both simulator targets against the managed Foundation.
+      command: python3.12 tools/recipe/mujoco_turtlebot3_dual_mirror.py build
+    - order: 3
+      component: hakoniwa-business-pack
+      action: Check Foundation, Python SOABI, source inputs, and platform toolchain prerequisites.
+      command: python3.12 tools/recipe/mujoco_turtlebot3_dual_mirror.py doctor
+    - order: 4
+      component: hakoniwa-business-pack
+      action: Run the bounded dual mirror lifecycle through a session-file Launcher contract.
+      command: python3.12 tools/recipe/mujoco_turtlebot3_dual_mirror.py start
+  cleanup:
+    owner: hakoniwa-launcher
+    provider: hakoniwa-pdu-python
+    mode: background
+    target: work/recipes/mujoco-turtlebot3-dual-mirror/runtime/launcher-session.json
+    trigger: python3.12 tools/recipe/mujoco_turtlebot3_dual_mirror.py stop
+    expected_behavior:
+      - LauncherService.terminate stops only the two simulators and two controllers owned by this Recipe.
+      - The session remains observable as TERMINATED.
+    verification_checks:
+      - Confirm the Launcher session reports TERMINATED.
+      - Confirm no Recipe-owned simulator or controller remains.
+    cautions:
+      - Do not replace session-file termination with OS-specific kill commands.
   observability:
     success_signals:
       - Process A MuJoCo viewer shows real Burger and mirrored Waffle.

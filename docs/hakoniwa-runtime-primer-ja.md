@@ -59,8 +59,7 @@ Recipeがコア開発、共有メモリのデバッグ、低レベルアセッ�
 - インストール済みの箱庭コアライブラリとツール。
 - 共有メモリへのアクセス権限。
 - 生成済み、またはパッケージ済みのPDU定義。
-- Recipeで明示的に別バージョンが指定されていない限り、箱庭PythonワークフローではPython 3.12。
-- `hakopy` を使う場合、Python 3.12環境とネイティブランタイム環境が一致していること。
+- `hakopy` を使う場合、runtime ownerが選択したPythonとSOABI付きnative bindingが一致していること。
 - シミュレーションライフサイクルの所有者。通常は `hako-cmd` またはLauncherから制御します。
 
 コアランタイムとPDU設定の経路が確認できるまでは、SHM/PDUデモを実行可能なものとして提示しないでください。
@@ -73,9 +72,20 @@ Linux/macOSでは、一般的なインストール先は `/usr/local/hakoniwa` �
 - `/usr/local/hakoniwa/share/hakoniwa/offset` 配下のPDUオフセットファイル。
 - `/etc/hakoniwa/cpp_core_config.json` のコア設定。
 - `/var/lib/hakoniwa/mmap` 配下のmmapデータ。
-- デモで使用するPython環境内の `hakopy`。
+- runtime ownerが管理するimport path上の `hakopy`。
 
-`hakopy` は `hakoniwa-core-pro` のインストールによって利用可能になります。Pythonの `site-packages` にインストールされるため、Recipeで使用するPython 3.12インタプリタは、その `hakopy` モジュールをimportできる同じ環境でなければなりません。
+`hakoniwa-core-pro`は、選択された互換Python向けに`hakopy`をbuildできます。
+SOABIを有効にしたbuildでは、たとえば`hakopy.cpython-312-...so`のような
+ABI tag付きmoduleをinstallし、選択したimplementation、正確なversion、SOABI、
+extension suffix、install済みartifactをresolved build manifestとReceiptへ記録します。
+正確なversionは追跡情報であり、runtime互換性はPython implementationとSOABIで
+判定します。
+
+Business Pack Foundationは、このCoreの汎用機能を**CPython 3.12**へ限定します。
+`work/foundation/install/python`に共通環境を作り、Coreを`python.soabi: true`で
+buildし、`work/foundation/install/share/hakoniwa/python`の`hakopy`を
+Foundation管理のimport pathとして公開します。この配置は通常の`site-packages`
+installではありません。
 
 `hakoniwa-pdu` は `hakoniwa-pdu-python` プロジェクトから `pip install hakoniwa-pdu` によって導入されます。これも現在有効なPython 3.12環境にインストールされます。
 
@@ -92,12 +102,13 @@ installされている可能性があります。Foundation-aware Recipeでは�
 `work/foundation/install/python`のPython実体で`sys.executable`、`sys.prefix`、
 `pip show`の`Version`と`Location`、必要moduleのsmoke importを確認してください。
 
-Python 3.12は、個々のRecipeで毎回発見し直す条件ではなく、箱庭Python
-ワークフローに共通するランタイム契約です。コンポーネントが所有する起動
-wrapperはPython 3.12を明示的に選択し、`HAKO_PYTHON`や`PYTHON_CMD`などの
-文書化されたinterpreter上書きを受け付け、選択されたinterpreterがPython
-3.12でない場合や必要な箱庭packageをimportできない場合は、assetを起動する
-前に失敗させるべきです。
+Python 3.12はBusiness Pack Foundationの共通契約であり、個々のRecipeで毎回
+発見し直す条件ではありません。Foundation `doctor`はinterpreter identityを
+検査し、そのSOABIをCore Receiptと比較します。共通Foundation環境が未初期化の
+状態でPython 3.13/3.14からFoundation buildを実行した場合は、component workspaceを
+変更する前に失敗させます。コンポーネントが所有する起動wrapperはFoundation
+interpreterを使用し、必要な箱庭packageをimportできない場合はasset起動前に
+失敗させるべきです。
 
 ## アセット
 

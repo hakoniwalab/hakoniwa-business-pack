@@ -248,10 +248,25 @@ recipe_paths.each do |path|
   end
 
   errors.concat(
+    FoundationValidation.validate_foundation_contract(
+      data["foundation_contract"],
+      data["foundation_requirements"],
+      data["execution_environment"],
+      label: label
+    )
+  )
+  errors.concat(
     FoundationValidation.validate_requirements(
       data["foundation_requirements"],
       label: label,
       catalog_ids: catalog_ids
+    )
+  )
+  errors.concat(
+    FoundationValidation.validate_workspace_contract(
+      data["execution_environment"],
+      data["foundation_requirements"],
+      label: label
     )
   )
 end

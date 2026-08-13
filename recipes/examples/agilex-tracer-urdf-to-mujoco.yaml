@@ -7,8 +7,8 @@ goal:
   description: >
     Materialize the pinned AgileX Tracer source, normalize the ROS-origin description,
     preprocess unsupported mesh formats when necessary, generate structural and
-    target-prepared MuJoCo artifacts with hakoniwa-mbody-registry, then hand those
-    artifacts to hakoniwa-mujoco-robots for runtime control and PDU validation.
+    target-prepared MuJoCo artifacts with hakoniwa-mbody-registry, then verify the
+    generated model can be handed to a downstream MuJoCo runtime.
 
 feasibility:
   status: feasible
@@ -131,7 +131,7 @@ constraints:
   - prefer-declarative-preparation-inputs-over-hand-maintained-mjcf-forks
 
 target_environment:
-  required_for: executable-demo
+  required_for: artifact-generation
   status: partially_known
   os: macOS | Linux
   architecture: arm64 | x86_64
@@ -146,31 +146,33 @@ target_environment:
       version: unknown
       path: unknown
   hakoniwa:
-    install_prefix: /usr/local/hakoniwa
-    components_built:
-      - hakoniwa-mbody-registry
-      - hakoniwa-mujoco-robots
+    install_prefix: not-applicable
+    components_built: []
   notes:
     - Use a repository-local Python virtual environment for the MBody toolchain.
     - MBody preparation itself does not require Hakoniwa shared memory.
 
 execution_environment:
-  required_for: executable-demo
+  required_for: artifact-generation
   status: partially_known
   gui:
-    required: true
-    status: unknown
+    required: false
+    status: not_required
   shared_memory:
-    required: true
-    access: required-for-downstream-hakoniwa-runtime
+    required: false
+    access: not_required
   python:
     environment: venv
-    hakopy_available: not-required-for-mbody-conversion
+    hakopy_available: not_required
   hakoniwa:
-    install_prefix: /usr/local/hakoniwa
-    hako_cmd_access: required-for-runtime-demo
+    install_prefix: not-applicable
+    hako_cmd_access: not_required
   notes:
-    - The MuJoCo/Hakoniwa runtime stage requires downstream build/runtime prerequisites that are separate from MBody conversion prerequisites.
+    - The Hakoniwa runtime stage is intentionally owned by the separate agilex-tracer-hakoniwa-runtime Recipe.
+
+foundation_contract:
+  mode: not_required
+  reason: This Recipe only materializes and converts MBody artifacts; it does not execute Core, SHM, hako-cmd, or hakopy.
 
 components:
   - id: hakoniwa-mbody-registry
@@ -284,6 +286,7 @@ missing_pieces:
   - Re-run the current Tracer flow against the latest MBody main to determine whether explicit --package mappings can reduce the Tracer-specific adapter without changing behavior.
   - Re-promote any newly verified simplification into the source definition, docs, and this Recipe instead of preserving an obsolete workaround.
   - Keep runtime-specific control/PDU validation in hakoniwa-mujoco-robots rather than moving it into MBody.
+  - Validate the generated artifact through the separate agilex-tracer-hakoniwa-runtime Recipe.
 
 demo:
   status: available-from-previous-validation
@@ -292,26 +295,17 @@ demo:
     - Apply the current Tracer source normalization path.
     - Run the MBody forge path with DAE-to-OBJ enabled.
     - Confirm structural/prepared MuJoCo artifacts load successfully.
-  runtime:
-    - Build/run the downstream Tracer rover example or Hakoniwa asset.
-    - Start the sender used by the selected runtime example.
-    - Run hako-cmd start after assets are registered for the Hakoniwa PDU path.
   success_signals:
     - MBody forge completes without unresolved source/mesh references.
     - MuJoCo loads the prepared model/world.
-    - Downstream actuator smoke reports finite execution and positive forward displacement.
-    - Hakoniwa PDU runtime receives positive linear command and advances the Tracer base.
   failure_signals:
     - unresolved Xacro/package or mesh references
     - MuJoCo model load failure
-    - actuator binding failure
-    - no base displacement during the downstream motion smoke
 
 expected_result: >
   The user obtains a reproducible Tracer preparation path whose output can be handed
-  to a downstream MuJoCo/Hakoniwa runtime. The Recipe clearly separates verified
-  MBody artifact preparation from downstream runtime/control verification and does not
-  treat historical source workarounds as permanent architectural constraints.
+  to the separate MuJoCo/Hakoniwa runtime Recipe. This Recipe does not treat historical
+  runtime evidence or source workarounds as part of its current execution contract.
 
 source_catalogs:
   - component_id: hakoniwa-mbody-registry

@@ -2,27 +2,38 @@
   "schema_version": 1,
   "install_prefix": "work/foundation/install",
   "receipt_root": "share/hakoniwa/receipts",
+  "runtime": {
+    "python": {
+      "implementation": "CPython",
+      "major": 3,
+      "minor": 12
+    }
+  },
   "components": {
     "hakoniwa-core-pro": {
       "source": "../hakoniwa-core-pro",
+      "repository": "https://github.com/hakoniwalab/hakoniwa-core-pro.git",
       "dependencies": [],
       "operations": ["doctor", "build", "install"],
       "receipt": "share/hakoniwa/receipts/hakoniwa-core-pro.yaml"
     },
     "hakoniwa-pdu-endpoint": {
       "source": "../hakoniwa-pdu-endpoint",
+      "repository": "https://github.com/hakoniwalab/hakoniwa-pdu-endpoint.git",
       "dependencies": ["hakoniwa-core-pro"],
       "operations": ["doctor", "configure", "build", "install"],
       "receipt": "share/hakoniwa/receipts/hakoniwa-pdu-endpoint.yaml"
     },
     "hakoniwa-pdu-rpc": {
       "source": "../hakoniwa-pdu-rpc",
+      "repository": "https://github.com/hakoniwalab/hakoniwa-pdu-rpc.git",
       "dependencies": ["hakoniwa-pdu-endpoint"],
       "operations": ["doctor", "configure", "build", "install"],
       "receipt": "share/hakoniwa/receipts/hakoniwa-pdu-rpc.yaml"
     },
     "hakoniwa-pdu-bridge-core": {
       "source": "../hakoniwa-pdu-bridge-core",
+      "repository": "https://github.com/hakoniwalab/hakoniwa-pdu-bridge-core.git",
       "dependencies": [
         "hakoniwa-core-pro",
         "hakoniwa-pdu-endpoint"
@@ -32,6 +43,7 @@
     },
     "hakoniwa-pdu-python": {
       "source": "../hakoniwa-pdu-python",
+      "repository": "https://github.com/hakoniwalab/hakoniwa-pdu-python.git",
       "dependencies": ["hakoniwa-core-pro"],
       "operations": ["doctor", "configure", "build", "install", "smoke"],
       "receipt": "share/hakoniwa/receipts/hakoniwa-pdu-python.yaml"

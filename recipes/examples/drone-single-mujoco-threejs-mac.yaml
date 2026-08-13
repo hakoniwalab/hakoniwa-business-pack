@@ -130,6 +130,8 @@ target_environment:
     - Python 3.12 must be the environment that can import both hakopy and hakoniwa_pdu.
 
 execution_environment:
+  workspace:
+    mode: managed
   required_for: executable-demo
   status: specified
   os: macOS
@@ -189,6 +191,10 @@ components:
     roles:
       - visualizer
     purpose: Render the drone in a browser using the fleets viewer configuration and WebSocket PDU stream.
+
+foundation_contract:
+  mode: required
+  reason: This Recipe uses components installed and validated through the managed Business Pack Foundation.
 
 foundation_requirements:
   hakoniwa-core-pro:

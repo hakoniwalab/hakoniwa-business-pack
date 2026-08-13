@@ -1,0 +1,3 @@
+# Python dependency of hakoniwa-mbody-registry/tools/fetch.py.
+# Shared by Recipes that materialize MBody source assets.
+PyYAML>=6.0,<7

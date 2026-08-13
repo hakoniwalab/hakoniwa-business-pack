@@ -18,8 +18,87 @@ module FoundationValidation
     artifacts
     resolved_manifest
   ]).freeze
+  OPTIONAL_RECEIPT_FIELDS = Set.new(%w[python]).freeze
 
   module_function
+
+  def foundation_usage_signals(execution_environment)
+    return [] unless execution_environment.is_a?(Hash)
+
+    signals = []
+    shared_memory = execution_environment.dig("shared_memory", "required")
+    signals << "shared_memory.required" if shared_memory == true || shared_memory.to_s.start_with?("required")
+    hakopy = execution_environment.dig("python", "hakopy_available")
+    signals << "python.hakopy_available" if hakopy == true || hakopy.to_s.start_with?("required")
+    hako_cmd = execution_environment.dig("hakoniwa", "hako_cmd_access")
+    signals << "hakoniwa.hako_cmd_access" if hako_cmd == true || hako_cmd.to_s.start_with?("required")
+    signals
+  end
+
+  def validate_foundation_contract(value, requirements, execution_environment, label:)
+    if value.nil?
+      errors = []
+      if requirements.is_a?(Hash) && !requirements.empty?
+        errors << "#{label}: foundation_requirements must be classified by foundation_contract"
+      end
+      signals = foundation_usage_signals(execution_environment)
+      unless signals.empty?
+        errors << "#{label}: Foundation runtime signals require explicit foundation_contract: #{signals.join(', ')}"
+      end
+      return errors
+    end
+    unless value.is_a?(Hash) && value.keys.to_set == Set.new(%w[mode reason])
+      return ["#{label}: foundation_contract must contain exactly mode and reason"]
+    end
+
+    mode = value["mode"]
+    reason = value["reason"]
+    errors = []
+    unless %w[required not_required].include?(mode)
+      errors << "#{label}: foundation_contract.mode must be required or not_required"
+    end
+    unless non_empty_string?(reason)
+      errors << "#{label}: foundation_contract.reason must be a non-empty string"
+    end
+
+    workspace_mode = execution_environment.is_a?(Hash) ? execution_environment.dig("workspace", "mode") : nil
+    has_requirements = requirements.is_a?(Hash) && !requirements.empty?
+    if mode == "required"
+      errors << "#{label}: required Foundation contract must define non-empty foundation_requirements" unless has_requirements
+      errors << "#{label}: required Foundation contract must use execution_environment.workspace.mode managed" unless workspace_mode == "managed"
+      install_prefix = execution_environment.is_a?(Hash) ? execution_environment.dig("hakoniwa", "install_prefix") : nil
+      unless install_prefix == "work/foundation/install"
+        errors << "#{label}: required Foundation contract must use hakoniwa.install_prefix work/foundation/install"
+      end
+
+      hakopy = execution_environment.is_a?(Hash) ? execution_environment.dig("python", "hakopy_available") : nil
+      uses_hakopy = hakopy == true || hakopy.to_s.start_with?("required")
+      if uses_hakopy
+        python = execution_environment["python"]
+        unless python.is_a?(Hash) && python["environment"] == "foundation-venv"
+          errors << "#{label}: hakopy runtime must use python.environment foundation-venv"
+        end
+        unless python.is_a?(Hash) && python["path"] == "work/foundation/install/python"
+          errors << "#{label}: hakopy runtime must use python.path work/foundation/install/python"
+        end
+        unless python.is_a?(Hash) && python["version"].to_s == "3.12"
+          errors << "#{label}: hakopy runtime must use Python 3.12"
+        end
+        core = requirements.is_a?(Hash) ? requirements["hakoniwa-core-pro"] : nil
+        unless core.is_a?(Hash) && core.dig("capabilities", "python_binding") == true
+          errors << "#{label}: hakopy runtime must require hakoniwa-core-pro capability python_binding"
+        end
+      end
+    elsif mode == "not_required"
+      errors << "#{label}: not_required Foundation contract must not define foundation_requirements" if has_requirements
+      errors << "#{label}: not_required Foundation contract must not use a managed Workspace" if workspace_mode == "managed"
+      signals = foundation_usage_signals(execution_environment)
+      unless signals.empty?
+        errors << "#{label}: not_required Foundation contract conflicts with runtime signals: #{signals.join(', ')}"
+      end
+    end
+    errors
+  end
 
   def validate_requirements(value, label:, catalog_ids:)
     errors = []
@@ -56,6 +135,26 @@ module FoundationValidation
     errors
   end
 
+  def validate_workspace_contract(execution_environment, requirements, label:)
+    return [] if execution_environment.nil?
+    return ["#{label}: execution_environment must be a mapping"] unless execution_environment.is_a?(Hash)
+
+    workspace = execution_environment["workspace"]
+    return [] if workspace.nil?
+    unless workspace.is_a?(Hash) && workspace.keys == ["mode"]
+      return ["#{label}: execution_environment.workspace must contain only mode"]
+    end
+    unless workspace["mode"] == "managed"
+      return ["#{label}: execution_environment.workspace.mode must be managed"]
+    end
+    return [] if requirements.is_a?(Hash) && !requirements.empty?
+
+    [
+      "#{label}: managed Workspace Recipe must define non-empty foundation_requirements; " \
+      "do not bypass this gate with component-local doctor/build/install commands"
+    ]
+  end
+
   def validate_receipt(value, label:)
     errors = []
     unless value.is_a?(Hash)
@@ -63,7 +162,7 @@ module FoundationValidation
     end
 
     missing = RECEIPT_FIELDS - value.keys.to_set
-    unknown = value.keys.to_set - RECEIPT_FIELDS
+    unknown = value.keys.to_set - RECEIPT_FIELDS - OPTIONAL_RECEIPT_FIELDS
     errors << "#{label}: missing required fields: #{missing.to_a.sort.join(', ')}" unless missing.empty?
     errors << "#{label}: unknown fields: #{unknown.to_a.sort.join(', ')}" unless unknown.empty?
     return errors unless missing.empty?
@@ -88,12 +187,44 @@ module FoundationValidation
     errors.concat(validate_installed_build_limits(value["build_limits"], "#{label}: build_limits"))
     errors.concat(validate_dependencies(value["dependencies"], "#{label}: dependencies"))
     errors.concat(validate_artifacts(value["artifacts"], "#{label}: artifacts"))
+    unless value["python"].nil?
+      errors.concat(validate_python_binding(value["python"], "#{label}: python"))
+    end
 
     resolved_manifest = value["resolved_manifest"]
     unless relative_install_path?(resolved_manifest)
       errors << "#{label}: resolved_manifest must be a relative install-prefix path"
     end
 
+    errors
+  end
+
+  def validate_python_binding(value, path)
+    fields = %w[
+      binding_mode implementation executable version major minor soabi
+      extension_suffix artifact
+    ]
+    unless value.is_a?(Hash) && value.keys.to_set == fields.to_set
+      return ["#{path} must contain exactly #{fields.join(', ')}"]
+    end
+
+    errors = []
+    errors << "#{path}.binding_mode must be soabi" unless value["binding_mode"] == "soabi"
+    errors << "#{path}.implementation must be CPython" unless value["implementation"] == "CPython"
+    errors << "#{path}.executable must be a non-empty string" unless non_empty_string?(value["executable"])
+    unless value["version"].is_a?(String) && DOTTED_NUMERIC_VERSION.match?(value["version"])
+      errors << "#{path}.version must be a dotted numeric version"
+    end
+    errors << "#{path}.major must be 3" unless value["major"] == 3
+    errors << "#{path}.minor must be 12" unless value["minor"] == 12
+    errors << "#{path}.soabi must be a non-empty string" unless non_empty_string?(value["soabi"])
+    suffix = value["extension_suffix"]
+    unless non_empty_string?(suffix) && suffix.start_with?(".") && %w[.so .pyd].any? { |extension| suffix.end_with?(extension) }
+      errors << "#{path}.extension_suffix must be a native Python extension suffix"
+    end
+    unless relative_install_path?(value["artifact"])
+      errors << "#{path}.artifact must be a relative install-prefix path"
+    end
     errors
   end
 

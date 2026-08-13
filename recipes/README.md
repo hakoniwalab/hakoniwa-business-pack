@@ -111,6 +111,61 @@ workflow.
 Foundation may be `MISSING`, `INCOMPATIBLE`, or `UNKNOWN`; this does not block
 guide generation. The generated page is the handoff point. Follow its commands
 to prepare Foundation and run the Recipe-specific workflow.
+
+Before executing those commands, use the generic Recipe doctor when the Recipe
+declares versioned local requirements:
+
+```bash
+python3.12 tools/recipe.py doctor --recipe path/to/<recipe-id>.yaml
+```
+
+The doctor is read-only. It checks both Foundation and
+`recipe_local_requirements`, including environment-variable path overrides and
+required files, directories, or executables. Use the unified plan to inspect
+missing sibling repositories, Foundation build actions, and Recipe Python
+packages, then configure them through the same user-facing entry point:
+
+```bash
+python3.12 tools/recipe.py plan --recipe path/to/<recipe-id>.yaml
+python3.12 tools/recipe.py configure --recipe path/to/<recipe-id>.yaml
+```
+
+`configure` clones only missing dependencies into declared sibling paths, calls
+the internal Foundation plan/build engine, and installs declared Recipe Python
+requirements into Foundation Python. It never overwrites an existing directory
+and never clones into a missing path selected through an override environment
+variable. Direct `foundation.py` commands remain available for component and CI
+maintenance, but Recipe users need only `recipe.py`. The contract is defined in
+[`recipes/schema.yaml`](schema.yaml).
+
+When a Recipe declares `recipe_runtime_schema_version: 1`, `configure` also
+materializes a resolved runtime contract:
+
+```text
+work/recipes/<recipe-id>/
+├── environment.json
+├── activate
+├── Activate.ps1
+└── config/launcher.json
+```
+
+Start its generated Launcher directly through the Recipe entry point:
+
+```bash
+python tools/recipe.py launch --recipe path/to/<recipe-id>.yaml
+```
+
+`launch` composes the Workspace and Recipe environments internally, so the
+Launcher terminal does not need to source `activate`. Additional operator or
+client terminals first run `workspace.py enter`, then source the generated
+Recipe activation when they require the same resolved runtime paths. Secrets,
+tokens, passwords, credentials, and API keys must not be persisted in this
+runtime contract.
+
+Cross-platform native Recipes may use `${NATIVE_BIN_PREFIX}` and
+`${NATIVE_EXECUTABLE_SUFFIX}` in declared local artifact paths and Recipe runtime
+environment values. They resolve to `mac`/empty, `linux`/empty, or `win`/`.exe`
+for macOS, Linux (including WSL2), and Windows respectively.
 Recipe-specific `configure` implementations may enrich the same `index.html`
 with resolved paths and generated resources while preserving it as the common
 handoff surface. Recipe-specific executables live under
@@ -135,6 +190,47 @@ expose the absolute Foundation Python path. `exit` restores the parent shell; it
 does not terminate Launcher-managed background processes. A running Recipe must
 execute its declared `stop` operation first. CI and other non-interactive
 callers may use `python tools/workspace.py run -- <command>`.
+
+If Foundation `doctor`, `plan`, or `build` rejects the selected Recipe because
+`foundation_requirements` is missing or invalid, stop and treat that result as
+a Recipe authoring or migration gap. Do not continue by invoking sibling
+components' local doctor, build, or install commands. Their standalone output
+does not establish the selected Foundation or composed Recipe state.
+
+An executable Recipe that declares `execution_environment.workspace.mode:
+managed` must also declare a non-empty `foundation_requirements` mapping. A
+legacy or architecture-only Recipe may omit both until it is intentionally
+migrated to the managed Workspace contract.
+
+Migrated Recipes also declare their classification explicitly:
+
+```yaml
+foundation_contract:
+  mode: required
+  reason: This Recipe executes Core shared memory and hakopy.
+```
+
+or, for setup/package Recipes that do not execute Core, SHM, `hako-cmd`, or
+`hakopy`:
+
+```yaml
+foundation_contract:
+  mode: not_required
+  reason: This Recipe only verifies and extracts a binary package.
+```
+
+`required` must be paired with managed Workspace execution and non-empty
+`foundation_requirements`. `not_required` must not declare either. The reason
+is part of the machine-readable review boundary; it is not a generic escape
+hatch for legacy Recipes.
+
+A Recipe that imports `hakopy` must require
+`hakoniwa-core-pro.capabilities.python_binding: true`. Business Pack Foundation
+then narrows the Core build to CPython 3.12 with `python.soabi: true`, requires
+the Core Receipt to report `binding_mode: soabi` and a non-empty SOABI, and
+compares that SOABI with the exact Foundation interpreter before reuse. A
+system Python, untagged `hakopy.so`/`hakopy.pyd`, or an import from another venv
+is not compatible evidence.
 
 ## Target Environment Requirement
 
@@ -163,14 +259,18 @@ For Foundation-aware Recipes that use Hakoniwa shared memory, PDU, Python
 controllers, or the launcher, declare `foundation_requirements` and use:
 
 ```bash
-python3.12 tools/foundation.py doctor --recipe <recipe.yaml>
+python3.12 tools/recipe.py doctor --recipe <recipe.yaml>
+python3.12 tools/recipe.py plan --recipe <recipe.yaml>
+python3.12 tools/recipe.py configure --recipe <recipe.yaml>
 ```
 
-The Foundation doctor compares Recipe requirements with installed Component
-Receipts and never builds. Keep component build/install in the shared Foundation
-setup phase, and keep ports, processes, producers, browser state, and user gates
-in the Recipe runtime preflight. `bash tools/doctor.bash` remains available to
-Recipes that still explicitly use the legacy system install.
+The Recipe doctor delegates to the read-only Foundation inspection and also
+checks versioned Recipe-local dependencies. `plan` remains read-only;
+`configure` delegates component build/install to Foundation and prepares other
+declared environment dependencies. Keep ports, processes, producers, browser
+state, and user gates in the Recipe runtime preflight. Direct `foundation.py`
+commands are for Foundation/component maintenance. `bash tools/doctor.bash`
+remains available to Recipes that explicitly use the legacy system install.
 
 ## Recipe-Specific Python Dependencies
 

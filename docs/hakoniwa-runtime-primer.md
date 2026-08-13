@@ -79,9 +79,8 @@ Typical requirements include:
 - installed Hakoniwa core libraries and tools;
 - shared-memory access permissions;
 - generated or packaged PDU definitions;
-- Python 3.12 for Hakoniwa Python workflows unless a Recipe explicitly says
-  otherwise;
-- matching Python 3.12/native runtime environments when `hakopy` is involved;
+- the Python version selected by the runtime owner and a matching SOABI-tagged
+  native binding when `hakopy` is involved;
 - a simulation lifecycle owner, usually controlled through `hako-cmd` or a
   launcher.
 
@@ -97,11 +96,22 @@ runtime artifacts can include:
 - PDU offset files under `/usr/local/hakoniwa/share/hakoniwa/offset`;
 - core config under `/etc/hakoniwa/cpp_core_config.json`;
 - mmap data under `/var/lib/hakoniwa/mmap`;
-- `hakopy` in the Python environment used by the demo.
+- `hakopy` on the import path controlled by the runtime owner.
 
-`hakopy` appears through the `hakoniwa-core-pro` install. It is installed into a
-Python `site-packages` location, so the Python 3.12 interpreter used by a Recipe
-must be the same environment where that `hakopy` module is importable.
+`hakoniwa-core-pro` can build `hakopy` for a selected compatible Python. A
+SOABI-enabled build installs the ABI-tagged module, for example
+`hakopy.cpython-312-...so`, and records the selected implementation, exact
+version, SOABI, extension suffix, and installed artifact in its resolved build
+manifest and Receipt. The exact version is traceability metadata; runtime
+compatibility is decided from the Python implementation and SOABI.
+
+Business Pack Foundation narrows that general Core capability to **CPython
+3.12**. It creates one shared environment under
+`work/foundation/install/python`, builds Core with `python.soabi: true`, and
+exposes the installed `hakopy` from
+`work/foundation/install/share/hakoniwa/python` through the
+Foundation-controlled import path. This directory is not a normal
+`site-packages` installation.
 
 `hakoniwa-pdu` appears through `pip install hakoniwa-pdu` from the
 `hakoniwa-pdu-python` project. It is also installed into the active Python 3.12
@@ -124,12 +134,14 @@ under `work/foundation/install/python` to verify `sys.executable`, `sys.prefix`,
 the `Version` and `Location` from `pip show`, and smoke imports for the required
 modules.
 
-Python 3.12 is a common Hakoniwa runtime contract, not a condition that should
-be rediscovered independently in each Recipe. Component-owned launch wrappers
-for Hakoniwa Python workflows should select Python 3.12 explicitly, honor a
-documented interpreter override such as `HAKO_PYTHON` or `PYTHON_CMD`, and fail
-before starting assets when the selected interpreter is not Python 3.12 or
-cannot import the required Hakoniwa packages.
+Python 3.12 is the Business Pack Foundation contract, not a condition that
+should be rediscovered independently in each Recipe. Foundation `doctor`
+checks the interpreter identity and compares its SOABI with the Core Receipt.
+Foundation build must fail before modifying component workspaces when it is
+invoked with Python 3.13/3.14 and the shared Foundation environment has not yet
+been initialized. Component-owned launch wrappers should use the Foundation
+interpreter and fail before starting assets when the required modules cannot be
+imported.
 
 ## Assets
 
@@ -377,7 +389,7 @@ Some APIs expose explicit conductor calls, such as `conductor_start()` /
 does not change the singleton rule. A Recipe must still identify which process
 is allowed to call those APIs.
 
-For the distinction between Core PRO, Conductor PRO, and Conductor Light, see
+For the distinction between Core PRO, Hakoniwa Conductor, and Conductor Light, see
 the Ecosystem Guide. This primer focuses only on runtime ownership and startup
 rules for the selected composition.
 

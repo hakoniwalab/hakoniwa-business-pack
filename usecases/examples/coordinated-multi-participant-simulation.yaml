@@ -1,0 +1,96 @@
+id: coordinated-multi-participant-simulation
+title: 独立したシミュレーション参加者の同期実行
+usecase_version: 0.1
+
+audience:
+  primary:
+    - distributed-simulation-developer
+    - robot-system-integrator
+  notes:
+    - The references cover multiple local processes and multiple Conductor Client participants; they do not yet prove operation across multiple physical hosts.
+
+situation: >
+  A simulation is divided into independently running participants, such as robot
+  simulators, control processes, visualization processes, or Conductor Client nodes.
+  The participants must advance under an explicit time-ownership model and exchange
+  state without collapsing into one process.
+
+problem: >
+  Starting every process does not prove that they advance under a common simulation
+  time or observe each other's current state. Conductor ownership, participant
+  identity, generated configuration, mirrored state, and cleanup become ambiguous as
+  the topology grows. A single-node multi-process composition and a multi-client
+  Conductor composition also have different runtime contracts.
+
+desired_outcome: >
+  Keep participant execution responsibilities separate while making time ownership,
+  synchronization progress, and exchanged state observable, so a team can validate a
+  small composition before choosing or expanding to a broader distributed topology.
+
+status:
+  feasibility: feasible
+  validation: partially_verified
+  confidence: high
+  rationale:
+    - A verified dual TurtleBot3 reference runs two simulator processes under one explicit Conductor owner and observes bidirectional pose mirroring.
+    - A separate Conductor reference runs two Python assets behind two Conductor Clients and observes both at the same tick and Hakoniwa time.
+    - The evidence demonstrates multiple local participants but not deployment across multiple physical hosts or production networks.
+
+realized_by:
+  - recipe_id: mujoco-turtlebot3-dual-mirror
+    relationship: single_node_multi_process_variant
+    validation_scope: >
+      Two MuJoCo simulator processes own different TurtleBot3 robots, share one
+      explicit Conductor owner, mirror pose state bidirectionally, and expose separate
+      LiDAR observations on macOS arm64.
+  - recipe_id: hakoniwa-conductor-python-time-sync
+    relationship: conductor_multi_client_variant
+    validation_scope: >
+      Two Python assets behind two Conductor Clients reached tick 20 at 200000 usec
+      using generated configuration and the public Conductor package in the recorded
+      local reference environments.
+
+supported_by:
+  - component_id: hakoniwa-conductor
+    role: Coordinate Conductor Client participants and their common Hakoniwa simulation time in the distributed reference.
+  - component_id: hakoniwa-core-pro
+    role: Provide local participant lifecycle, shared-memory state, and time ownership in Core-backed references.
+  - component_id: hakoniwa-pdu-endpoint
+    role: Connect participant state and control paths through explicit transport profiles.
+  - component_id: hakoniwa-pdu-rpc
+    role: Provide the distributed Conductor control-plane transport.
+  - component_id: hakoniwa-pdu-bridge-core
+    role: Satisfy the bridge/runtime boundary used by the Conductor reference package.
+  - component_id: hakoniwa-mujoco-robots
+    role: Provide the independently running robot simulator processes and mirrored-state behavior.
+  - component_id: hakoniwa-pdu-registry
+    role: Provide the command, pose, and sensor contracts used by the robot mirror reference.
+
+communication_notes:
+  safe_statements:
+    - Multiple local simulation participants have been observed advancing under explicit time ownership.
+    - Reference evidence exists for both single-node multi-process mirroring and a two-Conductor-Client time-synchronization smoke.
+    - The topology and Conductor owner must be explicit before runtime execution.
+  avoid_statements:
+    - The current Recipes verify synchronization across multiple physical hosts or sites.
+    - Process liveness alone proves common-time synchronization or current state exchange.
+    - The same Conductor configuration should be used unchanged for every participant count and network topology.
+
+limitations:
+  - Multi-host networking, clock behavior, latency, disconnection recovery, and secured deployment are not validated.
+  - The two references demonstrate different topology levels and must not be treated as identical architectures.
+  - Runtime Delegation is not exercised by the public Python time-synchronization smoke.
+  - Larger participant counts and workload-dependent synchronization behavior remain unverified.
+
+next_steps:
+  - Add a two-physical-host Recipe with explicit listener, connector, firewall, and cleanup contracts.
+  - Document the decision boundary between single-node Core/Conductor ownership and multi-client Conductor topology.
+  - Add observable recovery evidence for participant or transport interruption.
+
+tags:
+  - time-sync
+  - multi-process
+  - conductor
+  - distributed-simulation
+  - mirror
+  - pdu

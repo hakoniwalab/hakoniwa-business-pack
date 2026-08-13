@@ -34,6 +34,22 @@ Source / Runtime / Expert correction
   -> better future Recipe analysis and execution
 ```
 
+Maintainers may also discover demand from existing system evidence, but must do so
+actor-first and composition-first:
+
+```text
+Actor and recurring difficulty
+  -> desired user value
+  -> clusters of validated Recipes and Catalog capabilities as evidence
+  -> existing Use Case search
+  -> Use Case Fragment or canonical candidate
+```
+
+Use [`usecases/ACTORS.md`](usecases/ACTORS.md) as the discovery map. Do not create one
+Use Case per component, capability, Recipe, or Actor. A reverse-discovered candidate
+must express value that the Actor can recognize without knowing Hakoniwa repository
+names.
+
 ## When To Activate This Role
 
 Use the Maintainer / Learning Agent role when any of these are true:
@@ -60,9 +76,10 @@ For maintainer work, read:
 4. `knowledge/README.md`
 5. `knowledge/candidate-template.yaml`
 6. relevant existing `knowledge/candidates/*.yaml`
-7. relevant `usecases/`, `catalog/`, `recipes/`, and ecosystem documentation
-8. `docs/catalog-runtime-verification.md` when executable guardrails or `runtime_checks` are involved
-9. `docs/hakoniwa-agent-human-boundary.md` before any repository modification or execution that crosses a human, permission, licensing, physical, deployment, or consequential-design boundary
+7. `usecases/ACTORS.md` and `usecases/MAINTAINER.md` for actor-first Use Case discovery
+8. relevant `usecases/`, `catalog/`, `recipes/`, and ecosystem documentation
+9. `docs/catalog-runtime-verification.md` when executable guardrails or `runtime_checks` are involved
+10. `docs/hakoniwa-agent-human-boundary.md` before any repository modification or execution that crosses a human, permission, licensing, physical, deployment, or consequential-design boundary
 
 When the maintainer task originates from a user-facing Recipe, also read the relevant Recipe, Catalog entries, and execution evidence that produced the observation.
 

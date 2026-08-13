@@ -125,6 +125,8 @@ target_environment:
     - TCP ports 8000 and 8765 must be available.
 
 execution_environment:
+  workspace:
+    mode: managed
   required_for: executable-demo
   status: specified
   os: host-native
@@ -239,6 +241,10 @@ components:
     roles:
       - visualizer
     purpose: Render the drone and PLATEAU Shibuya GLB inside Map Viewer.
+
+foundation_contract:
+  mode: required
+  reason: This Recipe uses components installed and validated through the managed Business Pack Foundation.
 
 foundation_requirements:
   hakoniwa-core-pro:
