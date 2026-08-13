@@ -287,11 +287,14 @@ execution_environment:
       Vendor project generation is GUI-bound, but the verified run only read from an
       already-generated example project, so the demo itself is headless.
 
-foundation_requirements:
-  hakoniwa-pdu-endpoint:
-    capabilities:
-      tcp: true
-      hakoniwa_core: false
+foundation_contract:
+  mode: not_required
+  reason: >-
+    This Recipe never uses the Foundation runtime. It builds hakoniwa-pdu-endpoint
+    locally and uses only its TCP transport: no Hakoniwa Core, no shared memory, no
+    hakopy, and no managed Workspace. The endpoint capability it depends on (TCP, and
+    explicitly not the Core binding) is stated in execution_environment and in the
+    hakoniwa-pdu-endpoint component entry, so no Foundation-managed requirement applies.
 
 components:
   - id: tobas
