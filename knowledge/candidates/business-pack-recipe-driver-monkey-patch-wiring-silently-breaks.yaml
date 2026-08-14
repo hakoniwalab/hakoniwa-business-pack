@@ -30,7 +30,12 @@ summary: >
   live consequence -- os.kill(pid, 0) on Windows enters the CTRL_C_EVENT path,
   and when GenerateConsoleCtrlEvent fails, CPython's own fallthrough (see
   cpython gh-58689) can reach OpenProcess/TerminateProcess, killing a live host
-  worker -- 3/3 on real hardware, 0/3 after correcting the ordering.
+  worker -- 3/3 on real hardware, 0/3 after correcting the ordering. That
+  termination symptom requires a CPython that still carries the gh-58689
+  fallthrough (3.9-3.12.8, 3.13.0-3.13.1); the measurements here used 3.12.7.
+  On a CPython where gh-58689 is already fixed the same wiring defect does not
+  kill anything, but still makes managed_host_alive report a running host
+  worker as not alive -- see sources.runtime_evidence for both measurements.
 
 observation:
   context: >
@@ -65,13 +70,34 @@ observation:
       gh-58689) can fall through to OpenProcess/TerminateProcess against the
       target pid. Against a live host worker process, that fallthrough
       terminates it -- the exact defect issue #105 originally reported and PR
-      #110 intended to fix."
-    - "Measured effect on real hardware. With the wiring as shipped (self-
-      assignment bug present), calling managed_host_alive against a live host
-      worker terminated it 3 times out of 3 attempts. After correcting the
-      ordering so the override actually lands on impl.pid_alive (verified by
-      an identity assertion, see below), the same scenario was 0/3 -- the host
-      worker survived every liveness check."
+      #110 intended to fix. The fallthrough is present in CPython 3.9-3.12.8
+      and 3.13.0-3.13.1 and fixed in 3.12.9 / 3.13.2+, so which symptom this
+      wiring defect produces depends on the interpreter (see below)."
+    - "Measured effect on real hardware, CPython 3.12.7 (fallthrough present).
+      With the wiring as shipped (self-assignment bug present), calling
+      managed_host_alive against a live host worker terminated it 3 times out
+      of 3 attempts. After correcting the ordering so the override actually
+      lands on impl.pid_alive (verified by an identity assertion, see below),
+      the same scenario was 0/3 -- the host worker survived every liveness
+      check."
+    - "Measured effect on real hardware, CPython 3.13.11 (fallthrough already
+      fixed). Nothing is terminated on either side, but the shipped wiring
+      still answers wrongly: managed_host_alive reported a host worker that was
+      demonstrably still running as not alive, 3 times out of 3, while the
+      corrected wiring answered correctly 0/3. Upgrading the interpreter
+      therefore does not neutralise this defect -- it converts a destructive
+      symptom into a silent false negative, which start/status/stop all consume
+      without any downstream correction."
+    - "Where the false negative lands, read in ros2_service_add_two_ints_impl.py
+      at revision 060907d. start (lines 641-644) guards against relaunching an
+      already-RUNNING session with `state == RUNNING and managed_host_alive(...)`,
+      so a wrong 'not alive' answer lets a second host worker start over a live
+      one. status (lines 747, 752-753) prints `Host RPC: STOPPED` for a running
+      worker and returns 1. stop (lines 855-857) exits its 10-second wait loop
+      immediately and sets host_stopped = True, so the session is recorded as
+      TERMINATED while the host worker is still running. None of the three
+      re-checks the answer by any other means, so on a fixed interpreter the
+      defect surfaces as state corruption rather than as a crash."
     - "This is a recurring shape, not a one-off mistake. Two prior commits in
       this same driver file already tried to solve a version of this problem:
       08d44eb ('fix: preserve monkey-patchable recipe API') and e04f3d4
@@ -134,7 +160,8 @@ sources:
       revision: 060907d
   runtime_evidence:
     - description: >-
-        This workspace's own reproduction, Windows 11 Pro x64, 2026-08-11/08-12.
+        This workspace's own reproduction, Windows 11 Pro x64, CPython 3.12.7
+        (which still carries the gh-58689 fallthrough), 2026-08-11/08-12.
         With the shipped ordering (copy-loop before override): 3/3 live host
         worker terminations via managed_host_alive's liveness check. After
         correcting the ordering locally so impl.pid_alive is genuinely replaced
@@ -143,6 +170,22 @@ sources:
         test does not distinguish the two wirings, and that a mock-based
         patch.object test on the driver module's own attribute stays green
         under both wirings.
+    - description: >-
+        Re-measurement on 2026-08-14 against merged upstream main @127421f,
+        run on two interpreters. The symptom of the wiring defect depends on
+        the CPython build, because the destructive
+        os.kill(pid, 0) -> GenerateConsoleCtrlEvent -> TerminateProcess
+        fall-through (gh-58689 / bpo-14484) exists only in 3.9-3.12.8 and
+        3.13.0-3.13.1 and is fixed in 3.12.9 / 3.13.2+. On Python 3.12.7 the
+        unfixed wiring terminated the live host worker 3/3 while the merged
+        wiring did so 0/3. On Python 3.13.11 nothing was terminated on either
+        side, but the unfixed wiring answered "not alive" for a host worker
+        that was still running 3/3 (ground-truth verified by an independently
+        written OpenProcess + GetExitCodeProcess check), while the merged
+        wiring answered correctly 0/3. So upgrading CPython does not make this
+        wiring defect harmless -- it only changes the symptom from killing the
+        host worker to misreporting it as dead, which is why the guardrail is
+        an identity assertion rather than a behavioural probe.
   expert_input: []
 
 confidence: high
@@ -152,32 +195,41 @@ contradictions: []
 validation:
   status: verified
   required:
-    - >-
-      Confirm the fix landing in PR #121 (once merged) preserves the identity
-      assertion's guarantee -- i.e. that impl.pid_alive is process_liveness.pid_alive
-      after driver-module import -- and re-run the 3/3-vs-0/3 host-worker
-      liveness measurement against the merged revision, not only against this
-      workspace's local reordering.
     - Confirm whether the same copy-loop-before-override hazard exists for any
       other symbol beyond pid_alive in this driver, or in the analogous driver
       for the Action Recipes, since only pid_alive was measured directly here.
   notes:
     - Verified by direct source reading of the exact ordering (import, copy
       loop, override, and the impl-side bare-name call site) plus a live 3/3
-      vs 0/3 measurement in this workspace on real Windows hardware, not by
-      inference from the commit messages alone.
+      vs 0/3 measurement in this workspace on real Windows hardware under
+      CPython 3.12.7, not by inference from the commit messages alone. The
+      later 2026-08-14 re-measurement adds a second interpreter; see
+      sources.runtime_evidence.
+    - >-
+      The former first required item -- re-confirm the identity guarantee and
+      the 3/3-vs-0/3 measurement against the merged revision rather than
+      against this workspace's local reordering -- was satisfied on 2026-08-14
+      against upstream main @127421f. WindowsLivenessWiringTests ran 3/3 ok
+      there (13 tests OK in that module), and the runtime contrast separated the
+      two wirings 3/3 vs 0/3 on both interpreters tested. See
+      sources.runtime_evidence for the two observables and resolution.notes for
+      the four conditions the measurement requires.
 
 tracking:
-  implementation_status: open
+  implementation_status: resolved
   issues:
     - repository: hakoniwalab/hakoniwa-business-pack
       number: 121
       relation: fix
-      status: open
+      status: closed
     - repository: hakoniwalab/hakoniwa-business-pack
       number: 105
       relation: fix
       status: closed
+    - repository: hakoniwalab/hakoniwa-business-pack
+      number: 123
+      relation: follow_up
+      status: open
 
 promotion_targets:
   catalog:
@@ -244,27 +296,53 @@ promotion_rationale:
     gap through source changes alone without a guardrail catching regressions.
 
 resolution:
-  status: pending
-  fixed_by: []
-  verified: false
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      issue: null
+      pull_request: 121
+      revision: c555f48
+  verified: true
   promoted_to: []
-  executable_guardrails: []
+  executable_guardrails:
+    - tools/recipe/test_ros2_service_add_two_ints.py
+    - .github/workflows/validate-business-pack.yml
   notes:
     - >-
-      hakoniwalab/hakoniwa-business-pack PR #121
-      (https://github.com/hakoniwalab/hakoniwa-business-pack/pull/121) is open
-      but not yet merged, so resolution.status is pending and
-      resolution.verified is false. The fix's effect has already been measured
-      in this workspace against a local reordering (3/3 host-worker
-      terminations before, 0/3 after), but that is a workspace-side
-      reproduction of the intended fix, not a re-verification against the
-      actual merged upstream revision -- per MAINTAINER.md, closing an issue
-      or merging a PR is not by itself sufficient evidence, and this candidate
-      additionally has not yet reached even that merge point.
+      PR #121 was merged as c555f48 (commit date 2026-08-13 +0900), reachable
+      from main @127421f. Per MAINTAINER.md a merge is not by itself sufficient
+      evidence, so the contrast was re-measured on 2026-08-14 against the merged
+      upstream revision itself -- checked out as a detached worktree -- rather
+      than against this workspace's fork branch, driving managed_host_alive()
+      exactly as start/status/stop reach it. It separated the two wirings 3/3
+      vs 0/3 on both interpreters tested, by different observables on each; see
+      sources.runtime_evidence for the interpreter dependency. Liveness was
+      confirmed by an independently written OpenProcess + GetExitCodeProcess
+      ground-truth check. The merged module's WindowsLivenessWiringTests also
+      ran ok (13 tests OK in that module) inside the same worktree.
+      resolution.verified is true on those measurements, not on the merge.
+    - >-
+      Re-verifying this candidate requires four conditions, and dropping any one
+      of them yields a silent false pass. Three are topological: the child must
+      be spawned with CREATE_NEW_PROCESS_GROUP, the process that spawned it must
+      have EXITED so no handle is retained, and the probe must run in a separate
+      process. An earlier driver that spawned the child inline and stayed alive
+      measured 0/3 on the unfixed side too -- it would have "confirmed" any
+      wiring. The fourth is the interpreter: on a CPython with gh-58689 already
+      fixed, `killed` is 0/3 on both sides and only the wrong-liveness-answer
+      observable discriminates. An independent reviewer of this candidate hit
+      exactly that case and read it as the evidence failing to reproduce, which
+      is why both observables are now recorded rather than just the kill count.
     - >-
       issue #105 (closed) is the original os.kill(pid, 0)-on-Windows report
-      that PR #110 was written against. It is tracked here, alongside the
-      still-open PR #121, because #105's closure is what makes this
-      candidate's finding notable: the wiring defect described here caused
-      PR #110's intended fix to never actually reach managed_host_alive,
-      despite #105 having been closed as resolved.
+      that PR #110 was written against. It is tracked here because #105's
+      closure is what makes this candidate's finding notable: the wiring defect
+      described here caused PR #110's intended fix to never actually reach
+      managed_host_alive, despite #105 having been closed as resolved.
+    - >-
+      issue #123 (open) is the maintainer's structural follow-up, filed after
+      #121 merged: make process_liveness.py the single source of truth by
+      removing impl's own pid_alive and replacing the dir(impl)-based
+      re-export with explicit API exports. That is the remediation this
+      candidate's promotion_rationale argued for; the guardrail listed above
+      is what keeps the ordering honest until #123 lands.
