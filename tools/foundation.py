@@ -1102,14 +1102,11 @@ def _yaml_string(value: Path | str) -> str:
     return json.dumps(str(value))
 
 
-def _core_foundation_manifest(source_manifest: Path) -> str:
-    if not source_manifest.is_file():
-        raise FoundationError(
-            f"hakoniwa-core-pro build manifest not found: {source_manifest}"
-        )
-    lines = source_manifest.read_text(encoding="utf-8").splitlines()
-    python_index: int | None = None
-    soabi_index: int | None = None
+def _set_manifest_boolean(
+    lines: list[str], section: str, key: str, value: bool
+) -> list[str]:
+    section_index: int | None = None
+    key_index: int | None = None
     active_section: str | None = None
     for index, line in enumerate(lines):
         stripped = line.strip()
@@ -1117,20 +1114,34 @@ def _core_foundation_manifest(source_manifest: Path) -> str:
             continue
         if not line.startswith((" ", "\t")) and stripped.endswith(":"):
             active_section = stripped[:-1]
-            if active_section == "python":
-                python_index = index
+            if active_section == section:
+                section_index = index
             continue
-        if active_section == "python" and re.match(r"^\s+soabi\s*:", line):
-            soabi_index = index
-    if soabi_index is not None:
-        indentation = lines[soabi_index][: len(lines[soabi_index]) - len(lines[soabi_index].lstrip())]
-        lines[soabi_index] = f"{indentation}soabi: true"
-    elif python_index is not None:
-        lines.insert(python_index + 1, "  soabi: true")
+        if active_section == section and re.match(rf"^\s+{re.escape(key)}\s*:", line):
+            key_index = index
+    rendered = str(value).lower()
+    if key_index is not None:
+        indentation = lines[key_index][
+            : len(lines[key_index]) - len(lines[key_index].lstrip())
+        ]
+        lines[key_index] = f"{indentation}{key}: {rendered}"
+    elif section_index is not None:
+        lines.insert(section_index + 1, f"  {key}: {rendered}")
     else:
         if lines and lines[-1] != "":
             lines.append("")
-        lines.extend(["python:", "  soabi: true"])
+        lines.extend([f"{section}:", f"  {key}: {rendered}"])
+    return lines
+
+
+def _core_foundation_manifest(source_manifest: Path) -> str:
+    if not source_manifest.is_file():
+        raise FoundationError(
+            f"hakoniwa-core-pro build manifest not found: {source_manifest}"
+        )
+    lines = source_manifest.read_text(encoding="utf-8").splitlines()
+    lines = _set_manifest_boolean(lines, "python", "soabi", True)
+    lines = _set_manifest_boolean(lines, "validation", "tests", False)
     return "\n".join(lines) + "\n"
 
 

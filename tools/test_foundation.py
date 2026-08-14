@@ -815,7 +815,8 @@ class FoundationInspectorTest(unittest.TestCase):
         hako.parent.mkdir(parents=True)
         hako.write_text("# test\n", encoding="utf-8")
         (source / "hakoniwa-build.yaml").write_text(
-            "version: 1\nlimits:\n  asset_num: 16\npython:\n  soabi: false\n",
+            "version: 1\nlimits:\n  asset_num: 16\npython:\n  soabi: false\n"
+            "validation:\n  tests: true\n",
             encoding="utf-8",
         )
 
@@ -836,6 +837,56 @@ class FoundationInspectorTest(unittest.TestCase):
         manifest_index = command.index("--config") + 1
         manifest = Path(command[manifest_index])
         self.assertIn("  soabi: true", manifest.read_text(encoding="utf-8"))
+        self.assertIn("  tests: false", manifest.read_text(encoding="utf-8"))
+
+    def test_build_stops_after_failed_component_doctor(self) -> None:
+        paths = foundation.resolve_workspace(self.root, "test")
+        foundation_python = foundation.foundation_python_executable(
+            paths.foundation_python
+        )
+        doctor = [str(foundation_python), "tools/hako.py", "doctor"]
+        build = [str(foundation_python), "tools/hako.py", "build"]
+        plan = {
+            "blocked": [],
+            "recipe": str(self.recipe),
+            "actions": [
+                {
+                    "component": "hakoniwa-core-pro",
+                    "source": str(self.root / "hakoniwa-core-pro"),
+                    "operations": ["doctor", "build"],
+                    "requirements": {},
+                }
+            ],
+        }
+        python_contract = {
+            "version": "3.12.0",
+            "soabi": "cpython-312-test",
+        }
+
+        with mock.patch.object(
+            foundation,
+            "ensure_foundation_python",
+            return_value=(foundation_python, python_contract),
+        ), mock.patch.object(
+            foundation, "prepare_workspace"
+        ), mock.patch.object(
+            foundation, "component_commands", return_value=[doctor, build]
+        ), mock.patch.object(
+            foundation.subprocess,
+            "run",
+            return_value=subprocess.CompletedProcess(doctor, 1),
+        ) as run:
+            with self.assertRaisesRegex(
+                foundation.FoundationError,
+                "hakoniwa-core-pro command failed with exit code 1",
+            ):
+                foundation.execute_build_plan(plan, paths)
+
+        run.assert_called_once_with(
+            doctor,
+            cwd=self.root / "hakoniwa-core-pro",
+            check=False,
+        )
 
     def test_normalize_core_config_repairs_unescaped_windows_path(self) -> None:
         paths = foundation.resolve_workspace(self.root, "test")

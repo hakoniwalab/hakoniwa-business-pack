@@ -13,7 +13,17 @@
 
 Foundation はインストール済みソフトウェアだけを意味しません。箱庭コアの設定と共有ランタイム領域も、複数の Recipe から共通利用する Foundation の一部として管理します。一方、PDU 定義、アセット構成、Bridge の転送設定、Viewer 設定など、実行するシステムのトポロジを表すものは Recipe ごとに管理します。
 
-本仕様は、まず設計上の合意を作ることを目的とします。ファイル形式、CLI、比較規則の細部は、本ドキュメントを人間および AI でレビューした後に実装します。
+本仕様は、現行実装における設計上の責務、設定の生成経路、インストール済み証跡の所在を示します。実装を変更する場合は、本ドキュメント、`foundation/schema.yaml`、`catalog/foundation-components.json`、各コンポーネントの `hako.py` 契約を一緒に更新します。
+
+### 1.1 関連ドキュメントとの境界
+
+| ドキュメント | 扱う内容 |
+| --- | --- |
+| 本ドキュメント | FoundationとRecipeの責務、設定・証跡のライフサイクル、再利用判定 |
+| `foundation/README.md` | Foundationの具体的な操作方法と保守コマンド |
+| `docs/hakoniwa-workspace-environment-ja.md` | install済みFoundationを選択するprocess環境 |
+| `docs/hako-cli-contract.md` | 各Componentが実装する`hako.py`の共通CLI semantics |
+| `docs/foundation-component-release-checklist-ja.md` | Component機能をFoundationへ公開する際のrelease手順 |
 
 ## 2. 設計原則
 
@@ -120,6 +130,7 @@ Foundation は、Component Receiptに記録されたCapability、build limit、P
 
 ```text
 Component Catalog
+  - catalog/foundation-components.json
   - hako.py support
   - capabilities
   - interfaces
@@ -161,9 +172,53 @@ Business Pack Local Foundation
 
 Business Pack は、Core、Endpoint、Bridge のCMakeロジックを再実装しません。各コンポーネントの `hako.py` を呼び出し、結果として配置されたArtifactとreceiptを管理します。
 
+### 3.1 Foundation設定と証跡のライフサイクル
+
+Foundationには、一つの万能な構成ファイルはありません。要求、ビルド入力、解決結果、インストール済み証跡を、それぞれの責務を持つファイルに分けます。
+
+```text
+RecipeのFoundation要求
+  foundation_requirements
+        |
+        | Foundation resolverがComponentごとに変換
+        v
+Component build input
+  work/foundation/build/<component-id>.yaml
+        |
+        | component-owned hako.py が検証・解決
+        v
+一時的なresolved manifest
+  <component-repository>/.hako/resolved-build.yaml
+        |
+        | install時にFoundationへ保存
+        v
+インストールに使用したresolved manifest
+  work/foundation/install/share/hakoniwa/receipts/resolved/<component-id>.yaml
+        |
+        | Component Receiptから参照
+        v
+インストール済み状態の証跡
+  work/foundation/install/share/hakoniwa/receipts/<component-id>.yaml
+```
+
+各層の所有者と役割は次のとおりです。
+
+| 層 | 所在 | 所有者 | 役割 |
+| --- | --- | --- | --- |
+| Required State | Recipe manifestまたはRecipe workspaceの`foundation-requirements.yaml` | Recipe | 必要なversion、Capability、build limitを宣言する |
+| Component Graph | `catalog/foundation-components.json` | Business Pack Catalog | source、repository、依存順序、対応operation、Receiptの場所を定義する |
+| Build Input | `work/foundation/build/<component-id>.yaml` | Foundation resolver | Recipe要求とFoundationの共通パスを、Component固有schemaへ変換する |
+| Transient Resolution | `<component-repository>/.hako/resolved-build.yaml` | Component `hako.py` | その操作で解決したPlatform、path、build optionを保持する |
+| Installed Resolution | `work/foundation/install/share/hakoniwa/receipts/resolved/<component-id>.yaml` | Component `hako.py install` | 実際のinstallに使用したresolved manifestを保存する |
+| Installed State | `work/foundation/install/share/hakoniwa/receipts/<component-id>.yaml` | Component `hako.py install` | version、Capability、build limit、依存関係、Artifactを証明する |
+
+Component repository内の `.hako/resolved-build.yaml` は、単独のbuildや別prefix向け操作で上書きされ得るため、インストール済みFoundationの正とはしません。インストール済み構成を調査するときは、Receiptが参照する `receipts/resolved/<component-id>.yaml` を使用します。
+
+Required Stateの正はRecipeの`foundation_requirements`、Installed Stateの正はComponent Receiptです。Foundation全体を集約したlock fileや`resolved-foundation.yaml`は生成しません。Foundationの状態は、この二つとCatalogから評価時に導出します。
+
 ## 4. ローカルワークスペース
 
-標準レイアウト案は次のとおりです。
+標準レイアウトは次のとおりです。
 
 ```text
 hakoniwa-business-pack/
@@ -176,24 +231,19 @@ hakoniwa-business-pack/
     │   │   └── share/
     │   │       └── hakoniwa/
     │   │           └── receipts/
-    │   │               ├── hakoniwa-core-pro.yaml
-    │   │               ├── hakoniwa-pdu-endpoint.yaml
-    │   │               ├── hakoniwa-pdu-rpc.yaml
-    │   │               ├── hakoniwa-pdu-bridge-core.yaml
-    │   │               └── hakoniwa-pdu-python.yaml
-    │   ├── python/
-    │   │   ├── bin/python
-    │   │   └── lib/python3.12/site-packages/
+    │   │               ├── resolved/
+    │   │               │   └── <component-id>.yaml
+    │   │               └── <component-id>.yaml
+    │   │   └── python/
+    │   │       ├── bin/python
+    │   │       └── lib/python3.12/site-packages/
     │   ├── config/
     │   │   └── cpp_core_config.json
     │   ├── runtime/
     │   │   └── mmap/
     │   ├── build/
-    │   │   ├── hakoniwa-core-pro/
-    │   │   ├── hakoniwa-pdu-endpoint/
-    │   │   ├── hakoniwa-pdu-rpc/
-    │   │   ├── hakoniwa-pdu-bridge-core/
-    │   │   └── hakoniwa-pdu-python/
+    │   │   ├── <component-id>.yaml
+    │   │   └── <component-id>/
     └── recipes/
         └── <recipe-id>/
             ├── config/
@@ -229,10 +279,10 @@ Foundation の領域はすべての Recipe から共通利用します。Recipe 
 
 | 配置先 | 管理対象の例 |
 | --- | --- |
-| `work/foundation/install/` | 実行ファイル、ライブラリ、header、CMake package、Foundation共通Python venv、component receipt |
+| `work/foundation/install/` | 実行ファイル、ライブラリ、header、CMake package、Foundation共通Python venv、Component Receipt、installに使用したresolved manifest |
 | `work/foundation/config/` | `cpp_core_config.json`など、Recipeに依存しない箱庭共通設定 |
 | `work/foundation/runtime/` | Coreが共通利用するmmapなどのruntime状態 |
-| `work/foundation/build/` | componentごとのローカルbuild tree |
+| `work/foundation/build/` | Component固有のbuild input manifestとローカルbuild tree |
 | `work/recipes/<recipe-id>/config/` | PDU定義、Fleet、Bridge転送、Launcher、Viewer設定 |
 | `work/recipes/<recipe-id>/assets/` | Recipe固有Asset |
 | `work/recipes/<recipe-id>/missions/` | Recipe固有Mission |
@@ -356,6 +406,8 @@ Core configとmmap pathはRecipe configureで作り直しません。RecipeはFo
 
 Foundationに含めるコンポーネントは、Catalogと実際のRecipe要求から決めます。すべての箱庭コンポーネントを無条件にインストールするものではありません。
 
+現行のComponent Graphは `catalog/foundation-components.json` で管理します。このCatalogは各Componentのsource、repository、依存関係、対応operation、Receiptの相対パスを定義します。Component固有のmanifest schemaやhost prerequisitesはCatalogへ複製せず、各Component repositoryが所有します。
+
 代表的な基盤候補は次のとおりです。
 
 - `hakoniwa-core-pro`
@@ -400,6 +452,10 @@ Recipeから実装componentを隠す追加のprovider抽象化は行いません
 ## 7. 個別RecipeのFoundation要求
 
 個別Recipeは、Foundationのビルド手順ではなく要求を宣言します。
+
+静的なRecipeではCatalogのRecipe manifest内に `foundation_requirements` を記述します。ユーザー入力から構成を生成する動的Recipeでは、operatorが同じschemaの要求を `work/recipes/<recipe-id>/config/foundation-requirements.yaml` に生成できます。いずれの場合も、RecipeがComponent固有の `hakoniwa-build.yaml` を直接所有するわけではありません。
+
+Foundation resolverは、選択された要求からComponentごとのbuild inputを `work/foundation/build/<component-id>.yaml` に生成します。Core ProではComponent repositoryの標準 `hakoniwa-build.yaml` を基にFoundation向け設定を適用し、その他のComponentではComponent固有schemaに従って入力を生成します。
 
 例として、DroneとThree.jsを接続するRecipeは、概念的に次の要求を持ちます。
 
@@ -520,26 +576,26 @@ capabilities:
   python_binding: false
 
 build_limits:
-  asset_number: 128
+  asset_num: 128
   service_max: 1024
   recv_event_max: 4096
   service_client_max: 256
-  client_namelen_max: 64
-  service_namelen_max: 128
-  channel_max: 8192
+  client_name_len_max: 64
+  service_name_len_max: 128
+  pdu_channel_max: 8192
 
 dependencies:
   hakoniwa-core-pro:
     version: 1.3.0
     source_revision: abc1234
     build_limits:
-      asset_number: 128
+      asset_num: 128
       service_max: 1024
       recv_event_max: 4096
       service_client_max: 256
-      client_namelen_max: 64
-      service_namelen_max: 128
-      channel_max: 8192
+      client_name_len_max: 64
+      service_name_len_max: 128
+      pdu_channel_max: 8192
 
 artifacts:
   - path: lib/libhakoniwa_pdu_endpoint.a
@@ -547,13 +603,14 @@ artifacts:
   - path: lib/cmake/hakoniwa_pdu_endpoint
     kind: cmake-package
 
-configuration:
-  resolved_manifest: share/hakoniwa/receipts/resolved/hakoniwa-pdu-endpoint.yaml
+resolved_manifest: share/hakoniwa/receipts/resolved/hakoniwa-pdu-endpoint.yaml
 ```
 
 ### 8.3 Receiptと比較対象
 
 Receiptには、実際に解決された全設定を参照するresolved manifestを記録します。これは再現性と診断に利用します。
+
+Receiptの `resolved_manifest` はinstall prefixからの相対パスであり、保存済みのresolved manifestを指します。Component repository内の一時的な `.hako/resolved-build.yaml` を指してはいけません。
 
 再利用可否は、Receipt内の次のようなフィールドをRecipe要求と直接比較して判定します。
 
@@ -756,19 +813,20 @@ Receiptの依存情報を使って再構築範囲を狭める最適化は、実�
 ## 12. Foundation操作フロー
 
 ```text
-1. Recipe requirementsを読む
-2. Foundation rootを解決する
-3. Platformを検出する
+1. Recipe manifestまたは生成済みファイルからFoundation requirementsを読む
+2. `catalog/foundation-components.json`からComponent Graphを読む
+3. Foundation rootとPlatformを解決する
 4. installed Component Receiptsを読む
-5. componentごとにsatisfies()と一時的なreasonを評価する
+5. Componentごとに`satisfies()`と一時的なreasonを評価する
 6. Recipe全体の状態へ集約する
-7. SATISFIEDならFoundationを変更せず終了する
-8. MISSING/INCOMPATIBLEなら既知の依存順序から再構築planを作る
-9. component-owned hako.pyを依存順に実行する
-10. local prefixへinstallする
-11. Component Receiptを配置する
-12. 再度satisfies()を評価する
-13. 個別RecipeのconfigureへFoundation情報を渡す
+7. `SATISFIED`ならFoundationを変更せず終了する
+8. `MISSING`または`INCOMPATIBLE`なら既知の依存順序から再構築planを作る
+9. 対象Componentのbuild inputを`work/foundation/build/<component-id>.yaml`へ生成する
+10. Component-owned `hako.py doctor --config <component-manifest>`でhost prerequisitesと入力を診断する
+11. Catalogに記録された対応operationの範囲で、`configure`、`build`、`install`を依存順に実行する
+12. local prefixへArtifact、保存済みresolved manifest、Component Receiptを配置する
+13. 再度`satisfies()`を評価する
+14. 個別RecipeのconfigureへFoundation情報を渡す
 ```
 
 Foundationの確認だけを行う場合、download、build、installを実行しません。
@@ -788,10 +846,12 @@ smoke
 
 ### 13.1 `doctor`
 
-- toolchainと依存関係を確認する
-- local FoundationのreceiptとArtifactを確認する
+- manifestで選択された構成に必要なtoolchain、host package、依存関係を確認する
+- Component固有schemaと入力値を確認する
 - 修正を自動実行しない
-- 不一致理由を機械可読または明確なtextで返す
+- 不足している技術要件、選択条件、検出Platform、探索情報を機械可読または明確なtextで返す
+
+Component `doctor`は、そのComponentをbuildするための診断を所有します。RecipeはBoostやGoogleTestなどのhost package一覧を所有しません。install済みReceiptとArtifactをRecipe要求に照らして評価するのは、Business PackのFoundation resolverが所有します。
 
 ### 13.2 `configure`
 
@@ -856,6 +916,19 @@ component-owned:
   capability-specific validation
 ```
 
+### 13.8 Manifestの選択と保存
+
+`--config <component-manifest>`に渡すmanifestは、Foundation resolverが選択したComponent build inputです。Recipe manifestそのものではありません。
+
+```text
+Recipe requirements
+  -> Foundation resolver
+  -> work/foundation/build/<component-id>.yaml
+  -> component/tools/hako.py --config <component-manifest>
+```
+
+Component `hako.py`は、選択されたmanifestをComponent固有schemaで解決します。Component repositoryの `.hako/resolved-build.yaml` は操作間で利用する一時ファイルです。`install`は、その時点のresolved manifestをFoundationの `receipts/resolved/` へコピーし、その相対パスをReceiptのトップレベル `resolved_manifest` に記録します。
+
 ## 14. 個別Recipeの実行フロー
 
 個別Recipeは次の順序で実行します。
@@ -905,9 +978,9 @@ check、operator handoffを構造化します。background `start`が復帰す�
 
 ## 15. 複数構成の将来対応
 
-初期実装では、一つのactive Foundation installを管理します。
+現行実装では、一つのactive Foundation installを管理します。
 
-複数Foundationの切り替え、install cache、profile、snapshotは初期スコープに含めず、本仕様では形式も定義しません。互換性のない複数構成を頻繁に切り替える具体的な要求が生じた時点で設計します。
+複数Foundationの切り替え、install cache、profile、snapshotは現行スコープに含めず、本仕様では形式も定義しません。互換性のない複数構成を頻繁に切り替える具体的な要求が生じた時点で設計します。
 
 ## 16. Agency Boundary
 
@@ -939,74 +1012,40 @@ Business Pack内のlocal Foundationであっても、次の操作は区別しま
 
 Foundation doctorは、原則として検出と説明を担当し、暗黙のdownloadやinstallを行いません。
 
-## 17. 現時点の実装ギャップ
+## 17. 現在の実装状態と残課題
 
-本仕様を実現するには、少なくとも次の確認・実装が必要です。
+次の基盤契約は実装済みです。
 
-### 共通
+- Business Pack local Foundation rootとlocal install prefix
+- Foundation requirementsとComponent Receiptのschema
+- `catalog/foundation-components.json`によるComponent Graph
+- Componentごとのbuild input生成
+- local prefixへのArtifact、resolved manifest、Receiptの保存
+- Foundation共通CPython 3.12 venvとSOABIの検証
+- Recipe要求とReceiptによる4状態評価
+- Foundation readinessとRecipe runtime readinessの分離
 
-- Business Pack local Foundation rootの定義
-- `work/`のGit除外
-- Foundation requirement schema
-- installed receipt schema
-- Recipe単位の`satisfies()`、reason、集約規則
-- Catalogの既知の依存順序を使う再構築plan
+現在の主な残課題は、初見ユーザーがclean環境から再現できることの検証です。とくに、Component `doctor`は選択されたmanifestに応じて必要になるcompiler、CMake、Boost、GoogleTestなどのhost prerequisitesをbuild前に検出し、不足しているtool・header・library、選択条件、Platform、探索情報を説明する必要があります。Recipe側にOS package一覧を重複させず、必要条件の所有者である各Componentの `doctor` に実装します。OSやversionで変化する固定package-manager commandは、この診断契約には含めません。
 
-### `hako.py`
+また、clean環境のE2EでFoundation build、install、doctor、代表Recipeのheadless smokeを継続確認します。個別Componentや外部配布物のsource provenanceは、それぞれの取得・再利用境界で明示します。
 
-- Core Proの`install`対応
-- PDU Endpointの`install`対応
-- PDU RPCのFoundation prefix統合とreceipt生成
-- PDU Bridge Coreの`install`対応
-- PDU PythonのFoundation共通venvへの`pip install`、`pip show`確認、receipt生成
-- Endpoint CFFI packageのFoundation共通venvへの配置
-- local install prefixの共通した受け渡し
-- install時のreceipt生成
+## 18. 実装履歴の扱い
 
-### Core Pro
+Foundation root、schema、Receipt生成、共通Python venv、各Componentのlocal install対応など、初期設計時に列挙していた実装項目は完了しています。本ドキュメントは未実装計画の台帳ではなく、現行の設計契約を説明する文書として維持します。
 
-- POSIX build driverの固定install prefixの整理
-- Core configをFoundationの共通config領域へ生成する方法
-- mmap pathをFoundation配下へ解決する方法
-- Core build limitsのうち、ABI互換性へ影響する項目の確定
+個別の改善計画、進捗、完了判定はGitHub Issueで管理し、完了した計画を本仕様の「残課題」として残しません。設計または責務境界が変わった場合だけ、その結果を本仕様へ反映します。
 
-### Recipe実行
+## 19. 現在の設計判断
 
-- LauncherへFoundation prefixを渡す方法
-- システムディレクトリをハードコードする既存launch構成のAdapter
-- Foundation readinessとruntime readinessの分離
-
-## 18. 初期実装スコープ案
-
-設計レビュー後の最小実装は、次の順序を推奨します。
-
-1. Component ReceiptとFoundation requirementsのschemaを確定する
-2. Business Pack内のFoundation inspectorを作る
-3. Core Proのlocal installとreceipt生成を実装する
-4. Foundation共通Python venvとPDU Pythonのlocal install / receipt生成を実装する
-5. Endpointのlocal install、CFFI配置、receipt生成を実装する
-6. RPCのlocal installとreceipt生成を実装する
-7. Bridge Coreのlocal installとreceipt生成を実装する
-8. Recipe要求に対するcomponent評価、reason、全体状態の集約を実装する
-9. 一つの既存RecipeからFoundation build手順を除去する
-10. Foundation共通のCore configとmmap配置を実装する
-11. Recipe固有configureからlocal Foundationを利用する
-
-最初の検証対象としてDrone Three.js Demoを利用できますが、Foundationの設計や名前をDrone固有にはしません。
-
-## 19. レビューで決める項目
-
-本仕様のレビューでは、特に次を議論します。
-
-1. Foundationの正式なIDと標準root
-2. Receiptのうち再利用判定に使用する共通項目
-3. Coreの7つのbuild limitをどう比較するか
-4. Capabilityの真偽値、version、列挙値、容量値の充足規則
-5. 複数問題がある場合のRecipe集約状態の表示優先順位
-6. `hako.py install`の共通option名
-7. 古いreceiptなしinstallを`UNKNOWN`としてどう移行するか
-8. LauncherへFoundation prefixを渡す共通方式
-9. Recipe workspaceのログとvalidationをいつ初期化するか
+1. FoundationはBusiness Pack配下の一つのactive install prefixを使用する
+2. Required Stateの正はRecipeの`foundation_requirements`とする
+3. Installed Stateの正はComponent Receiptとする
+4. installに使用したresolved manifestはReceiptから参照可能にする
+5. Component repository内の`.hako/resolved-build.yaml`は永続的なinstalled stateとみなさない
+6. Foundation全体のlock file、Contract Hash、独立したInstall Contractは作らない
+7. Component manifest schemaとhost prerequisitesは各Component repositoryが所有する
+8. Business PackはCatalog、要求変換、依存順序、Foundation評価、Recipeへの引き渡しを所有する
+9. `doctor`は検出と説明を行い、host packageを暗黙にinstallしない
 
 ## 20. 完了条件
 

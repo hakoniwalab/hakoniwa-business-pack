@@ -2,7 +2,7 @@
 
 Foundationは、複数のRecipeから再利用する箱庭共通基盤です。
 
-初期実装では、次の二つだけを永続的な正として扱います。
+現行設計では、次の二つだけを永続的な正として扱います。
 
 - Recipeの`foundation_requirements`
 - install済みComponentが生成するReceipt
@@ -46,6 +46,20 @@ work/foundation/install/share/hakoniwa/receipts/<component-id>.yaml
 ```
 
 ReceiptはComponentのinstall処理が生成します。Foundation Lock、Contract Hash、独立したInstall Contractは生成しません。
+
+## 設定と証跡の流れ
+
+```text
+Recipe foundation_requirements
+  -> work/foundation/build/<component-id>.yaml
+  -> <component-repository>/.hako/resolved-build.yaml
+  -> work/foundation/install/share/hakoniwa/receipts/resolved/<component-id>.yaml
+  -> work/foundation/install/share/hakoniwa/receipts/<component-id>.yaml
+```
+
+Recipeは要求を所有し、Foundation resolverがComponent固有のbuild inputを生成します。Component repository内の`.hako/resolved-build.yaml`は一時情報であり、別の操作で上書きされ得ます。インストール済みFoundationを調査するときは、Receiptと、Receiptの`resolved_manifest`が指す保存済みmanifestを参照します。
+
+責務とファイルの詳細は[`docs/hakoniwa-foundation-recipe-design-ja.md`](../docs/hakoniwa-foundation-recipe-design-ja.md#31-foundation設定と証跡のライフサイクル)を参照してください。
 
 ## Workspace
 
