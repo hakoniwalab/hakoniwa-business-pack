@@ -8,12 +8,12 @@ repository:
 distribution:
   channel: oss
   package: hakoniwa-pdu
-  version: 1.6.8
+  version: 1.6.9
   notes:
     - Public OSS Hakoniwa component distributed as hakoniwa-pdu on PyPI.
 verification:
-  verified_at: 2026-08-11
-  source_revision: 6b9a8b520c4bbc36d10b3c282b5d07f0dafee3bc
+  verified_at: 2026-08-14
+  source_revision: 411041322225a78c43ae040b84f1f32a907b2369
   source_ref: main
 summary: Python PDU package providing generated type and offset-based binary conversion independently of Hakoniwa Core, with optional WebSocket, shared-memory, RPC, and Launcher runtime capabilities.
 category:
@@ -45,6 +45,15 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-pdu-python
         path: pyproject.toml
         revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
+  - name: ROS byte and char uint8 conversion
+    description: Version 1.6.9 and later encode and decode ROS byte and char as numeric uint8 values across scalar, fixed-array, and variable-array paths, including std_msgs/ByteMultiArray.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: src/hakoniwa_pdu/pdu_msgs/binary_io.py
+        revision: 411041322225a78c43ae040b84f1f32a907b2369
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: tests/test_primitive_type_contract.py
+        revision: 411041322225a78c43ae040b84f1f32a907b2369
   - name: PDU metadata initialization diagnostics
     description: Version 1.6.8 and later expose PduMetaDataState and classify_pdu_metadata() so a caller can distinguish an all-zero, not-yet-written PDU from invalid metadata after typed decoding fails.
     evidence:
@@ -209,6 +218,12 @@ data_contracts:
       - repository: hakoniwalab/hakoniwa-pdu-python
         path: README.md
         revision: f7dc60ca0d8b37cf4b7343d81d17464a86fa2802
+  - name: ROS byte and char representation
+    description: ROS byte and char are unsigned 8-bit numeric values in Python; scalar values are int and arrays contain integers in the range 0 through 255.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: tests/test_primitive_type_contract.py
+        revision: 411041322225a78c43ae040b84f1f32a907b2369
   - name: PDU metadata diagnostic classification
     description: After typed decoding raises an error, classify the original raw PDU bytes. UNINITIALIZED means the complete 24-byte metadata header is zero and usually indicates read-before-first-write or startup ordering. INVALID means missing, truncated, corrupt, or unsupported metadata. VALID means only that magic/version are accepted; preserve the original decode error because offsets, sizes, or body data may still be invalid.
     source:
@@ -230,6 +245,7 @@ recipe_roles:
     description: Supports Python RPC and Launcher-managed demo lifecycle.
 typical_usecases:
   - Convert generated service or topic PDU packets without installing Hakoniwa Core.
+  - Round-trip byte and char fields, including ByteMultiArray payloads, without signed-byte or string coercion.
   - Diagnose typed decode failures as first-write startup ordering or invalid PDU metadata without changing existing converter behavior.
   - Build Python controllers, visualizers, or tools for Hakoniwa simulations.
   - Run WebSocket topic or RPC demos.
@@ -296,7 +312,7 @@ source_refs:
     description: Features, installation, quick starts, event handling, conversion, and project structure.
   - repository: hakoniwalab/hakoniwa-pdu-python
     path: pyproject.toml
-    revision: 6b9a8b520c4bbc36d10b3c282b5d07f0dafee3bc
+    revision: 411041322225a78c43ae040b84f1f32a907b2369
     description: Python package metadata and package data.
   - repository: hakoniwalab/hakoniwa-pdu-python
     path: docs/rpc/async_shared_runtime.md

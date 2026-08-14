@@ -10,8 +10,8 @@ distribution:
   notes:
     - Public OSS Hakoniwa component.
 verification:
-  verified_at: 2026-07-20
-  source_revision: cdc812ce31199acd4246a9a7664ed8172f204a51
+  verified_at: 2026-08-14
+  source_revision: 9072f29439877fdbbeab22235f6899340b262ffa
   source_ref: main
 summary: Authoritative registry and reproducible generator for Hakoniwa PDU binary layouts derived from ROS 2 message and service definitions.
 category:
@@ -41,6 +41,18 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-pdu-registry
         path: README.md
         revision: cdc812ce31199acd4246a9a7664ed8172f204a51
+  - name: ROS primitive type contract validation
+    description: Canonicalizes ROS byte and char to uint8 across generated scalar, fixed-array, and variable-array converters, and rejects unsupported wstring forms instead of generating an ambiguous wire representation.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-registry
+        path: generators/generate_hako_pdu_msgs/primitive_types.py
+        revision: 9072f29439877fdbbeab22235f6899340b262ffa
+      - repository: hakoniwalab/hakoniwa-pdu-registry
+        path: tests/test_primitive_type_contract.py
+        revision: 9072f29439877fdbbeab22235f6899340b262ffa
+      - repository: hakoniwalab/hakoniwa-pdu-registry
+        path: tests/test_cdr_generator.py
+        revision: 9072f29439877fdbbeab22235f6899340b262ffa
   - name: Reproducible Docker generation
     description: Provides Docker workflow pinned to ROS 2 Jazzy for deterministic generation and type hash metadata.
     evidence:
@@ -86,6 +98,7 @@ limitations:
   - Generated artifacts can create large diffs, intentionally trading repository size for reproducibility.
   - Generated language support is layered; type generation, fixed-offset binary conversion, CDR conversion, size registries, and interop tests are separate claims.
   - Ruby and Elixir fixed-offset converter generation can be validated independently from CDR; Ruby/Elixir CDR support should be treated as not implemented unless explicit converter/runtime artifacts and tests exist.
+  - ROS 2 wstring is not supported by the current Hakoniwa wire contract; scalar, bounded, fixed-array, variable-array, service, and action uses are rejected during generation.
 
 interfaces:
   inputs:
@@ -220,6 +233,12 @@ data_contracts:
       - repository: hakoniwalab/hakoniwa-pdu-registry
         path: tests/test_ruby_elixir_generated_artifacts.py
         revision: fa60dbb9c6036dc0843801655ea9b7a4b602381b
+  - name: ROS byte, char, and wstring policy
+    description: ROS byte and char share the uint8 wire representation in every supported generated language. ROS 2 wstring has no supported Hakoniwa wire representation and must fail generation explicitly.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-registry
+        path: generators/generate_hako_pdu_msgs/primitive_types.py
+        revision: 9072f29439877fdbbeab22235f6899340b262ffa
 
 recipe_roles:
   - role: registry
@@ -231,6 +250,7 @@ recipe_roles:
 
 typical_usecases:
   - Add or update a PDU type for multiple Hakoniwa runtimes.
+  - Generate consistent byte and char scalar and array bindings while rejecting unsupported wstring definitions before artifacts are emitted.
   - Ensure Python, JavaScript, Ruby, Elixir, C++, C#, Godot, bridge, and endpoint components share the same binary layout.
   - Generate CDR converters for Foxglove or ROS-compatible payload paths.
   - Audit binary compatibility changes through committed generated diffs.
@@ -284,6 +304,7 @@ operations:
   test:
     commands:
       - python3.12 -m unittest tests.test_generated_artifacts
+      - python3.12 -m unittest tests.test_primitive_type_contract tests.test_cdr_generator
       - python3.12 -m unittest tests.test_ruby_elixir_generator tests.test_ruby_elixir_generated_artifacts
     notes:
       - Use the same Python 3.12 environment that has the generator dependencies installed.
