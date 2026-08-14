@@ -85,6 +85,13 @@ jobs:
           tools/test_workspace_enter.py
           -v
 
+      - name: Test Recipe-specific tools
+        run: >-
+          python -m unittest discover
+          -s tools/recipe
+          -p "test_*.py"
+          -v
+
       - name: Test shared tools helpers
         run: >-
           python -m unittest discover

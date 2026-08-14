@@ -10,6 +10,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tools.recipe.path_test_support import contains_path
+
 
 SCRIPT = Path(__file__).with_name("drone_threejs.py")
 SPEC = importlib.util.spec_from_file_location("drone_threejs_recipe", SCRIPT)
@@ -47,8 +49,8 @@ class DroneThreejsConfigureTest(unittest.TestCase):
 
             self.assertNotIn("/usr/local", serialized)
             self.assertNotIn("/etc/hakoniwa", serialized)
-            self.assertIn(str(paths.install_prefix), serialized)
-            self.assertIn(str(paths.recipe_config), serialized)
+            self.assertTrue(contains_path(data, paths.install_prefix))
+            self.assertTrue(contains_path(data, paths.recipe_config))
             self.assertEqual(
                 data["assets"][2]["command"],
                 str(paths.install_prefix / "bin" / "hakoniwa-pdu-web-bridge"),
