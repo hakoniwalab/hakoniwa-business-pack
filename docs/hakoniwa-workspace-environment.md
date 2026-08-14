@@ -116,6 +116,32 @@ Exit-HakoniwaWorkspace
 
 Normal users should use the OS-independent `enter` and `exit` lifecycle.
 
+## Best-effort Workspace identity diagnostics
+
+Explicitly check whether the current shell belongs to this repository's managed
+Workspace with:
+
+```bash
+python tools/workspace_guard.py
+```
+
+The standalone check validates the Workspace marker, repository root, Foundation
+paths, and Python isolation environment, and exits non-zero on a mismatch. Its
+integration into `recipe.py` (`doctor`, `plan`, `configure`, and `launch`) and
+`foundation.py` (`toolchain`, `doctor`, `plan`, and `build`) is advisory: it prints
+a `WARNING` but lets the command continue so that bootstrap and recovery remain
+possible.
+
+This guard is not a complete enforcement boundary or a security mechanism. It can
+be bypassed, for example by invoking an individual Recipe tool directly. It also
+does not require Foundation Python or install artifacts to exist, which preserves
+clean bootstrap. After a warning, rerun from the repository root with either:
+
+```bash
+python tools/workspace.py enter
+python tools/workspace.py run -- <command>
+```
+
 ## Ownership
 
 | Layer | Responsibility |

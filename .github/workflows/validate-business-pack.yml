@@ -83,6 +83,7 @@ jobs:
           python -m unittest
           tools/test_workspace.py
           tools/test_workspace_enter.py
+          tools/test_workspace_guard.py
           -v
 
       - name: Test Recipe-specific tools

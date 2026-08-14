@@ -19,6 +19,27 @@ SPEC.loader.exec_module(foundation)
 
 
 class FoundationWorkspaceTest(unittest.TestCase):
+    def test_doctor_warns_about_workspace_and_continues(self) -> None:
+        inspection = {"status": "SATISFIED", "components": [], "runtime": {}}
+        with mock.patch.object(foundation, "warn_if_workspace_invalid") as warning:
+            with mock.patch.object(
+                foundation, "inspect_foundation", return_value=inspection
+            ):
+                with mock.patch.object(foundation, "print_inspection"):
+                    result = foundation.main(["doctor", "--recipe", "recipe.yaml"])
+
+        self.assertEqual(result, 0)
+        warning.assert_called_once_with(foundation.repository_root())
+
+    def test_prepare_does_not_warn_about_workspace(self) -> None:
+        with mock.patch.object(foundation, "warn_if_workspace_invalid") as warning:
+            with mock.patch.object(foundation, "prepare_workspace"):
+                with mock.patch.object(foundation, "print_paths"):
+                    result = foundation.main(["prepare", "--recipe-id", "test"])
+
+        self.assertEqual(result, 0)
+        warning.assert_not_called()
+
     def test_resolve_workspace_stays_under_business_pack_work(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "business-pack"

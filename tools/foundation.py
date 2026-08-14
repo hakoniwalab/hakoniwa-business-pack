@@ -11,6 +11,13 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 
+TOOLS_DIR = Path(__file__).absolute().parent
+if str(TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(TOOLS_DIR))
+
+from workspace_guard import warn_if_workspace_invalid
+
+
 RECIPE_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 RECEIPT_REQUIRED_FIELDS = {
     "schema_version",
@@ -1536,6 +1543,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command in {"toolchain", "doctor", "plan", "build"}:
+        warn_if_workspace_invalid(repository_root())
     try:
         if args.command in {"doctor", "plan", "build"}:
             root = repository_root()

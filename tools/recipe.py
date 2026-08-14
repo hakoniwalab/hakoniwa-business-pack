@@ -23,6 +23,7 @@ from recipe_portal import (
     PortalLink,
     write_recipe_portal,
 )
+from workspace_guard import warn_if_workspace_invalid
 
 
 class RecipeGuideError(RuntimeError):
@@ -1261,6 +1262,8 @@ def parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
+    if args.command in {"doctor", "plan", "configure", "launch"}:
+        warn_if_workspace_invalid(root())
     try:
         recipe_path = args.recipe.expanduser().resolve()
         data = load_recipe(recipe_path)

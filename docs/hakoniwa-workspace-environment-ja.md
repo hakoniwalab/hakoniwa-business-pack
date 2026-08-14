@@ -130,6 +130,30 @@ Exit-HakoniwaWorkspace
 
 新しい運用では、OS差をユーザーへ露出しない`enter`と`exit`を使用してください。
 
+## Workspace identityのbest-effort診断
+
+現在のshellがこのrepository用のmanaged Workspaceかどうかは、次で明示的に確認できます。
+
+```bash
+python tools/workspace_guard.py
+```
+
+このcheckは、Workspace marker、root、Foundation path、Python隔離用の環境変数を確認し、
+不一致ならnon-zeroで終了します。一方、`recipe.py`の`doctor`、`plan`、`configure`、
+`launch`と、`foundation.py`の`toolchain`、`doctor`、`plan`、`build`への組み込みは
+advisoryです。不一致を`WARNING`として表示しますが、bootstrapや復旧を妨げないよう
+command自体は続行します。
+
+このguardは完全な強制境界やsecurity機構ではありません。個別Recipe toolを直接実行
+した場合など、迂回できる経路があります。またclean bootstrapを許すため、Foundation
+Pythonやinstall artifactが既に存在することは要求しません。警告を受けた場合は、
+repository rootで次のいずれかを使用して再実行します。
+
+```bash
+python tools/workspace.py enter
+python tools/workspace.py run -- <command>
+```
+
 ## 責務境界
 
 | レイヤ | 責務 |

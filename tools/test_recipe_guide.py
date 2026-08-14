@@ -76,7 +76,9 @@ class RecipeGuideTest(unittest.TestCase):
             "test_recipe_guide.py",
             "test_workspace.py",
             "test_workspace_enter.py",
+            "test_workspace_guard.py",
             "workspace.py",
+            "workspace_guard.py",
         }
         tools_dir = self.business_pack_root / "tools"
         actual = {path.name for path in tools_dir.iterdir() if path.is_file()}
@@ -156,6 +158,36 @@ class RecipeGuideTest(unittest.TestCase):
         self.assertIn("--foundation-requirements", help_text)
         self.assertIn("--open", help_text)
         self.assertNotIn("build", help_text)
+
+    def test_managed_plan_warns_about_workspace_and_continues(self) -> None:
+        recipe_path = self.recipe_dir / "drone-fleet-single-host.yaml"
+        plan = {
+            "foundation": None,
+            "foundation_sources": [],
+            "local_sources": [],
+            "python_requirements": None,
+            "runtime": None,
+        }
+        with mock.patch.object(guide, "warn_if_workspace_invalid") as warning:
+            with mock.patch.object(guide, "load_recipe", return_value={"id": "test"}):
+                with mock.patch.object(guide, "create_recipe_plan", return_value=plan):
+                    with mock.patch.object(guide, "print_recipe_plan"):
+                        result = guide.main(["plan", "--recipe", str(recipe_path)])
+
+        self.assertEqual(result, 0)
+        warning.assert_called_once_with(guide.root())
+
+    def test_guide_generation_does_not_warn_about_workspace(self) -> None:
+        recipe_path = self.recipe_dir / "drone-fleet-single-host.yaml"
+        with mock.patch.object(guide, "warn_if_workspace_invalid") as warning:
+            with mock.patch.object(guide, "load_recipe", return_value={"id": "test"}):
+                with mock.patch.object(
+                    guide, "write_guide", return_value=Path("/tmp/recipe-guide.html")
+                ):
+                    result = guide.main(["guide", "--recipe", str(recipe_path)])
+
+        self.assertEqual(result, 0)
+        warning.assert_not_called()
 
     def test_unversioned_local_requirements_remain_documentation_only(self) -> None:
         data = {
