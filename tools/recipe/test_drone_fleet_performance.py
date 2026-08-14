@@ -9,6 +9,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from tools.recipe.path_test_support import path_endswith
+
 
 SCRIPT = Path(__file__).with_name("drone_fleet_single_host.py")
 SPEC = importlib.util.spec_from_file_location("drone_fleet_performance_base_test", SCRIPT)
@@ -101,7 +103,13 @@ class DroneFleetPerformanceTest(unittest.TestCase):
             self.assertTrue(show["args"][0].endswith("drone_fleet_performance_runner.py"))
             self.assertIn("HAKO_PERFORMANCE_CONFIG", show["env"]["set"])
             summary_index = show["args"].index("--summary-json") + 1
-            self.assertIn("attempt-01/execution-summary.json", show["args"][summary_index])
+            self.assertTrue(
+                path_endswith(
+                    show["args"][summary_index],
+                    "attempt-01",
+                    "execution-summary.json",
+                )
+            )
             service = next(
                 asset for asset in launcher["assets"] if asset["name"] == "drone-service-1"
             )

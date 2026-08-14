@@ -13,6 +13,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from tools.recipe.path_test_support import contains_path, path_endswith, same_path
+
 SCRIPT = Path(__file__).with_name("drone_gamepad_exhibition.py")
 SPEC = importlib.util.spec_from_file_location("drone_gamepad_exhibition_recipe", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
@@ -100,13 +102,18 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
                 str(drone_root / "drone_api" / "rc" / "rc-custom.py"),
             )
             self.assertTrue(
-                assets["remote-controller"]["args"][2].endswith(
-                    "rc_config/ps4-control.json"
+                path_endswith(
+                    assets["remote-controller"]["args"][2],
+                    "rc_config",
+                    "ps4-control.json",
                 )
             )
             self.assertTrue(
-                assets["remote-controller"]["args"][1].endswith(
-                    "config/pdudef/drone-pdudef-1.json"
+                path_endswith(
+                    assets["remote-controller"]["args"][1],
+                    "config",
+                    "pdudef",
+                    "drone-pdudef-1.json",
                 )
             )
             self.assertTrue(
@@ -133,7 +140,7 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
                 ["web-bridge-disturb"],
             )
             serialized = json.dumps(data)
-            self.assertIn(str(paths.install_prefix), serialized)
+            self.assertTrue(contains_path(data, paths.install_prefix))
             self.assertIn("web_bridge_disturb", serialized)
             self.assertNotIn("web_bridge_fleets", serialized)
             self.assertNotIn("/usr/local", serialized)
@@ -347,15 +354,14 @@ class DroneGamepadExhibitionTest(unittest.TestCase):
         self.assertIn("rerun the Recipe configure command", detail)
 
     def test_reset_keeps_platform_shells_out_of_user_contract(self) -> None:
-        commands = recipe.reset_commands(Path("/foundation/bin/hako-cmd"))
+        hako_cmd = Path("/foundation/bin/hako-cmd")
+        commands = recipe.reset_commands(hako_cmd)
         self.assertEqual(
-            commands,
-            [
-                ["/foundation/bin/hako-cmd", "stop"],
-                ["/foundation/bin/hako-cmd", "reset"],
-                ["/foundation/bin/hako-cmd", "start"],
-            ],
+            [command[1:] for command in commands],
+            [["stop"], ["reset"], ["start"]],
         )
+        for command in commands:
+            self.assertTrue(same_path(command[0], hako_cmd))
 
     def test_recipe_records_human_operation_and_background_cleanup(self) -> None:
         content = recipe.recipe_file().read_text(encoding="utf-8")

@@ -12,6 +12,8 @@ import zipfile
 from pathlib import Path
 from unittest import mock
 
+from tools.recipe.path_test_support import contains_path
+
 
 SCRIPT = Path(__file__).with_name("drone_fleet_single_host.py")
 SPEC = importlib.util.spec_from_file_location("drone_fleet_single_host_recipe", SCRIPT)
@@ -382,7 +384,7 @@ results:
                 str(paths.foundation_config / "cpp_core_config.json"),
             )
             self.assertNotIn("/usr/local/hakoniwa", serialized)
-            self.assertIn(str(paths.install_prefix), serialized)
+            self.assertTrue(contains_path(payload, paths.install_prefix))
             self.assertIn("execution-summary.json", serialized)
             show_runner_asset = assets["show-runner"]
             poll_sleep_index = show_runner_asset["args"].index("--poll-sleep-msec")
