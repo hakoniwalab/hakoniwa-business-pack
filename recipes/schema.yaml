@@ -88,6 +88,8 @@ doctor_contract:
 configure_contract:
   mutation: explicit
   behavior:
+    - Normalize Foundation and Recipe-local repositories into one source materialization plan.
+    - Report existing checkouts as reused local input with available revision provenance.
     - Clone only missing git dependencies, including Foundation source repositories required by the plan.
     - Place automatically cloned repositories beside the Recipe repository.
     - Never overwrite an existing path.

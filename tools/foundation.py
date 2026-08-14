@@ -900,6 +900,7 @@ def load_build_catalog(path: Path) -> dict[str, dict]:
             raise FoundationError(f"{component_id}: catalog entry must be a mapping")
         source = component.get("source")
         repository = component.get("repository")
+        revision = component.get("revision")
         dependencies = component.get("dependencies")
         operations = component.get("operations")
         if not isinstance(source, str) or not source:
@@ -908,6 +909,12 @@ def load_build_catalog(path: Path) -> dict[str, dict]:
             not isinstance(repository, str) or not repository
         ):
             raise FoundationError(f"{component_id}: repository must be a URL")
+        if revision is not None and (
+            not isinstance(revision, str) or not revision.strip()
+        ):
+            raise FoundationError(
+                f"{component_id}: revision must be a non-empty string"
+            )
         if (
             not isinstance(dependencies, list)
             or not all(isinstance(item, str) for item in dependencies)
@@ -1387,6 +1394,7 @@ def execute_build_plan(plan: dict, paths: WorkspacePaths) -> dict:
             "Foundation plan is blocked by UNKNOWN components: "
             + ", ".join(plan["blocked"])
         )
+    validate_build_plan_sources(plan)
     python, python_contract = ensure_foundation_python(
         paths, Path(plan["recipe"])
     )
@@ -1430,6 +1438,32 @@ def execute_build_plan(plan: dict, paths: WorkspacePaths) -> dict:
             f"Foundation remains {final['status']} after build/install"
         )
     return final
+
+
+def validate_build_plan_sources(plan: dict) -> None:
+    invalid: list[str] = []
+    for action in plan["actions"]:
+        source = Path(action["source"])
+        if not source.is_dir():
+            invalid.append(
+                f"{action['component']}: source directory is missing: {source}"
+            )
+            continue
+        hako = source / "tools" / "hako.py"
+        if not hako.is_file():
+            invalid.append(
+                f"{action['component']}: component tool is missing: {hako}"
+            )
+    if not invalid:
+        return
+    recipe = Path(plan["recipe"])
+    details = "\n".join(f"  - {message}" for message in invalid)
+    raise FoundationError(
+        "Foundation source is missing or invalid:\n"
+        f"{details}\n\n"
+        "Materialize the selected Recipe first:\n"
+        f"  python tools/recipe.py configure --recipe {recipe}"
+    )
 
 
 def print_build_plan(plan: dict, json_output: bool) -> None:
@@ -1570,6 +1604,8 @@ def main(argv: list[str] | None = None) -> int:
                     root,
                     set(args.force),
                 )
+                if args.command == "plan":
+                    validate_build_plan_sources(result)
                 print_build_plan(result, getattr(args, "json_output", False))
                 if args.command == "plan":
                     return 2 if result["blocked"] else 0

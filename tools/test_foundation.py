@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import importlib.util
+import io
 import subprocess
 import sys
 import tempfile
@@ -862,6 +863,10 @@ class FoundationInspectorTest(unittest.TestCase):
 
     def test_build_stops_after_failed_component_doctor(self) -> None:
         paths = foundation.resolve_workspace(self.root, "test")
+        source = self.root / "hakoniwa-core-pro"
+        hako = source / "tools" / "hako.py"
+        hako.parent.mkdir(parents=True)
+        hako.write_text("# test\n", encoding="utf-8")
         foundation_python = foundation.foundation_python_executable(
             paths.foundation_python
         )
@@ -905,9 +910,63 @@ class FoundationInspectorTest(unittest.TestCase):
 
         run.assert_called_once_with(
             doctor,
-            cwd=self.root / "hakoniwa-core-pro",
+            cwd=source,
             check=False,
         )
+
+    def test_build_source_validation_fails_before_bootstrap_with_recipe_hint(self) -> None:
+        paths = foundation.resolve_workspace(self.root, "test")
+        source = self.root / "missing-core"
+        plan = {
+            "blocked": [],
+            "recipe": str(self.recipe),
+            "actions": [
+                {
+                    "component": "hakoniwa-core-pro",
+                    "source": str(source),
+                    "operations": ["doctor", "build", "install"],
+                    "requirements": {},
+                }
+            ],
+        }
+
+        with mock.patch.object(foundation, "ensure_foundation_python") as bootstrap:
+            with self.assertRaisesRegex(
+                foundation.FoundationError, "Foundation source is missing"
+            ) as raised:
+                foundation.execute_build_plan(plan, paths)
+
+        bootstrap.assert_not_called()
+        self.assertIn("recipe.py configure", str(raised.exception))
+
+    def test_direct_foundation_plan_rejects_missing_source(self) -> None:
+        source = self.root / "missing-core"
+        plan = {
+            "blocked": [],
+            "recipe": str(self.recipe),
+            "actions": [
+                {
+                    "component": "hakoniwa-core-pro",
+                    "source": str(source),
+                    "operations": ["build"],
+                    "requirements": {},
+                }
+            ],
+        }
+        stderr = io.StringIO()
+
+        with mock.patch.object(foundation, "warn_if_workspace_invalid"):
+            with mock.patch.object(foundation, "load_build_catalog", return_value={}):
+                with mock.patch.object(
+                    foundation, "create_build_plan", return_value=plan
+                ):
+                    with mock.patch.object(foundation.sys, "stderr", stderr):
+                        result = foundation.main(
+                            ["plan", "--recipe", str(self.recipe)]
+                        )
+
+        self.assertEqual(result, 2)
+        self.assertIn("recipe.py configure", stderr.getvalue())
 
     def test_normalize_core_config_repairs_unescaped_windows_path(self) -> None:
         paths = foundation.resolve_workspace(self.root, "test")

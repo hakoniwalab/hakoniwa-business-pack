@@ -94,10 +94,16 @@ python tools/recipe.py plan --recipe <recipe.yaml>
 python tools/recipe.py configure --recipe <recipe.yaml>
 ```
 
-`recipe.py` delegates Receipt inspection and component build/install to the
-Foundation engine, while also handling declared sibling repositories and Recipe
-Python requirements. Direct `foundation.py` commands are retained for component,
-CI, and Foundation-maintainer work.
+`recipe.py` resolves Foundation component repositories and Recipe-local
+repositories through one source contract. `plan` reports `clone`, `reuse`, or a
+required local input together with available revision provenance. `configure`
+clones only missing, cloneable sibling repositories and never updates, resets, or
+replaces an existing checkout. It then delegates Receipt inspection and component
+build/install to the Foundation engine and installs Recipe Python requirements.
+
+Direct `foundation.py` commands are retained for component, CI, and
+Foundation-maintainer work. They assume source trees have already been resolved;
+a missing build source fails early and points back to `recipe.py configure`.
 
 Recipes with a generated Launcher are started through the same entry point:
 

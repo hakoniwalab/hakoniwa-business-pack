@@ -216,6 +216,39 @@ Component repository内の `.hako/resolved-build.yaml` は、単独のbuildや�
 
 Required Stateの正はRecipeの`foundation_requirements`、Installed Stateの正はComponent Receiptです。Foundation全体を集約したlock fileや`resolved-foundation.yaml`は生成しません。Foundationの状態は、この二つとCatalogから評価時に導出します。
 
+### 3.2 Source materializationの責務
+
+Recipeを成立させるためのsource repository取得は`tools/recipe.py`が所有します。
+Foundation Component sourceとRecipe固有sourceは、次の共通概念へ正規化します。
+
+```text
+id
+kind: foundation | recipe
+action: clone | reuse | provide-local | provide-overridden-path
+target
+repository
+optional requested revision
+required artifacts
+available provenance
+```
+
+`recipe.py plan`は、Foundation build planが必要とするComponent sourceと、versioned
+`recipe_local_requirements`を同じsource planに表示します。`recipe.py configure`は、
+plan全体のmetadataとtarget境界を検証してから、missingかつclone可能なsourceだけを
+共通clone policyでmaterializeします。
+
+既存checkoutはユーザー所有のlocal inputです。required artifactは検証しますが、
+暗黙の`git pull`、`checkout`、`reset`、置換、削除は行いません。requested revisionと
+実際のcommitが取得できる場合は両方を表示します。revision指定のないmoving sourceは
+`unpinned`として扱い、再現可能であるとは表現しません。overrideで選択されたmissing
+pathへ自動cloneすることもありません。
+
+`tools/foundation.py`は、解決済みsource treeからbuild/installする低レベルengineです。
+repository取得機能は持ちません。直接`plan`または`build`した際にbuild対象sourceや
+Componentの`tools/hako.py`がなければ、副作用を開始する前に停止し、選択したRecipeの
+`recipe.py configure`を案内します。Receiptがすでに要求を満たしbuild actionがない場合、
+source checkout自体は要求しません。
+
 ## 4. ローカルワークスペース
 
 標準レイアウトは次のとおりです。

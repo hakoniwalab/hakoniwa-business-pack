@@ -577,12 +577,157 @@ def _clone_repository(url: str, target: Path, *, revision: str | None = None) ->
         )
 
 
+def _checkout_revision(target: Path) -> str | None:
+    if not (target / ".git").exists():
+        return None
+    completed = subprocess.run(
+        ["git", "-C", str(target), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    revision = completed.stdout.strip()
+    return revision if completed.returncode == 0 and revision else None
+
+
+def _missing_source_artifacts(source: dict) -> list[str]:
+    target = Path(source["target"])
+    if not target.is_dir():
+        return ["directory:."]
+    missing: list[str] = []
+    for artifact in source["required_artifacts"]:
+        path = target / artifact["path"]
+        kind = artifact["kind"]
+        satisfied = (
+            path.is_file()
+            if kind == "file"
+            else path.is_dir()
+            if kind == "directory"
+            else path.is_file() and os.access(path, os.X_OK)
+        )
+        if not satisfied:
+            missing.append(f"{kind}:{artifact['path']}")
+    return missing
+
+
+def _resolve_source_requirement(
+    *,
+    source_id: str,
+    kind: str,
+    target: Path,
+    source_type: str,
+    repository: str | None,
+    revision: str | None,
+    required_artifacts: list[dict],
+    clone_boundary: Path,
+    overridden: bool = False,
+    override_env: str | None = None,
+) -> dict:
+    target = target.expanduser().resolve()
+    if source_type == "git" and (
+        not isinstance(repository, str) or not repository.strip()
+    ):
+        raise RecipeGuideError(
+            f"{kind} source {source_id} has no repository URL: {target}"
+        )
+    if revision is not None and (
+        not isinstance(revision, str) or not revision.strip()
+    ):
+        raise RecipeGuideError(
+            f"{kind} source {source_id} has an invalid revision"
+        )
+
+    if target.exists():
+        action = "reuse"
+    elif source_type != "git":
+        action = "provide-local"
+    elif overridden:
+        action = "provide-overridden-path"
+    else:
+        if target.parent != clone_boundary.expanduser().resolve():
+            raise RecipeGuideError(
+                f"automatic {kind} source is outside the declared sibling "
+                f"boundary: target={target}, boundary={clone_boundary}"
+            )
+        action = "clone"
+
+    result = {
+        "id": source_id,
+        "kind": kind,
+        "action": action,
+        "target": str(target),
+        "repository": repository,
+        "revision": revision,
+        "required_artifacts": required_artifacts,
+        "override_env": override_env,
+        "provenance": {
+            "mode": "existing-checkout" if action == "reuse" else action,
+            "requested_revision": revision,
+            "resolved_revision": (
+                _checkout_revision(target) if action == "reuse" else None
+            ),
+            "reproducibility": (
+                "pinned"
+                if revision
+                else "local"
+                if source_type == "local"
+                else "unpinned"
+            ),
+        },
+    }
+    if action == "reuse":
+        missing = _missing_source_artifacts(result)
+        if missing:
+            raise RecipeGuideError(
+                f"existing {kind} source is invalid: {source_id} target={target}; "
+                f"missing={', '.join(missing)}"
+            )
+    return result
+
+
+def materialize_sources(sources: list[dict]) -> None:
+    unresolved = [
+        source
+        for source in sources
+        if source["action"] not in {"clone", "reuse"}
+    ]
+    if unresolved:
+        details = ", ".join(
+            f"{source['kind']}:{source['id']} ({source['action']})"
+            for source in unresolved
+        )
+        raise RecipeGuideError(
+            "Recipe has source dependencies that cannot be materialized "
+            f"automatically: {details}"
+        )
+
+    for source in sources:
+        if source["action"] != "clone":
+            continue
+        _clone_repository(
+            source["repository"],
+            Path(source["target"]),
+            revision=source.get("revision"),
+        )
+
+    for source in sources:
+        missing = _missing_source_artifacts(source)
+        if missing:
+            raise RecipeGuideError(
+                f"materialized {source['kind']} source is invalid: "
+                f"{source['id']} target={source['target']}; "
+                f"missing={', '.join(missing)}"
+            )
+
+
 def create_recipe_plan(recipe_path: Path, data: dict) -> dict:
     foundation = load_foundation_module()
     business_root = root()
     paths = foundation.resolve_workspace(business_root, data["id"])
     foundation_plan = None
-    foundation_sources: list[dict] = []
+    sources: list[dict] = []
+    recipe_repo = recipe_repository_root(recipe_path)
+    clone_boundary = recipe_repo.parent
     if isinstance(data.get("foundation_requirements"), dict):
         catalog_path = business_root / "catalog" / "foundation-components.json"
         components = foundation.load_build_catalog(catalog_path)
@@ -594,75 +739,59 @@ def create_recipe_plan(recipe_path: Path, data: dict) -> dict:
         )
         for action in foundation_plan["actions"]:
             source = Path(action["source"])
-            if source.is_dir():
-                continue
             component = action["component"]
             repository_url = components[component].get("repository")
-            if not isinstance(repository_url, str) or not repository_url:
-                raise RecipeGuideError(
-                    f"Foundation component source is missing and has no repository URL: "
-                    f"{component} source={source}"
+            sources.append(
+                _resolve_source_requirement(
+                    source_id=component,
+                    kind="foundation",
+                    target=source,
+                    source_type="git",
+                    repository=repository_url,
+                    revision=components[component].get("revision"),
+                    required_artifacts=[
+                        {"path": "tools/hako.py", "kind": "file"}
+                    ],
+                    clone_boundary=business_root.parent,
                 )
-            if source.parent != business_root.parent:
-                raise RecipeGuideError(
-                    f"Foundation component source must be a Business Pack sibling: {source}"
-                )
-            foundation_sources.append(
-                {
-                    "component": component,
-                    "url": repository_url,
-                    "target": str(source),
-                }
             )
 
-    local_sources: list[dict] = []
     requirements = validate_local_requirements(data)
-    recipe_repo = recipe_repository_root(recipe_path)
+    platform_context = native_platform_context() if requirements else {}
     for dependency_id, requirement in requirements.items():
         target, overridden = resolve_local_requirement_root(recipe_path, requirement)
-        if target.exists():
-            continue
         source = requirement["source"]
-        if source["type"] != "git":
-            local_sources.append(
-                {
-                    "dependency": dependency_id,
-                    "action": "provide-local-path",
-                    "target": str(target),
-                    "override_env": requirement["root"]["override_env"],
-                }
-            )
-            continue
-        if overridden:
-            local_sources.append(
-                {
-                    "dependency": dependency_id,
-                    "action": "provide-overridden-path",
-                    "target": str(target),
-                    "override_env": requirement["root"]["override_env"],
-                }
-            )
-            continue
-        if target.parent != recipe_repo.parent:
-            raise RecipeGuideError(
-                f"automatic git dependency must be a sibling of the Recipe repository: {target}"
-            )
-        local_sources.append(
+        artifacts = [
             {
-                "dependency": dependency_id,
-                "action": "clone",
-                "url": source["url"],
-                "revision": source.get("revision"),
-                "target": str(target),
+                "path": _expand_runtime_value(
+                    artifact["path"],
+                    platform_context,
+                    f"recipe_local_requirements.{dependency_id}.required_artifacts.path",
+                ),
+                "kind": artifact["kind"],
             }
+            for artifact in requirement["required_artifacts"]
+        ]
+        sources.append(
+            _resolve_source_requirement(
+                source_id=dependency_id,
+                kind="recipe",
+                target=target,
+                source_type=source["type"],
+                repository=source.get("url"),
+                revision=source.get("revision"),
+                required_artifacts=artifacts,
+                clone_boundary=clone_boundary,
+                overridden=overridden,
+                override_env=requirement["root"]["override_env"],
+            )
         )
 
     python_requirements = recipe_python_requirements(recipe_path, data)
     runtime = validate_recipe_runtime(data)
     return {
         "foundation": foundation_plan,
-        "foundation_sources": foundation_sources,
-        "local_sources": local_sources,
+        "sources": sources,
         "python_requirements": str(python_requirements) if python_requirements else None,
         "runtime": (
             {
@@ -678,11 +807,30 @@ def create_recipe_plan(recipe_path: Path, data: dict) -> dict:
 
 def print_recipe_plan(plan: dict) -> None:
     print("Recipe plan:")
-    for source in plan["foundation_sources"]:
-        print(
-            f"  - clone Foundation {source['component']}: "
-            f"{source['url']} -> {source['target']}"
+    for source in plan["sources"]:
+        label = (
+            f"Foundation {source['id']}"
+            if source["kind"] == "foundation"
+            else f"Recipe dependency {source['id']}"
         )
+        if source["action"] == "clone":
+            revision = source["revision"] or "unpinned"
+            print(
+                f"  - clone {label}: {source['repository']} -> "
+                f"{source['target']} (revision={revision})"
+            )
+        elif source["action"] == "reuse":
+            resolved = source["provenance"]["resolved_revision"] or "unknown"
+            requested = source["revision"] or "unpinned"
+            print(
+                f"  - reuse {label}: {source['target']} "
+                f"(requested={requested}, resolved={resolved})"
+            )
+        else:
+            print(
+                f"  - {source['action']} for {label}: {source['target']} "
+                f"(override={source['override_env']})"
+            )
     foundation_plan = plan["foundation"]
     if foundation_plan is not None:
         print(f"  - Foundation status: {foundation_plan['status']}")
@@ -690,18 +838,6 @@ def print_recipe_plan(plan: dict) -> None:
             print(
                 f"  - Foundation {action['component']}: "
                 f"{', '.join(action['operations'])} ({action['reason']})"
-            )
-    for source in plan["local_sources"]:
-        if source["action"] == "clone":
-            print(
-                f"  - clone Recipe dependency {source['dependency']}: "
-                f"{source['url']} -> {source['target']}"
-            )
-        else:
-            print(
-                f"  - {source['action']} for Recipe dependency "
-                f"{source['dependency']}: {source['target']} "
-                f"(override={source['override_env']})"
             )
     if plan["python_requirements"]:
         print(
@@ -714,9 +850,8 @@ def print_recipe_plan(plan: dict) -> None:
             f"{plan['runtime']['environment']}, {plan['runtime']['launcher']}"
         )
     if (
-        not plan["foundation_sources"]
+        not plan["sources"]
         and (foundation_plan is None or not foundation_plan["actions"])
-        and not plan["local_sources"]
         and not plan["python_requirements"]
         and not plan["runtime"]
     ):
@@ -726,21 +861,7 @@ def print_recipe_plan(plan: dict) -> None:
 def configure_recipe(recipe_path: Path, data: dict) -> int:
     plan = create_recipe_plan(recipe_path, data)
     print_recipe_plan(plan)
-    unresolved = [
-        item for item in plan["local_sources"] if item["action"] != "clone"
-    ]
-    if unresolved:
-        raise RecipeGuideError(
-            "Recipe has local dependencies that cannot be materialized automatically"
-        )
-    for source in plan["foundation_sources"]:
-        _clone_repository(source["url"], Path(source["target"]))
-    for source in plan["local_sources"]:
-        _clone_repository(
-            source["url"],
-            Path(source["target"]),
-            revision=source.get("revision"),
-        )
+    materialize_sources(plan["sources"])
 
     foundation = load_foundation_module()
     paths = foundation.resolve_workspace(root(), data["id"])

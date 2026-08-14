@@ -163,8 +163,7 @@ class RecipeGuideTest(unittest.TestCase):
         recipe_path = self.recipe_dir / "drone-fleet-single-host.yaml"
         plan = {
             "foundation": None,
-            "foundation_sources": [],
-            "local_sources": [],
+            "sources": [],
             "python_requirements": None,
             "runtime": None,
         }
@@ -322,8 +321,9 @@ class RecipeGuideTest(unittest.TestCase):
             }
             with mock.patch.dict(guide.os.environ, {}, clear=True):
                 plan = guide.create_recipe_plan(recipe_path, data)
-            self.assertEqual(plan["local_sources"][0]["action"], "clone")
-            self.assertEqual(plan["local_sources"][0]["revision"], "main")
+            self.assertEqual(plan["sources"][0]["kind"], "recipe")
+            self.assertEqual(plan["sources"][0]["action"], "clone")
+            self.assertEqual(plan["sources"][0]["revision"], "main")
 
     def test_recipe_plan_does_not_clone_into_missing_override_path(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -359,8 +359,269 @@ class RecipeGuideTest(unittest.TestCase):
             ):
                 plan = guide.create_recipe_plan(recipe_path, data)
             self.assertEqual(
-                plan["local_sources"][0]["action"], "provide-overridden-path"
+                plan["sources"][0]["action"], "provide-overridden-path"
             )
+
+    def test_recipe_plan_reports_existing_dependency_as_reused(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary) / "recipe-repository"
+            (repository / ".git").mkdir(parents=True)
+            (repository / "recipes").mkdir()
+            dependency = repository.parent / "viewer"
+            dependency.mkdir()
+            (dependency / "index.html").write_text("viewer", encoding="utf-8")
+            recipe_path = repository / "recipes" / "demo.yaml"
+            data = {
+                "id": "demo",
+                "recipe_local_requirements_schema_version": 1,
+                "recipe_local_requirements": {
+                    "viewer": {
+                        "root": {
+                            "default_path": "../viewer",
+                            "override_env": "HAKO_TEST_VIEWER_ROOT",
+                            "relative_to": "recipe_repository",
+                        },
+                        "source": {
+                            "type": "git",
+                            "url": "https://example.invalid/viewer.git",
+                        },
+                        "required_artifacts": [
+                            {"path": "index.html", "kind": "file"}
+                        ],
+                    }
+                },
+            }
+
+            plan = guide.create_recipe_plan(recipe_path, data)
+
+        source = plan["sources"][0]
+        self.assertEqual(source["kind"], "recipe")
+        self.assertEqual(source["action"], "reuse")
+        self.assertEqual(source["provenance"]["mode"], "existing-checkout")
+        self.assertEqual(source["provenance"]["reproducibility"], "unpinned")
+
+    def test_recipe_plan_rejects_invalid_existing_dependency(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary) / "recipe-repository"
+            (repository / ".git").mkdir(parents=True)
+            (repository / "recipes").mkdir()
+            (repository.parent / "viewer").mkdir()
+            recipe_path = repository / "recipes" / "demo.yaml"
+            data = {
+                "id": "demo",
+                "recipe_local_requirements_schema_version": 1,
+                "recipe_local_requirements": {
+                    "viewer": {
+                        "root": {
+                            "default_path": "../viewer",
+                            "override_env": "HAKO_TEST_VIEWER_ROOT",
+                            "relative_to": "recipe_repository",
+                        },
+                        "source": {
+                            "type": "git",
+                            "url": "https://example.invalid/viewer.git",
+                        },
+                        "required_artifacts": [
+                            {"path": "index.html", "kind": "file"}
+                        ],
+                    }
+                },
+            }
+
+            with self.assertRaisesRegex(
+                guide.RecipeGuideError, "existing recipe source is invalid"
+            ):
+                guide.create_recipe_plan(recipe_path, data)
+
+    def test_foundation_and_recipe_sources_share_one_plan_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            business_root = Path(temporary) / "hakoniwa-business-pack"
+            (business_root / ".git").mkdir(parents=True)
+            recipes = business_root / "recipes"
+            recipes.mkdir()
+            recipe_path = recipes / "demo.yaml"
+            foundation_source = business_root.parent / "hakoniwa-core-pro"
+            paths = SimpleNamespace(install_prefix=business_root / "work/foundation/install")
+            components = {
+                "hakoniwa-core-pro": {
+                    "repository": "https://example.invalid/core.git",
+                    "revision": "v1.0.0",
+                }
+            }
+            foundation_plan = {
+                "status": "NEEDS_BUILD",
+                "blocked": [],
+                "actions": [
+                    {
+                        "component": "hakoniwa-core-pro",
+                        "source": str(foundation_source),
+                        "operations": ["doctor", "build", "install"],
+                        "reason": "MISSING",
+                    }
+                ],
+            }
+            foundation = SimpleNamespace(
+                resolve_workspace=lambda _root, _recipe_id: paths,
+                load_build_catalog=lambda _path: components,
+                create_build_plan=lambda *_args: foundation_plan,
+            )
+            data = {"id": "demo", "foundation_requirements": {"hakoniwa-core-pro": {}}}
+
+            with mock.patch.object(guide, "root", return_value=business_root):
+                with mock.patch.object(
+                    guide, "load_foundation_module", return_value=foundation
+                ):
+                    plan = guide.create_recipe_plan(recipe_path, data)
+                    hako = foundation_source / "tools" / "hako.py"
+                    hako.parent.mkdir(parents=True)
+                    hako.write_text("# test\n", encoding="utf-8")
+                    reused_plan = guide.create_recipe_plan(recipe_path, data)
+
+        source = plan["sources"][0]
+        self.assertEqual(source["id"], "hakoniwa-core-pro")
+        self.assertEqual(source["kind"], "foundation")
+        self.assertEqual(source["action"], "clone")
+        self.assertEqual(source["repository"], "https://example.invalid/core.git")
+        self.assertEqual(source["revision"], "v1.0.0")
+        self.assertEqual(
+            source["required_artifacts"],
+            [{"path": "tools/hako.py", "kind": "file"}],
+        )
+        self.assertEqual(reused_plan["sources"][0]["action"], "reuse")
+
+    def test_foundation_source_requires_repository_metadata_before_clone(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            business_root = Path(temporary) / "hakoniwa-business-pack"
+            (business_root / ".git").mkdir(parents=True)
+            recipes = business_root / "recipes"
+            recipes.mkdir()
+            recipe_path = recipes / "demo.yaml"
+            paths = SimpleNamespace(install_prefix=business_root / "work/foundation/install")
+            foundation_plan = {
+                "status": "NEEDS_BUILD",
+                "blocked": [],
+                "actions": [
+                    {
+                        "component": "hakoniwa-core-pro",
+                        "source": str(business_root.parent / "hakoniwa-core-pro"),
+                        "operations": ["build"],
+                        "reason": "MISSING",
+                    }
+                ],
+            }
+            foundation = SimpleNamespace(
+                resolve_workspace=lambda _root, _recipe_id: paths,
+                load_build_catalog=lambda _path: {"hakoniwa-core-pro": {}},
+                create_build_plan=lambda *_args: foundation_plan,
+            )
+
+            with mock.patch.object(guide, "root", return_value=business_root):
+                with mock.patch.object(
+                    guide, "load_foundation_module", return_value=foundation
+                ):
+                    with self.assertRaisesRegex(
+                        guide.RecipeGuideError, "has no repository URL"
+                    ):
+                        guide.create_recipe_plan(
+                            recipe_path,
+                            {"id": "demo", "foundation_requirements": {"hakoniwa-core-pro": {}}},
+                        )
+
+    def test_automatic_source_rejects_target_outside_declared_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            with self.assertRaisesRegex(
+                guide.RecipeGuideError, "outside the declared sibling boundary"
+            ):
+                guide._resolve_source_requirement(
+                    source_id="viewer",
+                    kind="recipe",
+                    target=base / "nested" / "viewer",
+                    source_type="git",
+                    repository="https://example.invalid/viewer.git",
+                    revision=None,
+                    required_artifacts=[],
+                    clone_boundary=base,
+                )
+
+    def test_materialize_sources_uses_one_clone_policy_for_both_kinds(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            sources = [
+                {
+                    "id": "core",
+                    "kind": "foundation",
+                    "action": "clone",
+                    "target": str(base / "core"),
+                    "repository": "https://example.invalid/core.git",
+                    "revision": None,
+                    "required_artifacts": [],
+                },
+                {
+                    "id": "viewer",
+                    "kind": "recipe",
+                    "action": "clone",
+                    "target": str(base / "viewer"),
+                    "repository": "https://example.invalid/viewer.git",
+                    "revision": "v1.0.0",
+                    "required_artifacts": [],
+                },
+            ]
+            reused = base / "existing"
+            reused.mkdir()
+            sources.append(
+                {
+                    "id": "existing",
+                    "kind": "recipe",
+                    "action": "reuse",
+                    "target": str(reused),
+                    "repository": "https://example.invalid/existing.git",
+                    "revision": None,
+                    "required_artifacts": [],
+                }
+            )
+
+            def materialize(_url: str, target: Path, *, revision: str | None = None) -> None:
+                target.mkdir()
+
+            with mock.patch.object(
+                guide, "_clone_repository", side_effect=materialize
+            ) as clone:
+                guide.materialize_sources(sources)
+
+        self.assertEqual(clone.call_count, 2)
+        self.assertEqual(clone.call_args_list[0].kwargs["revision"], None)
+        self.assertEqual(clone.call_args_list[1].kwargs["revision"], "v1.0.0")
+
+    def test_unresolved_source_blocks_all_clones_before_side_effects(self) -> None:
+        sources = [
+            {
+                "id": "core",
+                "kind": "foundation",
+                "action": "clone",
+                "target": "/tmp/core",
+                "repository": "https://example.invalid/core.git",
+                "revision": None,
+                "required_artifacts": [],
+            },
+            {
+                "id": "private-input",
+                "kind": "recipe",
+                "action": "provide-local",
+                "target": "/tmp/private-input",
+                "repository": None,
+                "revision": None,
+                "required_artifacts": [],
+            },
+        ]
+
+        with mock.patch.object(guide, "_clone_repository") as clone:
+            with self.assertRaisesRegex(
+                guide.RecipeGuideError, "cannot be materialized automatically"
+            ):
+                guide.materialize_sources(sources)
+
+        clone.assert_not_called()
 
     def test_recipe_runtime_rejects_secret_like_environment_variables(self) -> None:
         data = {

@@ -102,6 +102,23 @@ version、Capability、Receipt、smoke、Catalog、Recipeを伴うリリース�
 
 ## Inspectorと構築
 
+通常ユーザーとclean CIにおけるsource取得の入口は`tools/recipe.py`です。
+Foundation ComponentとRecipe固有dependencyを一つのplanで確認し、missingなclone可能
+repositoryをmaterializeしてからFoundationを構築します。
+
+```bash
+python tools/recipe.py plan --recipe <recipe.yaml>
+python tools/recipe.py configure --recipe <recipe.yaml>
+```
+
+既存checkoutはユーザー所有のlocal inputとして再利用し、暗黙の`git pull`、`checkout`、
+`reset`、置換、削除は行いません。revisionが固定されていないsourceは、planでも
+`unpinned`として表示し、再現可能であるとは扱いません。
+
+以下の`foundation.py`操作はComponent/Foundation maintainer向けの低レベル入口です。
+source treeを自動cloneせず、build対象のsourceまたは`tools/hako.py`がない場合は、
+副作用を開始する前に`recipe.py configure`を案内して停止します。
+
 Windowsなどでvcpkgを明示的に選択する場合は、親shellの`VCPKG_ROOT`を
 書き換えず、Foundation設定として`work/foundation/config/toolchain.json`へ保存します。
 
