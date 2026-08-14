@@ -17,10 +17,12 @@ import json
 import math
 import os
 import platform
+import re
 import shutil
 import socket
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 import urllib.error
@@ -53,6 +55,7 @@ RECOMMENDED_DRONES_PER_STROKE = 2
 GENERAL_USER_MAX_DRONES = 200
 PUBLIC_DRONE_RELEASE = "v4.0.0"
 PUBLIC_DRONE_REPOSITORY = "https://github.com/toppers/hakoniwa-drone-core.git"
+PUBLIC_DRONE_REPOSITORY_ID = "toppers/hakoniwa-drone-core"
 THREEJS_VIEWER_REPOSITORY = "https://github.com/hakoniwalab/hakoniwa-threejs-drone.git"
 PUBLIC_DRONE_ARCHIVES = {
     "Darwin": (
@@ -63,11 +66,9 @@ PUBLIC_DRONE_ARCHIVES = {
         "lnx.zip",
         "d8ef1418e8754dcb4048d808a700568f21dd9b328966ae2806f70285e273fc60",
     ),
-    "Windows": (
-        "win.zip",
-        "2931cb7844dbe74ec3dd5f4be5bb49f28757d268774010c90ea18e8266e59ac0",
-    ),
 }
+SUPPORTED_NATIVE_SYSTEMS = ("Darwin", "Linux")
+MUJOCO_RELEASE_BASE = "https://github.com/google-deepmind/mujoco/releases/download"
 
 
 class RecipeError(RuntimeError):
@@ -164,12 +165,84 @@ def _safe_extract(archive: Path, destination: Path) -> None:
         package.extractall(destination)
 
 
-def prepare_native_distribution(drone_root: Path, system_name: str) -> int:
-    """Explicitly materialize the public Drone source and native distribution."""
-    profile = PUBLIC_DRONE_ARCHIVES.get(system_name)
-    if profile is None:
-        raise RecipeError(f"unsupported native operating system: {system_name}")
+def _atomic_json(path: Path, value: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(path)
 
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        while chunk := source.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _download(url: str, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_suffix(destination.suffix + ".tmp")
+    try:
+        with urllib.request.urlopen(url) as response:
+            with temporary.open("wb") as output:
+                while chunk := response.read(1024 * 1024):
+                    output.write(chunk)
+        temporary.replace(destination)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+def _verified_download(url: str, destination: Path, expected_sha256: str) -> str:
+    if destination.is_file() and _sha256(destination) == expected_sha256:
+        return "verified-cache"
+    print(f"Downloading: {url}")
+    _download(url, destination)
+    actual_sha256 = _sha256(destination)
+    if actual_sha256 != expected_sha256:
+        destination.unlink(missing_ok=True)
+        raise RecipeError(
+            f"download SHA-256 mismatch for {url}: expected "
+            f"{expected_sha256}, got {actual_sha256}"
+        )
+    return "downloaded"
+
+
+def _git_output(drone_root: Path, *arguments: str) -> str:
+    command = ["git", *arguments]
+    result = subprocess.run(
+        command,
+        cwd=drone_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        suffix = f": {detail}" if detail else ""
+        raise RecipeError(f"command failed: {subprocess.list2cmdline(command)}{suffix}")
+    return result.stdout.strip()
+
+
+def _git_is_ancestor(drone_root: Path, older: str, newer: str) -> bool:
+    return subprocess.run(
+        ["git", "merge-base", "--is-ancestor", older, newer],
+        cwd=drone_root,
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    ).returncode == 0
+
+
+def _repository_id(remote_url: str) -> str | None:
+    value = remote_url.strip().removesuffix(".git").rstrip("/")
+    match = re.search(r"github\.com(?::|/)([^/]+/[^/]+)$", value)
+    return match.group(1).lower() if match else None
+
+
+def prepare_drone_workspace(drone_root: Path) -> dict[str, Any]:
+    mode = "reused"
     if not drone_root.exists():
         drone_root.parent.mkdir(parents=True, exist_ok=True)
         _run_checked(
@@ -178,7 +251,7 @@ def prepare_native_distribution(drone_root: Path, system_name: str) -> int:
                 "clone",
                 "--recurse-submodules",
                 "--branch",
-                PUBLIC_DRONE_RELEASE,
+                "main",
                 "--depth",
                 "1",
                 PUBLIC_DRONE_REPOSITORY,
@@ -186,56 +259,290 @@ def prepare_native_distribution(drone_root: Path, system_name: str) -> int:
             ],
             cwd=drone_root.parent,
         )
+        mode = "cloned"
+    elif not (drone_root / ".git").exists():
+        raise RecipeError(
+            f"existing Drone workspace is not a Git checkout: {drone_root}"
+        )
+    else:
+        remote_url = _git_output(drone_root, "remote", "get-url", "origin")
+        actual_repository = _repository_id(remote_url)
+        if actual_repository != PUBLIC_DRONE_REPOSITORY_ID:
+            raise RecipeError(
+                "existing Drone workspace has an unexpected origin: expected "
+                f"{PUBLIC_DRONE_REPOSITORY_ID}, got {remote_url}"
+            )
+        branch = _git_output(drone_root, "branch", "--show-current")
+        if branch != "main":
+            raise RecipeError(
+                f"existing Drone workspace must be on main, got {branch or 'detached HEAD'}: "
+                f"{drone_root}"
+            )
+        _run_checked(["git", "fetch", "origin", "main"], cwd=drone_root)
+        current = _git_output(drone_root, "rev-parse", "HEAD")
+        upstream = _git_output(drone_root, "rev-parse", "origin/main")
+        if current != upstream:
+            if not _git_is_ancestor(drone_root, current, upstream):
+                raise RecipeError(
+                    "existing Drone workspace is not a fast-forward ancestor of "
+                    f"origin/main: HEAD={current}, origin/main={upstream}"
+                )
+            _run_checked(["git", "merge", "--ff-only", "origin/main"], cwd=drone_root)
+            mode = "updated"
+
+    _run_checked(
+        ["git", "submodule", "update", "--init", "--recursive"], cwd=drone_root
+    )
+    remote_url = _git_output(drone_root, "remote", "get-url", "origin")
+    actual_repository = _repository_id(remote_url)
+    if actual_repository != PUBLIC_DRONE_REPOSITORY_ID:
+        raise RecipeError(
+            "cloned Drone workspace has an unexpected origin: expected "
+            f"{PUBLIC_DRONE_REPOSITORY_ID}, got {remote_url}"
+        )
+    revision = _git_output(drone_root, "rev-parse", "HEAD")
+    dirty_paths = [
+        line for line in _git_output(drone_root, "status", "--short").splitlines() if line
+    ]
     if not (drone_root / "tools" / "gen_fleet_scale_config.py").is_file():
         raise RecipeError(
-            f"Hakoniwa Drone source is incomplete: {drone_root}; "
-            "use --drone-root to select a toppers/hakoniwa-drone-core checkout"
+            f"Hakoniwa Drone workspace is incomplete: {drone_root}; "
+            "tools/gen_fleet_scale_config.py is missing"
         )
+    return {
+        "mode": mode,
+        "repository": PUBLIC_DRONE_REPOSITORY_ID,
+        "requested_ref": "main",
+        "resolved_revision": revision,
+        "dirty": bool(dirty_paths),
+        "dirty_path_count": len(dirty_paths),
+    }
 
+
+def _mujoco_asset(version: str, system_name: str, machine: str) -> str:
+    normalized_machine = machine.lower()
+    if system_name == "Darwin":
+        return f"mujoco-{version}-macos-universal2.dmg"
+    if system_name == "Linux":
+        architectures = {
+            "x86_64": "x86_64",
+            "amd64": "x86_64",
+            "aarch64": "aarch64",
+            "arm64": "aarch64",
+        }
+        architecture = architectures.get(normalized_machine)
+        if architecture is None:
+            raise RecipeError(f"unsupported Linux architecture for MuJoCo: {machine}")
+        return f"mujoco-{version}-linux-{architecture}.tar.gz"
+    raise RecipeError(
+        f"unsupported native operating system: {system_name}; "
+        "drone-fleet-single-host supports macOS and Linux"
+    )
+
+
+def _read_mujoco_version(drone_root: Path) -> str:
+    version_file = drone_root / "MUJOCO_VERSION.txt"
     try:
-        service = resolve_drone_binary(drone_root, system_name)
-        vsp = resolve_visual_state_publisher(drone_root, system_name)
-        print(f"Native Drone distribution is already ready: {service}")
-        print(f"Visual-state publisher is already ready: {vsp}")
-        return 0
-    except RecipeError:
-        pass
+        version = version_file.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise RecipeError(f"cannot read MuJoCo version authority: {version_file}") from exc
+    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
+        raise RecipeError(f"invalid MuJoCo version in {version_file}: {version!r}")
+    return version
+
+
+def _read_checksum(path: Path, asset_name: str) -> str:
+    try:
+        fields = path.read_text(encoding="utf-8").strip().split()
+    except OSError as exc:
+        raise RecipeError(f"cannot read MuJoCo checksum: {path}") from exc
+    if not fields or not re.fullmatch(r"[0-9a-fA-F]{64}", fields[0]):
+        raise RecipeError(f"invalid MuJoCo checksum file: {path}")
+    if len(fields) > 1 and Path(fields[-1].lstrip("*")).name != asset_name:
+        raise RecipeError(
+            f"MuJoCo checksum names an unexpected asset: {fields[-1]}"
+        )
+    return fields[0].lower()
+
+
+def _install_mujoco_linux(archive: Path, drone_root: Path, version: str) -> Path:
+    with tempfile.TemporaryDirectory(prefix="hakoniwa-mujoco-extract-") as temporary:
+        extraction_root = Path(temporary)
+        try:
+            with tarfile.open(archive, "r:gz") as package:
+                package.extractall(extraction_root, filter="data")
+        except (OSError, tarfile.TarError) as exc:
+            raise RecipeError(f"failed to extract MuJoCo archive: {exc}") from exc
+        source = extraction_root / f"mujoco-{version}"
+        if not source.is_dir():
+            directories = [path for path in extraction_root.iterdir() if path.is_dir()]
+            if len(directories) != 1:
+                raise RecipeError(
+                    f"MuJoCo archive has an unexpected layout: {archive}"
+                )
+            source = directories[0]
+        destination = drone_root / "vendor" / "mujoco"
+        shutil.copytree(source, destination, dirs_exist_ok=True)
+    library = destination / "lib" / f"libmujoco.so.{version}"
+    if not library.is_file():
+        raise RecipeError(f"MuJoCo runtime library is missing after install: {library}")
+    return library
+
+
+def materialize_mujoco_runtime(
+    drone_root: Path, system_name: str, cache_root: Path
+) -> dict[str, Any]:
+    version = _read_mujoco_version(drone_root)
+    asset_name = _mujoco_asset(version, system_name, platform.machine())
+    release_url = f"{MUJOCO_RELEASE_BASE}/{version}"
+    checksum_url = f"{release_url}/{asset_name}.sha256"
+    cache = cache_root / "mujoco" / version
+    checksum_path = cache / f"{asset_name}.sha256"
+    if not checksum_path.is_file():
+        print(f"Downloading MuJoCo checksum: {checksum_url}")
+        try:
+            _download(checksum_url, checksum_path)
+        except (OSError, urllib.error.URLError) as exc:
+            raise RecipeError(f"failed to download MuJoCo checksum: {exc}") from exc
+    expected_sha256 = _read_checksum(checksum_path, asset_name)
+    archive = cache / asset_name
+    try:
+        mode = _verified_download(
+            f"{release_url}/{asset_name}", archive, expected_sha256
+        )
+    except (OSError, urllib.error.URLError) as exc:
+        raise RecipeError(f"failed to download MuJoCo runtime: {exc}") from exc
+
+    if system_name == "Darwin":
+        installer = drone_root / "tools" / "install-mujoco-mac.bash"
+        linker = drone_root / "tools" / "link-mujoco-mac.bash"
+        if not installer.is_file() or not linker.is_file():
+            raise RecipeError(
+                "Drone workspace does not provide the required macOS MuJoCo "
+                "install/link scripts"
+            )
+        with tempfile.TemporaryDirectory(prefix="hakoniwa-mujoco-install-") as temporary:
+            staging = Path(temporary)
+            shutil.copy2(archive, staging / asset_name)
+            (staging / "MUJOCO_VERSION.txt").write_text(
+                version + "\n", encoding="utf-8"
+            )
+            _run_checked(["bash", str(installer), str(drone_root)], cwd=staging)
+        library = drone_root / "vendor" / "mujoco" / "lib" / f"libmujoco.{version}.dylib"
+        if not library.is_file():
+            raise RecipeError(
+                f"MuJoCo runtime library is missing after install: {library}"
+            )
+        target = drone_root / "mac"
+        _run_checked(
+            [
+                "bash",
+                str(linker),
+                str(target),
+                "--lib-dir",
+                str(library.parent),
+            ],
+            cwd=drone_root,
+        )
+        link_mode = "macos-install-name-and-rpath"
+    else:
+        library = _install_mujoco_linux(archive, drone_root, version)
+        link_mode = "runtime-library-path"
+
+    return {
+        "mode": mode,
+        "version_authority": str(drone_root / "MUJOCO_VERSION.txt"),
+        "version": version,
+        "asset": asset_name,
+        "sha256": expected_sha256,
+        "library": str(library.absolute()),
+        "link_mode": link_mode,
+    }
+
+
+def prepare_native_distribution(
+    drone_root: Path,
+    system_name: str,
+    *,
+    cache_root: Path | None = None,
+    evidence_path: Path | None = None,
+) -> int:
+    """Materialize the current Drone workspace and its verified native runtime."""
+    if system_name not in SUPPORTED_NATIVE_SYSTEMS:
+        raise RecipeError(
+            f"unsupported native operating system: {system_name}; "
+            "drone-fleet-single-host supports macOS and Linux"
+        )
+    profile = PUBLIC_DRONE_ARCHIVES.get(system_name)
+    if profile is None:
+        raise RecipeError(f"unsupported native operating system: {system_name}")
+    workspace_evidence = prepare_drone_workspace(drone_root)
 
     archive_name, expected_sha256 = profile
     url = (
         "https://github.com/toppers/hakoniwa-drone-core/releases/download/"
         f"{PUBLIC_DRONE_RELEASE}/{archive_name}"
     )
-    print(f"Downloading official Hakoniwa Drone {PUBLIC_DRONE_RELEASE}: {url}")
+    resolved_cache_root = cache_root or ROOT / "work" / "downloads"
+    archive = resolved_cache_root / "hakoniwa-drone-core" / PUBLIC_DRONE_RELEASE / archive_name
     try:
-        with tempfile.TemporaryDirectory(prefix="hakoniwa-drone-download-") as temporary:
-            archive = Path(temporary) / archive_name
-            with urllib.request.urlopen(url) as response:
-                with archive.open("wb") as output:
-                    while chunk := response.read(1024 * 1024):
-                        output.write(chunk)
-            digest = hashlib.sha256()
-            with archive.open("rb") as package:
-                while chunk := package.read(1024 * 1024):
-                    digest.update(chunk)
-            actual_sha256 = digest.hexdigest()
-            if actual_sha256 != expected_sha256:
-                raise RecipeError(
-                    f"native Drone archive SHA-256 mismatch: expected "
-                    f"{expected_sha256}, got {actual_sha256}"
-                )
-            _safe_extract(archive, drone_root)
+        native_mode = _verified_download(url, archive, expected_sha256)
+        _safe_extract(archive, drone_root)
     except (OSError, urllib.error.URLError, zipfile.BadZipFile) as exc:
         raise RecipeError(f"failed to prepare native Drone distribution: {exc}") from exc
 
-    for candidate in (*binary_candidates(drone_root, system_name), *visual_state_publisher_candidates(drone_root, system_name)):
-        if candidate.is_file() and system_name != "Windows":
+    for candidate in (
+        *binary_candidates(drone_root, system_name),
+        *visual_state_publisher_candidates(drone_root, system_name),
+    ):
+        if candidate.is_file():
             candidate.chmod(candidate.stat().st_mode | 0o111)
     service = resolve_drone_binary(drone_root, system_name)
     vsp = resolve_visual_state_publisher(drone_root, system_name)
+    mujoco_evidence = materialize_mujoco_runtime(
+        drone_root, system_name, resolved_cache_root
+    )
+    evidence = {
+        "schema_version": 1,
+        "recipe": RECIPE_ID,
+        "platform": system_name,
+        "drone_workspace": workspace_evidence,
+        "native_distribution": {
+            "mode": native_mode,
+            "release": PUBLIC_DRONE_RELEASE,
+            "platform": system_name,
+            "archive": archive_name,
+            "sha256": expected_sha256,
+            "service": {
+                "path": str(service),
+                "sha256": _sha256(service),
+            },
+            "visual_state_publisher": {
+                "path": str(vsp),
+                "sha256": _sha256(vsp),
+            },
+        },
+        "mujoco_runtime": mujoco_evidence,
+    }
+    if evidence_path is not None:
+        _atomic_json(evidence_path, evidence)
+        print(f"[OK] provenance evidence: {evidence_path}")
+    print("Drone workspace:")
+    print(f"  mode: {workspace_evidence['mode']}")
+    print(f"  repository: {workspace_evidence['repository']}")
+    print(f"  requested ref: {workspace_evidence['requested_ref']}")
+    print(f"  resolved revision: {workspace_evidence['resolved_revision']}")
+    print("Native distribution:")
+    print(f"  mode: {native_mode}")
+    print(f"  release: {PUBLIC_DRONE_RELEASE}")
+    print(f"  platform: {system_name}")
+    print(f"  sha256: {expected_sha256}")
+    print("MuJoCo runtime:")
+    print(f"  mode: {mujoco_evidence['mode']}")
+    print(f"  version: {mujoco_evidence['version']}")
+    print(f"  authority: {mujoco_evidence['version_authority']}")
     print(f"[OK] native drone service: {service}")
     print(f"[OK] visual-state publisher: {vsp}")
-    print(f"[OK] SHA-256: {expected_sha256}")
     return 0
 
 
@@ -1284,7 +1591,9 @@ def binary_candidates(drone_root: Path, system_name: str) -> tuple[Path, ...]:
         name, folder = "win-main_hako_drone_service.exe", "win"
     else:
         raise RecipeError(f"unsupported native operating system: {system_name}")
-    return drone_root / "lib" / name, drone_root / folder / name
+    # prepare-native extracts the verified public archive into its OS folder.
+    # Prefer that materialized artifact over an unrelated pre-existing lib copy.
+    return drone_root / folder / name, drone_root / "lib" / name
 
 
 def visual_state_publisher_candidates(
@@ -1298,7 +1607,7 @@ def visual_state_publisher_candidates(
         name, folder = "win-drone_visual_state_publisher.exe", "win"
     else:
         raise RecipeError(f"unsupported native operating system: {system_name}")
-    return drone_root / "lib" / name, drone_root / folder / name
+    return drone_root / folder / name, drone_root / "lib" / name
 
 
 def resolve_visual_state_publisher(drone_root: Path, system_name: str) -> Path:
@@ -2005,11 +2314,24 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
+        system_name = platform.system()
+        if system_name not in SUPPORTED_NATIVE_SYSTEMS:
+            raise RecipeError(
+                f"unsupported native operating system: {system_name}; "
+                "drone-fleet-single-host supports macOS and Linux"
+            )
         experiment_path = args.experiment.absolute()
         drone_root = args.drone_root.absolute()
         viewer_root = args.viewer_root.absolute()
         if args.command == "prepare-native":
-            return prepare_native_distribution(drone_root, platform.system())
+            foundation = load_foundation_module()
+            paths = foundation.resolve_workspace(ROOT, RECIPE_ID)
+            return prepare_native_distribution(
+                drone_root,
+                system_name,
+                cache_root=paths.work_root / "downloads",
+                evidence_path=paths.recipe_validation / "native-distribution.json",
+            )
         if args.command == "prepare-viewer":
             return prepare_viewer(viewer_root)
         if args.command == "configure":

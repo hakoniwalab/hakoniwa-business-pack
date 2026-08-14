@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import sys
+import tarfile
 import tempfile
 import unittest
 import zipfile
@@ -267,10 +268,18 @@ results:
 
     def test_prepare_native_downloads_verifies_and_extracts_linux_release(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            drone_root = Path(temporary) / "hakoniwa-drone-core"
+            root = Path(temporary)
+            drone_root = root / "hakoniwa-drone-core"
             generator = drone_root / "tools" / "gen_fleet_scale_config.py"
             generator.parent.mkdir(parents=True)
             generator.touch()
+            (drone_root / "lnx").mkdir()
+            (drone_root / "lnx" / "linux-main_hako_drone_service").write_bytes(
+                b"unproven-old-service"
+            )
+            (drone_root / "lnx" / "linux-drone_visual_state_publisher").write_bytes(
+                b"unproven-old-vsp"
+            )
             payload = io.BytesIO()
             with zipfile.ZipFile(payload, "w") as archive:
                 archive.writestr("lnx/linux-main_hako_drone_service", b"service")
@@ -279,11 +288,39 @@ results:
             profile = {
                 "Linux": ("lnx.zip", hashlib.sha256(archive_bytes).hexdigest())
             }
+            workspace = {
+                "mode": "reused",
+                "repository": recipe.PUBLIC_DRONE_REPOSITORY_ID,
+                "requested_ref": "main",
+                "resolved_revision": "abc123",
+                "dirty": False,
+                "dirty_path_count": 0,
+            }
+            mujoco = {
+                "mode": "downloaded",
+                "version_authority": str(drone_root / "MUJOCO_VERSION.txt"),
+                "version": "workspace-version",
+                "asset": "workspace-selected-mujoco.tar.gz",
+                "sha256": "f" * 64,
+                "library": str(drone_root / "vendor/mujoco/lib/libmujoco.so.fixture"),
+                "link_mode": "runtime-library-path",
+            }
+            evidence = root / "validation" / "native-distribution.json"
             with mock.patch.object(recipe, "PUBLIC_DRONE_ARCHIVES", profile), mock.patch.object(
+                recipe, "prepare_drone_workspace", return_value=workspace
+            ), mock.patch.object(
+                recipe, "materialize_mujoco_runtime", return_value=mujoco
+            ), mock.patch.object(
                 recipe.urllib.request, "urlopen", return_value=io.BytesIO(archive_bytes)
             ) as urlopen:
                 self.assertEqual(
-                    recipe.prepare_native_distribution(drone_root, "Linux"), 0
+                    recipe.prepare_native_distribution(
+                        drone_root,
+                        "Linux",
+                        cache_root=root / "downloads",
+                        evidence_path=evidence,
+                    ),
+                    0,
                 )
             urlopen.assert_called_once_with(
                 "https://github.com/toppers/hakoniwa-drone-core/releases/download/"
@@ -295,6 +332,230 @@ results:
             self.assertTrue(
                 (drone_root / "lnx" / "linux-drone_visual_state_publisher").is_file()
             )
+            self.assertEqual(
+                (drone_root / "lnx" / "linux-main_hako_drone_service").read_bytes(),
+                b"service",
+            )
+            recorded = json.loads(evidence.read_text(encoding="utf-8"))
+            self.assertEqual(recorded["drone_workspace"]["resolved_revision"], "abc123")
+            self.assertEqual(recorded["native_distribution"]["mode"], "downloaded")
+            self.assertEqual(
+                recorded["mujoco_runtime"]["version"], "workspace-version"
+            )
+
+    def test_prepare_drone_workspace_clones_latest_main(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            drone_root = Path(temporary) / "hakoniwa-drone-core"
+
+            def run_checked(command, *, cwd=None):
+                if command[:2] == ["git", "clone"]:
+                    (drone_root / ".git").mkdir(parents=True)
+                    generator = drone_root / "tools" / "gen_fleet_scale_config.py"
+                    generator.parent.mkdir(parents=True)
+                    generator.touch()
+
+            def git_output(_root, *arguments):
+                return {
+                    ("remote", "get-url", "origin"): recipe.PUBLIC_DRONE_REPOSITORY,
+                    ("rev-parse", "HEAD"): "new-main-revision",
+                    ("status", "--short"): "",
+                }[arguments]
+
+            with mock.patch.object(recipe, "_run_checked", side_effect=run_checked) as run, mock.patch.object(
+                recipe, "_git_output", side_effect=git_output
+            ):
+                evidence = recipe.prepare_drone_workspace(drone_root)
+
+            clone = run.call_args_list[0].args[0]
+            self.assertIn("--branch", clone)
+            self.assertEqual(clone[clone.index("--branch") + 1], "main")
+            self.assertNotIn(recipe.PUBLIC_DRONE_RELEASE, clone)
+            self.assertEqual(evidence["mode"], "cloned")
+            self.assertEqual(evidence["resolved_revision"], "new-main-revision")
+
+    def test_prepare_drone_workspace_reuses_current_main_and_reports_dirty(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            drone_root = Path(temporary) / "hakoniwa-drone-core"
+            (drone_root / ".git").mkdir(parents=True)
+            generator = drone_root / "tools" / "gen_fleet_scale_config.py"
+            generator.parent.mkdir(parents=True)
+            generator.touch()
+
+            def git_output(_root, *arguments):
+                return {
+                    ("remote", "get-url", "origin"): "git@github.com:toppers/hakoniwa-drone-core.git",
+                    ("branch", "--show-current"): "main",
+                    ("rev-parse", "HEAD"): "same-revision",
+                    ("rev-parse", "origin/main"): "same-revision",
+                    ("status", "--short"): " M config/generated.json",
+                }[arguments]
+
+            with mock.patch.object(recipe, "_run_checked") as run, mock.patch.object(
+                recipe, "_git_output", side_effect=git_output
+            ):
+                evidence = recipe.prepare_drone_workspace(drone_root)
+
+            self.assertEqual(evidence["mode"], "reused")
+            self.assertTrue(evidence["dirty"])
+            self.assertEqual(evidence["dirty_path_count"], 1)
+            self.assertIn(
+                mock.call(["git", "fetch", "origin", "main"], cwd=drone_root),
+                run.call_args_list,
+            )
+
+    def test_prepare_drone_workspace_fast_forwards_stale_main(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            drone_root = Path(temporary) / "hakoniwa-drone-core"
+            (drone_root / ".git").mkdir(parents=True)
+            generator = drone_root / "tools" / "gen_fleet_scale_config.py"
+            generator.parent.mkdir(parents=True)
+            generator.touch()
+            revisions = iter(["old-revision", "new-revision", "new-revision"])
+
+            def git_output(_root, *arguments):
+                if arguments == ("rev-parse", "HEAD"):
+                    return next(revisions)
+                return {
+                    ("remote", "get-url", "origin"): recipe.PUBLIC_DRONE_REPOSITORY,
+                    ("branch", "--show-current"): "main",
+                    ("rev-parse", "origin/main"): "new-revision",
+                    ("status", "--short"): "",
+                }[arguments]
+
+            with mock.patch.object(recipe, "_run_checked") as run, mock.patch.object(
+                recipe, "_git_output", side_effect=git_output
+            ), mock.patch.object(recipe, "_git_is_ancestor", return_value=True):
+                evidence = recipe.prepare_drone_workspace(drone_root)
+
+            self.assertEqual(evidence["mode"], "updated")
+            self.assertEqual(evidence["resolved_revision"], "new-revision")
+            self.assertIn(
+                mock.call(["git", "merge", "--ff-only", "origin/main"], cwd=drone_root),
+                run.call_args_list,
+            )
+
+    def test_prepare_drone_workspace_rejects_unrelated_checkout(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            drone_root = Path(temporary) / "hakoniwa-drone-core"
+            (drone_root / ".git").mkdir(parents=True)
+            with mock.patch.object(
+                recipe,
+                "_git_output",
+                return_value="https://github.com/example/unrelated.git",
+            ), self.assertRaisesRegex(recipe.RecipeError, "unexpected origin"):
+                recipe.prepare_drone_workspace(drone_root)
+
+    def test_linux_mujoco_version_comes_from_drone_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            drone_root = root / "hakoniwa-drone-core"
+            drone_root.mkdir()
+            workspace_version = "9.8.7"
+            (drone_root / "MUJOCO_VERSION.txt").write_text(
+                workspace_version + "\n", encoding="utf-8"
+            )
+            archive_buffer = io.BytesIO()
+            library_content = b"mujoco-runtime"
+            with tarfile.open(fileobj=archive_buffer, mode="w:gz") as archive:
+                info = tarfile.TarInfo(
+                    f"mujoco-{workspace_version}/lib/libmujoco.so.{workspace_version}"
+                )
+                info.size = len(library_content)
+                archive.addfile(info, io.BytesIO(library_content))
+            archive_bytes = archive_buffer.getvalue()
+            digest = hashlib.sha256(archive_bytes).hexdigest()
+            asset = f"mujoco-{workspace_version}-linux-x86_64.tar.gz"
+            checksum = f"{digest}  {asset}\n".encode()
+
+            with mock.patch.object(
+                recipe.platform, "machine", return_value="x86_64"
+            ), mock.patch.object(
+                recipe.urllib.request,
+                "urlopen",
+                side_effect=[io.BytesIO(checksum), io.BytesIO(archive_bytes)],
+            ) as urlopen:
+                evidence = recipe.materialize_mujoco_runtime(
+                    drone_root, "Linux", root / "downloads"
+                )
+
+            self.assertEqual(evidence["version"], workspace_version)
+            self.assertEqual(evidence["asset"], asset)
+            self.assertEqual(evidence["sha256"], digest)
+            self.assertEqual(evidence["link_mode"], "runtime-library-path")
+            self.assertEqual(
+                (
+                    drone_root
+                    / f"vendor/mujoco/lib/libmujoco.so.{workspace_version}"
+                ).read_bytes(),
+                library_content,
+            )
+            self.assertEqual(urlopen.call_count, 2)
+
+    def test_macos_mujoco_runs_workspace_installer_and_linker(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            drone_root = root / "hakoniwa-drone-core"
+            tools = drone_root / "tools"
+            tools.mkdir(parents=True)
+            installer = tools / "install-mujoco-mac.bash"
+            linker = tools / "link-mujoco-mac.bash"
+            installer.touch()
+            linker.touch()
+            (drone_root / "mac").mkdir()
+            workspace_version = "8.7.6"
+            (drone_root / "MUJOCO_VERSION.txt").write_text(
+                workspace_version + "\n", encoding="utf-8"
+            )
+            archive_bytes = b"fixture-dmg"
+            digest = hashlib.sha256(archive_bytes).hexdigest()
+            asset = f"mujoco-{workspace_version}-macos-universal2.dmg"
+            checksum = f"{digest}  {asset}\n".encode()
+
+            def run_checked(command, *, cwd=None):
+                if command[:2] == ["bash", str(installer)]:
+                    library = (
+                        drone_root
+                        / f"vendor/mujoco/lib/libmujoco.{workspace_version}.dylib"
+                    )
+                    library.parent.mkdir(parents=True)
+                    library.write_bytes(b"mujoco-dylib")
+
+            with mock.patch.object(
+                recipe.urllib.request,
+                "urlopen",
+                side_effect=[io.BytesIO(checksum), io.BytesIO(archive_bytes)],
+            ), mock.patch.object(recipe, "_run_checked", side_effect=run_checked) as run:
+                evidence = recipe.materialize_mujoco_runtime(
+                    drone_root, "Darwin", root / "downloads"
+                )
+
+            self.assertEqual(evidence["version"], workspace_version)
+            self.assertEqual(evidence["asset"], asset)
+            self.assertEqual(evidence["link_mode"], "macos-install-name-and-rpath")
+            commands = [call.args[0] for call in run.call_args_list]
+            self.assertTrue(any(command[:2] == ["bash", str(installer)] for command in commands))
+            self.assertTrue(any(command[:2] == ["bash", str(linker)] for command in commands))
+
+    def test_verified_download_reuses_only_matching_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "archive.zip"
+            payload = b"verified-cache"
+            destination.write_bytes(payload)
+            with mock.patch.object(recipe.urllib.request, "urlopen") as urlopen:
+                mode = recipe._verified_download(
+                    "https://example.invalid/archive.zip",
+                    destination,
+                    hashlib.sha256(payload).hexdigest(),
+                )
+            self.assertEqual(mode, "verified-cache")
+            urlopen.assert_not_called()
+
+    def test_prepare_native_rejects_windows(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaisesRegex(recipe.RecipeError, "supports macOS and Linux"):
+                recipe.prepare_native_distribution(
+                    Path(temporary) / "hakoniwa-drone-core", "Windows"
+                )
 
     def test_linux_runtime_resolves_distribution_and_ld_library_path(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

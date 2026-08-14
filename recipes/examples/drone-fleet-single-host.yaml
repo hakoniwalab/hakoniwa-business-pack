@@ -3,7 +3,7 @@ title: Native Single-host Multi-process Hakoniwa Drone Fleet
 recipe_version: 0.1
 
 goal:
-  user_request: 任意数の箱庭ドローンを1台のホスト上で複数のシミュレータプロセスへ分割し、macOS・Linux・Windowsで同じ実験設定から実行したい
+  user_request: 任意数の箱庭ドローンを1台のホスト上で複数のシミュレータプロセスへ分割し、macOS・Linuxで同じ実験設定から実行したい
   description: >
     Run one temporally coordinated Hakoniwa Drone simulation on a single native
     host. An experiment YAML declares the drone count and either an explicit
@@ -21,7 +21,7 @@ feasibility:
   status: feasible
   confidence: high
   rationale:
-    - Drone Core provides arbitrary fleet generation, balanced fleet splitting, native macOS/Linux/Windows binaries, and the shared RPC show runner.
+    - Drone Core provides arbitrary fleet generation, balanced fleet splitting, native macOS/Linux binaries, and the shared RPC show runner.
     - Drone Core supports one built-in Conductor owner with additional local simulator processes joining the same Core domain.
     - Core PRO supports multiple local assets sharing one simulation time and exposes build limits through Foundation Receipts.
     - PDU Python provides the cross-platform Launcher and session-file background lifecycle.
@@ -32,8 +32,7 @@ validation:
   summary: >
     Native macOS validation covers 26 drones in one and two simulator
     processes, visualization and headless modes, cumulative real-time pacing,
-    and a 200-drone/four-process headless run. Linux and Windows remain to be
-    verified.
+    and a 200-drone/four-process headless run. Linux remains to be verified.
   steps:
     - id: experiment_resolution
       status: verified
@@ -57,9 +56,6 @@ validation:
         - With real-time pacing enabled for 26 drones/two processes, simulation elapsed 18.04 sec and aligned wall elapsed 18.044 sec, producing RTF 0.99978.
         - A 200-drone/four-process headless run completed with simulation elapsed 21.52 sec, aligned wall elapsed 23.40 sec, and RTF approximately 0.92 on the tested Mac.
     - id: native_linux_mvp
-      status: not_tested
-      evidence: []
-    - id: native_windows_mvp
       status: not_tested
       evidence: []
 
@@ -100,7 +96,7 @@ target_environment:
       - hakoniwa-pdu-endpoint
       - hakoniwa-pdu-bridge-core
   notes:
-    - The same experiment YAML and Python operator are used on all three operating systems.
+    - The same experiment YAML and Python operator are used on macOS and Linux; Windows is not supported by this Recipe.
     - Platform differences are limited to native executable names and dynamic-library search paths.
     - The single-host Recipe does not install or launch the distributed Hakoniwa Conductor Server/Client package.
 
@@ -391,7 +387,7 @@ connections:
         - Only drone-service-2..N receive --disable-conductor.
       validation_notes:
         - Native macOS E2E completed with 26 drones in one and two processes and with 200 drones in four processes.
-        - Linux and Windows native E2E remain unverified.
+        - Linux native E2E remains unverified; Windows is outside this Recipe's support contract.
   - from: hakoniwa-pdu-python
     to: hakoniwa-drone-core
     interface: api
@@ -489,7 +485,7 @@ artifact_sets:
       - config/pdudef/drone-pdutypes.json
       - config/drone/fleets/services/api-current-service.json
   runtime_artifacts:
-    description: Resolved experiment, capacity requirements, scenario, Launcher, logs, and completion summary.
+    description: Native provenance, resolved experiment, capacity requirements, scenario, Launcher, logs, and completion summary.
     status: partially_verified
     artifacts:
       - config/resolved-experiment.yaml
@@ -497,6 +493,7 @@ artifact_sets:
       - config/scenario/show.json
       - config/launcher.json
       - runtime/launcher-session.json
+      - validation/native-distribution.json
       - validation/execution-summary.json
 
 artifacts:
@@ -519,6 +516,12 @@ artifacts:
     consumer:
       - hakoniwa-pdu-python
     path: work/recipes/drone-fleet-single-host/config/launcher.json
+  - name: native-distribution-provenance
+    kind: file
+    producer: hakoniwa-business-pack
+    consumer:
+      - hakoniwa-business-pack
+    path: work/recipes/drone-fleet-single-host/validation/native-distribution.json
   - name: execution-summary
     kind: file
     producer: hakoniwa-drone-core
@@ -528,7 +531,6 @@ artifacts:
 
 missing_pieces:
   - Execute the same resolved experiment on native Linux.
-  - Verify the native single-host runtime on Windows before restoring the Windows runtime claim.
   - Add experiment matrix expansion, repeated trials, per-run result preservation, and results aggregation.
   - Create the separate multi-host Recipe and host-placement contract for the 1024-drone experiment.
   - Define a machine-verifiable Receipt for the 512-drone Core/Drone/VSP/Foundation binary profile before enabling 201-512 drone experiments.
@@ -540,7 +542,7 @@ implementation_plan:
   - Generate fleet, PDU, service, HAKONIWA formation, and native Launcher artifacts under the Recipe workspace; generate VSP artifacts only when visualization is enabled.
   - Run synchronized takeoff, wait for every drone, form HAKONIWA, and hold through a background Launcher session.
   - Verify completion through execution-summary.json and cleanly terminate the owned session.
-  - Preserve and aggregate per-run measurements after the native Linux and Windows paths are validated.
+  - Preserve and aggregate per-run measurements after the native Linux path is validated.
   - Extend the same contract with experiment matrices and results in a later revision.
 
 acceptance_criteria:
@@ -598,8 +600,8 @@ demo:
     - order: 1
       id: prepare_native
       component: hakoniwa-drone-core
-      action: Explicitly clone the official public Drone Core source when missing and download the pinned v4.0.0 native distribution for this operating system.
-      description: Verify the official release SHA-256, extract the native Drone service and visual-state publisher under the sibling hakoniwa-drone-core checkout, and rerun this command safely when the binaries already exist.
+      action: Clone or safely fast-forward the official Drone Core main workspace, then materialize the pinned v4.0.0 native distribution and its required MuJoCo runtime on macOS or Linux.
+      description: Record the resolved Drone Core main revision, verify and extract the official native archive even when unproven binaries already exist, read the MuJoCo version from hakoniwa-drone-core/MUJOCO_VERSION.txt, install that runtime, apply the required macOS link adjustment, and preserve provenance in validation/native-distribution.json.
       command: python tools/recipe/drone_fleet_single_host.py prepare-native
       agency: agent_action
     - order: 2
