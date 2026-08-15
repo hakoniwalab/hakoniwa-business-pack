@@ -71,12 +71,6 @@ jobs:
           brew install boost cmake
           boost_prefix="$(brew --prefix boost)"
           echo "CMAKE_PREFIX_PATH=${boost_prefix}${CMAKE_PREFIX_PATH:+:${CMAKE_PREFIX_PATH}}" >> "$GITHUB_ENV"
-          # The hosted macOS image exposes an ambient vcpkg installation. It is
-          # not part of this Recipe's declared host contract, so exclude it from
-          # the clean native/Homebrew prerequisite path. Endpoint #70 tracks the
-          # reusable component-level auto-detection problem.
-          echo "VCPKG_ROOT=" >> "$GITHUB_ENV"
-          echo "VCPKG_INSTALLATION_ROOT=" >> "$GITHUB_ENV"
           echo "Boost prefix: ${boost_prefix}"
 
       - name: Record clean runner boundary
