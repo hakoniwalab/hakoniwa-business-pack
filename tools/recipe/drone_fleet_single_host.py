@@ -56,6 +56,7 @@ GENERAL_USER_MAX_DRONES = 200
 PUBLIC_DRONE_RELEASE = "v4.0.0"
 PUBLIC_DRONE_REPOSITORY = "https://github.com/toppers/hakoniwa-drone-core.git"
 PUBLIC_DRONE_REPOSITORY_ID = "toppers/hakoniwa-drone-core"
+NATIVE_RUNTIME_REQUIREMENTS = "NATIVE_RUNTIME_REQUIREMENTS.yaml"
 THREEJS_VIEWER_REPOSITORY = "https://github.com/hakoniwalab/hakoniwa-threejs-drone.git"
 PUBLIC_DRONE_ARCHIVES = {
     "Darwin": (
@@ -340,8 +341,8 @@ def _mujoco_asset(version: str, system_name: str, machine: str) -> str:
     )
 
 
-def _read_mujoco_version(drone_root: Path) -> str:
-    version_file = drone_root / "MUJOCO_VERSION.txt"
+def _read_mujoco_version(drone_root: Path, relative_path: str = "MUJOCO_VERSION.txt") -> str:
+    version_file = _contract_path(drone_root, relative_path, "MuJoCo version_file")
     try:
         version = version_file.read_text(encoding="utf-8").strip()
     except OSError as exc:
@@ -349,6 +350,133 @@ def _read_mujoco_version(drone_root: Path) -> str:
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
         raise RecipeError(f"invalid MuJoCo version in {version_file}: {version!r}")
     return version
+
+
+def _contract_mapping(value: Any, label: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise RecipeError(f"native runtime contract {label} must be a mapping")
+    return value
+
+
+def _contract_path(root: Path, value: Any, label: str) -> Path:
+    if not isinstance(value, str) or not value.strip():
+        raise RecipeError(f"native runtime contract {label} must be a relative path")
+    relative = Path(value)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise RecipeError(f"native runtime contract {label} is unsafe: {value}")
+    return root / relative
+
+
+def load_native_runtime_requirements(
+    drone_root: Path, system_name: str
+) -> dict[str, Any]:
+    contract_path = drone_root / NATIVE_RUNTIME_REQUIREMENTS
+    contract = load_simple_yaml(contract_path)
+    if contract.get("schema_version") != 1:
+        raise RecipeError(
+            f"unsupported native runtime contract schema in {contract_path}: "
+            f"{contract.get('schema_version')!r}"
+        )
+
+    distribution = _contract_mapping(
+        contract.get("native_distribution"), "native_distribution"
+    )
+    release = distribution.get("release")
+    if release != PUBLIC_DRONE_RELEASE:
+        raise RecipeError(
+            "native runtime contract targets an unexpected distribution: "
+            f"expected {PUBLIC_DRONE_RELEASE}, got {release!r}"
+        )
+
+    managed = _contract_mapping(contract.get("managed_runtimes"), "managed_runtimes")
+    mujoco = _contract_mapping(managed.get("mujoco"), "managed_runtimes.mujoco")
+    if mujoco.get("required") is not True:
+        raise RecipeError("native runtime contract must require MuJoCo")
+    version_file_value = mujoco.get("version_file")
+    version_file = _contract_path(
+        drone_root, version_file_value, "managed_runtimes.mujoco.version_file"
+    )
+    version = _read_mujoco_version(drone_root, str(version_file.relative_to(drone_root)))
+    mujoco_platforms = _contract_mapping(
+        mujoco.get("platforms"), "managed_runtimes.mujoco.platforms"
+    )
+    mujoco_platform = _contract_mapping(
+        mujoco_platforms.get(system_name),
+        f"managed_runtimes.mujoco.platforms.{system_name}",
+    )
+    library_template = mujoco_platform.get("library")
+    if not isinstance(library_template, str) or "{version}" not in library_template:
+        raise RecipeError(
+            "native runtime contract MuJoCo library must contain {version}: "
+            f"{library_template!r}"
+        )
+    mujoco_library = _contract_path(
+        drone_root,
+        library_template.replace("{version}", version),
+        f"managed_runtimes.mujoco.platforms.{system_name}.library",
+    )
+
+    platforms = _contract_mapping(contract.get("platforms"), "platforms")
+    platform_contract = _contract_mapping(
+        platforms.get(system_name), f"platforms.{system_name}"
+    )
+    binaries = _contract_mapping(
+        platform_contract.get("binaries"), f"platforms.{system_name}.binaries"
+    )
+    resolved_binaries = {
+        role: _contract_path(
+            drone_root, relative, f"platforms.{system_name}.binaries.{role}"
+        )
+        for role, relative in binaries.items()
+    }
+    for required_role in ("drone_service", "visual_state_publisher"):
+        if required_role not in resolved_binaries:
+            raise RecipeError(
+                f"native runtime contract is missing binary role: {required_role}"
+            )
+    shared_libraries = platform_contract.get("shared_libraries")
+    if not isinstance(shared_libraries, list) or not all(
+        isinstance(value, str) and value for value in shared_libraries
+    ):
+        raise RecipeError(
+            f"native runtime contract platforms.{system_name}.shared_libraries "
+            "must be a list of library names"
+        )
+    return {
+        "path": contract_path,
+        "release": release,
+        "mujoco_version_file": version_file,
+        "mujoco_version": version,
+        "mujoco_library": mujoco_library,
+        "binaries": resolved_binaries,
+        "shared_libraries": tuple(shared_libraries),
+    }
+
+
+def inspect_linux_dynamic_dependencies(
+    binary: Path, environment: dict[str, str]
+) -> tuple[str, ...]:
+    ldd = shutil.which("ldd", path=environment.get("PATH"))
+    if ldd is None:
+        raise RecipeError("cannot inspect native runtime dependencies: ldd not found")
+    probe = subprocess.run(
+        [ldd, str(binary)],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=environment,
+    )
+    output = "\n".join(part for part in (probe.stdout, probe.stderr) if part).strip()
+    if probe.returncode != 0:
+        raise RecipeError(
+            f"ldd failed for {binary} with rc={probe.returncode}: {output}"
+        )
+    missing: list[str] = []
+    for line in output.splitlines():
+        match = re.match(r"^\s*(\S+)\s+=>\s+not found\s*$", line)
+        if match:
+            missing.append(match.group(1))
+    return tuple(dict.fromkeys(missing))
 
 
 def _read_checksum(path: Path, asset_name: str) -> str:
@@ -392,7 +520,8 @@ def _install_mujoco_linux(archive: Path, drone_root: Path, version: str) -> Path
 def materialize_mujoco_runtime(
     drone_root: Path, system_name: str, cache_root: Path
 ) -> dict[str, Any]:
-    version = _read_mujoco_version(drone_root)
+    requirements = load_native_runtime_requirements(drone_root, system_name)
+    version = requirements["mujoco_version"]
     asset_name = _mujoco_asset(version, system_name, platform.machine())
     release_url = f"{MUJOCO_RELEASE_BASE}/{version}"
     checksum_url = f"{release_url}/{asset_name}.sha256"
@@ -451,7 +580,8 @@ def materialize_mujoco_runtime(
 
     return {
         "mode": mode,
-        "version_authority": str(drone_root / "MUJOCO_VERSION.txt"),
+        "requirements": str(requirements["path"]),
+        "version_authority": str(requirements["mujoco_version_file"]),
         "version": version,
         "asset": asset_name,
         "sha256": expected_sha256,
@@ -616,9 +746,9 @@ def _parse_scalar(value: str) -> Any:
 
 
 def load_simple_yaml(path: Path) -> dict[str, Any]:
-    """Load the dependency-free YAML subset used by the experiment files."""
+    """Load the dependency-free YAML subset used by Recipe-owned contracts."""
     if not path.is_file():
-        raise RecipeError(f"experiment YAML not found: {path}")
+        raise RecipeError(f"YAML file not found: {path}")
     root: dict[str, Any] = {}
     stack: list[tuple[int, dict[str, Any]]] = [(-1, root)]
     for line_number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
@@ -630,7 +760,7 @@ def load_simple_yaml(path: Path) -> dict[str, Any]:
         text = raw.strip()
         if text.startswith("-") or ":" not in text:
             raise RecipeError(
-                f"{path}:{line_number}: experiment YAML supports mappings, scalars, and inline lists only"
+                f"{path}:{line_number}: YAML supports mappings, scalars, and inline lists only"
             )
         key, value = text.split(":", 1)
         key = key.strip()
@@ -1894,12 +2024,20 @@ def session_file(paths) -> Path:
 
 
 def runtime_environment(paths, drone_root: Path, system_name: str) -> dict[str, str]:
-    env = os.environ.copy()
+    env = native_library_environment(paths, drone_root, system_name)
     python = resolve_foundation_python(paths, system_name)
     env["HAKO_CONFIG_PATH"] = str(paths.foundation_config / "cpp_core_config.json")
     env["PATH"] = os.pathsep.join(
         [str(python.parent), str(paths.install_prefix / "bin"), env.get("PATH", "")]
     )
+
+    return env
+
+
+def native_library_environment(
+    paths, drone_root: Path, system_name: str
+) -> dict[str, str]:
+    env = os.environ.copy()
     key = "PATH" if system_name == "Windows" else (
         "DYLD_LIBRARY_PATH" if system_name == "Darwin" else "LD_LIBRARY_PATH"
     )
@@ -1999,15 +2137,42 @@ def doctor(
     foundation.print_inspection(inspection, False)
     system_name = platform.system()
     checks: list[tuple[str, bool, str]] = []
+    runtime_requirements: dict[str, Any] | None = None
+    try:
+        runtime_requirements = load_native_runtime_requirements(
+            drone_root, system_name
+        )
+        checks.append(
+            (
+                "native runtime contract",
+                True,
+                f"{runtime_requirements['path']} "
+                f"(distribution {runtime_requirements['release']})",
+            )
+        )
+        mujoco_library = runtime_requirements["mujoco_library"]
+        checks.append(
+            (
+                f"MuJoCo {runtime_requirements['mujoco_version']} runtime",
+                mujoco_library.is_file(),
+                str(mujoco_library),
+            )
+        )
+    except RecipeError as exc:
+        checks.append(("native runtime contract", False, str(exc)))
+
+    native_binaries: list[tuple[str, Path]] = []
     try:
         drone_binary = resolve_drone_binary(drone_root, system_name)
         checks.append(("native drone service", True, str(drone_binary)))
+        native_binaries.append(("native drone service", drone_binary))
     except RecipeError as exc:
         checks.append(("native drone service", False, str(exc)))
     if experiment.visualization:
         try:
             publisher = resolve_visual_state_publisher(drone_root, system_name)
             checks.append(("visual-state publisher", True, str(publisher)))
+            native_binaries.append(("visual-state publisher", publisher))
         except RecipeError as exc:
             checks.append(("visual-state publisher", False, str(exc)))
         bridge = web_bridge_path(paths, system_name)
@@ -2028,6 +2193,50 @@ def doctor(
                 + f"; run '{operator_command('prepare-viewer')}'",
             )
         )
+    if system_name == "Linux":
+        dependency_environment = native_library_environment(
+            paths, drone_root, system_name
+        )
+        declared_libraries = set(
+            runtime_requirements["shared_libraries"]
+            if runtime_requirements is not None
+            else ()
+        )
+        for binary_label, binary in native_binaries:
+            try:
+                missing_libraries = inspect_linux_dynamic_dependencies(
+                    binary, dependency_environment
+                )
+                if missing_libraries:
+                    details = []
+                    for library in missing_libraries:
+                        declaration = (
+                            "declared by native runtime contract"
+                            if library in declared_libraries
+                            else "not declared by native runtime contract"
+                        )
+                        details.append(
+                            f"{library} ({declaration}; required by {binary})"
+                        )
+                    checks.append(
+                        (
+                            f"{binary_label} shared libraries",
+                            False,
+                            "missing: " + ", ".join(details),
+                        )
+                    )
+                else:
+                    checks.append(
+                        (
+                            f"{binary_label} shared libraries",
+                            True,
+                            f"all dependencies resolved for {binary}",
+                        )
+                    )
+            except RecipeError as exc:
+                checks.append(
+                    (f"{binary_label} shared libraries", False, str(exc))
+                )
     for port in ((8000, 8765, 54111) if experiment.visualization else (54111,)):
         available = _port_available(port)
         if available is None:

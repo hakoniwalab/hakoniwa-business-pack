@@ -156,6 +156,12 @@ dependencies:
     - name: C/C++ toolchain
       type: tool
       notes: Required for native development builds.
+    - name: MuJoCo runtime
+      type: runtime
+      notes: Required by the native Drone distribution; the exact version is resolved from MUJOCO_VERSION.txt through NATIVE_RUNTIME_REQUIREMENTS.yaml instead of being duplicated by a consuming Recipe.
+    - name: Native platform shared libraries
+      type: library
+      notes: OS-specific runtime libraries required by the distributed binaries are declared in NATIVE_RUNTIME_REQUIREMENTS.yaml; the v4.0.0 Linux contract includes libOpenGL.so.0.
   optional:
     - name: hakoniwa-core-pro
       type: repository
@@ -195,6 +201,12 @@ connects_to:
     interface: service and RPC control
     notes: Supports service-oriented drone control recipes.
 data_contracts:
+  - name: Native runtime requirements
+    description: Declares the target native distribution release, MuJoCo version authority and library layout, OS-specific executable roles, and known host shared-library requirements for consuming Recipes and doctors.
+    source:
+      - repository: toppers/hakoniwa-drone-core
+        path: NATIVE_RUNTIME_REQUIREMENTS.yaml
+        revision: 7f20da4
   - name: Drone and fleet configuration contract
     description: Configuration defines aircraft models, controllers, services, and multi-drone placement.
     source:

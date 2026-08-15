@@ -555,6 +555,23 @@ Recipe configure
 
 この二つを混同しません。
 
+実験profileによって必要Capabilityが変わるRecipeは、Foundation構築前にRecipe固有
+operatorが`foundation-requirements.yaml`を生成できます。その場合もFoundationを直接
+構築せず、静的Recipeと生成要求を共通orchestratorへ一緒に渡します。
+
+```bash
+python tools/recipe.py plan --recipe <recipe.yaml> \
+  --foundation-requirements <generated-foundation-requirements.yaml>
+python tools/recipe.py configure --recipe <recipe.yaml> \
+  --foundation-requirements <generated-foundation-requirements.yaml>
+```
+
+静的Recipeはcomposition、Recipe-local source、runtime materializationの正として残り、
+生成fileは今回のFoundation要求だけを置き換えます。`doctor`、`plan`、`configure`、guide
+statusは同じ生成要求を使用します。これにより、例えばheadless profileではBridgeを
+要求せず、visualization profileではBridgeを要求する一方、source cloneとFoundation
+buildの入口は`recipe.py`へ統一したまま維持できます。
+
 例えば `web_bridge_fleets_config` の実ファイルは、Recipeが定義する接続構成なのでRecipe workspaceへ生成します。一方、その設定形式を読み取れることはBridge componentのCapabilityとしてFoundationへ要求します。
 
 Core config、Core mmap path、Core build limitsはRecipe固有configureに含めません。Recipeは必要なCore容量をFoundation requirementsとして宣言し、Foundation resolverが現在の共通Core環境で充足できるかを評価します。

@@ -95,6 +95,7 @@ configure_contract:
     - Never overwrite an existing path.
     - Do not clone into a missing path selected through an override environment variable.
     - Execute the Foundation build plan through the internal Foundation engine.
+    - Use an explicitly selected generated Foundation requirements file consistently for doctor, plan, configure, and guide status.
     - Install declared Recipe Python requirements into Foundation Python.
     - Atomically generate environment.json, POSIX and PowerShell activation, and the declared Launcher file.
 

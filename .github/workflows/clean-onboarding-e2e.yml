@@ -59,7 +59,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake libboost-dev
+          sudo apt-get install -y build-essential cmake libboost-dev libopengl0
 
       - name: Install declared host prerequisites (macOS)
         if: runner.os == 'macOS'
@@ -109,19 +109,6 @@ jobs:
       - name: Inspect Workspace contract before materialization
         run: python tools/workspace.py env --json
 
-      - name: Plan Recipe from the clean Workspace
-        run: >-
-          python tools/workspace.py run --
-          python tools/recipe.py plan --recipe ${{ env.RECIPE }}
-
-      - name: Materialize Recipe Foundation through the supported entry point
-        run: >-
-          python tools/workspace.py run --
-          python tools/recipe.py configure --recipe ${{ env.RECIPE }}
-
-      - name: Validate Foundation-owned Workspace runtime
-        run: python tools/workspace.py doctor
-
       - name: Materialize verified native Drone runtime
         run: >-
           python tools/workspace.py run --
@@ -133,6 +120,23 @@ jobs:
           python tools/workspace.py run --
           python tools/recipe/drone_fleet_single_host.py configure
           --experiment ${{ env.EXPERIMENT }}
+
+      - name: Plan Recipe from generated Foundation requirements
+        run: >-
+          python tools/workspace.py run --
+          python tools/recipe.py plan --recipe ${{ env.RECIPE }}
+          --foundation-requirements
+          ${{ env.RECIPE_WORK }}/config/foundation-requirements.yaml
+
+      - name: Materialize Recipe Foundation through the supported entry point
+        run: >-
+          python tools/workspace.py run --
+          python tools/recipe.py configure --recipe ${{ env.RECIPE }}
+          --foundation-requirements
+          ${{ env.RECIPE_WORK }}/config/foundation-requirements.yaml
+
+      - name: Validate Foundation-owned Workspace runtime
+        run: python tools/workspace.py doctor
 
       - name: Validate representative Recipe readiness
         run: >-
@@ -238,11 +242,11 @@ jobs:
             hakoniwa-core-pro \
             hakoniwa-pdu-python \
             hakoniwa-pdu-endpoint \
-            hakoniwa-pdu-bridge-core \
             hakoniwa-drone-core
           do
             test -d "../${repository}/.git"
           done
+          test ! -e ../hakoniwa-pdu-bridge-core
 
       - name: Upload onboarding evidence
         if: always()
