@@ -2,15 +2,22 @@
 
 require "minitest/autorun"
 require "yaml"
+require "date"
 require_relative "native_runtime_validation"
+
+def load_yaml_file(path)
+  YAML.load_file(path, permitted_classes: [Date])
+rescue ArgumentError
+  YAML.load_file(path)
+end
 
 class NativeRuntimeValidationTest < Minitest::Test
   ROOT = File.expand_path("..", __dir__)
-  SCHEMA = YAML.load_file(File.join(__dir__, "native-runtime.yaml"))
-  CATALOG_ENTRY = YAML.load_file(
+  SCHEMA = load_yaml_file(File.join(__dir__, "native-runtime.yaml"))
+  CATALOG_ENTRY = load_yaml_file(
     File.join(ROOT, "catalog", "components", "hakoniwa-drone-core.yaml")
   )
-  RECIPE = YAML.load_file(
+  RECIPE = load_yaml_file(
     File.join(ROOT, "recipes", "examples", "drone-fleet-single-host.yaml")
   )
 
