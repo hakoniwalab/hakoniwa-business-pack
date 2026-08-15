@@ -1079,6 +1079,13 @@ Foundation doctorは、原則として検出と説明を担当し、暗黙のdow
 
 また、clean環境のE2EでFoundation build、install、doctor、代表Recipeのheadless smokeを継続確認します。個別Componentや外部配布物のsource provenanceは、それぞれの取得・再利用境界で明示します。
 
+外部配布されるnative binaryの実行時依存は、Foundation build prerequisiteとは
+分離し、`schemas/native-runtime.yaml`の共通契約で扱います。Catalogはversion付き
+profile、managed runtime、binary role、Platform別libraryを宣言し、Recipeはprofileと
+利用roleだけを選択します。Recipe doctorはOS固有commandを持たず、共通validatorへ
+委譲します。ELF、Mach-O、将来のPE adapterだけが依存libraryの列挙・解決方法を所有し、
+共通層は宣言済み不足と未宣言不足を同じ形式で集約します。
+
 ## 18. 実装履歴の扱い
 
 Foundation root、schema、Receipt生成、共通Python venv、各Componentのlocal install対応など、初期設計時に列挙していた実装項目は完了しています。本ドキュメントは未実装計画の台帳ではなく、現行の設計契約を説明する文書として維持します。

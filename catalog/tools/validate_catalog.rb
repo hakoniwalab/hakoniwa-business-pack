@@ -4,6 +4,7 @@
 require "set"
 require "yaml"
 require "date"
+require_relative "../../schemas/native_runtime_validation"
 
 
 def load_yaml_file(path)
@@ -17,6 +18,7 @@ end
 ROOT = File.expand_path("..", __dir__)
 COMPONENTS_DIR = File.join(ROOT, "components")
 SCHEMA_PATH = File.join(ROOT, "schema.yaml")
+NATIVE_RUNTIME_SCHEMA_PATH = File.expand_path("../../schemas/native-runtime.yaml", __dir__)
 
 REQUIRED_FIELDS = %w[
   id
@@ -53,6 +55,7 @@ def error(errors, path, message)
 end
 
 schema = load_yaml_file(SCHEMA_PATH).fetch("controlled_fields")
+native_runtime_schema = load_yaml_file(NATIVE_RUNTIME_SCHEMA_PATH)
 paths = Dir[File.join(COMPONENTS_DIR, "*.yaml")].sort
 entries = paths.to_h { |path| [path, load_yaml_file(path)] }
 ids = entries.values.map { |entry| entry["id"] }
@@ -204,6 +207,12 @@ entries.each do |path, data|
       error(errors, label, "invalid #{check_label}.output: #{output.inspect}")
     end
   end
+
+  errors.concat(
+    NativeRuntimeValidation.validate_catalog(
+      data["native_runtime"], native_runtime_schema, label: label
+    )
+  )
 end
 
 warnings.each { |message| warn "warning: #{message}" }

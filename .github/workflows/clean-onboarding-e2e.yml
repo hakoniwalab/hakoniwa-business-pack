@@ -59,7 +59,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake libboost-dev libopengl0
+          sudo apt-get install -y build-essential cmake libboost-dev libglfw3 libopengl0
 
       - name: Install declared host prerequisites (macOS)
         if: runner.os == 'macOS'
@@ -68,7 +68,7 @@ jobs:
           set -euo pipefail
           echo "Runner ambient VCPKG_ROOT=${VCPKG_ROOT:-}"
           echo "Runner ambient VCPKG_INSTALLATION_ROOT=${VCPKG_INSTALLATION_ROOT:-}"
-          brew install boost cmake
+          brew install boost cmake glfw
           boost_prefix="$(brew --prefix boost)"
           echo "CMAKE_PREFIX_PATH=${boost_prefix}${CMAKE_PREFIX_PATH:+:${CMAKE_PREFIX_PATH}}" >> "$GITHUB_ENV"
           echo "Boost prefix: ${boost_prefix}"

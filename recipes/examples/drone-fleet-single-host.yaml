@@ -130,6 +130,14 @@ execution_environment:
     - Behavioral completion is independently validated through the generated execution summary.
     - Foundation build limits are generated from the selected experiment before startup.
 
+native_runtime_requirements:
+  schema_version: 1
+  components:
+    hakoniwa-drone-core:
+      profile: public-v4.0.0
+      required_roles: ["drone_service"]
+      optional_roles: ["visual_state_publisher"]
+
 agency_boundary:
   agent_actions:
     - id: generate_experiment_runtime

@@ -70,6 +70,8 @@ class RecipeGuideTest(unittest.TestCase):
             "doctor-mac.bash",
             "doctor.bash",
             "foundation.py",
+            "native_runtime.py",
+            "native_runtime_platforms.py",
             "recipe.py",
             "recipe_portal.py",
             "test_foundation.py",

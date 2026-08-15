@@ -76,46 +76,48 @@ results:
         )
         return path
 
-    def _native_contract(
+    def _mujoco_version(
         self,
         drone_root: Path,
         *,
         mujoco_version: str = "3.9.0",
-        release: str = recipe.PUBLIC_DRONE_RELEASE,
     ) -> Path:
         drone_root.mkdir(parents=True, exist_ok=True)
-        (drone_root / "MUJOCO_VERSION.txt").write_text(
+        version_file = drone_root / "MUJOCO_VERSION.txt"
+        version_file.write_text(
             mujoco_version + "\n", encoding="utf-8"
         )
-        contract = drone_root / recipe.NATIVE_RUNTIME_REQUIREMENTS
-        contract.write_text(
-            f"""schema_version: 1
-native_distribution:
-  release: {release}
-managed_runtimes:
-  mujoco:
-    required: true
-    version_file: MUJOCO_VERSION.txt
+        (drone_root / "NATIVE_RUNTIME_REQUIREMENTS.yaml").write_text(
+            """schema_version: 1
+profiles:
+  public-v4.0.0:
+    distribution_release: v4.0.0
+    managed_runtimes:
+      mujoco:
+        required: true
+        version_file: MUJOCO_VERSION.txt
+        platforms:
+          linux:
+            library: vendor/mujoco/lib/libmujoco.so.{version}
+          macos:
+            library: vendor/mujoco/lib/libmujoco.{version}.dylib
     platforms:
-      Linux:
-        library: vendor/mujoco/lib/libmujoco.so.{{version}}
-      Darwin:
-        library: vendor/mujoco/lib/libmujoco.{{version}}.dylib
-platforms:
-  Linux:
-    binaries:
-      drone_service: lnx/linux-main_hako_drone_service
-      visual_state_publisher: lnx/linux-drone_visual_state_publisher
-    shared_libraries: [\"libOpenGL.so.0\"]
-  Darwin:
-    binaries:
-      drone_service: mac/mac-main_hako_drone_service
-      visual_state_publisher: mac/mac-drone_visual_state_publisher
-    shared_libraries: []
+      linux:
+        dependency_inspector: elf
+        binary_roles:
+          drone_service: lnx/linux-main_hako_drone_service
+          visual_state_publisher: lnx/linux-drone_visual_state_publisher
+        required_libraries: [\"libOpenGL.so.0\", \"libglfw.so.3\"]
+      macos:
+        dependency_inspector: macho
+        binary_roles:
+          drone_service: mac/mac-main_hako_drone_service
+          visual_state_publisher: mac/mac-drone_visual_state_publisher
+        required_libraries: [\"libglfw.3.dylib\"]
 """,
             encoding="utf-8",
         )
-        return contract
+        return version_file
 
     def test_auto_process_count_and_build_limits(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -492,7 +494,7 @@ platforms:
             root = Path(temporary)
             drone_root = root / "hakoniwa-drone-core"
             workspace_version = "9.8.7"
-            self._native_contract(drone_root, mujoco_version=workspace_version)
+            self._mujoco_version(drone_root, mujoco_version=workspace_version)
             archive_buffer = io.BytesIO()
             library_content = b"mujoco-runtime"
             with tarfile.open(fileobj=archive_buffer, mode="w:gz") as archive:
@@ -530,73 +532,6 @@ platforms:
             )
             self.assertEqual(urlopen.call_count, 2)
 
-    def test_native_runtime_contract_resolves_release_mujoco_and_linux_libraries(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            drone_root = Path(temporary) / "hakoniwa-drone-core"
-            contract_path = self._native_contract(
-                drone_root, mujoco_version="7.6.5"
-            )
-
-            requirements = recipe.load_native_runtime_requirements(
-                drone_root, "Linux"
-            )
-
-            self.assertEqual(requirements["path"], contract_path)
-            self.assertEqual(requirements["release"], recipe.PUBLIC_DRONE_RELEASE)
-            self.assertEqual(requirements["mujoco_version"], "7.6.5")
-            self.assertEqual(
-                requirements["mujoco_library"],
-                drone_root / "vendor/mujoco/lib/libmujoco.so.7.6.5",
-            )
-            self.assertEqual(requirements["shared_libraries"], ("libOpenGL.so.0",))
-
-    def test_native_runtime_contract_rejects_distribution_mismatch(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            drone_root = Path(temporary) / "hakoniwa-drone-core"
-            self._native_contract(drone_root, release="v9.9.9")
-
-            with self.assertRaisesRegex(
-                recipe.RecipeError, "expected v4.0.0, got 'v9.9.9'"
-            ):
-                recipe.load_native_runtime_requirements(drone_root, "Linux")
-
-    def test_linux_dynamic_dependency_probe_reports_unresolved_sonames(self) -> None:
-        completed = recipe.subprocess.CompletedProcess(
-            args=["/usr/bin/ldd", "/tmp/drone"],
-            returncode=0,
-            stdout=(
-                "libmujoco.so.3.9.0 => /tmp/libmujoco.so.3.9.0 (0x1)\n"
-                "libOpenGL.so.0 => not found\n"
-                "libanother.so.1 => not found\n"
-            ),
-            stderr="",
-        )
-        with mock.patch.object(
-            recipe.shutil, "which", return_value="/usr/bin/ldd"
-        ), mock.patch.object(recipe.subprocess, "run", return_value=completed) as run:
-            missing = recipe.inspect_linux_dynamic_dependencies(
-                Path("/tmp/drone"), {"PATH": "/usr/bin", "LD_LIBRARY_PATH": "/tmp"}
-            )
-
-        self.assertEqual(missing, ("libOpenGL.so.0", "libanother.so.1"))
-        self.assertEqual(run.call_args.kwargs["env"]["LD_LIBRARY_PATH"], "/tmp")
-
-    def test_linux_dynamic_dependency_probe_passes_complete_closure(self) -> None:
-        completed = recipe.subprocess.CompletedProcess(
-            args=["/usr/bin/ldd", "/tmp/drone"],
-            returncode=0,
-            stdout="libOpenGL.so.0 => /usr/lib/libOpenGL.so.0 (0x1)\n",
-            stderr="",
-        )
-        with mock.patch.object(
-            recipe.shutil, "which", return_value="/usr/bin/ldd"
-        ), mock.patch.object(recipe.subprocess, "run", return_value=completed):
-            missing = recipe.inspect_linux_dynamic_dependencies(
-                Path("/tmp/drone"), {"PATH": "/usr/bin"}
-            )
-
-        self.assertEqual(missing, ())
-
     def test_doctor_reports_missing_declared_linux_library_before_start(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -610,11 +545,15 @@ platforms:
             binary = root / "drone/lnx/linux-main_hako_drone_service"
             binary.parent.mkdir(parents=True)
             binary.touch()
-            mujoco = root / "drone/vendor/mujoco/lib/libmujoco.so.3.9.0"
-            mujoco.parent.mkdir(parents=True)
-            mujoco.touch()
-            contract = root / "drone/NATIVE_RUNTIME_REQUIREMENTS.yaml"
             output = io.StringIO()
+            native_runtime = recipe.load_native_runtime_module()
+            native_checks = (
+                native_runtime.RuntimeCheck(
+                    "drone service shared libraries",
+                    False,
+                    f"missing: libOpenGL.so.0 (declared by native runtime contract; required by {binary})",
+                ),
+            )
 
             foundation_api = mock.Mock()
             foundation_api.inspect_foundation.return_value = {"status": "SATISFIED"}
@@ -625,21 +564,11 @@ platforms:
             ), mock.patch.object(
                 recipe.platform, "system", return_value="Linux"
             ), mock.patch.object(
-                recipe,
-                "load_native_runtime_requirements",
-                return_value={
-                    "path": contract,
-                    "release": recipe.PUBLIC_DRONE_RELEASE,
-                    "mujoco_version": "3.9.0",
-                    "mujoco_library": mujoco,
-                    "shared_libraries": ("libOpenGL.so.0",),
-                },
+                recipe, "load_native_runtime_module", return_value=native_runtime
             ), mock.patch.object(
-                recipe, "resolve_drone_binary", return_value=binary
-            ), mock.patch.object(
-                recipe,
-                "inspect_linux_dynamic_dependencies",
-                return_value=("libOpenGL.so.0",),
+                native_runtime,
+                "validate_requirement",
+                return_value=(mock.Mock(), native_checks),
             ), mock.patch.object(
                 recipe, "_port_available", return_value=True
             ), mock.patch.object(
@@ -653,7 +582,7 @@ platforms:
 
             self.assertEqual(result, 1)
             diagnostic = output.getvalue()
-            self.assertIn("[NG] native drone service shared libraries", diagnostic)
+            self.assertIn("[NG] drone service shared libraries", diagnostic)
             self.assertIn("libOpenGL.so.0", diagnostic)
             self.assertIn("declared by native runtime contract", diagnostic)
             self.assertIn(f"required by {binary}", diagnostic)
@@ -670,7 +599,7 @@ platforms:
             linker.touch()
             (drone_root / "mac").mkdir()
             workspace_version = "8.7.6"
-            self._native_contract(drone_root, mujoco_version=workspace_version)
+            self._mujoco_version(drone_root, mujoco_version=workspace_version)
             archive_bytes = b"fixture-dmg"
             digest = hashlib.sha256(archive_bytes).hexdigest()
             asset = f"mujoco-{workspace_version}-macos-universal2.dmg"

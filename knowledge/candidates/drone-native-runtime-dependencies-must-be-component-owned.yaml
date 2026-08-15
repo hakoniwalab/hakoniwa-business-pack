@@ -13,7 +13,8 @@ summary: >
   Drone Core binary. Drone Core should publish a versioned, machine-readable
   native runtime contract, while the Recipe doctor verifies that contract and
   inspects the actual active binaries for unresolved dynamic libraries before
-  launch.
+  launch. Catalog declarations and Recipe selections should conform to one shared
+  schema; only dependency discovery and resolution belong to OS-specific adapters.
 
 observation:
   context: >
@@ -26,6 +27,8 @@ observation:
     - MuJoCo is also a required managed runtime of the distributed Drone binaries, with its version already owned by hakoniwa-drone-core/MUJOCO_VERSION.txt.
     - The component owner should declare the native distribution release, managed runtimes, active binaries, and known host library requirements.
     - Linux ldd inspection remains necessary as a best-effort guard against newly introduced or undeclared binary dependencies.
+    - After libOpenGL.so.0 was installed, that inspection exposed libglfw.so.3 as a second Linux dependency that the initial contract had omitted.
+    - The clean macOS E2E independently found an unresolved absolute Homebrew GLFW install name; Mach-O inspection must therefore provide the same pre-launch guard as ELF inspection.
 
 sources:
   repositories:
@@ -42,6 +45,10 @@ sources:
     - description: >
         Ubuntu clean onboarding reached Recipe startup, where
         linux-main_hako_drone_service failed to load libOpenGL.so.0.
+    - description: >
+        macOS clean onboarding reached Recipe startup, where
+        mac-main_hako_drone_service failed to load libglfw.3.dylib from an absent
+        Homebrew path.
   expert_input:
     - source: user
       statement: >
@@ -56,9 +63,9 @@ validation:
   status: partially_verified
   required:
     - Re-run the clean Ubuntu onboarding E2E and confirm doctor passes when libOpenGL.so.0 is available.
-    - Reproduce the missing-library condition and confirm doctor fails before start with the SONAME and requiring binary.
+    - Re-run the clean macOS onboarding E2E and confirm doctor passes when GLFW is available.
   notes:
-    - Unit tests cover contract parsing, distribution mismatch, MuJoCo version resolution, and ldd missing-library parsing.
+    - Unit tests cover shared Catalog/Recipe schema validation, Catalog/source-contract drift, MuJoCo version resolution, ELF missing-library parsing, and Mach-O missing absolute install names.
 
 tracking:
   implementation_status: in_progress
@@ -83,11 +90,12 @@ promotion_targets:
       mode: detect-and-suggest-remediation
       notes:
         - Report missing SONAMEs and their requiring binaries without hard-coding an OS package manager command.
+        - Select an OS adapter in shared tooling; keep Recipe orchestration independent of ldd and otool details.
 
 promotion_rationale:
   - The dependency list is a component-owned interface contract.
   - The pre-launch dynamic dependency check is a reusable runtime rule and executable guardrail.
-  - The concrete orchestration belongs in the drone-fleet-single-host Recipe.
+  - Catalog/Recipe resolution belongs in shared Business Pack tooling; the Recipe only activates roles for its experiment.
 
 resolution:
   status: pending

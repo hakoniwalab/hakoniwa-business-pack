@@ -28,8 +28,8 @@ license:
     - Hakoniwa Drone PRO is not a separate component dependency; it is the commercial licensing path for this component.
     - Control Link and Scenario Link are optional licensed capabilities and must not be assumed to be included in every commercial agreement.
 verification:
-  verified_at: 2026-08-10
-  source_revision: 00182af5d8bb6b46aefb39c4316280ea53c61b34
+  verified_at: 2026-08-15
+  source_revision: d2922adef42930aa75860fa673762635ad6781a0
   source_ref: main
 summary: Drone simulation component with dynamics, PX4 and ArduPilot integration, Hakoniwa PDU integration, Python control APIs, multi-drone simulation, and extensible environment and sensor models. The same codebase is offered under non-commercial Hakoniwa Drone Core terms and commercial Hakoniwa Drone PRO licensing.
 category:
@@ -175,6 +175,34 @@ dependencies:
     - name: ArduPilot
       type: runtime
       notes: Optional flight-controller stack.
+native_runtime:
+  schema_version: 1
+  profiles:
+    public-v4.0.0:
+      distribution_release: v4.0.0
+      source_contract: NATIVE_RUNTIME_REQUIREMENTS.yaml
+      managed_runtimes:
+        mujoco:
+          required: true
+          version_file: MUJOCO_VERSION.txt
+          platforms:
+            linux:
+              library: vendor/mujoco/lib/libmujoco.so.{version}
+            macos:
+              library: vendor/mujoco/lib/libmujoco.{version}.dylib
+      platforms:
+        linux:
+          dependency_inspector: elf
+          binary_roles:
+            drone_service: lnx/linux-main_hako_drone_service
+            visual_state_publisher: lnx/linux-drone_visual_state_publisher
+          required_libraries: ["libOpenGL.so.0", "libglfw.so.3"]
+        macos:
+          dependency_inspector: macho
+          binary_roles:
+            drone_service: mac/mac-main_hako_drone_service
+            visual_state_publisher: mac/mac-drone_visual_state_publisher
+          required_libraries: ["libglfw.3.dylib"]
 platforms:
   supported:
     - Windows

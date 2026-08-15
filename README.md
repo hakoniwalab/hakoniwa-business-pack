@@ -115,6 +115,14 @@ The static Recipe remains the composition and source authority; only its
 Foundation requirement input is replaced by the generated profile. `doctor`,
 `plan`, `configure`, and guide status inspect the same selected requirements.
 
+Distributed native binaries use the shared contract in
+`schemas/native-runtime.yaml`. A component Catalog entry declares versioned
+runtime profiles, managed runtimes, binary roles, and platform libraries. A
+Recipe selects a profile and roles without naming `ldd`, `otool`, or an OS
+package command. The common validator chooses the platform adapter, checks the
+component-owned source contract for Catalog drift, and reports both declared
+and undeclared unresolved libraries before launch.
+
 Direct `foundation.py` commands are retained for component, CI, and
 Foundation-maintainer work. They assume source trees have already been resolved;
 a missing build source fails early and points back to `recipe.py configure`.

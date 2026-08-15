@@ -5,6 +5,7 @@ require "set"
 require "yaml"
 require "date"
 require_relative "../../foundation/tools/validation"
+require_relative "../../schemas/native_runtime_validation"
 
 def load_yaml_file(path)
   YAML.load_file(path, permitted_classes: [Date])
@@ -162,6 +163,7 @@ allowed_feasibility_statuses = %w[feasible partially_feasible not_feasible unkno
 allowed_confidence = %w[high medium low].to_set
 allowed_validation_statuses = %w[not_tested partially_verified verified blocked].to_set
 allowed_step_statuses = %w[not_tested verified blocked skipped].to_set
+native_runtime_schema = load_yaml_file(File.join(ROOT, "schemas", "native-runtime.yaml"))
 
 recipe_paths = RECIPE_DIRS.flat_map { |dir| Dir[File.join(dir, "*.yaml")] }.sort
 errors = []
@@ -266,6 +268,14 @@ recipe_paths.each do |path|
     FoundationValidation.validate_workspace_contract(
       data["execution_environment"],
       data["foundation_requirements"],
+      label: label
+    )
+  )
+  errors.concat(
+    NativeRuntimeValidation.validate_recipe(
+      data["native_runtime_requirements"],
+      catalog,
+      native_runtime_schema,
       label: label
     )
   )
