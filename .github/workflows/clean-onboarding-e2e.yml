@@ -63,7 +63,13 @@ jobs:
 
       - name: Install declared host prerequisites (macOS)
         if: runner.os == 'macOS'
-        run: brew install boost cmake
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install boost cmake
+          boost_prefix="$(brew --prefix boost)"
+          echo "CMAKE_PREFIX_PATH=${boost_prefix}${CMAKE_PREFIX_PATH:+:${CMAKE_PREFIX_PATH}}" >> "$GITHUB_ENV"
+          echo "Boost prefix: ${boost_prefix}"
 
       - name: Record clean runner boundary
         shell: bash
@@ -74,6 +80,7 @@ jobs:
           python --version
           ruby --version
           cmake --version
+          echo "CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH:-}"
 
           test ! -e work
           test ! -e /usr/local/hakoniwa
@@ -159,7 +166,6 @@ jobs:
           python - <<'PY'
           import json
           import os
-          import signal
           import socket
           from pathlib import Path
 
