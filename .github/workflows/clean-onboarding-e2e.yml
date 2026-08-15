@@ -1,0 +1,263 @@
+name: Clean Onboarding E2E
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/clean-onboarding-e2e.yml'
+      - 'catalog/**'
+      - 'foundation/**'
+      - 'recipes/**'
+      - 'tools/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/clean-onboarding-e2e.yml'
+      - 'catalog/**'
+      - 'foundation/**'
+      - 'recipes/**'
+      - 'tools/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: clean-onboarding-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  clean-onboarding:
+    name: Clean onboarding (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: Linux
+          - os: macos-14
+            platform: Darwin
+
+    env:
+      RECIPE: recipes/examples/drone-fleet-single-host.yaml
+      EXPERIMENT: recipes/experiments/drone-fleet-single-host-ci.yaml
+      RECIPE_WORK: work/recipes/drone-fleet-single-host
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install declared host prerequisites (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake libboost-dev libglfw3 libopengl0
+
+      - name: Install declared host prerequisites (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Runner ambient VCPKG_ROOT=${VCPKG_ROOT:-}"
+          echo "Runner ambient VCPKG_INSTALLATION_ROOT=${VCPKG_INSTALLATION_ROOT:-}"
+          brew install boost cmake glfw
+          boost_prefix="$(brew --prefix boost)"
+          echo "CMAKE_PREFIX_PATH=${boost_prefix}${CMAKE_PREFIX_PATH:+:${CMAKE_PREFIX_PATH}}" >> "$GITHUB_ENV"
+          echo "Boost prefix: ${boost_prefix}"
+
+      - name: Record clean runner boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "runner.os=${RUNNER_OS}"
+          uname -a
+          python --version
+          ruby --version
+          cmake --version
+          echo "CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH:-}"
+          echo "VCPKG_ROOT=${VCPKG_ROOT:-}"
+          echo "VCPKG_INSTALLATION_ROOT=${VCPKG_INSTALLATION_ROOT:-}"
+
+          test ! -e work
+          test ! -e /usr/local/hakoniwa
+          for repository in \
+            hakoniwa-core-pro \
+            hakoniwa-pdu-python \
+            hakoniwa-pdu-endpoint \
+            hakoniwa-pdu-bridge-core \
+            hakoniwa-drone-core
+          do
+            if [ -e "../${repository}" ]; then
+              echo "Unexpected pre-existing sibling repository: ../${repository}" >&2
+              exit 1
+            fi
+          done
+
+          if env | grep -E '^(HAKO_|HAKONIWA_)='; then
+            echo "Unexpected ambient Hakoniwa environment variables" >&2
+            exit 1
+          fi
+
+      - name: Inspect Workspace contract before materialization
+        run: python tools/workspace.py env --json
+
+      - name: Materialize verified native Drone runtime
+        run: >-
+          python tools/workspace.py run --
+          python tools/recipe/drone_fleet_single_host.py prepare-native
+          --experiment ${{ env.EXPERIMENT }}
+
+      - name: Configure the small headless representative experiment
+        run: >-
+          python tools/workspace.py run --
+          python tools/recipe/drone_fleet_single_host.py configure
+          --experiment ${{ env.EXPERIMENT }}
+
+      - name: Plan Recipe from generated Foundation requirements
+        run: >-
+          python tools/workspace.py run --
+          python tools/recipe.py plan --recipe ${{ env.RECIPE }}
+          --foundation-requirements
+          ${{ env.RECIPE_WORK }}/config/foundation-requirements.yaml
+
+      - name: Materialize Recipe Foundation through the supported entry point
+        run: >-
+          python tools/workspace.py run --
+          python tools/recipe.py configure --recipe ${{ env.RECIPE }}
+          --foundation-requirements
+          ${{ env.RECIPE_WORK }}/config/foundation-requirements.yaml
+
+      - name: Validate Foundation-owned Workspace runtime
+        run: python tools/workspace.py doctor
+
+      - name: Validate representative Recipe readiness
+        run: >-
+          python tools/workspace.py run --
+          python tools/recipe/drone_fleet_single_host.py doctor
+          --experiment ${{ env.EXPERIMENT }}
+
+      - name: Run behavioral smoke and normal cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_operator() {
+            python tools/workspace.py run -- \
+              python tools/recipe/drone_fleet_single_host.py "$@" \
+              --experiment "$EXPERIMENT"
+          }
+
+          cleanup() {
+            run_operator stop || true
+          }
+          trap cleanup EXIT
+
+          run_operator start
+          run_operator status
+          run_operator smoke --timeout-sec 90
+          run_operator stop
+          trap - EXIT
+
+      - name: Verify onboarding evidence and cleanup
+        shell: bash
+        env:
+          EXPECTED_PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import socket
+          from pathlib import Path
+
+          root = Path.cwd().resolve()
+          recipe = root / "work" / "recipes" / "drone-fleet-single-host"
+          validation = recipe / "validation"
+
+          summary = json.loads((validation / "execution-summary.json").read_text())
+          assert summary.get("status") == "done", summary
+          assert summary.get("drone_count") == 1, summary
+
+          native = json.loads((validation / "native-distribution.json").read_text())
+          assert native.get("platform") == os.environ["EXPECTED_PLATFORM"], native
+          assert native.get("native_distribution", {}).get("release") == "v4.0.0", native
+          assert native.get("drone_workspace", {}).get("repository") == "toppers/hakoniwa-drone-core", native
+
+          receipt_root = root / "work" / "foundation" / "install" / "share" / "hakoniwa" / "receipts"
+          for component in (
+              "hakoniwa-core-pro",
+              "hakoniwa-pdu-python",
+              "hakoniwa-pdu-endpoint",
+          ):
+              assert (receipt_root / f"{component}.yaml").is_file(), component
+
+          session_path = recipe / "runtime" / "launcher-session.json"
+          assert session_path.is_file(), session_path
+          session = json.loads(session_path.read_text())
+
+          pids = set()
+          def collect(value):
+              if isinstance(value, dict):
+                  for key, child in value.items():
+                      if "pid" in str(key).lower() and isinstance(child, int) and child > 1:
+                          pids.add(child)
+                      collect(child)
+              elif isinstance(value, list):
+                  for child in value:
+                      collect(child)
+          collect(session)
+
+          alive = []
+          for pid in pids:
+              try:
+                  os.kill(pid, 0)
+              except ProcessLookupError:
+                  continue
+              except PermissionError:
+                  alive.append(pid)
+              else:
+                  alive.append(pid)
+          assert not alive, f"Launcher-owned PIDs still alive after stop: {alive}"
+
+          with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+              probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+              probe.bind(("127.0.0.1", 54111))
+
+          assert not Path("/usr/local/hakoniwa").exists()
+          print("[OK] clean onboarding evidence and cleanup verified")
+          PY
+
+      - name: Verify expected source materialization
+        shell: bash
+        run: |
+          set -euo pipefail
+          for repository in \
+            hakoniwa-core-pro \
+            hakoniwa-pdu-python \
+            hakoniwa-pdu-endpoint \
+            hakoniwa-drone-core
+          do
+            test -d "../${repository}/.git"
+          done
+          test ! -e ../hakoniwa-pdu-bridge-core
+
+      - name: Upload onboarding evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clean-onboarding-${{ matrix.platform }}
+          if-no-files-found: warn
+          path: |
+            work/recipes/drone-fleet-single-host/config/resolved-experiment.yaml
+            work/recipes/drone-fleet-single-host/config/foundation-requirements.yaml
+            work/recipes/drone-fleet-single-host/logs/
+            work/recipes/drone-fleet-single-host/runtime/launcher-session.json
+            work/recipes/drone-fleet-single-host/validation/
+            work/foundation/install/share/hakoniwa/receipts/

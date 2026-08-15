@@ -720,7 +720,23 @@ def materialize_sources(sources: list[dict]) -> None:
             )
 
 
-def create_recipe_plan(recipe_path: Path, data: dict) -> dict:
+def _foundation_requirements_input(
+    recipe_path: Path,
+    data: dict,
+    generated_path: Path | None = None,
+) -> Path | None:
+    if generated_path is not None:
+        return generated_path.expanduser().resolve()
+    if isinstance(data.get("foundation_requirements"), dict):
+        return recipe_path
+    return None
+
+
+def create_recipe_plan(
+    recipe_path: Path,
+    data: dict,
+    foundation_requirements_path: Path | None = None,
+) -> dict:
     foundation = load_foundation_module()
     business_root = root()
     paths = foundation.resolve_workspace(business_root, data["id"])
@@ -728,11 +744,14 @@ def create_recipe_plan(recipe_path: Path, data: dict) -> dict:
     sources: list[dict] = []
     recipe_repo = recipe_repository_root(recipe_path)
     clone_boundary = recipe_repo.parent
-    if isinstance(data.get("foundation_requirements"), dict):
+    foundation_input = _foundation_requirements_input(
+        recipe_path, data, foundation_requirements_path
+    )
+    if foundation_input is not None:
         catalog_path = business_root / "catalog" / "foundation-components.json"
         components = foundation.load_build_catalog(catalog_path)
         foundation_plan = foundation.create_build_plan(
-            recipe_path,
+            foundation_input,
             paths.install_prefix,
             components,
             business_root,
@@ -791,6 +810,9 @@ def create_recipe_plan(recipe_path: Path, data: dict) -> dict:
     runtime = validate_recipe_runtime(data)
     return {
         "foundation": foundation_plan,
+        "foundation_requirements": (
+            str(foundation_input) if foundation_input is not None else None
+        ),
         "sources": sources,
         "python_requirements": str(python_requirements) if python_requirements else None,
         "runtime": (
@@ -858,19 +880,26 @@ def print_recipe_plan(plan: dict) -> None:
         print("  - no actions")
 
 
-def configure_recipe(recipe_path: Path, data: dict) -> int:
-    plan = create_recipe_plan(recipe_path, data)
+def configure_recipe(
+    recipe_path: Path,
+    data: dict,
+    foundation_requirements_path: Path | None = None,
+) -> int:
+    plan = create_recipe_plan(recipe_path, data, foundation_requirements_path)
     print_recipe_plan(plan)
     materialize_sources(plan["sources"])
 
     foundation = load_foundation_module()
     paths = foundation.resolve_workspace(root(), data["id"])
-    if isinstance(data.get("foundation_requirements"), dict):
+    foundation_input = _foundation_requirements_input(
+        recipe_path, data, foundation_requirements_path
+    )
+    if foundation_input is not None:
         components = foundation.load_build_catalog(
             root() / "catalog" / "foundation-components.json"
         )
         foundation_plan = foundation.create_build_plan(
-            recipe_path,
+            foundation_input,
             paths.install_prefix,
             components,
             root(),
@@ -900,7 +929,7 @@ def configure_recipe(recipe_path: Path, data: dict) -> int:
             f"{paths.recipe_root / 'environment.json'}"
         )
         print(f"Recipe Launcher   : {materialized['launcher']['path']}")
-    return doctor_recipe(recipe_path, data)
+    return doctor_recipe(recipe_path, data, foundation_requirements_path)
 
 
 def _launcher_environment(recipe_path: Path, data: dict, variables: dict[str, str]) -> dict[str, str]:
@@ -1053,13 +1082,20 @@ def launch_recipe(recipe_path: Path, data: dict) -> int:
             return process.wait(timeout=10)
 
 
-def doctor_recipe(recipe_path: Path, data: dict) -> int:
+def doctor_recipe(
+    recipe_path: Path,
+    data: dict,
+    foundation_requirements_path: Path | None = None,
+) -> int:
     foundation_status = "SATISFIED"
-    if isinstance(data.get("foundation_requirements"), dict):
+    foundation_input = _foundation_requirements_input(
+        recipe_path, data, foundation_requirements_path
+    )
+    if foundation_input is not None:
         foundation = load_foundation_module()
         paths = foundation.resolve_workspace(root(), data["id"])
         result = foundation.inspect_foundation(
-            recipe_path, paths.install_prefix, validate_core_config=True
+            foundation_input, paths.install_prefix, validate_core_config=True
         )
         foundation.print_inspection(result, False)
         foundation_status = result["status"]
@@ -1371,7 +1407,10 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument(
         "--foundation-requirements",
         type=Path,
-        help="Use generated Foundation requirements when rendering current status",
+        help=(
+            "Use generated Foundation requirements for doctor, plan, configure, "
+            "and guide status"
+        ),
     )
     result.add_argument(
         "--open",
@@ -1388,20 +1427,22 @@ def main(argv: list[str] | None = None) -> int:
     try:
         recipe_path = args.recipe.expanduser().resolve()
         data = load_recipe(recipe_path)
-        if args.command == "doctor":
-            return doctor_recipe(recipe_path, data)
-        if args.command == "plan":
-            print_recipe_plan(create_recipe_plan(recipe_path, data))
-            return 0
-        if args.command == "configure":
-            return configure_recipe(recipe_path, data)
-        if args.command == "launch":
-            return launch_recipe(recipe_path, data)
         requirements_path = (
-            args.foundation_requirements.expanduser().absolute()
+            args.foundation_requirements.expanduser().resolve()
             if args.foundation_requirements is not None
             else None
         )
+        if args.command == "doctor":
+            return doctor_recipe(recipe_path, data, requirements_path)
+        if args.command == "plan":
+            print_recipe_plan(
+                create_recipe_plan(recipe_path, data, requirements_path)
+            )
+            return 0
+        if args.command == "configure":
+            return configure_recipe(recipe_path, data, requirements_path)
+        if args.command == "launch":
+            return launch_recipe(recipe_path, data)
         output = write_guide(recipe_path, data, requirements_path)
         print(f"Recipe guide: {output}")
         if args.open and not webbrowser.open(output.as_uri()):

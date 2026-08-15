@@ -10,6 +10,7 @@ import tarfile
 import tempfile
 import unittest
 import zipfile
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -74,6 +75,49 @@ results:
             encoding="utf-8",
         )
         return path
+
+    def _mujoco_version(
+        self,
+        drone_root: Path,
+        *,
+        mujoco_version: str = "3.9.0",
+    ) -> Path:
+        drone_root.mkdir(parents=True, exist_ok=True)
+        version_file = drone_root / "MUJOCO_VERSION.txt"
+        version_file.write_text(
+            mujoco_version + "\n", encoding="utf-8"
+        )
+        (drone_root / "NATIVE_RUNTIME_REQUIREMENTS.yaml").write_text(
+            """schema_version: 1
+profiles:
+  public-v4.0.0:
+    distribution_release: v4.0.0
+    managed_runtimes:
+      mujoco:
+        required: true
+        version_file: MUJOCO_VERSION.txt
+        platforms:
+          linux:
+            library: vendor/mujoco/lib/libmujoco.so.{version}
+          macos:
+            library: vendor/mujoco/lib/libmujoco.{version}.dylib
+    platforms:
+      linux:
+        dependency_inspector: elf
+        binary_roles:
+          drone_service: lnx/linux-main_hako_drone_service
+          visual_state_publisher: lnx/linux-drone_visual_state_publisher
+        required_libraries: [\"libOpenGL.so.0\", \"libglfw.so.3\"]
+      macos:
+        dependency_inspector: macho
+        binary_roles:
+          drone_service: mac/mac-main_hako_drone_service
+          visual_state_publisher: mac/mac-drone_visual_state_publisher
+        required_libraries: [\"libglfw.3.dylib\"]
+""",
+            encoding="utf-8",
+        )
+        return version_file
 
     def test_auto_process_count_and_build_limits(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -449,11 +493,8 @@ results:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             drone_root = root / "hakoniwa-drone-core"
-            drone_root.mkdir()
             workspace_version = "9.8.7"
-            (drone_root / "MUJOCO_VERSION.txt").write_text(
-                workspace_version + "\n", encoding="utf-8"
-            )
+            self._mujoco_version(drone_root, mujoco_version=workspace_version)
             archive_buffer = io.BytesIO()
             library_content = b"mujoco-runtime"
             with tarfile.open(fileobj=archive_buffer, mode="w:gz") as archive:
@@ -491,6 +532,61 @@ results:
             )
             self.assertEqual(urlopen.call_count, 2)
 
+    def test_doctor_reports_missing_declared_linux_library_before_start(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths = foundation.resolve_workspace(root, recipe.RECIPE_ID)
+            foundation.prepare_workspace(paths)
+            experiment_path = self._experiment(
+                root, drones=1, per_process=1, visualization=False
+            )
+            experiment = recipe.resolve_experiment(experiment_path)
+            requirements = paths.recipe_config / "foundation-requirements.yaml"
+            binary = root / "drone/lnx/linux-main_hako_drone_service"
+            binary.parent.mkdir(parents=True)
+            binary.touch()
+            output = io.StringIO()
+            native_runtime = recipe.load_native_runtime_module()
+            native_checks = (
+                native_runtime.RuntimeCheck(
+                    "drone service shared libraries",
+                    False,
+                    f"missing: libOpenGL.so.0 (declared by native runtime contract; required by {binary})",
+                ),
+            )
+
+            foundation_api = mock.Mock()
+            foundation_api.inspect_foundation.return_value = {"status": "SATISFIED"}
+            with mock.patch.object(
+                recipe,
+                "_load_workspace",
+                return_value=(experiment, foundation_api, paths, requirements),
+            ), mock.patch.object(
+                recipe.platform, "system", return_value="Linux"
+            ), mock.patch.object(
+                recipe, "load_native_runtime_module", return_value=native_runtime
+            ), mock.patch.object(
+                native_runtime,
+                "validate_requirement",
+                return_value=(mock.Mock(), native_checks),
+            ), mock.patch.object(
+                recipe, "_port_available", return_value=True
+            ), mock.patch.object(
+                recipe,
+                "resolve_foundation_python",
+                side_effect=recipe.RecipeError("Foundation Python fixture omitted"),
+            ), mock.patch.object(
+                recipe, "validate_materialized_experiment", return_value=[]
+            ), redirect_stdout(output):
+                result = recipe.doctor(experiment_path, root / "drone", root / "viewer")
+
+            self.assertEqual(result, 1)
+            diagnostic = output.getvalue()
+            self.assertIn("[NG] drone service shared libraries", diagnostic)
+            self.assertIn("libOpenGL.so.0", diagnostic)
+            self.assertIn("declared by native runtime contract", diagnostic)
+            self.assertIn(f"required by {binary}", diagnostic)
+
     def test_macos_mujoco_runs_workspace_installer_and_linker(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -503,9 +599,7 @@ results:
             linker.touch()
             (drone_root / "mac").mkdir()
             workspace_version = "8.7.6"
-            (drone_root / "MUJOCO_VERSION.txt").write_text(
-                workspace_version + "\n", encoding="utf-8"
-            )
+            self._mujoco_version(drone_root, mujoco_version=workspace_version)
             archive_bytes = b"fixture-dmg"
             digest = hashlib.sha256(archive_bytes).hexdigest()
             asset = f"mujoco-{workspace_version}-macos-universal2.dmg"

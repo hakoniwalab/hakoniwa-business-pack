@@ -1,0 +1,107 @@
+id: drone-native-runtime-dependencies-must-be-component-owned
+title: Drone native runtime dependencies must be declared by Drone Core and checked before launch
+status: validating
+
+knowledge_type:
+  - interface_contract
+  - runtime_rule
+  - known_pitfall
+  - validation_rule
+
+summary: >
+  A Recipe must not infer or duplicate the runtime dependencies of a distributed
+  Drone Core binary. Drone Core should publish a versioned, machine-readable
+  native runtime contract, while the Recipe doctor verifies that contract and
+  inspects the actual active binaries for unresolved dynamic libraries before
+  launch. Catalog declarations and Recipe selections should conform to one shared
+  schema; only dependency discovery and resolution belong to OS-specific adapters.
+
+observation:
+  context: >
+    Running the clean Ubuntu onboarding E2E for Business Pack PR #134 with the
+    drone-fleet-single-host headless experiment.
+  details:
+    - Foundation construction, native preparation, experiment configuration, and Recipe doctor all succeeded.
+    - The Drone service then failed at startup because libOpenGL.so.0 could not be resolved.
+    - The pre-launch doctor checked that the native binary existed but did not inspect its dynamic-library closure.
+    - MuJoCo is also a required managed runtime of the distributed Drone binaries, with its version already owned by hakoniwa-drone-core/MUJOCO_VERSION.txt.
+    - The component owner should declare the native distribution release, managed runtimes, active binaries, and known host library requirements.
+    - Linux ldd inspection remains necessary as a best-effort guard against newly introduced or undeclared binary dependencies.
+    - After libOpenGL.so.0 was installed, that inspection exposed libglfw.so.3 as a second Linux dependency that the initial contract had omitted.
+    - The clean macOS E2E independently found an unresolved absolute Homebrew GLFW install name; Mach-O inspection must therefore provide the same pre-launch guard as ELF inspection.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: .github/workflows/clean-onboarding-e2e.yml
+      revision: pull-request-134
+    - repository: toppers/hakoniwa-drone-core
+      path: MUJOCO_VERSION.txt
+      revision: main
+    - repository: local/hakoniwa-business-pack
+      path: tools/recipe/drone_fleet_single_host.py
+      revision: local-working-tree-2026-08-15
+  runtime_evidence:
+    - description: >
+        Ubuntu clean onboarding reached Recipe startup, where
+        linux-main_hako_drone_service failed to load libOpenGL.so.0.
+    - description: >
+        macOS clean onboarding reached Recipe startup, where
+        mac-main_hako_drone_service failed to load libglfw.3.dylib from an absent
+        Homebrew path.
+  expert_input:
+    - source: user
+      statement: >
+        hakoniwa-drone-core should own the dependency declaration, including
+        version information and MuJoCo, and the Recipe should consume it in doctor.
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: partially_verified
+  required:
+    - Re-run the clean Ubuntu onboarding E2E and confirm doctor passes when libOpenGL.so.0 is available.
+    - Re-run the clean macOS onboarding E2E and confirm doctor passes when GLFW is available.
+  notes:
+    - Unit tests cover shared Catalog/Recipe schema validation, Catalog/source-contract drift, MuJoCo version resolution, ELF missing-library parsing, and Mach-O missing absolute install names.
+
+tracking:
+  implementation_status: in_progress
+  issues:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      number: 133
+      relation: validation
+      status: unknown
+
+promotion_targets:
+  catalog:
+    - hakoniwa-drone-core
+  runtime_primer: true
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - drone-fleet-single-host
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      kind: doctor
+      path: tools/recipe/drone_fleet_single_host.py
+      mode: detect-and-suggest-remediation
+      notes:
+        - Report missing SONAMEs and their requiring binaries without hard-coding an OS package manager command.
+        - Select an OS adapter in shared tooling; keep Recipe orchestration independent of ldd and otool details.
+
+promotion_rationale:
+  - The dependency list is a component-owned interface contract.
+  - The pre-launch dynamic dependency check is a reusable runtime rule and executable guardrail.
+  - Catalog/Recipe resolution belongs in shared Business Pack tooling; the Recipe only activates roles for its experiment.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Implementation is present locally and awaits clean Ubuntu E2E re-verification.

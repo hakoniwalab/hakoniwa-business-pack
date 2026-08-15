@@ -70,6 +70,8 @@ class RecipeGuideTest(unittest.TestCase):
             "doctor-mac.bash",
             "doctor.bash",
             "foundation.py",
+            "native_runtime.py",
+            "native_runtime_platforms.py",
             "recipe.py",
             "recipe_portal.py",
             "test_foundation.py",
@@ -526,6 +528,132 @@ class RecipeGuideTest(unittest.TestCase):
                             recipe_path,
                             {"id": "demo", "foundation_requirements": {"hakoniwa-core-pro": {}}},
                         )
+
+    def test_recipe_plan_uses_generated_foundation_requirements(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            business_root = Path(temporary) / "hakoniwa-business-pack"
+            (business_root / ".git").mkdir(parents=True)
+            recipes = business_root / "recipes"
+            recipes.mkdir()
+            recipe_path = recipes / "demo.yaml"
+            generated = business_root / "work/recipes/demo/config/foundation-requirements.yaml"
+            paths = SimpleNamespace(
+                install_prefix=business_root / "work/foundation/install"
+            )
+            create_build_plan = mock.Mock(
+                return_value={
+                    "status": "SATISFIED",
+                    "blocked": [],
+                    "actions": [],
+                }
+            )
+            foundation = SimpleNamespace(
+                resolve_workspace=lambda _root, _recipe_id: paths,
+                load_build_catalog=lambda _path: {},
+                create_build_plan=create_build_plan,
+            )
+
+            with mock.patch.object(guide, "root", return_value=business_root):
+                with mock.patch.object(
+                    guide, "load_foundation_module", return_value=foundation
+                ):
+                    plan = guide.create_recipe_plan(
+                        recipe_path,
+                        {"id": "demo", "foundation_requirements": {"static": {}}},
+                        generated,
+                    )
+
+        self.assertEqual(create_build_plan.call_args.args[0], generated.resolve())
+        self.assertEqual(plan["foundation_requirements"], str(generated.resolve()))
+
+    def test_configure_reuses_generated_requirements_for_build_and_doctor(self) -> None:
+        recipe_path = self.recipe_dir / "drone-fleet-single-host.yaml"
+        generated = Path("/tmp/generated-foundation-requirements.yaml")
+        paths = SimpleNamespace(
+            install_prefix=Path("/foundation/install"),
+            foundation_python=Path("/foundation/python"),
+            recipe_root=Path("/recipe-work"),
+        )
+        build_plan = {"blocked": [], "actions": []}
+        foundation = SimpleNamespace(
+            resolve_workspace=mock.Mock(return_value=paths),
+            load_build_catalog=mock.Mock(return_value={}),
+            create_build_plan=mock.Mock(return_value=build_plan),
+            execute_build_plan=mock.Mock(),
+        )
+        source_plan = {
+            "foundation": build_plan,
+            "foundation_requirements": str(generated),
+            "sources": [],
+            "python_requirements": None,
+            "runtime": None,
+        }
+
+        with mock.patch.object(
+            guide, "create_recipe_plan", return_value=source_plan
+        ) as create_plan:
+            with mock.patch.object(guide, "print_recipe_plan"):
+                with mock.patch.object(guide, "materialize_sources"):
+                    with mock.patch.object(
+                        guide, "load_foundation_module", return_value=foundation
+                    ):
+                        with mock.patch.object(
+                            guide, "materialize_recipe_runtime", return_value=None
+                        ):
+                            with mock.patch.object(
+                                guide, "doctor_recipe", return_value=0
+                            ) as doctor:
+                                result = guide.configure_recipe(
+                                    recipe_path,
+                                    {"id": "drone-fleet-single-host"},
+                                    generated,
+                                )
+
+        self.assertEqual(result, 0)
+        create_plan.assert_called_once_with(
+            recipe_path, {"id": "drone-fleet-single-host"}, generated
+        )
+        self.assertEqual(
+            foundation.create_build_plan.call_args.args[0], generated.resolve()
+        )
+        doctor.assert_called_once_with(
+            recipe_path, {"id": "drone-fleet-single-host"}, generated
+        )
+
+    def test_doctor_inspects_generated_foundation_requirements(self) -> None:
+        recipe_path = self.recipe_dir / "drone-fleet-single-host.yaml"
+        generated = Path("/tmp/generated-foundation-requirements.yaml")
+        paths = SimpleNamespace(install_prefix=Path("/foundation/install"))
+        inspection = {"status": "SATISFIED", "components": [], "runtime": {}}
+        foundation = SimpleNamespace(
+            resolve_workspace=mock.Mock(return_value=paths),
+            inspect_foundation=mock.Mock(return_value=inspection),
+            print_inspection=mock.Mock(),
+        )
+
+        with mock.patch.object(
+            guide, "load_foundation_module", return_value=foundation
+        ):
+            with mock.patch.object(guide, "inspect_local_requirements", return_value=[]):
+                with mock.patch.object(
+                    guide,
+                    "inspect_recipe_runtime",
+                    return_value={
+                        "status": "NOT_DECLARED",
+                        "launcher": "",
+                        "reasons": [],
+                    },
+                ):
+                    result = guide.doctor_recipe(
+                        recipe_path,
+                        {"id": "drone-fleet-single-host"},
+                        generated,
+                    )
+
+        self.assertEqual(result, 0)
+        self.assertEqual(
+            foundation.inspect_foundation.call_args.args[0], generated.resolve()
+        )
 
     def test_automatic_source_rejects_target_outside_declared_boundary(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

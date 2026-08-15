@@ -130,6 +130,14 @@ execution_environment:
     - Behavioral completion is independently validated through the generated execution summary.
     - Foundation build limits are generated from the selected experiment before startup.
 
+native_runtime_requirements:
+  schema_version: 1
+  components:
+    hakoniwa-drone-core:
+      profile: public-v4.0.0
+      required_roles: ["drone_service"]
+      optional_roles: ["visual_state_publisher"]
+
 agency_boundary:
   agent_actions:
     - id: generate_experiment_runtime
@@ -601,7 +609,7 @@ demo:
       id: prepare_native
       component: hakoniwa-drone-core
       action: Clone or safely fast-forward the official Drone Core main workspace, then materialize the pinned v4.0.0 native distribution and its required MuJoCo runtime on macOS or Linux.
-      description: Record the resolved Drone Core main revision, verify and extract the official native archive even when unproven binaries already exist, read the MuJoCo version from hakoniwa-drone-core/MUJOCO_VERSION.txt, install that runtime, apply the required macOS link adjustment, and preserve provenance in validation/native-distribution.json.
+      description: Record the resolved Drone Core main revision, verify and extract the official native archive even when unproven binaries already exist, verify its NATIVE_RUNTIME_REQUIREMENTS.yaml release contract, read the MuJoCo version from hakoniwa-drone-core/MUJOCO_VERSION.txt, install that runtime, apply the required macOS link adjustment, and preserve provenance in validation/native-distribution.json.
       command: python tools/recipe/drone_fleet_single_host.py prepare-native
       agency: agent_action
     - order: 2
@@ -638,7 +646,7 @@ demo:
     - order: 7
       id: doctor
       component: hakoniwa-pdu-python
-      action: Validate the native Drone binary, Foundation, Python imports, and generated artifacts; validate VSP/WebBridge/Viewer only when visualization is enabled.
+      action: Validate the Drone Core native runtime contract, matching MuJoCo runtime, native binaries, Foundation, Python imports, and generated artifacts; on Linux, report every unresolved shared-library SONAME from the active binaries, and validate VSP/WebBridge/Viewer only when visualization is enabled.
       command: python tools/recipe/drone_fleet_single_host.py doctor
       agency: agent_action
     - order: 8

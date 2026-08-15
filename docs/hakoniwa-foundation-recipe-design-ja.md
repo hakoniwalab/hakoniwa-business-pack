@@ -555,6 +555,23 @@ Recipe configure
 
 この二つを混同しません。
 
+実験profileによって必要Capabilityが変わるRecipeは、Foundation構築前にRecipe固有
+operatorが`foundation-requirements.yaml`を生成できます。その場合もFoundationを直接
+構築せず、静的Recipeと生成要求を共通orchestratorへ一緒に渡します。
+
+```bash
+python tools/recipe.py plan --recipe <recipe.yaml> \
+  --foundation-requirements <generated-foundation-requirements.yaml>
+python tools/recipe.py configure --recipe <recipe.yaml> \
+  --foundation-requirements <generated-foundation-requirements.yaml>
+```
+
+静的Recipeはcomposition、Recipe-local source、runtime materializationの正として残り、
+生成fileは今回のFoundation要求だけを置き換えます。`doctor`、`plan`、`configure`、guide
+statusは同じ生成要求を使用します。これにより、例えばheadless profileではBridgeを
+要求せず、visualization profileではBridgeを要求する一方、source cloneとFoundation
+buildの入口は`recipe.py`へ統一したまま維持できます。
+
 例えば `web_bridge_fleets_config` の実ファイルは、Recipeが定義する接続構成なのでRecipe workspaceへ生成します。一方、その設定形式を読み取れることはBridge componentのCapabilityとしてFoundationへ要求します。
 
 Core config、Core mmap path、Core build limitsはRecipe固有configureに含めません。Recipeは必要なCore容量をFoundation requirementsとして宣言し、Foundation resolverが現在の共通Core環境で充足できるかを評価します。
@@ -1061,6 +1078,13 @@ Foundation doctorは、原則として検出と説明を担当し、暗黙のdow
 現在の主な残課題は、初見ユーザーがclean環境から再現できることの検証です。とくに、Component `doctor`は選択されたmanifestに応じて必要になるcompiler、CMake、Boost、GoogleTestなどのhost prerequisitesをbuild前に検出し、不足しているtool・header・library、選択条件、Platform、探索情報を説明する必要があります。Recipe側にOS package一覧を重複させず、必要条件の所有者である各Componentの `doctor` に実装します。OSやversionで変化する固定package-manager commandは、この診断契約には含めません。
 
 また、clean環境のE2EでFoundation build、install、doctor、代表Recipeのheadless smokeを継続確認します。個別Componentや外部配布物のsource provenanceは、それぞれの取得・再利用境界で明示します。
+
+外部配布されるnative binaryの実行時依存は、Foundation build prerequisiteとは
+分離し、`schemas/native-runtime.yaml`の共通契約で扱います。Catalogはversion付き
+profile、managed runtime、binary role、Platform別libraryを宣言し、Recipeはprofileと
+利用roleだけを選択します。Recipe doctorはOS固有commandを持たず、共通validatorへ
+委譲します。ELF、Mach-O、将来のPE adapterだけが依存libraryの列挙・解決方法を所有し、
+共通層は宣言済み不足と未宣言不足を同じ形式で集約します。
 
 ## 18. 実装履歴の扱い
 

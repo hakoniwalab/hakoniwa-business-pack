@@ -1,6 +1,13 @@
 schema_version: 0.1
 description: Machine-readable contracts used by generic Business Pack Recipe tooling.
 
+native_runtime_requirements:
+  shared_schema: ../schemas/native-runtime.yaml
+  semantics:
+    - Select a component Catalog native runtime profile.
+    - Declare required and optional binary roles without selecting an OS-specific dependency inspector.
+    - Delegate dependency discovery and resolution to the shared validator platform adapter.
+
 recipe_local_requirements:
   schema_version_field: recipe_local_requirements_schema_version
   supported_schema_versions:
@@ -95,6 +102,7 @@ configure_contract:
     - Never overwrite an existing path.
     - Do not clone into a missing path selected through an override environment variable.
     - Execute the Foundation build plan through the internal Foundation engine.
+    - Use an explicitly selected generated Foundation requirements file consistently for doctor, plan, configure, and guide status.
     - Install declared Recipe Python requirements into Foundation Python.
     - Atomically generate environment.json, POSIX and PowerShell activation, and the declared Launcher file.
 

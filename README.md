@@ -101,6 +101,28 @@ clones only missing, cloneable sibling repositories and never updates, resets, o
 replaces an existing checkout. It then delegates Receipt inspection and component
 build/install to the Foundation engine and installs Recipe Python requirements.
 
+When an operator resolves experiment-specific Foundation capabilities before the
+Foundation exists, pass that generated requirement file through the same flow:
+
+```bash
+python tools/recipe.py plan --recipe <recipe.yaml> \
+  --foundation-requirements <generated-foundation-requirements.yaml>
+python tools/recipe.py configure --recipe <recipe.yaml> \
+  --foundation-requirements <generated-foundation-requirements.yaml>
+```
+
+The static Recipe remains the composition and source authority; only its
+Foundation requirement input is replaced by the generated profile. `doctor`,
+`plan`, `configure`, and guide status inspect the same selected requirements.
+
+Distributed native binaries use the shared contract in
+`schemas/native-runtime.yaml`. A component Catalog entry declares versioned
+runtime profiles, managed runtimes, binary roles, and platform libraries. A
+Recipe selects a profile and roles without naming `ldd`, `otool`, or an OS
+package command. The common validator chooses the platform adapter, checks the
+component-owned source contract for Catalog drift, and reports both declared
+and undeclared unresolved libraries before launch.
+
 Direct `foundation.py` commands are retained for component, CI, and
 Foundation-maintainer work. They assume source trees have already been resolved;
 a missing build source fails early and points back to `recipe.py configure`.

@@ -56,6 +56,8 @@ GENERAL_USER_MAX_DRONES = 200
 PUBLIC_DRONE_RELEASE = "v4.0.0"
 PUBLIC_DRONE_REPOSITORY = "https://github.com/toppers/hakoniwa-drone-core.git"
 PUBLIC_DRONE_REPOSITORY_ID = "toppers/hakoniwa-drone-core"
+DRONE_COMPONENT_ID = "hakoniwa-drone-core"
+DRONE_CATALOG = ROOT / "catalog" / "components" / f"{DRONE_COMPONENT_ID}.yaml"
 THREEJS_VIEWER_REPOSITORY = "https://github.com/hakoniwalab/hakoniwa-threejs-drone.git"
 PUBLIC_DRONE_ARCHIVES = {
     "Darwin": (
@@ -143,6 +145,14 @@ def load_foundation_module():
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def load_native_runtime_module():
+    if str(TOOLS_DIR) not in sys.path:
+        sys.path.insert(0, str(TOOLS_DIR))
+    import native_runtime
+
+    return native_runtime
 
 
 def default_source(name: str) -> Path:
@@ -340,17 +350,6 @@ def _mujoco_asset(version: str, system_name: str, machine: str) -> str:
     )
 
 
-def _read_mujoco_version(drone_root: Path) -> str:
-    version_file = drone_root / "MUJOCO_VERSION.txt"
-    try:
-        version = version_file.read_text(encoding="utf-8").strip()
-    except OSError as exc:
-        raise RecipeError(f"cannot read MuJoCo version authority: {version_file}") from exc
-    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
-        raise RecipeError(f"invalid MuJoCo version in {version_file}: {version!r}")
-    return version
-
-
 def _read_checksum(path: Path, asset_name: str) -> str:
     try:
         fields = path.read_text(encoding="utf-8").strip().split()
@@ -392,7 +391,29 @@ def _install_mujoco_linux(archive: Path, drone_root: Path, version: str) -> Path
 def materialize_mujoco_runtime(
     drone_root: Path, system_name: str, cache_root: Path
 ) -> dict[str, Any]:
-    version = _read_mujoco_version(drone_root)
+    native_runtime = load_native_runtime_module()
+    try:
+        _requirement, contract, _adapter = native_runtime.resolve_contract(
+            DRONE_CATALOG,
+            recipe_file(),
+            DRONE_COMPONENT_ID,
+            drone_root,
+            system_name,
+        )
+    except native_runtime.NativeRuntimeError as exc:
+        raise RecipeError(str(exc)) from exc
+    if contract.release != PUBLIC_DRONE_RELEASE:
+        raise RecipeError(
+            "Recipe native distribution and Catalog profile disagree: "
+            f"expected {PUBLIC_DRONE_RELEASE}, got {contract.release}"
+        )
+    mujoco = next(
+        (runtime for runtime in contract.managed_runtimes if runtime.name == "mujoco"),
+        None,
+    )
+    if mujoco is None:
+        raise RecipeError("Catalog native runtime profile does not require MuJoCo")
+    version = mujoco.version
     asset_name = _mujoco_asset(version, system_name, platform.machine())
     release_url = f"{MUJOCO_RELEASE_BASE}/{version}"
     checksum_url = f"{release_url}/{asset_name}.sha256"
@@ -451,7 +472,8 @@ def materialize_mujoco_runtime(
 
     return {
         "mode": mode,
-        "version_authority": str(drone_root / "MUJOCO_VERSION.txt"),
+        "requirements": str(contract.path),
+        "version_authority": str(mujoco.version_file),
         "version": version,
         "asset": asset_name,
         "sha256": expected_sha256,
@@ -616,9 +638,9 @@ def _parse_scalar(value: str) -> Any:
 
 
 def load_simple_yaml(path: Path) -> dict[str, Any]:
-    """Load the dependency-free YAML subset used by the experiment files."""
+    """Load the dependency-free YAML subset used by Recipe-owned contracts."""
     if not path.is_file():
-        raise RecipeError(f"experiment YAML not found: {path}")
+        raise RecipeError(f"YAML file not found: {path}")
     root: dict[str, Any] = {}
     stack: list[tuple[int, dict[str, Any]]] = [(-1, root)]
     for line_number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
@@ -630,7 +652,7 @@ def load_simple_yaml(path: Path) -> dict[str, Any]:
         text = raw.strip()
         if text.startswith("-") or ":" not in text:
             raise RecipeError(
-                f"{path}:{line_number}: experiment YAML supports mappings, scalars, and inline lists only"
+                f"{path}:{line_number}: YAML supports mappings, scalars, and inline lists only"
             )
         key, value = text.split(":", 1)
         key = key.strip()
@@ -1894,12 +1916,20 @@ def session_file(paths) -> Path:
 
 
 def runtime_environment(paths, drone_root: Path, system_name: str) -> dict[str, str]:
-    env = os.environ.copy()
+    env = native_library_environment(paths, drone_root, system_name)
     python = resolve_foundation_python(paths, system_name)
     env["HAKO_CONFIG_PATH"] = str(paths.foundation_config / "cpp_core_config.json")
     env["PATH"] = os.pathsep.join(
         [str(python.parent), str(paths.install_prefix / "bin"), env.get("PATH", "")]
     )
+
+    return env
+
+
+def native_library_environment(
+    paths, drone_root: Path, system_name: str
+) -> dict[str, str]:
+    env = os.environ.copy()
     key = "PATH" if system_name == "Windows" else (
         "DYLD_LIBRARY_PATH" if system_name == "Darwin" else "LD_LIBRARY_PATH"
     )
@@ -1999,17 +2029,25 @@ def doctor(
     foundation.print_inspection(inspection, False)
     system_name = platform.system()
     checks: list[tuple[str, bool, str]] = []
+    native_runtime = load_native_runtime_module()
     try:
-        drone_binary = resolve_drone_binary(drone_root, system_name)
-        checks.append(("native drone service", True, str(drone_binary)))
-    except RecipeError as exc:
-        checks.append(("native drone service", False, str(exc)))
+        _contract, native_checks = native_runtime.validate_requirement(
+            DRONE_CATALOG,
+            recipe_file(),
+            DRONE_COMPONENT_ID,
+            drone_root,
+            native_library_environment(paths, drone_root, system_name),
+            active_optional_roles=(
+                ("visual_state_publisher",) if experiment.visualization else ()
+            ),
+        )
+        checks.extend(
+            (check.label, check.ok, check.detail) for check in native_checks
+        )
+    except native_runtime.NativeRuntimeError as exc:
+        checks.append(("native runtime contract", False, str(exc)))
+
     if experiment.visualization:
-        try:
-            publisher = resolve_visual_state_publisher(drone_root, system_name)
-            checks.append(("visual-state publisher", True, str(publisher)))
-        except RecipeError as exc:
-            checks.append(("visual-state publisher", False, str(exc)))
         bridge = web_bridge_path(paths, system_name)
         checks.append(("WebBridge", bridge.is_file(), str(bridge)))
         bridge_config = bridge_config_root(paths)
