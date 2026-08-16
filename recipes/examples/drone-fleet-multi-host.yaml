@@ -162,15 +162,23 @@ foundation_requirements:
       python_binding: true
       measurement_library: true
     build_limits:
-      asset_num: {min: 16}
-      pdu_channel_max: {min: 4096}
-      recv_event_max: {min: 2048}
-      service_client_max: {min: 128}
-      service_max: {min: 512}
-      client_name_len_max: {min: 64}
-      service_name_len_max: {min: 128}
+      asset_num:
+        min: 16
+      pdu_channel_max:
+        min: 4096
+      recv_event_max:
+        min: 2048
+      service_client_max:
+        min: 128
+      service_max:
+        min: 512
+      client_name_len_max:
+        min: 64
+      service_name_len_max:
+        min: 128
   hakoniwa-pdu-python:
-    version: {min: 1.6.6}
+    version:
+      min: 1.6.6
     capabilities:
       hako_launcher: true
       launcher_background_lifecycle: true

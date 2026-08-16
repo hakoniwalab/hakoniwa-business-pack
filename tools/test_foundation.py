@@ -511,6 +511,20 @@ class FoundationInspectorTest(unittest.TestCase):
         self.assertIn("platform.os", fields)
         self.assertIn("artifacts.lib/component.marker", fields)
 
+    def test_build_limit_without_nested_integer_min_is_actionable(self) -> None:
+        self.write_recipe(
+            "  component-a:\n"
+            "    build_limits:\n"
+            "      asset_num: {min: 16}\n"
+        )
+        self.write_receipt("component-a", build_limits="\n  asset_num: 16")
+
+        with self.assertRaisesRegex(
+            foundation.FoundationError,
+            "build_limits.asset_num.min must be an integer",
+        ):
+            foundation.inspect_foundation(self.recipe, self.prefix)
+
     def test_core_receipt_soabi_must_match_foundation_python(self) -> None:
         self.write_recipe(
             "  hakoniwa-core-pro:\n"

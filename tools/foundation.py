@@ -661,7 +661,12 @@ def evaluate_component(
                 _reason(f"capabilities.{capability}", enabled, installed)
             )
     for limit, constraint in required.get("build_limits", {}).items():
-        minimum = constraint.get("min")
+        minimum = constraint.get("min") if isinstance(constraint, dict) else None
+        if not isinstance(minimum, int):
+            raise FoundationError(
+                f"foundation requirement build_limits.{limit}.min must be an integer; "
+                "use the nested YAML form with 'min:' on the following indented line"
+            )
         installed = receipt.get("build_limits", {}).get(limit)
         if not isinstance(installed, int) or installed < minimum:
             reasons.append(
