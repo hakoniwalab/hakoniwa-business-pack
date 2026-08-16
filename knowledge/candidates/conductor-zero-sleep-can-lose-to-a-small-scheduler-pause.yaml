@@ -1,0 +1,85 @@
+id: conductor-zero-sleep-can-lose-to-a-small-scheduler-pause
+title: Zero Conductor sleep can lose to a small scheduler pause
+status: validating
+
+knowledge_type:
+  - runtime_rule
+  - known_pitfall
+  - validation_rule
+
+summary: >
+  Removing Conductor wall-clock sleep does not guarantee the highest RTF. In a
+  controlled 64-UAV two-host pilot, a 1 ms sleep produced higher RTF and lower
+  CPU use than the zero-sleep yield-only loop. Select the pacing profile from
+  paired measurements instead of assuming zero is optimal.
+
+observation:
+  context: >
+    Comparing real_sleep_msec values 10, 1, and 0 for the headless 64-UAV
+    multi-host scaling preflight on macOS srv-01 and WSL2 cli-01.
+  details:
+    - All conditions used 32 UAV per host, 4 server processes, 12 client processes, a 1 ms Conductor step, a 20 ms maximum delay, and a 10 ms SimTime publication interval.
+    - All three paired runs passed preflight and every fleet phase with matching host configuration hashes.
+    - Server RTF was 0.8900 at 10 ms, 2.5449 at 1 ms, and 2.4556 at 0 ms.
+    - From 1 ms to 0 ms, server average CPU increased from 45.10% to 60.60% and client average CPU increased from 64.43% to 69.17%.
+    - The 1 ms profile provisionally Pareto-dominated 0 ms for this condition.
+    - Scheduler contention from the yield-only loop is a plausible explanation, not yet a proven causal mechanism.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: recipes/experiments/drone-fleet-performance/multi-host-scaling.yaml
+      revision: 2c77f09
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: docs/drone-fleet-multi-host-configuration.md
+      revision: working-tree-after-2c77f09
+  runtime_evidence:
+    - description: Paired 64-UAV summary for real_sleep_msec=10 reported server RTF 0.890020 and success on both hosts.
+    - description: Paired 64-UAV summary for real_sleep_msec=1 reported server RTF 2.544892 and success on both hosts.
+    - description: Paired 64-UAV summary for real_sleep_msec=0 reported server RTF 2.455646 and success on both hosts.
+  expert_input:
+    - source: Hakoniwa maintainer
+      statement: Record why 1 ms was selected so the experimental choice can be explained later.
+
+confidence: medium
+
+contradictions:
+  - target: Multi-host scaling pacing assumption
+    existing_claim: real_sleep_msec=0 should be the final profile because it removes wall-clock sleep.
+    new_evidence: The zero-sleep 64-UAV run was slower and consumed more CPU than the 1 ms run.
+
+validation:
+  status: partially_verified
+  required:
+    - Repeat the 1 ms and 0 ms comparison at 256 UAV with otherwise identical conditions.
+    - Use repeated attempts if the 256-UAV difference is close enough to plausible run-to-run noise.
+  notes:
+    - RTF evidence is tightly matched across hosts, but each condition currently has one attempt.
+    - macOS CPU averages contain fewer valid CPU samples than Linux because of the shorter high-RTF runs.
+
+tracking:
+  implementation_status: in_progress
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - drone-fleet-multi-host
+  executable_guardrails: []
+
+promotion_rationale:
+  - The observation guides experiment-profile selection and belongs with the multi-host Recipe rather than a component Catalog entry.
+  - No blocking guardrail is appropriate because the best pacing value is empirical and workload-dependent.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to:
+    - docs/drone-fleet-multi-host-configuration.md
+  executable_guardrails: []
+  notes:
+    - Treat 1 ms as provisional until the 256-UAV comparison is complete.

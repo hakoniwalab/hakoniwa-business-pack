@@ -24,7 +24,7 @@ runtime:
     simtime_publish_interval_usec: 10000
     # Scalar pilot parameter. Change manually: 10 -> 5 -> 2 -> 1 -> 0.
     # It is intentionally not a matrix axis; the final scaling target is 0.
-    real_sleep_msec: 0
+    real_sleep_msec: 1
     simtime_publish_mode: delta_boundary
 
 deployment:

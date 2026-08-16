@@ -254,3 +254,33 @@ Results produced before the effective timing contract was introduced may still
 demonstrate multi-host connectivity, but must not be used as timing-profile
 performance evidence unless their generated role configurations and executed
 binary identities can be reconstructed and verified.
+
+### 64-UAV real-sleep pilot decision (2026-08-16)
+
+The first valid paired pilot held the UAV count (64), placement (32 per host),
+process policy (4 on `srv-01`, 12 on `cli-01`), 1 ms Conductor step, 20 ms
+maximum delay, 10 ms SimTime publication interval, workload, and measurement
+boundary constant. Only `real_sleep_msec` changed.
+
+| `real_sleep_msec` | Server RTF | Server CPU avg. | Client CPU avg. |
+| ---: | ---: | ---: | ---: |
+| 10 | 0.8900 | 44.64% | 64.90% |
+| 1 | **2.5449** | **45.10%** | **64.43%** |
+| 0 | 2.4556 | 60.60% | 69.17% |
+
+All three conditions completed all 64 UAV phases, passed preflight, and paired
+with matching configuration hashes. Moving from 1 ms to 0 ms reduced server
+RTF by about 3.5% while increasing average CPU by about 34% on the server and
+7% on the client. Therefore 1 ms is the provisional scaling-profile choice: it
+Pareto-dominated 0 ms in this pilot rather than being selected merely because
+it was nonzero. A likely explanation is increased scheduler contention in the
+zero-sleep (`yield()`-only) loop, but the measurements establish the selection;
+they do not by themselves prove that mechanism.
+
+This is a one-attempt, 64-UAV pilot. Reconfirm 1 ms versus 0 ms at 256 UAV
+before treating 1 ms as the final full-matrix profile. The authoritative local
+summaries are:
+
+- `multi-host-scaling-sleep-010ms-uav-064.json`
+- `multi-host-scaling-sleep-001ms-uav-064.json`
+- `multi-host-scaling-sleep-000ms-uav-064.json`
