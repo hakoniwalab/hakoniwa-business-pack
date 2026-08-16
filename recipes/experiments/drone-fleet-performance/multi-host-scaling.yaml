@@ -6,7 +6,7 @@ experiment:
 scale:
   drone_count: 256
   drones_per_process: auto
-  process_count: 16
+  process_count: 18
 
 matrix:
   drone_count: [64, 128, 256]
@@ -47,7 +47,7 @@ deployment:
       node_id: srv-01-01
       address: 192.168.2.100
       drone_count: auto
-      process_count: 4
+      process_count: 6
       global_start_index: auto
       launcher_mode: activate-only
     cli-01:

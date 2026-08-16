@@ -176,7 +176,9 @@ to WSL2.
 `multi-host-scaling.yaml` is the ICRA-oriented, headless scaling Recipe. Its
 matrix varies only the total UAV count (`64`, `128`, `256`) and currently uses
 one attempt. Equal allocation resolves each condition across `srv-01` and
-`cli-01`; their fixed process policy is 4 and 12 processes respectively.
+`cli-01`; their Experiment B-derived process policy is 6 and 12 processes
+respectively. This differs from the legacy connectivity baseline, which used
+4 processes on `srv-01` and 12 on `cli-01`.
 
 The Conductor `real_sleep_msec` value is deliberately a scalar Recipe setting,
 not a matrix axis. Before the final scaling run, edit that one value manually

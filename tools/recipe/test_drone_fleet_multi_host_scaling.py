@@ -43,11 +43,11 @@ class DroneFleetMultiHostScalingTest(unittest.TestCase):
             condition = scaling.resolve_condition(raw, drone_count)
             hosts = condition["deployment"]["hosts"]
             self.assertEqual(hosts["srv-01"]["drone_count"], server_count)
-            self.assertEqual(hosts["srv-01"]["process_count"], 4)
+            self.assertEqual(hosts["srv-01"]["process_count"], 6)
             self.assertEqual(hosts["cli-01"]["drone_count"], client_count)
             self.assertEqual(hosts["cli-01"]["process_count"], 12)
             self.assertEqual(hosts["cli-01"]["global_start_index"], client_start)
-            self.assertEqual(condition["scale"]["process_count"], 16)
+            self.assertEqual(condition["scale"]["process_count"], 18)
 
     def test_resolved_condition_builds_headless_target_conductor_input(self) -> None:
         raw, _counts, _attempts = scaling.load_scaling(
