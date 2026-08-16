@@ -1,13 +1,13 @@
 id: drone-fleet-multi-process-scaling
-title: Native Drone Fleet Multi-process Performance Measurement
+title: Native Drone Fleet Boundary-focused Multi-process Performance Measurement
 recipe_version: 0.1
 goal:
-  user_request: 128台の箱庭ドローンを同一ホストで複数プロセスへ均等分割し、プロセス数による性能変化を測定したい
+  user_request: 箱庭ドローンの実時間性能境界付近で、同一ホストのプロセス分割による回復可能領域を測定したい
   description: >
-    Keep the logical workload fixed at 128 UAVs and measure native single-host
-    performance while changing only the simulator process count. This is the
-    Experiment B preflight profile and intentionally keeps the embedded
-    Conductor used by single-node execution.
+    Measure native single-host performance on an explicit sparse matrix of 32,
+    64, and 128 UAV workloads and simulator process counts. This boundary-focused
+    Experiment B profile identifies where process partitioning restores real-time
+    performance and intentionally keeps the embedded Conductor used by single-node execution.
 feasibility:
   status: feasible
   confidence: high
@@ -16,7 +16,7 @@ feasibility:
     - The Core asset limit allows one Fleet Asset plus up to 15 simulator processes.
 validation:
   status: partially_verified
-  summary: The seven-condition performance preflight and the 2-vs-15-process Temporal Validation are verified on native macOS; WSL2/Ubuntu execution remains to be verified.
+  summary: The former fixed-128-UAV performance preflight and the 2-vs-15-process Temporal Validation are verified on native macOS; the boundary-focused sparse matrix remains to be rerun on WSL2/Ubuntu.
   steps:
     - id: macos_performance_preflight
       status: verified
@@ -36,7 +36,7 @@ validation:
 constraints:
   - single-host
   - native-execution-only
-  - fixed-128-uav-workload
+  - explicit-sparse-workload-matrix
   - embedded-conductor
   - headless-performance-mode
   - no-real-time-pacing
@@ -113,7 +113,7 @@ components:
     roles: []
 connections: []
 data_flow:
-  - process-count matrix -> near-even fleet partitions -> repeated performance results
+  - sparse UAV/process workload matrix -> near-even fleet partitions -> repeated performance results
 time_model:
   mode: virtual-time-performance
   notes:
@@ -122,17 +122,18 @@ time_model:
 artifact_sets: {}
 artifacts: []
 missing_pieces:
-  - WSL2/Ubuntu execution of Experiment B and its dedicated Temporal Validation remains to be verified.
+  - WSL2/Ubuntu execution of the boundary-focused Experiment B matrix remains to be verified.
 experiment_contract:
   source: recipes/experiments/drone-fleet-performance/multi-process-scaling.yaml
   user_inputs:
-    - matrix.process_count
+    - matrix.workloads
     - matrix.attempts
     - measurement.protocol_status
     - measurement.invalid_conditions
     - recipes/experiments/drone-fleet-performance/single-host-temporal-validation.yaml
   resolution:
-    - Experiment B fixes the workload at 128 UAVs and partitions it near-evenly across each declared process count.
+    - Experiment B explicitly measures 32, 64, and 128 UAV workloads with a sparse process grid and never expands them as a Cartesian product.
+    - The 16-UAV single-process boundary anchor remains Experiment A evidence and is not duplicated in Experiment B.
     - Temporal Validation is a separate 2-vs-15-process series and its timing results never enter the performance summary.
 demo:
   prerequisites:
@@ -142,10 +143,10 @@ demo:
   steps:
     - id: inspect_performance_matrix
       command: python tools/recipe/drone_fleet_performance_b.py plan
-      expected: Show all seven process-count conditions and their recorded or pending attempts.
+      expected: Show only the 16 explicitly declared UAV/process conditions and their recorded or pending attempts.
     - id: run_performance_matrix
       command: python tools/recipe/drone_fleet_performance_b.py run
-      expected: Execute the initial three attempts for every process count.
+      expected: Execute the initial three attempts for every declared UAV/process condition.
     - id: resume_performance_matrix
       command: python tools/recipe/drone_fleet_performance_b.py run --resume
       expected: Preserve recorded attempts and continue pending performance measurements.
@@ -157,10 +158,10 @@ demo:
       expected: Add attempts four and five only for conditions whose three-run spread exceeds the fixed threshold or contains failures.
     - id: summarize_performance
       command: python tools/recipe/drone_fleet_performance_b.py summarize
-      expected: Generate raw and aggregate Experiment B JSON and CSV summaries and process-count selection evidence.
+      expected: Generate raw and aggregate Experiment B summaries grouped by UAV count, including real-time recovery and process-count selection evidence.
     - id: plot_performance
-      command: python tools/recipe/drone_fleet_performance_plot.py work/recipes/drone-fleet-multi-process-scaling/results/multi-process-scaling/summary/experiment-b.json --x-field process_count
-      expected: Generate the dependency-free SVG containing RTF, step time, CPU, and memory panels.
+      command: python tools/recipe/drone_fleet_performance_plot.py work/recipes/drone-fleet-multi-process-scaling/results/multi-process-scaling/summary/experiment-b.json --x-field process_count --drone-count 64
+      expected: Generate a dependency-free SVG for one selected UAV workload; repeat with 32 or 128 to compare the other workload boundaries.
     - id: inspect_temporal_matrix
       command: python tools/recipe/drone_fleet_temporal_b.py plan
       expected: Show the separate 128-UAV temporal conditions at 2 and 15 processes.
@@ -188,8 +189,9 @@ demo:
     cautions:
       - A Ctrl+C interruption may leave the current Launcher condition active; inspect and stop it before another attempt.
 expected_result: >
-  Seven process-count results preserve a fixed 128-UAV workload and report
-  validated RTF, step time, CPU, and memory data.
+  Sixteen sparse UAV/process conditions report validated RTF, step time, CPU,
+  memory, and the minimum process count that recovers real-time performance for
+  each workload when one exists.
 source_catalogs:
   - component_id: hakoniwa-core-pro
   - component_id: hakoniwa-pdu-python

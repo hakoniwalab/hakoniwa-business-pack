@@ -18,8 +18,12 @@ sections:
     extension_fields: false
   matrix:
     required_fields: []
-    optional_fields: [drone_count, process_count, conductor_real_sleep_msec, attempts]
+    optional_fields: [drone_count, process_count, workloads, conductor_real_sleep_msec, attempts]
     extension_fields: false
+    workload:
+      required_fields: [drone_count, process_count]
+      optional_fields: []
+      extension_fields: false
   runtime:
     required_fields: [mode, visualization, show_runner_real_time_sync]
     optional_fields: [conductor]
@@ -135,6 +139,7 @@ semantics:
   - When multi-host visualization is enabled, it declares one publisher chunk for every host and places Bridge and Viewer on declared hosts; headless experiments omit the visualization section.
   - A controlled Conductor profile prevents timing parameters from drifting independently under a stable profile name.
   - The ICRA target profile fixes timing mode and intervals while leaving real_sleep_msec as one scalar experiment parameter; the multi-host scaling matrix does not vary it.
+  - A workloads matrix declares an explicit sparse set of drone-count and process-count combinations; it never implies a Cartesian product.
   - Host keys express stable roles such as server and client; platform and execution_environment map those roles to the current machines.
   - machine_address records physical host metadata; address is the server address advertised to clients. A WSL2-private address is never an input.
   - Scenario contents and detailed measurement policy remain Recipe-specific extensions; their common container and identity fields are validated here.

@@ -27,8 +27,10 @@ EXPERIMENT = (
 )
 
 
-def result_payload(process_count: int, attempt: int, step_sec: float) -> dict:
-    configuration = matrix.configuration_id(128, process_count)
+def result_payload(
+    process_count: int, attempt: int, step_sec: float, drone_count: int = 128
+) -> dict:
+    configuration = matrix.configuration_id(drone_count, process_count)
     return {
         "run_id": f"{configuration}-attempt-{attempt:02d}",
         "status": "success",
@@ -45,13 +47,13 @@ def result_payload(process_count: int, attempt: int, step_sec: float) -> dict:
         "machine": {"cpu_average_percent": 20.0},
         "metadata": {
             "configuration_id": configuration,
-            "drone_count": 128,
+            "drone_count": drone_count,
             "process_count": process_count,
             "attempt": attempt,
             "preflight_boundary": {"passed": True},
             "fleet_phase_results": [
-                {"phase": "takeoff", "total": 128, "status": "PASS"},
-                {"phase": "goto:HAKONIWA", "total": 128, "status": "PASS"},
+                {"phase": "takeoff", "total": drone_count, "status": "PASS"},
+                {"phase": "goto:HAKONIWA", "total": drone_count, "status": "PASS"},
             ],
         },
         "validation": {"passed": True},
@@ -59,10 +61,18 @@ def result_payload(process_count: int, attempt: int, step_sec: float) -> dict:
 
 
 class DroneFleetPerformanceBTest(unittest.TestCase):
-    def test_matrix_contract_is_fixed_workload_embedded_conductor(self) -> None:
-        base, process_counts, attempts = matrix.load_matrix(EXPERIMENT)
+    def test_matrix_contract_is_sparse_workloads_with_embedded_conductor(self) -> None:
+        base, workloads, attempts = matrix.load_matrix(EXPERIMENT)
         self.assertEqual(base.drone_count, 128)
-        self.assertEqual(process_counts, [1, 2, 4, 6, 8, 12, 15])
+        self.assertEqual(
+            matrix.workload_groups(workloads),
+            [
+                (32, [1, 2, 4, 6]),
+                (64, [1, 2, 4, 6, 8]),
+                (128, [1, 2, 4, 6, 8, 12, 15]),
+            ],
+        )
+        self.assertEqual(len(workloads), 16)
         self.assertEqual(attempts, 3)
         assert base.measurement is not None
         self.assertEqual(base.measurement.conductor_implementation, "embedded")
@@ -83,17 +93,19 @@ class DroneFleetPerformanceBTest(unittest.TestCase):
         self.assertEqual(sum(partitions), 128)
 
     def test_materialized_condition_has_process_specific_identity(self) -> None:
-        base, _process_counts, _attempts = matrix.load_matrix(EXPERIMENT)
+        base, _workloads, _attempts = matrix.load_matrix(EXPERIMENT)
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "condition.yaml"
             with mock.patch.object(matrix, "generated_experiment_path", return_value=output):
-                generated = matrix.materialize_experiment(base, 6, 2)
+                generated = matrix.materialize_experiment(
+                    base, matrix.Workload(64, 6), 2
+                )
             resolved = matrix.operator.resolve_experiment(generated)
-        self.assertEqual(resolved.drone_count, 128)
+        self.assertEqual(resolved.drone_count, 64)
         self.assertEqual(resolved.process_count, 6)
-        self.assertEqual(resolved.drones_per_process, 22)
+        self.assertEqual(resolved.drones_per_process, 11)
         assert resolved.measurement is not None
-        self.assertEqual(resolved.measurement.configuration_id, "uav-128-proc-06")
+        self.assertEqual(resolved.measurement.configuration_id, "uav-064-proc-06")
         self.assertEqual(resolved.measurement.attempt, 2)
 
     def test_result_identity_rejects_wrong_process_or_fleet_total(self) -> None:
@@ -122,7 +134,7 @@ class DroneFleetPerformanceBTest(unittest.TestCase):
             self.assertFalse(matrix.reusable_result(invalid))
 
     def test_reuse_rechecks_current_preflight_thresholds(self) -> None:
-        base, _process_counts, _attempts = matrix.load_matrix(EXPERIMENT)
+        base, _workloads, _attempts = matrix.load_matrix(EXPERIMENT)
         with tempfile.TemporaryDirectory() as temporary:
             result = Path(temporary) / "result.json"
             payload = result_payload(1, 1, 0.001)
@@ -151,7 +163,7 @@ class DroneFleetPerformanceBTest(unittest.TestCase):
                     payload, Path(f"result-{process_count}.json"), 128, process_count, 1
                 )
             )
-        aggregates, selected, status = matrix.aggregate(rows, [1, 2])
+        aggregates, selected, status = matrix.aggregate(rows, 128, [1, 2])
         self.assertIsNone(selected)
         self.assertEqual(status, "additional_runs_required")
         self.assertTrue(all(not row["stable_estimate"] for row in aggregates))
@@ -173,10 +185,30 @@ class DroneFleetPerformanceBTest(unittest.TestCase):
                         attempt,
                     )
                 )
-        aggregates, selected, status = matrix.aggregate(rows, [1, 2])
+        aggregates, selected, status = matrix.aggregate(rows, 128, [1, 2])
         self.assertEqual(status, "selected")
         self.assertEqual(selected, 1)
         self.assertTrue(aggregates[0]["performance_equivalent"])
+
+    def test_aggregate_keeps_same_process_count_separate_by_workload(self) -> None:
+        rows = []
+        for drone_count, step_sec in ((32, 0.0005), (64, 0.002)):
+            for attempt in range(1, 4):
+                rows.append(
+                    matrix.summary_row(
+                        result_payload(2, attempt, step_sec, drone_count),
+                        Path(f"uav-{drone_count}-attempt-{attempt}.json"),
+                        drone_count,
+                        2,
+                        attempt,
+                    )
+                )
+        aggregates, selected, status = matrix.aggregate(rows, 32, [2])
+        self.assertEqual(status, "selected")
+        self.assertEqual(selected, 2)
+        self.assertEqual(aggregates[0]["drone_count"], 32)
+        self.assertEqual(aggregates[0]["recorded_count"], 3)
+        self.assertTrue(aggregates[0]["realtime_recovered"])
 
     def test_large_three_attempt_spread_blocks_selection_and_requests_escalation(self) -> None:
         rows = []
@@ -190,7 +222,7 @@ class DroneFleetPerformanceBTest(unittest.TestCase):
                     attempt,
                 )
             )
-        aggregates, selected, status = matrix.aggregate(rows, [1])
+        aggregates, selected, status = matrix.aggregate(rows, 128, [1])
         self.assertEqual(status, "additional_runs_required")
         self.assertIsNone(selected)
         self.assertTrue(aggregates[0]["escalation_required"])
@@ -209,7 +241,7 @@ class DroneFleetPerformanceBTest(unittest.TestCase):
                     attempt,
                 )
             )
-        aggregates, selected, status = matrix.aggregate(rows, [1])
+        aggregates, selected, status = matrix.aggregate(rows, 128, [1])
         self.assertEqual(status, "selected")
         self.assertEqual(selected, 1)
         self.assertTrue(aggregates[0]["escalation_required"])
@@ -255,20 +287,36 @@ class DroneFleetPerformanceBTest(unittest.TestCase):
         kill.assert_called_once_with(321, matrix.signal.SIGTERM)
 
     def test_extend_runs_attempts_four_and_five_only_for_escalated_conditions(self) -> None:
-        base, process_counts, attempts = matrix.load_matrix(EXPERIMENT)
+        base, workloads, attempts = matrix.load_matrix(EXPERIMENT)
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
 
-            def fake_result_path(_base, process_count: int, attempt: int) -> Path:
-                return root / f"process-{process_count}" / f"attempt-{attempt}" / "result.json"
+            def fake_result_path(_base, workload, attempt: int) -> Path:
+                return (
+                    root
+                    / f"uav-{workload.drone_count}-process-{workload.process_count}"
+                    / f"attempt-{attempt}"
+                    / "result.json"
+                )
 
-            for process_count in process_counts:
-                values = (0.0010, 0.0010, 0.0012) if process_count == 6 else (0.001, 0.001, 0.001)
+            for workload in workloads:
+                values = (
+                    (0.0010, 0.0010, 0.0012)
+                    if workload == matrix.Workload(64, 6)
+                    else (0.001, 0.001, 0.001)
+                )
                 for attempt, step_sec in enumerate(values, 1):
-                    path = fake_result_path(base, process_count, attempt)
+                    path = fake_result_path(base, workload, attempt)
                     path.parent.mkdir(parents=True)
                     path.write_text(
-                        json.dumps(result_payload(process_count, attempt, step_sec)),
+                        json.dumps(
+                            result_payload(
+                                workload.process_count,
+                                attempt,
+                                step_sec,
+                                workload.drone_count,
+                            )
+                        ),
                         encoding="utf-8",
                     )
             with mock.patch.object(matrix, "result_path", side_effect=fake_result_path), mock.patch.object(
@@ -276,12 +324,15 @@ class DroneFleetPerformanceBTest(unittest.TestCase):
             ) as run_matrix:
                 rc = matrix.extend_matrix(
                     base,
-                    process_counts,
+                    workloads,
                     attempts,
                     rerun_invalid=False,
                 )
         self.assertEqual(rc, 0)
-        self.assertEqual(run_matrix.call_args.kwargs["attempt_plan"], {6: [4, 5]})
+        self.assertEqual(
+            run_matrix.call_args.kwargs["attempt_plan"],
+            {matrix.Workload(64, 6): [4, 5]},
+        )
         self.assertTrue(run_matrix.call_args.kwargs["resume"])
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run Experiment B: fixed-workload scaling across simulator processes."""
+"""Run Experiment B: boundary-focused scaling across simulator processes."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ import statistics
 import subprocess
 import sys
 import time
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -33,7 +33,11 @@ DEFAULT_EXPERIMENT = (
     / "drone-fleet-performance"
     / "multi-process-scaling.yaml"
 )
-PROCESS_GRID = [1, 2, 4, 6, 8, 12, 15]
+WORKLOAD_GRID = {
+    32: [1, 2, 4, 6],
+    64: [1, 2, 4, 6, 8],
+    128: [1, 2, 4, 6, 8, 12, 15],
+}
 MAX_SIMULATOR_PROCESSES = 15
 SELECTION_THRESHOLD = 0.05
 SPREAD_THRESHOLD = 0.05
@@ -43,6 +47,7 @@ ESCALATED_MEASURED_RUN_COUNT = 5
 DRONE_SERVICE_PROCESS_MARKER = "main_hako_drone_service"
 PROCESS_EXIT_TIMEOUT_SEC = 5.0
 AGGREGATE_FIELDS = (
+    "drone_count",
     "process_count",
     "recorded_count",
     "success_count",
@@ -54,11 +59,19 @@ AGGREGATE_FIELDS = (
     "escalation_required",
     "stable_estimate",
     "performance_equivalent",
+    "median_rtf",
+    "realtime_recovered",
 )
 
 
 class MatrixError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True, order=True)
+class Workload:
+    drone_count: int
+    process_count: int
 
 
 def running_drone_services() -> dict[int, str]:
@@ -170,29 +183,52 @@ def _positive_int(value: Any, label: str) -> int:
     return value
 
 
-def load_matrix(path: Path) -> tuple[operator.Experiment, list[int], int]:
+def load_matrix(path: Path) -> tuple[operator.Experiment, list[Workload], int]:
     raw = operator.load_simple_yaml(path)
     matrix = raw.get("matrix")
     if not isinstance(matrix, dict):
         raise MatrixError("matrix must be a mapping")
-    unknown = sorted(set(matrix) - {"process_count", "attempts"})
+    unknown = sorted(set(matrix) - {"workloads", "attempts"})
     if unknown:
         raise MatrixError(f"unknown matrix fields: {', '.join(unknown)}")
-    values = matrix.get("process_count")
-    if not isinstance(values, list) or not values:
-        raise MatrixError("matrix.process_count must be a non-empty inline list")
-    process_counts = [_positive_int(value, "matrix.process_count[]") for value in values]
-    if process_counts != sorted(process_counts):
-        raise MatrixError("matrix.process_count must be in ascending order")
-    if len(set(process_counts)) != len(process_counts):
-        raise MatrixError("matrix.process_count must not contain duplicates")
-    if process_counts != PROCESS_GRID:
-        raise MatrixError(f"Experiment B process grid must be {PROCESS_GRID}")
+    values = matrix.get("workloads")
+    if not isinstance(values, dict) or not values:
+        raise MatrixError("matrix.workloads must be a non-empty mapping")
+    workload_grid: dict[int, list[int]] = {}
+    for name, value in values.items():
+        label = f"matrix.workloads.{name}"
+        if not isinstance(value, dict):
+            raise MatrixError(f"{label} must be a mapping")
+        unknown_workload = sorted(set(value) - {"drone_count", "process_count"})
+        if unknown_workload:
+            raise MatrixError(f"unknown {label} fields: {', '.join(unknown_workload)}")
+        drone_count = _positive_int(value.get("drone_count"), f"{label}.drone_count")
+        process_values = value.get("process_count")
+        if not isinstance(process_values, list) or not process_values:
+            raise MatrixError(f"{label}.process_count must be a non-empty list")
+        process_counts = [
+            _positive_int(item, f"{label}.process_count[]")
+            for item in process_values
+        ]
+        if process_counts != sorted(process_counts):
+            raise MatrixError(f"{label}.process_count must be in ascending order")
+        if len(set(process_counts)) != len(process_counts):
+            raise MatrixError(f"{label}.process_count must not contain duplicates")
+        if drone_count in workload_grid:
+            raise MatrixError("matrix.workloads must not repeat drone_count")
+        workload_grid[drone_count] = process_counts
+    if list(workload_grid) != sorted(workload_grid):
+        raise MatrixError("matrix.workloads must be in ascending drone_count order")
+    if workload_grid != WORKLOAD_GRID:
+        raise MatrixError(f"Experiment B workload grid must be {WORKLOAD_GRID}")
+    workloads = [
+        Workload(drone_count, process_count)
+        for drone_count, process_counts in workload_grid.items()
+        for process_count in process_counts
+    ]
     attempts = _positive_int(matrix.get("attempts"), "matrix.attempts")
     base = operator.resolve_experiment(path)
-    if base.drone_count != 128:
-        raise MatrixError("Experiment B requires scale.drone_count=128")
-    if max(process_counts) > MAX_SIMULATOR_PROCESSES:
+    if max(workload.process_count for workload in workloads) > MAX_SIMULATOR_PROCESSES:
         raise MatrixError(
             "Experiment B requires one Fleet Asset plus each simulator process; "
             f"maximum process count is {MAX_SIMULATOR_PROCESSES}"
@@ -201,7 +237,7 @@ def load_matrix(path: Path) -> tuple[operator.Experiment, list[int], int]:
         raise MatrixError("Experiment B requires measurement.enabled=true")
     if base.measurement.conductor_implementation != "embedded":
         raise MatrixError("single-host Experiment B requires the embedded Conductor")
-    return base, process_counts, attempts
+    return base, workloads, attempts
 
 
 def workspace_root() -> Path:
@@ -212,42 +248,41 @@ def configuration_id(drone_count: int, process_count: int) -> str:
     return f"uav-{drone_count:03d}-proc-{process_count:02d}"
 
 
-def result_path(base: operator.Experiment, process_count: int, attempt: int) -> Path:
+def result_path(base: operator.Experiment, workload: Workload, attempt: int) -> Path:
     assert base.measurement is not None
     return (
         workspace_root()
         / base.results_directory
         / base.measurement.series
-        / configuration_id(base.drone_count, process_count)
+        / configuration_id(workload.drone_count, workload.process_count)
         / f"attempt-{attempt:02d}"
         / "result.json"
     )
 
 
-def generated_experiment_path(process_count: int, attempt: int) -> Path:
+def generated_experiment_path(workload: Workload, attempt: int) -> Path:
     return (
         workspace_root()
         / "matrix"
         / "experiment-b"
-        / configuration_id(128, process_count)
+        / configuration_id(workload.drone_count, workload.process_count)
         / f"attempt-{attempt:02d}.yaml"
     )
 
 
-def host_preflight_paths(process_count: int, attempt: int) -> tuple[Path, Path]:
+def host_preflight_paths(workload: Workload, attempt: int) -> tuple[Path, Path]:
     directory = workspace_root() / "runtime" / "host-preflight"
-    stem = f"{configuration_id(128, process_count)}-attempt-{attempt:02d}"
+    identity = configuration_id(workload.drone_count, workload.process_count)
+    stem = f"{identity}-attempt-{attempt:02d}"
     return directory / f"{stem}.json", directory / f"{stem}-samples.jsonl"
 
 
-def collect_host_preflight(
-    base: operator.Experiment, process_count: int, attempt: int
-) -> None:
+def collect_host_preflight(base: operator.Experiment, workload: Workload, attempt: int) -> None:
     assert base.measurement is not None
     foundation = operator.load_foundation_module()
     paths = foundation.resolve_workspace(ROOT, RECIPE_ID)
     python = operator.resolve_foundation_python(paths, platform.system())
-    output, samples = host_preflight_paths(process_count, attempt)
+    output, samples = host_preflight_paths(workload, attempt)
     command = [
         str(python),
         str(Path(__file__).with_name("assets") / "collect_machine_preflight.py"),
@@ -341,23 +376,24 @@ def archive_active_series(base: operator.Experiment) -> Path | None:
 
 
 def materialize_experiment(
-    base: operator.Experiment, process_count: int, attempt: int
+    base: operator.Experiment, workload: Workload, attempt: int
 ) -> Path:
     assert base.measurement is not None
     measurement = replace(
         base.measurement,
-        configuration_id=configuration_id(base.drone_count, process_count),
+        configuration_id=configuration_id(workload.drone_count, workload.process_count),
         attempt=attempt,
     )
     condition = replace(
         base,
-        drones_per_process=math.ceil(base.drone_count / process_count),
-        process_count=process_count,
+        drone_count=workload.drone_count,
+        drones_per_process=math.ceil(workload.drone_count / workload.process_count),
+        process_count=workload.process_count,
         measurement=measurement,
     )
     payload = operator.resolved_experiment_dict(condition)
     payload.pop("resolved", None)
-    output = generated_experiment_path(process_count, attempt)
+    output = generated_experiment_path(workload, attempt)
     operator.write_simple_yaml(output, payload)
     operator.resolve_experiment(output)
     return output
@@ -444,11 +480,16 @@ def summary_paths(base: operator.Experiment) -> tuple[Path, Path, Path]:
 
 
 def aggregate(
-    rows: list[dict[str, Any]], process_counts: list[int]
+    rows: list[dict[str, Any]], drone_count: int, process_counts: list[int]
 ) -> tuple[list[dict[str, Any]], int | None, str]:
     summaries: list[dict[str, Any]] = []
     for process_count in process_counts:
-        recorded = [row for row in rows if row["process_count"] == process_count]
+        recorded = [
+            row
+            for row in rows
+            if row["drone_count"] == drone_count
+            and row["process_count"] == process_count
+        ]
         successful = [
             row
             for row in recorded
@@ -457,6 +498,7 @@ def aggregate(
             and isinstance(row.get("average_step_wall_clock_sec"), (int, float))
         ]
         values = [float(row["average_step_wall_clock_sec"]) for row in successful]
+        rtf_values = [float(row["rtf"]) for row in successful]
         median = statistics.median(values) if values else None
         minimum = min(values) if values else None
         maximum = max(values) if values else None
@@ -476,6 +518,7 @@ def aggregate(
         )
         summaries.append(
             {
+                "drone_count": drone_count,
                 "process_count": process_count,
                 "recorded_count": len(recorded),
                 "success_count": len(successful),
@@ -491,6 +534,10 @@ def aggregate(
                     and len(successful) >= MINIMUM_STABLE_SUCCESS_COUNT
                 ),
                 "performance_equivalent": False,
+                "median_rtf": statistics.median(rtf_values) if rtf_values else None,
+                "realtime_recovered": (
+                    statistics.median(rtf_values) >= 1.0 if rtf_values else False
+                ),
             }
         )
     stable = [row for row in summaries if row["stable_estimate"]]
@@ -520,75 +567,125 @@ def aggregate(
     return summaries, min(candidates), "selected"
 
 
+def workload_groups(workloads: list[Workload]) -> list[tuple[int, list[int]]]:
+    groups: dict[int, list[int]] = {}
+    for workload in workloads:
+        groups.setdefault(workload.drone_count, []).append(workload.process_count)
+    return list(groups.items())
+
+
 def initial_escalation_targets(
-    base: operator.Experiment, process_counts: list[int], attempts: int
-) -> tuple[list[int], list[str]]:
+    base: operator.Experiment, workloads: list[Workload], attempts: int
+) -> tuple[list[Workload], list[str]]:
     rows: list[dict[str, Any]] = []
     missing: list[str] = []
-    for process_count in process_counts:
+    for workload in workloads:
         for attempt in range(1, attempts + 1):
-            path = result_path(base, process_count, attempt)
+            path = result_path(base, workload, attempt)
             if not path.is_file():
                 missing.append(str(path))
                 continue
             payload = common.load_result(path)
-            rows.append(summary_row(payload, path, base.drone_count, process_count, attempt))
+            rows.append(
+                summary_row(
+                    payload,
+                    path,
+                    workload.drone_count,
+                    workload.process_count,
+                    attempt,
+                )
+            )
     if missing:
         return [], missing
-    aggregates, _selected, _status = aggregate(rows, process_counts)
-    return [
-        int(row["process_count"])
-        for row in aggregates
-        if row["escalation_required"]
-    ], []
+    targets: list[Workload] = []
+    for drone_count, process_counts in workload_groups(workloads):
+        aggregates, _selected, _status = aggregate(rows, drone_count, process_counts)
+        targets.extend(
+            Workload(drone_count, int(row["process_count"]))
+            for row in aggregates
+            if row["escalation_required"]
+        )
+    return targets, []
 
 
 def summary_attempt_limits(
-    base: operator.Experiment, process_counts: list[int], attempts: int
-) -> dict[int, int]:
-    limits = {process_count: attempts for process_count in process_counts}
-    targets, missing = initial_escalation_targets(base, process_counts, attempts)
+    base: operator.Experiment, workloads: list[Workload], attempts: int
+) -> dict[Workload, int]:
+    limits = {workload: attempts for workload in workloads}
+    targets, missing = initial_escalation_targets(base, workloads, attempts)
     if missing:
         return limits
     additional_started = any(
-        result_path(base, process_count, attempt).is_file()
-        for process_count in targets
+        result_path(base, workload, attempt).is_file()
+        for workload in targets
         for attempt in range(attempts + 1, ESCALATED_MEASURED_RUN_COUNT + 1)
     )
     if additional_started:
-        for process_count in targets:
-            limits[process_count] = ESCALATED_MEASURED_RUN_COUNT
+        for workload in targets:
+            limits[workload] = ESCALATED_MEASURED_RUN_COUNT
     return limits
 
 
-def summarize(base: operator.Experiment, process_counts: list[int], attempts: int) -> int:
+def summarize(base: operator.Experiment, workloads: list[Workload], attempts: int) -> int:
     rows: list[dict[str, Any]] = []
     missing: list[str] = []
-    attempt_limits = summary_attempt_limits(base, process_counts, attempts)
-    for process_count in process_counts:
-        for attempt in range(1, attempt_limits[process_count] + 1):
-            path = result_path(base, process_count, attempt)
+    attempt_limits = summary_attempt_limits(base, workloads, attempts)
+    for workload in workloads:
+        for attempt in range(1, attempt_limits[workload] + 1):
+            path = result_path(base, workload, attempt)
             if not path.is_file():
                 missing.append(str(path))
                 continue
             payload = common.load_result(path)
-            rows.append(summary_row(payload, path, base.drone_count, process_count, attempt))
-    aggregates, selected, selection_status = aggregate(rows, process_counts)
+            rows.append(
+                summary_row(
+                    payload,
+                    path,
+                    workload.drone_count,
+                    workload.process_count,
+                    attempt,
+                )
+            )
+    aggregates: list[dict[str, Any]] = []
+    workload_summaries: list[dict[str, Any]] = []
+    for drone_count, process_counts in workload_groups(workloads):
+        group_aggregates, selected, selection_status = aggregate(
+            rows, drone_count, process_counts
+        )
+        aggregates.extend(group_aggregates)
+        realtime_processes = [
+            int(row["process_count"])
+            for row in group_aggregates
+            if row["stable_estimate"] and row["realtime_recovered"]
+        ]
+        workload_summaries.append(
+            {
+                "drone_count": drone_count,
+                "process_counts": process_counts,
+                "selection_status": selection_status,
+                "selected_process_count": selected,
+                "minimum_realtime_process_count": (
+                    min(realtime_processes) if realtime_processes else None
+                ),
+                "configuration_summary": group_aggregates,
+            }
+        )
     json_path, csv_path, aggregate_path = summary_paths(base)
     json_path.parent.mkdir(parents=True, exist_ok=True)
     report = {
         "experiment": "multi-process-scaling",
-        "fixed_drone_count": base.drone_count,
+        "drone_counts": [drone_count for drone_count, _ in workload_groups(workloads)],
         "expected_result_count": sum(attempt_limits.values()),
         "recorded_result_count": len(rows),
         "complete": not missing,
         "missing_results": missing,
         "selection_threshold": SELECTION_THRESHOLD,
-        "selection_status": selection_status,
-        "selected_process_count": selected,
-        "expected_attempts_by_process": {
-            str(process_count): attempt_limits[process_count]
-            for process_count in process_counts
+        "workload_summary": workload_summaries,
+        "expected_attempts_by_configuration": {
+            configuration_id(
+                workload.drone_count, workload.process_count
+            ): attempt_limits[workload]
+            for workload in workloads
         },
         "configuration_summary": aggregates,
         "results": rows,
@@ -606,31 +703,39 @@ def summarize(base: operator.Experiment, process_counts: list[int], attempts: in
     print(f"Raw summary CSV : {csv_path}")
     print(f"Aggregate CSV   : {aggregate_path}")
     print(f"Recorded        : {len(rows)}/{sum(attempt_limits.values())}")
-    print(f"Selection       : {selection_status} ({selected})")
+    for workload_summary in workload_summaries:
+        print(
+            f"UAV={workload_summary['drone_count']:3d}       : "
+            f"{workload_summary['selection_status']} "
+            f"(selected={workload_summary['selected_process_count']}, "
+            f"realtime-min={workload_summary['minimum_realtime_process_count']})"
+        )
     return 0 if not missing else 1
 
 
-def plan(base: operator.Experiment, process_counts: list[int], attempts: int) -> int:
+def plan(base: operator.Experiment, workloads: list[Workload], attempts: int) -> int:
     print("Experiment B: multi-process single-host scaling")
-    print(f"Fixed workload: {base.drone_count} UAVs")
-    print(f"Conditions    : {len(process_counts)} process counts x {attempts} attempt(s)")
-    for process_count in process_counts:
-        partitions = operator.expected_partition_counts(base.drone_count, process_count)
+    print(f"Conditions    : {len(workloads)} sparse workloads x {attempts} attempt(s)")
+    for workload in workloads:
+        partitions = operator.expected_partition_counts(
+            workload.drone_count, workload.process_count
+        )
         for attempt in range(1, attempts + 1):
-            path = result_path(base, process_count, attempt)
+            path = result_path(base, workload, attempt)
             state = "RECORDED" if path.is_file() else "PENDING"
             print(
-                f"  [{state}] process={process_count:2d} partitions={partitions} "
+                f"  [{state}] UAV={workload.drone_count:3d} "
+                f"process={workload.process_count:2d} partitions={partitions} "
                 f"attempt={attempt:02d} result={path}"
             )
-    targets, missing = initial_escalation_targets(base, process_counts, attempts)
+    targets, missing = initial_escalation_targets(base, workloads, attempts)
     if not missing:
         if targets:
             print(
                 "Additional attempts: "
                 + ", ".join(
-                    f"process={process_count} attempts=04,05"
-                    for process_count in targets
+                    f"UAV={workload.drone_count} process={workload.process_count} attempts=04,05"
+                    for workload in targets
                 )
             )
             print("Next              : run 'extend' after confirming a clean host")
@@ -641,26 +746,26 @@ def plan(base: operator.Experiment, process_counts: list[int], attempts: int) ->
 
 def run_matrix(
     base: operator.Experiment,
-    process_counts: list[int],
+    workloads: list[Workload],
     attempts: int,
     *,
     resume: bool,
     rerun_invalid: bool,
     restart_series: bool,
-    attempt_plan: dict[int, list[int]] | None = None,
+    attempt_plan: dict[Workload, list[int]] | None = None,
 ) -> int:
     assert base.measurement is not None
     if restart_series:
         archive_active_series(base)
     planned = attempt_plan or {
-        process_count: list(range(1, attempts + 1))
-        for process_count in process_counts
+        workload: list(range(1, attempts + 1))
+        for workload in workloads
     }
     existing = [
-        result_path(base, process_count, attempt)
-        for process_count, attempt_numbers in planned.items()
+        result_path(base, workload, attempt)
+        for workload, attempt_numbers in planned.items()
         for attempt in attempt_numbers
-        if result_path(base, process_count, attempt).is_file()
+        if result_path(base, workload, attempt).is_file()
     ]
     non_reusable = [path for path in existing if not reusable_result(path, base)]
     if non_reusable and rerun_invalid:
@@ -680,17 +785,17 @@ def run_matrix(
         )
 
     failed = False
-    for process_count, attempt_numbers in planned.items():
+    for workload, attempt_numbers in planned.items():
         for attempt in attempt_numbers:
-            result = result_path(base, process_count, attempt)
+            result = result_path(base, workload, attempt)
             if result.is_file():
                 print(f"[SKIP] recorded result: {result}")
                 continue
             before_pids = require_clean_process_state()
-            generated = materialize_experiment(base, process_count, attempt)
+            generated = materialize_experiment(base, workload, attempt)
             print(
-                f"\n=== Experiment B: UAV={base.drone_count} "
-                f"process={process_count} attempt={attempt:02d} ===",
+                f"\n=== Experiment B: UAV={workload.drone_count} "
+                f"process={workload.process_count} attempt={attempt:02d} ===",
                 flush=True,
             )
             start_attempted = False
@@ -698,13 +803,15 @@ def run_matrix(
                 for command in ("configure", "doctor"):
                     if run_operator(command, generated) != 0:
                         raise MatrixError(
-                            f"{command} failed for process={process_count}, attempt={attempt}"
+                            f"{command} failed for UAV={workload.drone_count}, "
+                            f"process={workload.process_count}, attempt={attempt}"
                         )
-                collect_host_preflight(base, process_count, attempt)
+                collect_host_preflight(base, workload, attempt)
                 start_attempted = True
                 if run_operator("start", generated) != 0:
                     raise MatrixError(
-                        f"start failed for process={process_count}, attempt={attempt}"
+                        f"start failed for UAV={workload.drone_count}, "
+                        f"process={workload.process_count}, attempt={attempt}"
                     )
                 timeout = base.measurement.maximum_wall_time_sec + 30.0
                 smoke_rc = run_operator("smoke", generated, "--timeout-sec", str(timeout))
@@ -713,16 +820,19 @@ def run_matrix(
                     stop_rc = run_operator("stop", generated)
                     if stop_rc != 0:
                         print(
-                            f"[WARN] stop failed for process={process_count}, attempt={attempt}",
+                            f"[WARN] stop failed for UAV={workload.drone_count}, "
+                            f"process={workload.process_count}, attempt={attempt}",
                             file=sys.stderr,
                         )
                     cleanup_spawned_drone_services(before_pids)
             if not result.is_file():
                 raise MatrixError(f"measurement result is missing after smoke: {result}")
             payload = common.load_result(result)
-            validate_identity(payload, base.drone_count, process_count, attempt)
+            validate_identity(
+                payload, workload.drone_count, workload.process_count, attempt
+            )
             if not common.preflight_passed(payload):
-                summarize(base, process_counts, attempts)
+                summarize(base, workloads, attempts)
                 raise MatrixError(
                     "machine preflight failed; stop the series and restore a clean "
                     f"measurement environment: {result}"
@@ -732,13 +842,13 @@ def run_matrix(
                 print(f"[FAIL] condition recorded; continuing: {result}", file=sys.stderr)
             else:
                 print(f"[PASS] {result}")
-    summary_rc = summarize(base, process_counts, attempts)
+    summary_rc = summarize(base, workloads, attempts)
     return 1 if failed or summary_rc != 0 else 0
 
 
 def extend_matrix(
     base: operator.Experiment,
-    process_counts: list[int],
+    workloads: list[Workload],
     attempts: int,
     *,
     rerun_invalid: bool,
@@ -748,15 +858,15 @@ def extend_matrix(
             "extend requires matrix.attempts="
             f"{INITIAL_MEASURED_RUN_COUNT}; configured={attempts}"
         )
-    targets, missing = initial_escalation_targets(base, process_counts, attempts)
+    targets, missing = initial_escalation_targets(base, workloads, attempts)
     if missing:
         raise MatrixError(
             "initial three-attempt series is incomplete; run with --resume first: "
             + ", ".join(missing)
         )
     initial_paths = [
-        result_path(base, process_count, attempt)
-        for process_count in process_counts
+        result_path(base, workload, attempt)
+        for workload in workloads
         for attempt in range(1, attempts + 1)
     ]
     non_reusable = [path for path in initial_paths if not reusable_result(path, base)]
@@ -768,23 +878,26 @@ def extend_matrix(
         )
     if not targets:
         print("Experiment B: no configurations require additional attempts")
-        return summarize(base, process_counts, attempts)
+        return summarize(base, workloads, attempts)
     print(
         "Experiment B additional attempts: "
-        + ", ".join(f"process={process_count} attempts=04,05" for process_count in targets)
+        + ", ".join(
+            f"UAV={workload.drone_count} process={workload.process_count} attempts=04,05"
+            for workload in targets
+        )
     )
     return run_matrix(
         base,
-        process_counts,
+        workloads,
         attempts,
         resume=True,
         rerun_invalid=rerun_invalid,
         restart_series=False,
         attempt_plan={
-            process_count: list(
+            workload: list(
                 range(attempts + 1, ESCALATED_MEASURED_RUN_COUNT + 1)
             )
-            for process_count in targets
+            for workload in targets
         },
     )
 
@@ -818,15 +931,15 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
-        base, process_counts, attempts = load_matrix(args.experiment.resolve())
+        base, workloads, attempts = load_matrix(args.experiment.resolve())
         if args.command == "plan":
-            return plan(base, process_counts, attempts)
+            return plan(base, workloads, attempts)
         if args.command == "summarize":
-            return summarize(base, process_counts, attempts)
+            return summarize(base, workloads, attempts)
         if args.command == "extend":
             return extend_matrix(
                 base,
-                process_counts,
+                workloads,
                 attempts,
                 rerun_invalid=args.rerun_invalid,
             )
@@ -834,7 +947,7 @@ def main(argv: list[str] | None = None) -> int:
             return run_operator(args.command, args.experiment.resolve())
         return run_matrix(
             base,
-            process_counts,
+            workloads,
             attempts,
             resume=args.resume,
             rerun_invalid=args.rerun_invalid,

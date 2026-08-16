@@ -168,4 +168,18 @@ class ExperimentValidationTest < Minitest::Test
 
     assert validate(value).any? { |error| error.include?("every deployment host") }
   end
+
+  def test_rejects_invalid_sparse_workload_matrix
+    value = load_experiment_yaml(
+      File.join(
+        ROOT,
+        "recipes/experiments/drone-fleet-performance/multi-process-scaling.yaml"
+      )
+    )
+    value.dig("matrix", "workloads", "uav_064")["process_count"] = [1, 4, 4, 2]
+
+    errors = validate(value)
+    assert errors.any? { |error| error.include?("must not contain duplicates") }
+    assert errors.any? { |error| error.include?("must be in ascending order") }
+  end
 end

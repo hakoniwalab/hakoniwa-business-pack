@@ -108,6 +108,9 @@ module ExperimentValidation
   end
 
   def validate_matrix(errors, matrix, label)
+    if matrix.key?("workloads") && (matrix.key?("drone_count") || matrix.key?("process_count"))
+      errors << "#{label}.matrix.workloads cannot be combined with top-level drone_count or process_count"
+    end
     %w[drone_count process_count].each do |field|
       next unless matrix.key?(field)
 
@@ -124,6 +127,36 @@ module ExperimentValidation
     end
     if matrix.key?("attempts") && !integer_at_least?(matrix["attempts"], 1)
       errors << "#{label}.matrix.attempts must be a positive integer"
+    end
+    return unless matrix.key?("workloads")
+
+    workloads = matrix["workloads"]
+    unless workloads.is_a?(Hash) && !workloads.empty?
+      errors << "#{label}.matrix.workloads must be a non-empty mapping"
+      return
+    end
+    seen_drone_counts = []
+    workloads.each do |name, workload|
+      prefix = "#{label}.matrix.workloads.#{name}"
+      unless workload.is_a?(Hash)
+        errors << "#{prefix} must be a mapping"
+        next
+      end
+      unknown = workload.keys - %w[drone_count process_count]
+      errors << "#{prefix} has unknown fields: #{unknown.join(', ')}" unless unknown.empty?
+      drone_count = workload["drone_count"]
+      errors << "#{prefix}.drone_count must be a positive integer" unless integer_at_least?(drone_count, 1)
+      process_counts = workload["process_count"]
+      unless process_counts.is_a?(Array) && !process_counts.empty? && process_counts.all? { |item| integer_at_least?(item, 1) }
+        errors << "#{prefix}.process_count must be a non-empty positive integer list"
+      else
+        errors << "#{prefix}.process_count must not contain duplicates" unless process_counts.uniq.length == process_counts.length
+        errors << "#{prefix}.process_count must be in ascending order" unless process_counts == process_counts.sort
+      end
+      seen_drone_counts << drone_count if integer_at_least?(drone_count, 1)
+    end
+    if seen_drone_counts.uniq.length != seen_drone_counts.length
+      errors << "#{label}.matrix.workloads must not repeat drone_count"
     end
   end
 
