@@ -181,23 +181,43 @@ def validate_experiment(raw: dict[str, Any]) -> dict[str, Any]:
     runtime = _mapping(raw.get("runtime"), "runtime")
     if runtime.get("mode") != "native":
         raise RecipeError("runtime.mode must be native")
-    if runtime.get("visualization") is not True:
-        raise RecipeError("legacy connectivity requires runtime.visualization true")
+    visualization_enabled = runtime.get("visualization")
+    if not isinstance(visualization_enabled, bool):
+        raise RecipeError("runtime.visualization must be boolean")
+    if not isinstance(runtime.get("show_runner_real_time_sync"), bool):
+        raise RecipeError("runtime.show_runner_real_time_sync must be boolean")
     conductor = _mapping(runtime.get("conductor"), "runtime.conductor")
+    profile = conductor.get("profile")
     expected_conductor = {
-        "implementation": "hakoniwa-conductor-pro",
-        "profile": "legacy-distributed-10ms",
-        "delta_time_usec": 10000,
-        "max_delay_time_usec": 20000,
-        "real_sleep_msec": "unspecified",
-        "simtime_publish_mode": "legacy_simple",
-    }
+        "legacy-distributed-10ms": {
+            "implementation": "hakoniwa-conductor-pro",
+            "delta_time_usec": 10000,
+            "max_delay_time_usec": 20000,
+            "real_sleep_msec": "unspecified",
+            "simtime_publish_mode": "legacy_simple",
+        },
+        "icra-target-delta-boundary": {
+            "implementation": "hakoniwa-conductor-pro",
+            "delta_time_usec": 1000,
+            "max_delay_time_usec": 20000,
+            "simtime_publish_interval_usec": 10000,
+            "simtime_publish_mode": "delta_boundary",
+        },
+    }.get(profile)
+    if expected_conductor is None:
+        raise RecipeError(f"unsupported runtime.conductor.profile: {profile!r}")
     for field, expected in expected_conductor.items():
         if conductor.get(field) != expected:
             raise RecipeError(
                 f"runtime.conductor.{field} must be {expected!r} for "
-                "legacy-distributed-10ms"
+                f"{profile}"
             )
+    if profile == "icra-target-delta-boundary":
+        _positive(
+            conductor.get("real_sleep_msec"),
+            "runtime.conductor.real_sleep_msec",
+            allow_zero=True,
+        )
 
     deployment = _mapping(raw.get("deployment"), "deployment")
     if deployment.get("mode") != "multi_host":
@@ -276,35 +296,48 @@ def validate_experiment(raw: dict[str, Any]) -> dict[str, Any]:
             )
         expected_start += count
 
-    visualization = _mapping(raw.get("visualization"), "visualization")
-    for owner in ("bridge_host", "viewer_host"):
-        if visualization.get(owner) not in hosts:
-            raise RecipeError(f"visualization.{owner} must name a declared host")
-    packet_size = _positive(
-        visualization.get("max_drones_per_packet"),
-        "visualization.max_drones_per_packet",
-    )
-    publishers = _mapping(visualization.get("publishers"), "visualization.publishers")
-    if set(publishers) != set(hosts):
-        raise RecipeError("visualization.publishers must cover every host exactly once")
-    chunks: list[int] = []
-    for host_id, publisher_value in publishers.items():
-        publisher = _mapping(publisher_value, f"visualization.publishers.{host_id}")
-        chunk = _positive(
-            publisher.get("chunk_index"),
-            f"visualization.publishers.{host_id}.chunk_index",
-            allow_zero=True,
+    visualization = None
+    packet_size = 512
+    if visualization_enabled:
+        visualization = _mapping(raw.get("visualization"), "visualization")
+        for owner in ("bridge_host", "viewer_host"):
+            if visualization.get(owner) not in hosts:
+                raise RecipeError(f"visualization.{owner} must name a declared host")
+        packet_size = _positive(
+            visualization.get("max_drones_per_packet"),
+            "visualization.max_drones_per_packet",
         )
-        if publisher.get("pdu_name") != f"drone_visual_state_array_{chunk}":
-            raise RecipeError(f"publisher PDU name does not match chunk {chunk}")
-        if publisher.get("transfer_policy") != "immediate-atomic":
-            raise RecipeError("publisher transfer policy must be immediate-atomic")
-        chunks.append(chunk)
-    if len(chunks) != len(set(chunks)):
-        raise RecipeError("publisher chunk indices must be unique")
-    subscriptions = visualization.get("bridge_subscriptions")
-    if not isinstance(subscriptions, list) or sorted(subscriptions) != sorted(chunks):
-        raise RecipeError("bridge subscriptions must match publisher chunks")
+        publishers = _mapping(
+            visualization.get("publishers"), "visualization.publishers"
+        )
+        if set(publishers) != set(hosts):
+            raise RecipeError(
+                "visualization.publishers must cover every host exactly once"
+            )
+        chunks: list[int] = []
+        for host_id, publisher_value in publishers.items():
+            publisher = _mapping(
+                publisher_value, f"visualization.publishers.{host_id}"
+            )
+            chunk = _positive(
+                publisher.get("chunk_index"),
+                f"visualization.publishers.{host_id}.chunk_index",
+                allow_zero=True,
+            )
+            if publisher.get("pdu_name") != f"drone_visual_state_array_{chunk}":
+                raise RecipeError(f"publisher PDU name does not match chunk {chunk}")
+            if publisher.get("transfer_policy") != "immediate-atomic":
+                raise RecipeError("publisher transfer policy must be immediate-atomic")
+            chunks.append(chunk)
+        if len(chunks) != len(set(chunks)):
+            raise RecipeError("publisher chunk indices must be unique")
+        subscriptions = visualization.get("bridge_subscriptions")
+        if not isinstance(subscriptions, list) or sorted(subscriptions) != sorted(chunks):
+            raise RecipeError("bridge subscriptions must match publisher chunks")
+    elif raw.get("visualization") is not None:
+        raise RecipeError(
+            "visualization section must be omitted when runtime.visualization=false"
+        )
 
     scenario = _mapping(raw.get("scenario"), "scenario")
     if scenario.get("type") != "hakoniwa-word" or scenario.get("word") != "HAKONIWA":
@@ -377,21 +410,24 @@ def materialize_host_runtimes(
     generated: dict[str, Path] = {}
     scenario = resolved["scenario"]
     total_drones = resolved["scale"]["drone_count"]
+    visualization_enabled = bool(resolved["runtime"]["visualization"])
     visual = resolved["visualization"]
     for host_id, host in resolved["deployment"]["hosts"].items():
         bundle_root = output_root / "bundles" / host_id
         config = bundle_root / "config"
         (config / "pdudef").mkdir(parents=True, exist_ok=True)
         paths = SimpleNamespace(recipe_root=bundle_root, recipe_config=config)
-        publisher = visual["publishers"][host_id]
+        publisher = visual["publishers"][host_id] if visual is not None else None
         fleet_spec = fleet_runtime.FleetRuntimeSpec(
             local_drone_count=host["drone_count"],
             process_count=host["process_count"],
-            visualization=True,
+            visualization=visualization_enabled,
             global_drone_count=total_drones,
             global_start_index=host["global_start_index"],
-            output_chunk_base_index=publisher["chunk_index"],
-            max_drones_per_packet=visual["max_drones_per_packet"],
+            output_chunk_base_index=(publisher["chunk_index"] if publisher else 0),
+            max_drones_per_packet=(
+                visual["max_drones_per_packet"] if visual is not None else 512
+            ),
         )
         scenario_spec = fleet_runtime.ScenarioRuntimeSpec(
             experiment_id=resolved["experiment_id"],
@@ -435,15 +471,16 @@ def host_launcher_spec(
         raise RecipeError(f"unknown host id: {host_id}")
     host = hosts[host_id]
     scenario = resolved["scenario"]
+    visualization_enabled = bool(resolved["runtime"]["visualization"])
     visual = resolved["visualization"]
     override = scenario.get("host_overrides", {}).get(host_id, {})
     return fleet_runtime.LauncherRuntimeSpec(
         local_drone_count=host["drone_count"],
         process_count=host["process_count"],
-        visualization=True,
+        visualization=visualization_enabled,
         external_conductor=True,
-        web_bridge=visual["bridge_host"] == host_id,
-        viewer=visual["viewer_host"] == host_id,
+        web_bridge=(visual is not None and visual["bridge_host"] == host_id),
+        viewer=(visual is not None and visual["viewer_host"] == host_id),
         show_runner_real_time_sync=bool(
             resolved["runtime"]["show_runner_real_time_sync"]
         ),
@@ -453,7 +490,9 @@ def host_launcher_spec(
         delta_time_msec=int(scenario["delta_time_msec"]),
         z_offset_m=float(override.get("z_offset_m", 0.0)),
         viewer_activation_timing=(
-            "before_start" if visual["viewer_host"] == host_id else "after_start"
+            "before_start"
+            if visual is not None and visual["viewer_host"] == host_id
+            else "after_start"
         ),
     )
 
@@ -506,6 +545,68 @@ def host_runtime_paths(output_root: Path, host_id: str) -> SimpleNamespace:
     )
 
 
+def prepare_host_measurement(
+    resolved: dict[str, Any], output_root: Path, host_id: str, config_hash: str
+) -> tuple[Path, Path] | None:
+    measurement = resolved["measurement"]
+    if measurement.get("enabled") is not True:
+        return None
+    configuration_id = _required_text(
+        measurement.get("configuration_id"), "measurement.configuration_id"
+    )
+    attempt = _positive(measurement.get("attempt"), "measurement.attempt")
+    series = _required_text(measurement.get("series"), "measurement.series")
+    results = resolved["results"]
+    if results.get("enabled") is not True:
+        raise RecipeError("measurement requires results.enabled=true")
+    directory = _required_text(results.get("directory"), "results.directory")
+    result_root = Path(directory)
+    if result_root.is_absolute() or ".." in result_root.parts:
+        raise RecipeError("results.directory must stay inside the Recipe workspace")
+    trial = (
+        output_root
+        / result_root
+        / series
+        / "hosts"
+        / host_id
+        / configuration_id
+        / f"attempt-{attempt:02d}"
+    )
+    trial.mkdir(parents=True, exist_ok=True)
+    coordination = dict(
+        _mapping(
+            measurement.get("time_coordination"),
+            "measurement.time_coordination",
+        )
+    )
+    conductor = resolved["runtime"]["conductor"]
+    coordination.update(
+        {
+            "conductor_delta_time_usec": conductor["delta_time_usec"],
+            "conductor_max_delay_time_usec": conductor["max_delay_time_usec"],
+            "conductor_real_sleep_msec": conductor["real_sleep_msec"],
+            "simtime_publish_interval_usec": conductor.get(
+                "simtime_publish_interval_usec"
+            ),
+            "simtime_publish_mode": conductor["simtime_publish_mode"],
+            "conductor_implementation": conductor["implementation"],
+        }
+    )
+    payload = {
+        **measurement,
+        "configuration_id": configuration_id,
+        "attempt": attempt,
+        "trial_directory": str(trial.resolve()),
+        "host_id": host_id,
+        "config_hash": config_hash,
+        "time_coordination": coordination,
+    }
+    config_path = host_runtime_paths(output_root, host_id).recipe_config / "measurement.json"
+    atomic_json(config_path, payload)
+    atomic_json(trial / "resolved-measurement.json", payload)
+    return config_path, trial
+
+
 def conductor_binary(conductor_root: Path, role: str) -> Path | None:
     name = "main_server" if role == "server" else "main_client"
     for candidate in (
@@ -539,6 +640,8 @@ def open_viewer_local(output_root: Path) -> int:
     state = load_local_selection(output_root)
     if state["selection"]["role"] != "server":
         raise RecipeError("open-viewer is server-only")
+    if not state["resolved"]["runtime"]["visualization"]:
+        raise RecipeError("open-viewer is unavailable for a headless experiment")
     health_url = "http://127.0.0.1:8000/index.html"
     try:
         with urllib.request.urlopen(health_url, timeout=2.0) as response:
@@ -574,9 +677,22 @@ def prepare_host_launcher(
     spec = host_launcher_spec(state["resolved"], host_id)
     drone_binary = yaml_support.resolve_drone_binary(drone_root, system_name)
     python = yaml_support.resolve_foundation_python(paths, system_name)
-    visual = yaml_support.resolve_visual_state_publisher(drone_root, system_name)
+    visual = (
+        yaml_support.resolve_visual_state_publisher(drone_root, system_name)
+        if spec.visualization
+        else None
+    )
+    measurement = prepare_host_measurement(
+        state["resolved"], output_root, host_id, state["index"]["config_hash"]
+    )
     show_runner = (
-        drone_root / "drone_api" / "external_rpc" / "apps" / "show_asset_runner.py"
+        ROOT / "tools" / "recipe" / "assets" / "drone_fleet_performance_runner.py"
+        if measurement is not None
+        else drone_root
+        / "drone_api"
+        / "external_rpc"
+        / "apps"
+        / "show_asset_runner.py"
     )
     if not show_runner.is_file():
         raise RecipeError(f"Drone show runner not found: {show_runner}")
@@ -595,7 +711,11 @@ def prepare_host_launcher(
             drone_binary=drone_binary,
             python=python,
             show_runner=show_runner,
-            summary=paths.recipe_validation / "execution-summary.json",
+            summary=(
+                measurement[1] / "execution-summary.json"
+                if measurement is not None
+                else paths.recipe_validation / "execution-summary.json"
+            ),
             visual_state_publisher=visual,
             web_bridge_binary=(
                 yaml_support.web_bridge_path(paths, system_name)
@@ -606,6 +726,7 @@ def prepare_host_launcher(
                 yaml_support.bridge_config_root(paths) if spec.web_bridge else None
             ),
             leading_assets=[leading],
+            performance_config=(measurement[0] if measurement is not None else None),
         )
     except ValueError as exc:
         raise RecipeError(str(exc)) from exc
@@ -631,17 +752,18 @@ def doctor_local(
                 str(yaml_support.resolve_drone_binary(drone_root, system_name)),
             )
         )
-        checks.append(
-            (
-                "Visual State Publisher",
-                True,
-                str(
-                    yaml_support.resolve_visual_state_publisher(
-                        drone_root, system_name
-                    )
-                ),
+        if state["resolved"]["runtime"]["visualization"]:
+            checks.append(
+                (
+                    "Visual State Publisher",
+                    True,
+                    str(
+                        yaml_support.resolve_visual_state_publisher(
+                            drone_root, system_name
+                        )
+                    ),
+                )
             )
-        )
         checks.append(
             (
                 "Foundation Python",
@@ -674,18 +796,28 @@ def doctor_local(
     )
     checks.append(("Conductor config", conductor_config.is_file(), str(conductor_config)))
     host = state["resolved"]["deployment"]["hosts"][host_id]
+    visualization = state["resolved"]["visualization"]
+    publisher = (
+        visualization["publishers"][host_id]
+        if visualization is not None
+        else None
+    )
     spec = fleet_runtime.FleetRuntimeSpec(
         local_drone_count=host["drone_count"],
         process_count=host["process_count"],
-        visualization=True,
+        visualization=bool(state["resolved"]["runtime"]["visualization"]),
         global_drone_count=state["resolved"]["scale"]["drone_count"],
         global_start_index=host["global_start_index"],
-        output_chunk_base_index=state["resolved"]["visualization"]["publishers"][host_id]["chunk_index"],
-        max_drones_per_packet=state["resolved"]["visualization"]["max_drones_per_packet"],
+        output_chunk_base_index=(publisher["chunk_index"] if publisher else 0),
+        max_drones_per_packet=(
+            visualization["max_drones_per_packet"]
+            if visualization is not None
+            else 512
+        ),
     )
     errors = fleet_runtime.validate_partitions(paths.recipe_config, spec)
     checks.append(("Drone partitions", not errors, "; ".join(errors) if errors else "configured"))
-    if role == "server":
+    if role == "server" and state["resolved"]["runtime"]["visualization"]:
         bridge = yaml_support.web_bridge_path(paths, system_name)
         checks.append(("WebBridge", bridge.is_file(), str(bridge)))
         missing_viewer = [
@@ -824,23 +956,31 @@ def build_conductor_input(resolved: dict[str, Any]) -> dict[str, Any]:
     client = clients[0]
     client_node = client["node_id"]
     server_node = server["node_id"]
-    publisher = resolved["visualization"]["publishers"]
+    visualization = resolved["visualization"]
     client_host_id = next(
         host_id for host_id, host in hosts.items() if host["role"] == "client"
     )
-    client_publisher = publisher[client_host_id]
-    visual_group = f"visual-state-{client_node}"
-    visual_eu_type = "VisualStatePublisherEU"
-    visual_eu = f"vsp-{client_node}"
     conductor = resolved["runtime"]["conductor"]
     transport = deployment["transport"]
 
-    # real_sleep_msec and simtime_publish_mode are intentionally omitted for
-    # the legacy profile. Their absence is part of the compatibility contract.
-    return {
+    conductor_defaults = {
+        "delta_time_usec": conductor["delta_time_usec"],
+        "max_delay_time_usec": conductor["max_delay_time_usec"],
+    }
+    if conductor["profile"] != "legacy-distributed-10ms":
+        conductor_defaults.update(
+            {
+                "real_sleep_msec": conductor["real_sleep_msec"],
+                "simtime_publish_mode": conductor["simtime_publish_mode"],
+                "simtime_publish_interval_usec": conductor[
+                    "simtime_publish_interval_usec"
+                ],
+            }
+        )
+
+    result = {
         "mode": "simple",
         "execution_nodes": [client_node],
-        "pdudef": "pdudef_visual_state.json",
         "connection_pairs": [
             {
                 "client_node_id": client_node,
@@ -853,56 +993,74 @@ def build_conductor_input(resolved: dict[str, Any]) -> dict[str, Any]:
                 "connection_initiator": transport["connection_initiator"],
             }
         },
-        "conductor_defaults": {
-            "delta_time_usec": conductor["delta_time_usec"],
-            "max_delay_time_usec": conductor["max_delay_time_usec"],
-        },
-        "robot_types": {
-            "VisualStatePublisher": {
-                "pdutypes": "pdutypes_visual_state.json",
-            }
-        },
-        "robots": [
-            {
-                "name": "DroneVisualStatePublisher",
-                "type": "VisualStatePublisher",
-            }
-        ],
-        "pdu_type_groups": [
-            {
-                "id": visual_group,
-                "robot_types": [
-                    {
-                        "robot_type": "VisualStatePublisher",
-                        "pdu_names": [client_publisher["pdu_name"]],
-                    }
-                ],
-                "transfer_policy_id": client_publisher["transfer_policy"],
-            }
-        ],
-        "eu_types": {
-            visual_eu_type: {
-                "writes": [visual_group],
-                "reads": [],
-            }
-        },
-        "execution_units": [
-            {
-                "name": visual_eu,
-                "eu_type": visual_eu_type,
-                "robot_bindings": [
-                    {
-                        "robot_name": "DroneVisualStatePublisher",
-                        "robot_type": "VisualStatePublisher",
-                    }
-                ],
-            }
-        ],
-        "unit_placement": {
-            "mode": "manual",
-            "nodes": {client_node: [visual_eu]},
-        },
+        "conductor_defaults": conductor_defaults,
     }
+    if visualization is None:
+        result.update(
+            {
+                "execution_units": [],
+                "pdu_groups": [],
+                "eu_pdu_bindings": [],
+            }
+        )
+        return result
+
+    publisher = visualization["publishers"]
+    client_publisher = publisher[client_host_id]
+    visual_group = f"visual-state-{client_node}"
+    visual_eu_type = "VisualStatePublisherEU"
+    visual_eu = f"vsp-{client_node}"
+    result.update(
+        {
+            "pdudef": "pdudef_visual_state.json",
+            "robot_types": {
+                "VisualStatePublisher": {
+                    "pdutypes": "pdutypes_visual_state.json",
+                }
+            },
+            "robots": [
+                {
+                    "name": "DroneVisualStatePublisher",
+                    "type": "VisualStatePublisher",
+                }
+            ],
+            "pdu_type_groups": [
+                {
+                    "id": visual_group,
+                    "robot_types": [
+                        {
+                            "robot_type": "VisualStatePublisher",
+                            "pdu_names": [client_publisher["pdu_name"]],
+                        }
+                    ],
+                    "transfer_policy_id": client_publisher["transfer_policy"],
+                }
+            ],
+            "eu_types": {
+                visual_eu_type: {
+                    "writes": [visual_group],
+                    "reads": [],
+                }
+            },
+            "execution_units": [
+                {
+                    "name": visual_eu,
+                    "eu_type": visual_eu_type,
+                    "robot_bindings": [
+                        {
+                            "robot_name": "DroneVisualStatePublisher",
+                            "robot_type": "VisualStatePublisher",
+                        }
+                    ],
+                }
+            ],
+            "unit_placement": {
+                "mode": "manual",
+                "nodes": {client_node: [visual_eu]},
+            },
+        }
+    )
+    return result
 
 
 def materialize(
@@ -945,17 +1103,27 @@ def materialize(
                 }
             },
             "scenario": resolved["scenario"],
-            "visualization": {
-                "publisher": visual["publishers"][host_id],
-                "max_drones_per_packet": visual["max_drones_per_packet"],
-                "web_bridge": visual["bridge_host"] == host_id,
-                "viewer": visual["viewer_host"] == host_id,
-                "bridge_subscriptions": (
-                    visual["bridge_subscriptions"]
-                    if visual["bridge_host"] == host_id
-                    else []
-                ),
-            },
+            "visualization": (
+                {
+                    "publisher": visual["publishers"][host_id],
+                    "max_drones_per_packet": visual["max_drones_per_packet"],
+                    "web_bridge": visual["bridge_host"] == host_id,
+                    "viewer": visual["viewer_host"] == host_id,
+                    "bridge_subscriptions": (
+                        visual["bridge_subscriptions"]
+                        if visual["bridge_host"] == host_id
+                        else []
+                    ),
+                }
+                if visual is not None
+                else {
+                    "publisher": None,
+                    "web_bridge": False,
+                    "viewer": False,
+                    "bridge_subscriptions": [],
+                }
+            ),
+            "measurement": resolved["measurement"],
             "source_identities": identities,
         }
         bundles[host_id] = bundle

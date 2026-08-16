@@ -151,3 +151,69 @@ remain identified by host.
 Only results need transfer. Initial experiments do not require remote command
 execution, configuration push, a shared filesystem, or an inbound connection
 to WSL2.
+
+## Headless scaling preflight
+
+`multi-host-scaling.yaml` is the ICRA-oriented, headless scaling Recipe. Its
+matrix varies only the total UAV count (`64`, `128`, `256`) and currently uses
+one attempt. Equal allocation resolves each condition across `srv-01` and
+`cli-01`; their fixed process policy is 4 and 12 processes respectively.
+
+The Conductor `real_sleep_msec` value is deliberately a scalar Recipe setting,
+not a matrix axis. Before the final scaling run, edit that one value manually
+through `10`, `5`, `2`, `1`, and `0`, and run only the 256-UAV condition. This
+keeps exploratory tuning distinct from the final experiment. If RTF and both
+hosts' CPU usage are acceptable at `0`, leave it fixed at `0` and execute the
+full UAV-count matrix.
+
+Inspect and configure a condition with the scaling operator:
+
+```bash
+python3 tools/recipe/drone_fleet_multi_host_scaling.py plan
+
+# Run on both machines, changing only the local host identity.
+python3 tools/recipe/drone_fleet_multi_host_scaling.py \
+  configure --host srv-01 --drone-count 256
+python3 tools/recipe/drone_fleet_multi_host_scaling.py \
+  configure --host cli-01 --drone-count 256
+```
+
+After configuration, the host identity and resolved condition are local state,
+so lifecycle commands take no host or condition arguments. Start `srv-01`
+first, then `cli-01`; invoke `run` on `srv-01` after both sides are ready:
+
+```bash
+python3 tools/recipe/drone_fleet_multi_host_scaling.py doctor
+python3 tools/recipe/drone_fleet_multi_host_scaling.py start
+python3 tools/recipe/drone_fleet_multi_host_scaling.py status
+
+# srv-01 only, after both hosts are active
+python3 tools/recipe/drone_fleet_multi_host_scaling.py run
+
+python3 tools/recipe/drone_fleet_multi_host_scaling.py stop
+```
+
+Each host writes its existing per-host measurement under:
+
+```text
+work/recipes/drone-fleet-multi-host/results/<series>/hosts/
+└── <host-id>/uav-NNN-sleep-NNNms/attempt-01/
+```
+
+Copy the `cli-01` result subtree into the same relative location on `srv-01`.
+The multi-host summarizer then verifies `host_id`, `configuration_id`,
+`attempt`, `run_id`, `config_hash`, and the Conductor sleep value before
+pairing results. It reports the server RTF as the authoritative RTF and keeps
+average/maximum CPU observations for both hosts:
+
+```bash
+# One 256-UAV sleep pilot
+python3 tools/recipe/drone_fleet_multi_host_scaling.py \
+  summarize --drone-count 256
+
+# Full 64/128/256 scaling after fixing real_sleep_msec to 0
+python3 tools/recipe/drone_fleet_multi_host_scaling.py summarize
+```
+
+Summary filenames include the scalar sleep value, so pilot results from
+different settings do not overwrite one another.

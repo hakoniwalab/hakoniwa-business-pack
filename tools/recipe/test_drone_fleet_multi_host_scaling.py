@@ -1,0 +1,189 @@
+from __future__ import annotations
+
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+import drone_fleet_multi_host as multi_host
+import drone_fleet_multi_host_scaling as scaling
+import drone_fleet_single_host as yaml_support
+
+
+class DroneFleetMultiHostScalingTest(unittest.TestCase):
+    def test_scaling_recipe_uses_scalar_sleep_and_attempt_one(self) -> None:
+        raw, counts, attempts = scaling.load_scaling(scaling.DEFAULT_EXPERIMENT)
+
+        self.assertEqual(counts, [64, 128, 256])
+        self.assertEqual(attempts, 1)
+        self.assertEqual(raw["runtime"]["conductor"]["real_sleep_msec"], 10)
+        self.assertNotIn("conductor_real_sleep_msec", raw["matrix"])
+        self.assertEqual(
+            raw["measurement"]["invalid_conditions"][
+                "preflight_max_cpu_average_percent"
+            ],
+            100.0,
+        )
+
+    def test_equal_allocation_keeps_process_policy_fixed(self) -> None:
+        raw, _counts, _attempts = scaling.load_scaling(
+            scaling.DEFAULT_EXPERIMENT
+        )
+
+        expected = {
+            64: (32, 32, 32),
+            128: (64, 64, 64),
+            256: (128, 128, 128),
+        }
+        for drone_count, (server_count, client_count, client_start) in expected.items():
+            condition = scaling.resolve_condition(raw, drone_count)
+            hosts = condition["deployment"]["hosts"]
+            self.assertEqual(hosts["srv-01"]["drone_count"], server_count)
+            self.assertEqual(hosts["srv-01"]["process_count"], 4)
+            self.assertEqual(hosts["cli-01"]["drone_count"], client_count)
+            self.assertEqual(hosts["cli-01"]["process_count"], 12)
+            self.assertEqual(hosts["cli-01"]["global_start_index"], client_start)
+            self.assertEqual(condition["scale"]["process_count"], 16)
+
+    def test_resolved_condition_builds_headless_target_conductor_input(self) -> None:
+        raw, _counts, _attempts = scaling.load_scaling(
+            scaling.DEFAULT_EXPERIMENT
+        )
+        resolved = multi_host.validate_experiment(
+            scaling.resolve_condition(raw, 256)
+        )
+
+        self.assertFalse(resolved["runtime"]["visualization"])
+        self.assertIsNone(resolved["visualization"])
+        conductor = multi_host.build_conductor_input(resolved)
+        self.assertEqual(conductor["pdu_groups"], [])
+        self.assertEqual(conductor["execution_units"], [])
+        self.assertEqual(conductor["eu_pdu_bindings"], [])
+        self.assertEqual(
+            conductor["conductor_defaults"],
+            {
+                "delta_time_usec": 1000,
+                "max_delay_time_usec": 20000,
+                "real_sleep_msec": 10,
+                "simtime_publish_mode": "delta_boundary",
+                "simtime_publish_interval_usec": 10000,
+            },
+        )
+
+    def test_generated_condition_round_trips_through_dependency_free_yaml(self) -> None:
+        raw, _counts, _attempts = scaling.load_scaling(
+            scaling.DEFAULT_EXPERIMENT
+        )
+        condition = scaling.resolve_condition(raw, 64)
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "condition.yaml"
+            yaml_support.write_simple_yaml(path, condition)
+            loaded = yaml_support.load_simple_yaml(path)
+        self.assertEqual(loaded, condition)
+
+    def test_summary_pairs_host_results_and_uses_server_rtf(self) -> None:
+        raw, _counts, _attempts = scaling.load_scaling(
+            scaling.DEFAULT_EXPERIMENT
+        )
+        sleep = raw["runtime"]["conductor"]["real_sleep_msec"]
+        series = raw["measurement"]["series"]
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            for drone_count in (64, 128, 256):
+                config_id = scaling.configuration_id(drone_count, sleep)
+                for host_id, rtf, cpu in (
+                    ("srv-01", 1.5, 72.0),
+                    ("cli-01", 1.4, 83.0),
+                ):
+                    path = scaling.result_path(
+                        output, raw["results"]["directory"], series, host_id, config_id
+                    )
+                    path.parent.mkdir(parents=True)
+                    path.write_text(
+                        json.dumps(
+                            {
+                                "status": "success",
+                                "run_id": f"{config_id}-attempt-01",
+                                "performance": {"rtf": rtf},
+                                "machine": {
+                                    "cpu_average_percent": cpu,
+                                    "cpu_max_percent": cpu + 5,
+                                },
+                                "metadata": {
+                                    "host_id": host_id,
+                                    "configuration_id": config_id,
+                                    "attempt": 1,
+                                    "config_hash": "shared-hash",
+                                    "time_coordination": {
+                                        "conductor_real_sleep_msec": sleep
+                                    },
+                                },
+                            }
+                        ),
+                        encoding="utf-8",
+                    )
+
+            self.assertEqual(
+                scaling.summarize(scaling.DEFAULT_EXPERIMENT, output), 0
+            )
+            report = json.loads(
+                (
+                    output
+                    / "results"
+                    / series
+                    / "summary"
+                    / "multi-host-scaling-sleep-010ms.json"
+                ).read_text(encoding="utf-8")
+            )
+
+        self.assertTrue(report["complete"])
+        self.assertEqual(report["real_sleep_msec"], 10)
+        self.assertEqual(report["results"][0]["rtf"], 1.5)
+        self.assertEqual(
+            report["results"][0]["cli-01_cpu_average_percent"], 83.0
+        )
+
+    def test_summary_rejects_a_result_from_another_host(self) -> None:
+        raw, _counts, _attempts = scaling.load_scaling(
+            scaling.DEFAULT_EXPERIMENT
+        )
+        sleep = raw["runtime"]["conductor"]["real_sleep_msec"]
+        series = raw["measurement"]["series"]
+        config_id = scaling.configuration_id(256, sleep)
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            path = scaling.result_path(
+                output,
+                raw["results"]["directory"],
+                series,
+                "srv-01",
+                config_id,
+            )
+            path.parent.mkdir(parents=True)
+            path.write_text(
+                json.dumps(
+                    {
+                        "run_id": f"{config_id}-attempt-01",
+                        "metadata": {
+                            "host_id": "cli-01",
+                            "configuration_id": config_id,
+                            "attempt": 1,
+                            "config_hash": "shared-hash",
+                            "time_coordination": {
+                                "conductor_real_sleep_msec": sleep
+                            },
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(scaling.ScalingError, "host_id"):
+                scaling.summarize(
+                    scaling.DEFAULT_EXPERIMENT,
+                    output,
+                    selected_drone_count=256,
+                )
+
+
+if __name__ == "__main__":
+    unittest.main()

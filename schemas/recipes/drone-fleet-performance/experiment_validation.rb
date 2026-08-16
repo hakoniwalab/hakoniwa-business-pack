@@ -141,7 +141,25 @@ module ExperimentValidation
       errors << "#{label}.deployment missing #{field} for multi_host" unless deployment.key?(field)
     end
     validate_transport(errors, deployment["transport"], schema, label)
+    validate_allocation(errors, deployment["allocation"], deployment["hosts"], schema, label) if deployment.key?("allocation")
     validate_hosts(errors, data, deployment, schema, label)
+  end
+
+  def validate_allocation(errors, allocation, hosts, schema, label)
+    prefix = "#{label}.deployment.allocation"
+    contract = schema.dig("deployment", "allocation")
+    return unless validate_fields(errors, allocation, contract, prefix)
+
+    modes = Array(contract["modes"])
+    errors << "#{prefix}.mode is invalid: #{allocation['mode'].inspect}" unless modes.include?(allocation["mode"])
+    order = allocation["host_order"]
+    unless order.is_a?(Array) && !order.empty? && order.all? { |host_id| non_empty_string?(host_id) } && order.uniq.length == order.length
+      errors << "#{prefix}.host_order must be a unique non-empty string list"
+      return
+    end
+    if hosts.is_a?(Hash) && order.sort != hosts.keys.sort
+      errors << "#{prefix}.host_order must contain every deployment host exactly once"
+    end
   end
 
   def validate_transport(errors, transport, schema, label)
@@ -184,10 +202,14 @@ module ExperimentValidation
         errors << "#{host_prefix}.execution_environment is invalid: #{host['execution_environment'].inspect}"
       end
       errors << "#{host_prefix}.node_id must be a non-empty string" unless non_empty_string?(host["node_id"])
-      errors << "#{host_prefix}.drone_count must be a positive integer" unless integer_at_least?(host["drone_count"], 1)
+      drone_count = host["drone_count"]
+      unless drone_count == "auto" || integer_at_least?(drone_count, 1)
+        errors << "#{host_prefix}.drone_count must be auto or a positive integer"
+      end
       errors << "#{host_prefix}.process_count must be a positive integer" unless integer_at_least?(host["process_count"], 1)
-      unless integer_at_least?(host["global_start_index"], 0)
-        errors << "#{host_prefix}.global_start_index must be a non-negative integer"
+      start = host["global_start_index"]
+      unless start == "auto" || integer_at_least?(start, 0)
+        errors << "#{host_prefix}.global_start_index must be auto or a non-negative integer"
       end
       validate_role_fields(errors, host, role, host_contract, host_prefix)
     end
@@ -262,6 +284,8 @@ module ExperimentValidation
     drone_counts = hosts.values.map { |host| host["drone_count"] }
     process_counts = hosts.values.map { |host| host["process_count"] }
     starts = hosts.map { |host_id, host| [host["global_start_index"], host["drone_count"], host_id] }
+    auto_allocation = drone_counts.any? { |count| count == "auto" }
+    return if auto_allocation
     if drone_counts.all? { |count| integer_at_least?(count, 1) } && scale["drone_count"].is_a?(Integer)
       total = drone_counts.sum
       errors << "#{label}.deployment host drone_count total #{total} does not match scale.drone_count #{scale['drone_count']}" unless total == scale["drone_count"]

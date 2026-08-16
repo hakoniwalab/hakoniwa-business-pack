@@ -61,8 +61,12 @@ controlled_values:
 
 deployment:
   required_fields: [mode]
-  optional_fields: [server_host, transport, hosts]
+  optional_fields: [server_host, allocation, transport, hosts]
   multi_host_required_fields: [server_host, transport, hosts]
+  allocation:
+    required_fields: [mode, host_order]
+    optional_fields: []
+    modes: [equal]
   transport:
     required_fields: [type, connection_initiator, base_port]
     optional_fields: []
@@ -81,6 +85,7 @@ deployment:
     server_forbidden_fields: [connect_to]
     client_required_fields: [connect_to]
     client_forbidden_fields: [address]
+    auto_fields: [drone_count, global_start_index]
 
 visualization:
   required_fields:
@@ -112,6 +117,12 @@ controlled_profiles:
       max_delay_time_usec: 20000
       real_sleep_msec: unspecified
       simtime_publish_mode: legacy_simple
+    icra-target-delta-boundary:
+      implementation: hakoniwa-conductor-pro
+      delta_time_usec: 1000
+      max_delay_time_usec: 20000
+      simtime_publish_mode: delta_boundary
+      simtime_publish_interval_usec: 10000
 
 semantics:
   - Existing single-host experiment inputs may omit deployment; omitted deployment means single_host.
@@ -119,9 +130,11 @@ semantics:
   - The server is the only listener and every client initiates an outbound TCP connection to it.
   - Client addresses are intentionally absent because NAT or WSL2-private addresses are not configuration authority.
   - Host drone ranges form one contiguous, non-overlapping partition of scale.drone_count starting at zero.
+  - An equal allocation may use auto host drone counts and start indices; matrix resolution materializes concrete contiguous host ranges before runtime generation.
   - Host process counts sum to scale.process_count.
-  - Multi-host visualization declares one publisher chunk for every host and places Bridge and Viewer on declared hosts.
+  - When multi-host visualization is enabled, it declares one publisher chunk for every host and places Bridge and Viewer on declared hosts; headless experiments omit the visualization section.
   - A controlled Conductor profile prevents timing parameters from drifting independently under a stable profile name.
+  - The ICRA target profile fixes timing mode and intervals while leaving real_sleep_msec as one scalar experiment parameter; the multi-host scaling matrix does not vary it.
   - Host keys express stable roles such as server and client; platform and execution_environment map those roles to the current machines.
   - machine_address records physical host metadata; address is the server address advertised to clients. A WSL2-private address is never an input.
   - Scenario contents and detailed measurement policy remain Recipe-specific extensions; their common container and identity fields are validated here.

@@ -143,4 +143,29 @@ class ExperimentValidationTest < Minitest::Test
 
     assert validate(value).any? { |error| error.include?("must match publisher chunks") }
   end
+
+  def test_scaling_allocation_accepts_auto_host_ranges
+    value = load_experiment_yaml(
+      File.join(
+        ROOT,
+        "recipes/experiments/drone-fleet-performance/multi-host-scaling.yaml"
+      )
+    )
+
+    assert_empty validate(value)
+    assert_equal 10, value.dig("runtime", "conductor", "real_sleep_msec")
+    refute value.fetch("matrix").key?("conductor_real_sleep_msec")
+  end
+
+  def test_rejects_incomplete_allocation_order
+    value = load_experiment_yaml(
+      File.join(
+        ROOT,
+        "recipes/experiments/drone-fleet-performance/multi-host-scaling.yaml"
+      )
+    )
+    value.dig("deployment", "allocation", "host_order").delete("cli-01")
+
+    assert validate(value).any? { |error| error.include?("every deployment host") }
+  end
 end

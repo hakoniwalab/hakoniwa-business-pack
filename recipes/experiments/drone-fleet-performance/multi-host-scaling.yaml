@@ -1,0 +1,108 @@
+version: 1
+
+experiment:
+  id: drone-fleet-multi-host-scaling
+
+scale:
+  drone_count: 256
+  drones_per_process: auto
+  process_count: 16
+
+matrix:
+  drone_count: [64, 128, 256]
+  attempts: 1
+
+runtime:
+  mode: native
+  visualization: false
+  show_runner_real_time_sync: false
+  conductor:
+    implementation: hakoniwa-conductor-pro
+    profile: icra-target-delta-boundary
+    delta_time_usec: 1000
+    max_delay_time_usec: 20000
+    simtime_publish_interval_usec: 10000
+    # Scalar pilot parameter. Change manually: 10 -> 5 -> 2 -> 1 -> 0.
+    # It is intentionally not a matrix axis; the final scaling target is 0.
+    real_sleep_msec: 10
+    simtime_publish_mode: delta_boundary
+
+deployment:
+  mode: multi_host
+  server_host: srv-01
+  allocation:
+    mode: equal
+    host_order: ["srv-01", "cli-01"]
+  transport:
+    type: tcp
+    connection_initiator: client
+    base_port: 54011
+  hosts:
+    srv-01:
+      role: server
+      platform: macos
+      execution_environment: native
+      machine_id: srv-01
+      machine_address: 192.168.2.100
+      node_id: srv-01-01
+      address: 192.168.2.100
+      drone_count: auto
+      process_count: 4
+      global_start_index: auto
+      launcher_mode: activate-only
+    cli-01:
+      role: client
+      platform: linux
+      execution_environment: wsl2
+      machine_id: cli-01
+      machine_address: 192.168.2.104
+      node_id: cli-01
+      connect_to: srv-01
+      drone_count: auto
+      process_count: 12
+      global_start_index: auto
+      launcher_mode: activate-only
+
+scenario:
+  type: hakoniwa-word
+  word: HAKONIWA
+  assignment_mode: nearest
+  letter_width_m: 2.0
+  letter_height_m: 4.0
+  letter_gap_m: 0.9
+  altitude_m: 4.0
+  duration_sec: 6.0
+  hold_sec: 0.0
+  speed_m_s: 0.5
+  timeout_sec: 300.0
+  delta_time_msec: 20
+  land: false
+
+results:
+  enabled: true
+  directory: results
+
+measurement:
+  enabled: true
+  mode: performance
+  series: multi-host-scaling-preflight
+  configuration_id: auto
+  attempt: 1
+  protocol_status: preflight
+  sampling_interval_sec: 0.05
+  preflight_duration_sec: 1.0
+  preflight_settle_timeout_sec: 60.0
+  stop_conditions:
+    minimum_virtual_time_sec: 10.0
+    minimum_cpu_sample_count: 5
+    minimum_machine_sample_count: 5
+  invalid_conditions:
+    maximum_virtual_time_sec: 180.0
+    maximum_wall_time_sec: 300.0
+    # CPU saturation is an observation in this pilot, not an invalid condition.
+    preflight_max_cpu_average_percent: 100.0
+    preflight_max_memory_used_percent: 90.0
+  warmup_virtual_time_sec: 1.0
+  time_coordination:
+    drone_delta_time_usec: 1000
+    fleet_delta_time_usec: 20000

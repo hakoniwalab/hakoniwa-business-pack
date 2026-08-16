@@ -1116,6 +1116,8 @@ def _yaml_scalar(value: Any) -> str:
         return "false"
     if value is None:
         return "null"
+    if isinstance(value, list):
+        return json.dumps(value, ensure_ascii=False)
     if isinstance(value, str):
         return json.dumps(value, ensure_ascii=False)
     return str(value)
