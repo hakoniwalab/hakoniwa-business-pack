@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Hakoniwa Business Pack remote operation message",
+  "description": "A constrained JSON control-plane message. It intentionally cannot carry shell commands or executable paths.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "type",
+    "session_id",
+    "sequence",
+    "attempt",
+    "source_host",
+    "configuration_id",
+    "config_hash"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "kind": {
+      "enum": ["command", "status"]
+    },
+    "type": {
+      "enum": [
+        "PREPARE",
+        "LAUNCH",
+        "RUN",
+        "CLEANUP",
+        "ABORT",
+        "REGISTERED",
+        "PREPARING",
+        "READY",
+        "LAUNCHED",
+        "JOINED",
+        "RUNNING",
+        "TERMINATED",
+        "CLEANED",
+        "FAILED"
+      ]
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "source_host": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 63,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "configuration_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "config_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "error": {
+      "$ref": "#/$defs/error"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"kind": {"const": "command"}},
+        "required": ["kind"]
+      },
+      "then": {
+        "properties": {
+          "type": {
+            "enum": ["PREPARE", "LAUNCH", "RUN", "CLEANUP", "ABORT"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"kind": {"const": "status"}},
+        "required": ["kind"]
+      },
+      "then": {
+        "properties": {
+          "type": {
+            "enum": [
+              "REGISTERED",
+              "PREPARING",
+              "READY",
+              "LAUNCHED",
+              "JOINED",
+              "RUNNING",
+              "TERMINATED",
+              "CLEANED",
+              "FAILED"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"type": {"const": "FAILED"}},
+        "required": ["type"]
+      },
+      "then": {"required": ["error"]},
+      "else": {"not": {"required": ["error"]}}
+    }
+  ],
+  "$defs": {
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phase", "code", "message"],
+      "properties": {
+        "phase": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      }
+    }
+  }
+}

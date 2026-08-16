@@ -22,6 +22,8 @@ schemas/
 Examples:
 
 - `schemas/native-runtime.yaml` is a cross-domain Catalog-to-Recipe contract.
+- `schemas/remote-operation/message.schema.json` is the JSON wire contract for
+  constrained, state-machine-based coordination between Recipe hosts.
 - `schemas/recipes/drone-fleet-performance/experiment.yaml` is the contract for
   Drone Fleet performance inputs below
   `recipes/experiments/drone-fleet-performance/`.
