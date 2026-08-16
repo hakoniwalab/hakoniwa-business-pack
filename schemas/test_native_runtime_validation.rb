@@ -20,6 +20,14 @@ class NativeRuntimeValidationTest < Minitest::Test
   RECIPE = load_yaml_file(
     File.join(ROOT, "recipes", "examples", "drone-fleet-single-host.yaml")
   )
+  PERFORMANCE_RECIPE = load_yaml_file(
+    File.join(
+      ROOT,
+      "recipes",
+      "examples",
+      "drone-fleet-multi-process-scaling.yaml"
+    )
+  )
 
   def test_current_catalog_and_recipe_contracts_are_valid
     assert_empty NativeRuntimeValidation.validate_catalog(
@@ -30,6 +38,12 @@ class NativeRuntimeValidationTest < Minitest::Test
       {CATALOG_ENTRY["id"] => CATALOG_ENTRY},
       SCHEMA,
       label: "recipe"
+    )
+    assert_empty NativeRuntimeValidation.validate_recipe(
+      PERFORMANCE_RECIPE["native_runtime_requirements"],
+      {CATALOG_ENTRY["id"] => CATALOG_ENTRY},
+      SCHEMA,
+      label: "performance recipe"
     )
   end
 

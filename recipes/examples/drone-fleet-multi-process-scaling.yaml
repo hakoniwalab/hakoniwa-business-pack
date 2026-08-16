@@ -123,6 +123,15 @@ artifact_sets: {}
 artifacts: []
 missing_pieces:
   - WSL2/Ubuntu execution of the boundary-focused Experiment B matrix remains to be verified.
+
+native_runtime_requirements:
+  schema_version: 1
+  components:
+    hakoniwa-drone-core:
+      profile: public-v4.0.0
+      required_roles: ["drone_service"]
+      optional_roles: ["visual_state_publisher"]
+
 experiment_contract:
   source: recipes/experiments/drone-fleet-performance/multi-process-scaling.yaml
   user_inputs:
