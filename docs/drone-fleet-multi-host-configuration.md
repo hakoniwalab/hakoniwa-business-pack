@@ -48,17 +48,38 @@ or dynamic WSL2 address is never configuration authority.
 
 ## Deterministic local generation
 
-Both hosts use the same revisions, experiment YAML, and command:
+Both hosts use the same revisions and experiment YAML. `configure` always
+generates the complete shared topology, while `--host` records which part this
+machine will execute:
 
 ```bash
+# On srv-01 (macOS)
 python3 tools/recipe/drone_fleet_multi_host.py \
   --experiment recipes/experiments/drone-fleet-performance/multi-host-legacy-256.yaml \
-  configure
+  configure --host srv-01
+
+# On cli-01 (WSL2/Linux)
+python3 tools/recipe/drone_fleet_multi_host.py \
+  --experiment recipes/experiments/drone-fleet-performance/multi-host-legacy-256.yaml \
+  configure --host cli-01
 ```
 
-Generation has no host-selection argument. It produces the complete shared
-topology on both machines. Host selection belongs to later prepare/start
-operations such as `--host srv-01` or `--host cli-01`.
+The unique role aliases `server` and `client` are also accepted. The selection
+is machine-local state under `.hako/`; it is not included in the shared
+configuration hash or committed to Git. Later lifecycle operations therefore
+need no host argument:
+
+```bash
+python3 tools/recipe/drone_fleet_multi_host.py doctor
+python3 tools/recipe/drone_fleet_multi_host.py start
+python3 tools/recipe/drone_fleet_multi_host.py status
+python3 tools/recipe/drone_fleet_multi_host.py stop
+```
+
+Each operation verifies that the stored host still exists in the current
+experiment, its role and platform match, and its configuration hash equals the
+current bundle. A changed experiment or regenerated bundle requires another
+`configure --host ...`.
 
 Because generation is deterministic, configuration bundles do not need to be
 transferred between the machines. Before a run, both sides compare the input,
@@ -67,6 +88,9 @@ configuration, schema, and source revision hashes.
 ## Workspace layout v1
 
 ```text
+.hako/recipes/drone-fleet-multi-host/
+└── local-selection.json          # machine-local; ignored by Git
+
 work/recipes/drone-fleet-multi-host/
 ├── bundle-index.json
 ├── config/
@@ -101,7 +125,7 @@ timestamps, logs, and metrics never contributes to the configuration hash.
 Both host `config/` trees are produced through the same runtime materializer
 used by `drone-fleet-single-host`. The server VSP owns global range `0..127`
 and chunk `0`; the client VSP owns range `128..255` and chunk `1`. Launcher
-JSON is deliberately deferred to host-local `doctor/start --host`: it embeds
+JSON is deliberately deferred to host-local `doctor`/`start`: it embeds
 Foundation, native executable, MuJoCo, and viewer paths for the machine that
 will execute it. External-Conductor launchers disable the built-in Conductor
 in every Drone Service; only `srv-01` owns WebBridge and Viewer assets.

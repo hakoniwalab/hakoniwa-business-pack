@@ -220,3 +220,6 @@ __marimo__/
 
 # Hakoniwa Business Pack local Foundation and Recipe workspaces
 /work/
+
+# Machine-local Recipe selection and transient component state
+/.hako/

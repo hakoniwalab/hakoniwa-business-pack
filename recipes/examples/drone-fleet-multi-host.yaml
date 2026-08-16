@@ -369,7 +369,6 @@ artifacts:
     path: work/recipes/drone-fleet-multi-host/results/connectivity/summary.json
 
 missing_pieces:
-  - Extend the initial host-bundle generator into Conductor/Endpoint/Bridge/Launcher configuration generation.
   - Resolve and validate Conductor PRO source/build revisions on both hosts.
   - Generate Foundation requirements independently for the Mac and WSL2 host roles.
   - Implement network doctor, config-hash handshake, readiness, coordinated stop, and residue checks.
@@ -379,29 +378,30 @@ missing_pieces:
 demo:
   foundation_workflow: partially_implemented
   objective: Display all 256 globally indexed UAVs from two hosts in the Mac browser and preserve machine-readable connectivity evidence.
-  operator_status: bundle_generation_only
+  operator_status: local_lifecycle_implemented
   intended_operations:
-    - configure --role server|client
-    - doctor --role server|client
-    - server --run-id <shared-run-id>
-    - client --run-id <shared-run-id>
+    - configure --host srv-01|cli-01
+    - doctor
+    - start
     - status
     - stop
     - smoke
   steps:
     - id: configure_server
       action: On the Mac, generate both logical bundles and select the local server role.
-      command: python tools/recipe/drone_fleet_multi_host.py configure --role server
+      command: python tools/recipe/drone_fleet_multi_host.py configure --host srv-01
       status: verified
     - id: configure_client
       action: In WSL2, generate both logical bundles and select the local client role.
-      command: python tools/recipe/drone_fleet_multi_host.py configure --role client
+      command: python tools/recipe/drone_fleet_multi_host.py configure --host cli-01
       status: verified
     - id: start_server
       action: Start the Mac listeners and Conductor server before accepting the WSL2 client.
+      command: python tools/recipe/drone_fleet_multi_host.py start
       status: blocked
     - id: join_client
       action: Start the WSL2 client locally and connect outbound to 192.168.2.100.
+      command: python tools/recipe/drone_fleet_multi_host.py start
       status: blocked
     - id: verify_connectivity
       action: Verify all 256 IDs, both visual-state chunks, synchronized lifecycle, browser updates, and behavioral completion.

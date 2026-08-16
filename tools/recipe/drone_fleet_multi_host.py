@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 import re
 import subprocess
 import sys
@@ -33,14 +34,90 @@ DEFAULT_EXPERIMENT = (
 )
 DEFAULT_CONDUCTOR_ROOT = ROOT.parent / "hakoniwa-conductor-pro"
 DEFAULT_DRONE_ROOT = ROOT.parent / "hakoniwa-drone-core"
+DEFAULT_VIEWER_ROOT = ROOT.parent / "hakoniwa-threejs-drone"
 DEFAULT_CONDUCTOR_SCHEMA = (
     ROOT.parent / "hakoniwa-conductor" / "schemas" / "eu-input-v1.schema.json"
 )
 WORK_ROOT = ROOT / "work" / "recipes" / RECIPE_ID
+LOCAL_SELECTION = ROOT / ".hako" / "recipes" / RECIPE_ID / "local-selection.json"
 
 
 class RecipeError(RuntimeError):
     pass
+
+
+def normalize_host_id(resolved: dict[str, Any], value: str) -> str:
+    hosts = resolved["deployment"]["hosts"]
+    if value in hosts:
+        return value
+    matches = [host_id for host_id, host in hosts.items() if host["role"] == value]
+    if len(matches) == 1:
+        return matches[0]
+    raise RecipeError(
+        f"unknown host {value!r}; choose one of: " + ", ".join(hosts)
+    )
+
+
+def validate_local_platform(host_id: str, host: dict[str, Any]) -> None:
+    expected = {"macos": "Darwin", "linux": "Linux", "windows": "Windows"}[
+        host["platform"]
+    ]
+    actual = platform.system()
+    if actual != expected:
+        raise RecipeError(
+            f"host {host_id} requires {expected}, but this machine reports {actual}"
+        )
+
+
+def write_local_selection(
+    resolved: dict[str, Any], index: dict[str, Any], host_value: str
+) -> Path:
+    host_id = normalize_host_id(resolved, host_value)
+    host = resolved["deployment"]["hosts"][host_id]
+    validate_local_platform(host_id, host)
+    atomic_json(
+        LOCAL_SELECTION,
+        {
+            "schema_version": 1,
+            "recipe_id": RECIPE_ID,
+            "host_id": host_id,
+            "role": host["role"],
+            "experiment_id": resolved["experiment_id"],
+            "config_hash": index["config_hash"],
+        },
+    )
+    return LOCAL_SELECTION
+
+
+def load_local_selection(output_root: Path = WORK_ROOT) -> dict[str, Any]:
+    if not LOCAL_SELECTION.is_file():
+        raise RecipeError("local host is not selected; run configure --host <host-id>")
+    try:
+        selection = json.loads(LOCAL_SELECTION.read_text(encoding="utf-8"))
+        index = json.loads((output_root / "bundle-index.json").read_text(encoding="utf-8"))
+        resolved = json.loads(
+            (output_root / "config" / "resolved-experiment.json").read_text(
+                encoding="utf-8"
+            )
+        )
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RecipeError(f"cannot load configured local host state: {exc}") from exc
+    if selection.get("schema_version") != 1:
+        raise RecipeError("unsupported local host selection schema; rerun configure --host")
+    if selection.get("recipe_id") != RECIPE_ID:
+        raise RecipeError("local host selection belongs to another Recipe")
+    if selection.get("experiment_id") != resolved.get("experiment_id"):
+        raise RecipeError("local host selection belongs to another experiment")
+    if selection.get("config_hash") != index.get("config_hash"):
+        raise RecipeError("local host selection is stale; rerun configure --host")
+    host_id = selection.get("host_id")
+    if host_id not in resolved["deployment"]["hosts"]:
+        raise RecipeError("selected host is absent from the configured experiment")
+    host = resolved["deployment"]["hosts"][host_id]
+    if selection.get("role") != host["role"]:
+        raise RecipeError("selected host role does not match the configured experiment")
+    validate_local_platform(host_id, host)
+    return {"selection": selection, "index": index, "resolved": resolved}
 
 
 def _mapping(value: Any, label: str) -> dict[str, Any]:
@@ -405,6 +482,229 @@ def conductor_launcher_asset(
     }
 
 
+def host_runtime_paths(output_root: Path, host_id: str) -> SimpleNamespace:
+    foundation = yaml_support.load_foundation_module()
+    shared = foundation.resolve_workspace(ROOT, RECIPE_ID)
+    bundle_root = output_root / "bundles" / host_id
+    local_root = output_root / "local" / host_id
+    runtime_root = output_root / "runtime" / host_id
+    return SimpleNamespace(
+        recipe_root=bundle_root,
+        recipe_config=bundle_root / "config",
+        recipe_logs=local_root / "logs",
+        recipe_validation=local_root / "validation",
+        runtime_root=runtime_root,
+        install_prefix=shared.install_prefix,
+        foundation_python=shared.foundation_python,
+        foundation_config=shared.foundation_config,
+    )
+
+
+def conductor_binary(conductor_root: Path, role: str) -> Path | None:
+    name = "main_server" if role == "server" else "main_client"
+    for candidate in (
+        conductor_root / "cmake-build" / name,
+        conductor_root / "build" / name,
+        conductor_root / "build-rd" / name,
+    ):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def prepare_host_launcher(
+    state: dict[str, Any],
+    output_root: Path,
+    drone_root: Path,
+    conductor_root: Path,
+    viewer_root: Path,
+) -> Path:
+    host_id = state["selection"]["host_id"]
+    role = state["selection"]["role"]
+    paths = host_runtime_paths(output_root, host_id)
+    for directory in (paths.recipe_logs, paths.recipe_validation, paths.runtime_root):
+        directory.mkdir(parents=True, exist_ok=True)
+    system_name = platform.system()
+    spec = host_launcher_spec(state["resolved"], host_id)
+    drone_binary = yaml_support.resolve_drone_binary(drone_root, system_name)
+    python = yaml_support.resolve_foundation_python(paths, system_name)
+    visual = yaml_support.resolve_visual_state_publisher(drone_root, system_name)
+    show_runner = (
+        drone_root / "drone_api" / "external_rpc" / "apps" / "show_asset_runner.py"
+    )
+    if not show_runner.is_file():
+        raise RecipeError(f"Drone show runner not found: {show_runner}")
+    leading = conductor_launcher_asset(
+        state["resolved"],
+        host_id,
+        conductor_root,
+        output_root / "config" / "conductor" / "generated",
+    )
+    try:
+        return fleet_runtime.prepare_launcher(
+            paths,
+            drone_root,
+            viewer_root,
+            spec,
+            drone_binary=drone_binary,
+            python=python,
+            show_runner=show_runner,
+            summary=paths.recipe_validation / "execution-summary.json",
+            visual_state_publisher=visual,
+            web_bridge_binary=(
+                yaml_support.web_bridge_path(paths, system_name)
+                if spec.web_bridge
+                else None
+            ),
+            web_bridge_config_root=(
+                yaml_support.bridge_config_root(paths) if spec.web_bridge else None
+            ),
+            leading_assets=[leading],
+        )
+    except ValueError as exc:
+        raise RecipeError(str(exc)) from exc
+
+
+def doctor_local(
+    output_root: Path,
+    drone_root: Path,
+    conductor_root: Path,
+    viewer_root: Path,
+) -> int:
+    state = load_local_selection(output_root)
+    host_id = state["selection"]["host_id"]
+    role = state["selection"]["role"]
+    paths = host_runtime_paths(output_root, host_id)
+    system_name = platform.system()
+    checks: list[tuple[str, bool, str]] = []
+    try:
+        checks.append(
+            (
+                "Drone service",
+                True,
+                str(yaml_support.resolve_drone_binary(drone_root, system_name)),
+            )
+        )
+        checks.append(
+            (
+                "Visual State Publisher",
+                True,
+                str(
+                    yaml_support.resolve_visual_state_publisher(
+                        drone_root, system_name
+                    )
+                ),
+            )
+        )
+        checks.append(
+            (
+                "Foundation Python",
+                True,
+                str(yaml_support.resolve_foundation_python(paths, system_name)),
+            )
+        )
+    except yaml_support.RecipeError as exc:
+        checks.append(("native runtime", False, str(exc)))
+    binary = conductor_binary(conductor_root, role)
+    checks.append(
+        (
+            f"Conductor {role}",
+            binary is not None,
+            str(binary) if binary else f"missing under {conductor_root}; run python tools/hako.py build",
+        )
+    )
+    conductor_config = (
+        output_root
+        / "config"
+        / "conductor"
+        / "generated"
+        / "conductor"
+        / f"{host_id if role == 'server' else state['resolved']['deployment']['hosts'][host_id]['node_id']}.json"
+    )
+    checks.append(("Conductor config", conductor_config.is_file(), str(conductor_config)))
+    host = state["resolved"]["deployment"]["hosts"][host_id]
+    spec = fleet_runtime.FleetRuntimeSpec(
+        local_drone_count=host["drone_count"],
+        process_count=host["process_count"],
+        visualization=True,
+        global_drone_count=state["resolved"]["scale"]["drone_count"],
+        global_start_index=host["global_start_index"],
+        output_chunk_base_index=state["resolved"]["visualization"]["publishers"][host_id]["chunk_index"],
+        max_drones_per_packet=state["resolved"]["visualization"]["max_drones_per_packet"],
+    )
+    errors = fleet_runtime.validate_partitions(paths.recipe_config, spec)
+    checks.append(("Drone partitions", not errors, "; ".join(errors) if errors else "configured"))
+    if role == "server":
+        bridge = yaml_support.web_bridge_path(paths, system_name)
+        checks.append(("WebBridge", bridge.is_file(), str(bridge)))
+        missing_viewer = [
+            path
+            for path in yaml_support.viewer_required_files(viewer_root)
+            if not path.is_file()
+        ]
+        checks.append(
+            (
+                "Three.js viewer",
+                not missing_viewer,
+                (
+                    str(viewer_root)
+                    if not missing_viewer
+                    else "missing: " + ", ".join(map(str, missing_viewer))
+                ),
+            )
+        )
+    failed = False
+    for label, ok, detail in checks:
+        print(f"[{'OK' if ok else 'NG'}] {label}: {detail}")
+        failed = failed or not ok
+    if failed:
+        return 1
+    launcher = prepare_host_launcher(state, output_root, drone_root, conductor_root, viewer_root)
+    print(f"[OK] launcher: {launcher}")
+    print(f"[OK] local host: {host_id} ({role})")
+    return 0
+
+
+def launcher_control(
+    command: str,
+    output_root: Path,
+    drone_root: Path,
+    conductor_root: Path,
+    viewer_root: Path,
+) -> int:
+    if command == "start" and doctor_local(output_root, drone_root, conductor_root, viewer_root) != 0:
+        return 1
+    state = load_local_selection(output_root)
+    host_id = state["selection"]["host_id"]
+    host = state["resolved"]["deployment"]["hosts"][host_id]
+    paths = host_runtime_paths(output_root, host_id)
+    python = yaml_support.resolve_foundation_python(paths, platform.system())
+    session = paths.runtime_root / "launcher-session.json"
+    if command == "start":
+        argv = [
+            str(python),
+            "-m",
+            "hakoniwa_pdu.apps.launcher.hako_launcher",
+            str(paths.recipe_config / "launcher.json"),
+            "--mode",
+            host["launcher_mode"],
+            "--background",
+            str(session),
+        ]
+    else:
+        operation = "terminate" if command == "stop" else "status"
+        argv = [
+            str(python),
+            "-m",
+            "hakoniwa_pdu.apps.launcher.hako_launcher_ctl",
+            operation,
+            str(session),
+        ]
+    env = yaml_support.runtime_environment(paths, drone_root, platform.system())
+    result = subprocess.run(argv, cwd=ROOT, env=env, check=False)
+    return result.returncode
+
+
 def git_identity(path: Path) -> dict[str, Any]:
     def output(*args: str) -> str:
         result = subprocess.run(
@@ -690,33 +990,66 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--conductor-root", type=Path)
     result.add_argument("--conductor-schema", type=Path)
     result.add_argument("--drone-root", type=Path, default=DEFAULT_DRONE_ROOT)
+    result.add_argument("--viewer-root", type=Path, default=DEFAULT_VIEWER_ROOT)
     result.add_argument("--output-root", type=Path, default=WORK_ROOT)
     commands = result.add_subparsers(dest="command", required=True)
     commands.add_parser("plan", help="validate and print the resolved host plan")
-    commands.add_parser(
+    configure_parser = commands.add_parser(
         "configure", help="materialize shared inputs and generated configuration"
     )
+    configure_parser.add_argument(
+        "--host",
+        required=True,
+        help="select this machine's host id (srv-01/cli-01) or unique role",
+    )
+    commands.add_parser("doctor", help="validate the locally selected host")
+    commands.add_parser("start", help="start the locally selected host")
+    commands.add_parser("status", help="show the local Launcher status")
+    commands.add_parser("stop", help="stop the locally selected host")
     return result
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
+    output_root = args.output_root.resolve()
+    if args.command in {"doctor", "start", "status", "stop"}:
+        try:
+            if args.command == "doctor":
+                return doctor_local(
+                    output_root,
+                    args.drone_root.resolve(),
+                    resolve_conductor_root(args.conductor_root),
+                    args.viewer_root.resolve(),
+                )
+            return launcher_control(
+                args.command,
+                output_root,
+                args.drone_root.resolve(),
+                resolve_conductor_root(args.conductor_root),
+                args.viewer_root.resolve(),
+            )
+        except (RecipeError, yaml_support.RecipeError) as exc:
+            print(f"[ERROR] {exc}", file=sys.stderr)
+            return 1
     try:
         result = materialize(
             args.experiment.resolve(),
-            args.output_root.resolve(),
+            output_root,
             args.conductor_root,
             args.conductor_schema,
             write=args.command == "configure",
         )
         if args.command == "configure":
             host_configs = materialize_host_runtimes(
-                result["resolved"], args.output_root.resolve(), args.drone_root
+                result["resolved"], output_root, args.drone_root
             )
             conductor_root = resolve_conductor_root(args.conductor_root)
             run_conductor_configure(
                 conductor_root,
-                args.output_root.resolve() / "config" / "conductor" / "eu-input.json",
+                output_root / "config" / "conductor" / "eu-input.json",
+            )
+            selection = write_local_selection(
+                result["resolved"], result["index"], args.host
             )
     except (RecipeError, yaml_support.RecipeError) as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)
@@ -736,6 +1069,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         for host_id, config in host_configs.items():
             print(f"[OK] host runtime: {host_id} -> {config}")
+        print(f"[OK] local host selection: {selection}")
+        print(f"Local host: {json.loads(selection.read_text())['host_id']}")
     dirty = [name for name, value in index["source_identities"].items() if value["dirty"]]
     if dirty:
         print("[WARN] dirty source identities: " + ", ".join(dirty))

@@ -239,9 +239,44 @@ class DroneFleetMultiHostTest(unittest.TestCase):
                 resolved, "cli-01", conductor, generated
             )
         self.assertEqual(server["name"], "conductor-server")
-        self.assertEqual(server["args"], [str(conductor / "srv.bash"), "1", "simple", str(generated)])
+        self.assertEqual(
+            server["args"],
+            [str(conductor / "srv.bash"), "1", "simple", str(generated)],
+        )
         self.assertEqual(client["name"], "conductor-client")
-        self.assertEqual(client["args"], [str(conductor / "cli.bash"), "1", "simple", str(generated)])
+        self.assertEqual(
+            client["args"],
+            [str(conductor / "cli.bash"), "1", "simple", str(generated)],
+        )
+
+    def test_local_selection_accepts_unique_role_and_rejects_stale_hash(self) -> None:
+        resolved = recipe.validate_experiment(self.experiment())
+        index = {"config_hash": "abc123"}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output = root / "output"
+            recipe.atomic_json(output / "bundle-index.json", index)
+            recipe.atomic_json(output / "config/resolved-experiment.json", resolved)
+            with (
+                mock.patch.object(recipe, "LOCAL_SELECTION", root / "local.json"),
+                mock.patch.object(recipe.platform, "system", return_value="Linux"),
+            ):
+                recipe.write_local_selection(resolved, index, "client")
+                loaded = recipe.load_local_selection(output)
+                self.assertEqual(loaded["selection"]["host_id"], "cli-01")
+                self.assertEqual(loaded["selection"]["role"], "client")
+                recipe.atomic_json(output / "bundle-index.json", {"config_hash": "new"})
+                with self.assertRaisesRegex(recipe.RecipeError, "stale"):
+                    recipe.load_local_selection(output)
+
+    def test_cli_persists_host_only_during_configure(self) -> None:
+        parsed = recipe.parser().parse_args(["configure", "--host", "server"])
+        self.assertEqual(parsed.command, "configure")
+        self.assertEqual(parsed.host, "server")
+        for command in ("doctor", "start", "status", "stop"):
+            parsed = recipe.parser().parse_args([command])
+            self.assertEqual(parsed.command, command)
+            self.assertFalse(hasattr(parsed, "host"))
 
 
 if __name__ == "__main__":
