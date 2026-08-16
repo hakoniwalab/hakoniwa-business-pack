@@ -22,7 +22,16 @@ SCHEMA_PATH = (
 )
 
 COMMAND_TYPES = frozenset(
-    {"PREPARE", "LAUNCH", "RUN", "CLEANUP", "COLLECT", "ABORT"}
+    {
+        "PREPARE",
+        "LAUNCH",
+        "RUN",
+        "CLEANUP",
+        "COLLECT",
+        "NEXT_ATTEMPT",
+        "BATCH_COMPLETE",
+        "ABORT",
+    }
 )
 STATUS_TYPES = frozenset(
     {
@@ -36,6 +45,7 @@ STATUS_TYPES = frozenset(
         "CLEANED",
         "COLLECTING",
         "COLLECTED",
+        "BATCH_COMPLETED",
         "FAILED",
     }
 )
@@ -69,7 +79,9 @@ COMMAND_TRANSITIONS = {
     "RUN": frozenset({"CLEANUP", "ABORT"}),
     "ABORT": frozenset({"CLEANUP"}),
     "CLEANUP": frozenset({"COLLECT"}),
-    "COLLECT": frozenset(),
+    "COLLECT": frozenset({"NEXT_ATTEMPT", "BATCH_COMPLETE"}),
+    "NEXT_ATTEMPT": frozenset(),
+    "BATCH_COMPLETE": frozenset(),
 }
 STATUS_TRANSITIONS = {
     None: frozenset({"REGISTERED", "FAILED"}),
@@ -85,7 +97,8 @@ STATUS_TRANSITIONS = {
     "FAILED": frozenset({"CLEANED"}),
     "CLEANED": frozenset({"COLLECTING", "FAILED"}),
     "COLLECTING": frozenset({"COLLECTED", "FAILED"}),
-    "COLLECTED": frozenset(),
+    "COLLECTED": frozenset({"BATCH_COMPLETED"}),
+    "BATCH_COMPLETED": frozenset(),
 }
 
 

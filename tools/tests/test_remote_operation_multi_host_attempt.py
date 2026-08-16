@@ -5,6 +5,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 from tools.remote_operation import multi_host_scaling_attempt as attempt
 
@@ -14,6 +15,12 @@ PROFILE = (
     / "configs"
     / "remote-operation"
     / "multi-host-temporal-validation.yaml"
+)
+SCALING_ATTEMPTS_PROFILE = (
+    Path(__file__).resolve().parents[2]
+    / "configs"
+    / "remote-operation"
+    / "multi-host-scaling-attempts.yaml"
 )
 
 
@@ -39,6 +46,7 @@ class MultiHostScalingAttemptTest(unittest.TestCase):
         self.assertEqual(server.control_port, client.control_port)
         self.assertEqual(server.artifact_port, client.artifact_port)
         self.assertEqual(server.drone_count, 256)
+        self.assertEqual(server.attempt_set, "baseline")
         self.assertEqual(
             server.runtime_dir,
             server.output_root / "runtime" / "remote-operation",
@@ -89,6 +97,105 @@ class MultiHostScalingAttemptTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(attempt.AttemptError, "CLI overrides"):
             attempt.resolve_arguments(parsed)
+
+    def test_scaling_attempts_profile_selects_conditional_extension(self) -> None:
+        resolved = attempt.resolve_arguments(
+            attempt.parser().parse_args(
+                ["--profile", str(SCALING_ATTEMPTS_PROFILE), "server"]
+            )
+        )
+        _raw, counts, baseline_attempts = attempt.scaling.load_scaling(
+            resolved.experiment
+        )
+        self.assertEqual(resolved.session_id, "mh-scaling-uav256-attempts-01")
+        self.assertEqual(resolved.drone_count, 256)
+        self.assertEqual(
+            resolved.attempt_set,
+            "baseline_with_conditional_extension",
+        )
+        self.assertIn(resolved.drone_count, counts)
+        self.assertEqual(baseline_attempts, 3)
+        self.assertEqual(
+            resolved.output_root.name,
+            "drone-fleet-multi-host-automation-smoke",
+        )
+
+    def test_extension_decision_uses_paired_baseline_rtf_spread(self) -> None:
+        resolved = attempt.resolve_arguments(
+            attempt.parser().parse_args(
+                ["--profile", str(SCALING_ATTEMPTS_PROFILE), "server"]
+            )
+        )
+        raw, _counts, _attempts = attempt.scaling.load_scaling(
+            resolved.experiment
+        )
+        policy = attempt.scaling.attempt_policy(raw["matrix"])
+        config_id = attempt.scaling.configuration_id(256, 1, "performance")
+        with tempfile.TemporaryDirectory() as temporary:
+            resolved.output_root = Path(temporary)
+            for attempt_number, rtf in enumerate((1.0, 1.01, 1.20), start=1):
+                for host_id in ("srv-01", "cli-01"):
+                    path = attempt.scaling.result_path(
+                        resolved.output_root,
+                        raw["results"]["directory"],
+                        raw["measurement"]["series"],
+                        host_id,
+                        config_id,
+                        attempt_number,
+                    )
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text(
+                        json.dumps(
+                            {
+                                "run_id": (
+                                    f"{config_id}-attempt-{attempt_number:02d}"
+                                ),
+                                "status": "success",
+                                "mode": "performance",
+                                "performance": {"rtf": rtf},
+                                "metadata": {
+                                    "host_id": host_id,
+                                    "configuration_id": config_id,
+                                    "attempt": attempt_number,
+                                    "config_hash": "a" * 63 + str(attempt_number),
+                                    "temporal_observer_enabled": False,
+                                    "time_coordination": {
+                                        "conductor_real_sleep_msec": 1
+                                    },
+                                },
+                            }
+                        ),
+                        encoding="utf-8",
+                    )
+            decision = attempt.extension_decision(
+                resolved,
+                policy,
+                policy["baseline"],
+            )
+
+        self.assertTrue(decision["required"])
+        self.assertFalse(decision["failure_triggered"])
+        self.assertTrue(decision["spread_triggered"])
+        self.assertGreater(decision["relative_spread"], 0.05)
+
+    def test_clean_removes_only_deferred_extension_attempts_up_front(self) -> None:
+        resolved = attempt.resolve_arguments(
+            attempt.parser().parse_args(
+                ["--profile", str(SCALING_ATTEMPTS_PROFILE), "server"]
+            )
+        )
+        calls: list[tuple[str, int]] = []
+
+        def record(args, _host, operation, _extra=None):
+            calls.append((operation, args.current_attempt))
+
+        with mock.patch.object(attempt, "_run", side_effect=record):
+            attempt._clean_deferred_attempts(resolved, "srv-01", [4, 5])
+
+        self.assertEqual(
+            calls,
+            [("configure", 4), ("clean", 4), ("configure", 5), ("clean", 5)],
+        )
 
     def test_verified_client_attempt_is_published_at_receiver_path(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

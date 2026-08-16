@@ -35,9 +35,16 @@
     "selection": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["drone_count"],
+      "required": ["drone_count", "attempt_set"],
       "properties": {
-        "drone_count": {"type": "integer", "minimum": 1}
+        "drone_count": {"type": "integer", "minimum": 1},
+        "attempt_set": {
+          "enum": [
+            "baseline",
+            "extension",
+            "baseline_with_conditional_extension"
+          ]
+        }
       }
     },
     "workspace": {

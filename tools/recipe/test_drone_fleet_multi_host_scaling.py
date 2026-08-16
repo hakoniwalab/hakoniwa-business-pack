@@ -28,11 +28,19 @@ class DroneFleetMultiHostScalingTest(unittest.TestCase):
         parsed = scaling.parser().parse_args(["collect"])
         self.assertEqual(parsed.command, "collect")
 
-    def test_scaling_recipe_uses_scalar_sleep_and_three_attempts(self) -> None:
+    def test_scaling_recipe_declares_baseline_and_extension_attempts(self) -> None:
         raw, counts, attempts = scaling.load_scaling(scaling.DEFAULT_EXPERIMENT)
 
         self.assertEqual(counts, [64, 128, 256])
         self.assertEqual(attempts, 3)
+        policy = scaling.attempt_policy(raw["matrix"])
+        self.assertEqual(policy["baseline"], [1, 2, 3])
+        self.assertEqual(policy["extension"], [4, 5])
+        self.assertTrue(policy["triggers"]["any_failure"])
+        self.assertEqual(
+            policy["triggers"]["relative_spread"],
+            {"metric": "rtf", "greater_than": 0.05},
+        )
         self.assertEqual(raw["runtime"]["conductor"]["real_sleep_msec"], 1)
         self.assertNotIn("conductor_real_sleep_msec", raw["matrix"])
         self.assertEqual(
@@ -41,6 +49,14 @@ class DroneFleetMultiHostScalingTest(unittest.TestCase):
             ],
             100.0,
         )
+
+    def test_extension_attempt_identity_is_declared_but_not_baseline(self) -> None:
+        raw, _counts, attempts = scaling.load_scaling(scaling.DEFAULT_EXPERIMENT)
+        self.assertEqual(attempts, 3)
+        resolved = scaling.resolve_condition(raw, 256, attempt=5)
+        self.assertEqual(resolved["measurement"]["attempt"], 5)
+        with self.assertRaisesRegex(scaling.ScalingError, "declared attempts"):
+            scaling.resolve_condition(raw, 256, attempt=6)
 
     def test_temporal_recipe_is_one_separate_worst_case_attempt(self) -> None:
         raw, counts, attempts = scaling.load_scaling(TEMPORAL_EXPERIMENT)
@@ -260,6 +276,74 @@ class DroneFleetMultiHostScalingTest(unittest.TestCase):
                     output,
                     selected_drone_count=256,
                 )
+
+    def test_summary_can_include_baseline_and_extension_attempts(self) -> None:
+        raw, _counts, _attempts = scaling.load_scaling(
+            scaling.DEFAULT_EXPERIMENT
+        )
+        sleep = raw["runtime"]["conductor"]["real_sleep_msec"]
+        series = raw["measurement"]["series"]
+        config_id = scaling.configuration_id(256, sleep)
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            for attempt in range(1, 6):
+                for host_id in ("srv-01", "cli-01"):
+                    path = scaling.result_path(
+                        output,
+                        raw["results"]["directory"],
+                        series,
+                        host_id,
+                        config_id,
+                        attempt,
+                    )
+                    path.parent.mkdir(parents=True)
+                    path.write_text(
+                        json.dumps(
+                            {
+                                "status": "success",
+                                "mode": "performance",
+                                "run_id": f"{config_id}-attempt-{attempt:02d}",
+                                "performance": {"rtf": 1.0 + attempt / 100},
+                                "machine": {
+                                    "cpu_average_percent": 50.0,
+                                    "cpu_max_percent": 60.0,
+                                },
+                                "metadata": {
+                                    "host_id": host_id,
+                                    "configuration_id": config_id,
+                                    "attempt": attempt,
+                                    "config_hash": "shared-hash",
+                                    "temporal_observer_enabled": False,
+                                    "time_coordination": {
+                                        "conductor_real_sleep_msec": sleep
+                                    },
+                                },
+                            }
+                        ),
+                        encoding="utf-8",
+                    )
+            self.assertEqual(
+                scaling.summarize(
+                    scaling.DEFAULT_EXPERIMENT,
+                    output,
+                    selected_drone_count=256,
+                    attempt_numbers=[1, 2, 3, 4, 5],
+                ),
+                0,
+            )
+            report = json.loads(
+                (
+                    output
+                    / "results"
+                    / series
+                    / "summary"
+                    / "multi-host-scaling-sleep-001ms-uav-256.json"
+                ).read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(report["attempt_numbers"], [1, 2, 3, 4, 5])
+        self.assertEqual(len(report["results"]), 5)
+        self.assertEqual(report["statistics"][0]["attempt_count"], 5)
 
     def test_temporal_summary_pairs_host_lag_and_world_time_boundaries(self) -> None:
         raw, _counts, _attempts = scaling.load_scaling(TEMPORAL_EXPERIMENT)

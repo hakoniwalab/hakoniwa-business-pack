@@ -294,8 +294,58 @@ retained under the remote-operation runtime directory.
 ## Headless scaling preflight
 
 `multi-host-scaling.yaml` is the ICRA-oriented, headless scaling Recipe. Its
-matrix varies only the total UAV count (`64`, `128`, `256`) and uses three
-attempts. Equal allocation resolves each condition across `srv-01` and
+matrix varies only the total UAV count (`64`, `128`, `256`). Its attempt policy
+is explicit:
+
+```yaml
+attempts:
+  baseline: [1, 2, 3]
+  extension:
+    attempts: [4, 5]
+    triggers:
+      any_failure: true
+      relative_spread:
+        metric: rtf
+        greater_than: 0.05
+```
+
+Baseline execution remains attempts 1 through 3. Attempts 4 and 5 are declared
+identities but are not part of a normal baseline run. They become eligible only
+when a baseline result failed or `(max RTF - min RTF) / median RTF` is greater
+than 5 percent. The lists must be ascending, contiguous, disjoint, and begin at
+1; the shared Experiment schema rejects gaps or unknown spread metrics.
+
+Both hosts consume the same baseline remote-operation profile:
+
+```text
+configs/remote-operation/multi-host-scaling-attempts.yaml
+```
+
+It selects the 256-UAV condition and the existing
+`drone-fleet-multi-host-automation-smoke` workspace. The Experiment remains the
+authority for baseline attempts 1 through 3 and extension attempts 4 and 5;
+the remote-operation profile selects
+`attempt_set: baseline_with_conditional_extension` and does not duplicate
+either list. The server runs baseline attempts 1 through 3, evaluates the
+paired results, and sends either `NEXT_ATTEMPT` or `BATCH_COMPLETE` to the
+client. Attempts 4 and 5 therefore run in the same two host processes only when
+the declared trigger fires.
+
+```bash
+# Mac
+python3 tools/workspace.py run -- \
+  python3 -m tools.remote_operation.multi_host_scaling_attempt \
+  --profile configs/remote-operation/multi-host-scaling-attempts.yaml \
+  server
+
+# WSL2
+python3 tools/workspace.py run -- \
+  python3 -m tools.remote_operation.multi_host_scaling_attempt \
+  --profile configs/remote-operation/multi-host-scaling-attempts.yaml \
+  client
+```
+
+Equal allocation resolves each condition across `srv-01` and
 `cli-01`; their Experiment B-derived process policy is 6 and 12 processes
 respectively. This differs from the legacy connectivity baseline, which used
 4 processes on `srv-01` and 12 on `cli-01`.

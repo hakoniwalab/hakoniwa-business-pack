@@ -24,6 +24,16 @@ sections:
       required_fields: [drone_count, process_count]
       optional_fields: []
       extension_fields: false
+    attempts:
+      policy_required_fields: [baseline, extension]
+      policy_optional_fields: []
+      extension_required_fields: [attempts, triggers]
+      extension_optional_fields: []
+      triggers_required_fields: [any_failure, relative_spread]
+      triggers_optional_fields: []
+      relative_spread_required_fields: [metric, greater_than]
+      relative_spread_optional_fields: []
+      spread_metrics: [rtf]
   runtime:
     required_fields: [mode, visualization, show_runner_real_time_sync]
     optional_fields: [conductor]

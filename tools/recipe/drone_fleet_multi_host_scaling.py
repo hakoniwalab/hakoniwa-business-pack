@@ -80,6 +80,86 @@ def _positive(value: Any, label: str, *, allow_zero: bool = False) -> int:
     return value
 
 
+def attempt_policy(matrix: dict[str, Any]) -> dict[str, Any]:
+    value = matrix.get("attempts")
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 1:
+        return {
+            "baseline": list(range(1, value + 1)),
+            "extension": [],
+            "triggers": None,
+        }
+    if not isinstance(value, dict):
+        raise ScalingError("matrix.attempts must be a positive integer or policy")
+    unknown = sorted(set(value) - {"baseline", "extension"})
+    if unknown:
+        raise ScalingError("unknown matrix.attempts fields: " + ", ".join(unknown))
+    baseline = value.get("baseline")
+    if (
+        not isinstance(baseline, list)
+        or not baseline
+        or any(isinstance(item, bool) or not isinstance(item, int) for item in baseline)
+        or baseline != list(range(1, len(baseline) + 1))
+    ):
+        raise ScalingError("matrix.attempts.baseline must be consecutive from 1")
+    extension = value.get("extension")
+    if not isinstance(extension, dict):
+        raise ScalingError("matrix.attempts.extension must be a mapping")
+    extension_unknown = sorted(set(extension) - {"attempts", "triggers"})
+    if extension_unknown:
+        raise ScalingError(
+            "unknown matrix.attempts.extension fields: "
+            + ", ".join(extension_unknown)
+        )
+    additional = extension.get("attempts")
+    expected = list(
+        range(len(baseline) + 1, len(baseline) + 1 + len(additional or []))
+    )
+    if (
+        not isinstance(additional, list)
+        or not additional
+        or any(isinstance(item, bool) or not isinstance(item, int) for item in additional)
+        or additional != expected
+    ):
+        raise ScalingError(
+            "matrix.attempts.extension.attempts must continue after baseline"
+        )
+    triggers = extension.get("triggers")
+    if not isinstance(triggers, dict) or set(triggers) != {
+        "any_failure",
+        "relative_spread",
+    }:
+        raise ScalingError(
+            "matrix.attempts.extension.triggers must define any_failure and "
+            "relative_spread"
+        )
+    if not isinstance(triggers["any_failure"], bool):
+        raise ScalingError(
+            "matrix.attempts.extension.triggers.any_failure must be boolean"
+        )
+    spread = triggers["relative_spread"]
+    if not isinstance(spread, dict) or set(spread) != {"metric", "greater_than"}:
+        raise ScalingError(
+            "matrix.attempts.extension.triggers.relative_spread must define "
+            "metric and greater_than"
+        )
+    if spread["metric"] != "rtf":
+        raise ScalingError("attempt extension relative_spread.metric must be rtf")
+    threshold = spread["greater_than"]
+    if (
+        isinstance(threshold, bool)
+        or not isinstance(threshold, (int, float))
+        or threshold <= 0
+    ):
+        raise ScalingError(
+            "attempt extension relative_spread.greater_than must be positive"
+        )
+    return {
+        "baseline": baseline,
+        "extension": additional,
+        "triggers": triggers,
+    }
+
+
 def load_scaling(path: Path) -> tuple[dict[str, Any], list[int], int]:
     raw = yaml_support.load_simple_yaml(path)
     matrix = raw.get("matrix")
@@ -96,7 +176,8 @@ def load_scaling(path: Path) -> tuple[dict[str, Any], list[int], int]:
         drone_counts
     ):
         raise ScalingError("matrix.drone_count must be unique and ascending")
-    attempts = _positive(matrix.get("attempts"), "matrix.attempts")
+    policy = attempt_policy(matrix)
+    attempts = len(policy["baseline"])
     conductor = raw.get("runtime", {}).get("conductor", {})
     if conductor.get("profile") != "icra-target-delta-boundary":
         raise ScalingError(
@@ -192,9 +273,13 @@ def resolve_condition(raw: dict[str, Any], drone_count: int, attempt: int = 1) -
     measurement["configuration_id"] = configuration_id(
         drone_count, sleep, str(measurement["mode"])
     )
-    attempts = _positive(matrix.get("attempts"), "matrix.attempts")
-    if attempt < 1 or attempt > attempts:
-        raise ScalingError(f"attempt {attempt} is outside 1..{attempts}")
+    policy = attempt_policy(matrix)
+    allowed_attempts = policy["baseline"] + policy["extension"]
+    if attempt not in allowed_attempts:
+        raise ScalingError(
+            "attempt " + str(attempt) + " is outside declared attempts: "
+            + ", ".join(map(str, allowed_attempts))
+        )
     measurement["attempt"] = attempt
     return result
 
@@ -255,12 +340,21 @@ def configure(args: argparse.Namespace) -> int:
 
 def plan(path: Path) -> int:
     raw, counts, attempts = load_scaling(path)
+    policy = attempt_policy(raw["matrix"])
     sleep = int(raw["runtime"]["conductor"]["real_sleep_msec"])
     mode = str(raw["measurement"]["mode"])
     hosts = raw["deployment"]["hosts"]
     print(f"Experiment C: multi-host {mode} preflight")
     print(f"real_sleep_msec: {sleep} (scalar)")
     print(f"attempts: {attempts}")
+    if policy["extension"]:
+        spread = policy["triggers"]["relative_spread"]
+        print(
+            "extension: "
+            + ",".join(map(str, policy["extension"]))
+            + f" when failure={policy['triggers']['any_failure']} or "
+            + f"{spread['metric']} spread > {spread['greater_than']:.1%}"
+        )
     for count in counts:
         resolved = resolve_condition(raw, count)
         placement = ", ".join(
@@ -408,6 +502,7 @@ def _temporal_summary(
     attempts: int,
     output_root: Path,
     selected_drone_count: int | None,
+    attempt_numbers: list[int],
 ) -> int:
     measurement = raw["measurement"]
     series = str(measurement["series"])
@@ -423,7 +518,7 @@ def _temporal_summary(
     missing: list[str] = []
     for count in counts:
         config_id = configuration_id(count, sleep, "temporal")
-        for attempt in range(1, attempts + 1):
+        for attempt in attempt_numbers:
             payloads: dict[str, dict[str, Any]] = {}
             metrics: dict[str, dict[str, float | int]] = {}
             for host_id in host_ids:
@@ -527,7 +622,8 @@ def _temporal_summary(
             "validation": "multi-host-temporal",
             "protocol_status": measurement["protocol_status"],
             "real_sleep_msec": sleep,
-            "attempts": attempts,
+            "attempts": len(attempt_numbers),
+            "attempt_numbers": attempt_numbers,
             "complete": not missing,
             "missing_results": missing,
             "results": rows,
@@ -570,9 +666,26 @@ def _statistics(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def summarize(
-    path: Path, output_root: Path, selected_drone_count: int | None = None
+    path: Path,
+    output_root: Path,
+    selected_drone_count: int | None = None,
+    attempt_numbers: list[int] | None = None,
 ) -> int:
     raw, counts, attempts = load_scaling(path)
+    selected_attempts = (
+        list(range(1, attempts + 1))
+        if attempt_numbers is None
+        else list(attempt_numbers)
+    )
+    declared = attempt_policy(raw["matrix"])
+    allowed_attempts = declared["baseline"] + declared["extension"]
+    if (
+        not selected_attempts
+        or len(set(selected_attempts)) != len(selected_attempts)
+        or selected_attempts != sorted(selected_attempts)
+        or any(attempt not in allowed_attempts for attempt in selected_attempts)
+    ):
+        raise ScalingError("summary attempt_numbers must be unique declared attempts")
     if selected_drone_count is not None:
         if selected_drone_count not in counts:
             raise ScalingError(
@@ -583,7 +696,12 @@ def summarize(
     mode = str(measurement["mode"])
     if mode == "temporal":
         return _temporal_summary(
-            raw, counts, attempts, output_root, selected_drone_count
+            raw,
+            counts,
+            attempts,
+            output_root,
+            selected_drone_count,
+            selected_attempts,
         )
     series = str(measurement["series"])
     results_directory = str(raw["results"]["directory"])
@@ -595,7 +713,7 @@ def summarize(
     for count in counts:
         config_id = configuration_id(count, sleep, mode)
         payloads: dict[str, dict[str, Any]] = {}
-        for attempt in range(1, attempts + 1):
+        for attempt in selected_attempts:
             payloads: dict[str, dict[str, Any]] = {}
             for host_id in host_ids:
                 result = result_path(output_root, results_directory, series,
@@ -643,7 +761,8 @@ def summarize(
             "experiment": "multi-host-scaling",
             "protocol_status": measurement["protocol_status"],
             "real_sleep_msec": sleep,
-            "attempts": attempts,
+            "attempts": len(selected_attempts),
+            "attempt_numbers": selected_attempts,
             "complete": not missing,
             "missing_results": missing,
             "results": rows,

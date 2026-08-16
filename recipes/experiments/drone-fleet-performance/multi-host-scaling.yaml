@@ -10,7 +10,15 @@ scale:
 
 matrix:
   drone_count: [64, 128, 256]
-  attempts: 3
+  attempts:
+    baseline: [1, 2, 3]
+    extension:
+      attempts: [4, 5]
+      triggers:
+        any_failure: true
+        relative_spread:
+          metric: rtf
+          greater_than: 0.05
 
 runtime:
   mode: native

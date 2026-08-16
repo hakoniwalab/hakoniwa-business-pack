@@ -35,6 +35,9 @@ class RemoteOperationProtocolTest(unittest.TestCase):
         protocol.validate_transition("command", "CLEANUP", "COLLECT")
         protocol.validate_transition("status", "CLEANED", "COLLECTING")
         protocol.validate_transition("status", "COLLECTING", "COLLECTED")
+        protocol.validate_transition("status", "COLLECTED", "BATCH_COMPLETED")
+        protocol.validate_transition("command", "COLLECT", "NEXT_ATTEMPT")
+        protocol.validate_transition("command", "COLLECT", "BATCH_COMPLETE")
 
     def test_schema_and_implementation_controlled_values_match(self) -> None:
         schema = json.loads(protocol.SCHEMA_PATH.read_text(encoding="utf-8"))

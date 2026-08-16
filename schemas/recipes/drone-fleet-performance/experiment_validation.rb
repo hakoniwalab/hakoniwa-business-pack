@@ -125,9 +125,7 @@ module ExperimentValidation
         errors << "#{label}.matrix.conductor_real_sleep_msec must be a non-empty non-negative integer list"
       end
     end
-    if matrix.key?("attempts") && !integer_at_least?(matrix["attempts"], 1)
-      errors << "#{label}.matrix.attempts must be a positive integer"
-    end
+    validate_attempts(errors, matrix["attempts"], label) if matrix.key?("attempts")
     return unless matrix.key?("workloads")
 
     workloads = matrix["workloads"]
@@ -157,6 +155,86 @@ module ExperimentValidation
     end
     if seen_drone_counts.uniq.length != seen_drone_counts.length
       errors << "#{label}.matrix.workloads must not repeat drone_count"
+    end
+  end
+
+  def validate_attempts(errors, attempts, label)
+    prefix = "#{label}.matrix.attempts"
+    return if integer_at_least?(attempts, 1)
+
+    unless attempts.is_a?(Hash)
+      errors << "#{prefix} must be a positive integer or an attempt policy"
+      return
+    end
+    policy_fields = %w[baseline extension]
+    unknown = attempts.keys - policy_fields
+    errors << "#{prefix} has unknown fields: #{unknown.sort.join(', ')}" unless unknown.empty?
+    policy_fields.each do |field|
+      errors << "#{prefix} missing #{field}" unless attempts.key?(field)
+    end
+
+    baseline = attempts["baseline"]
+    unless consecutive_attempts?(baseline, 1)
+      errors << "#{prefix}.baseline must be a consecutive positive integer list starting at 1"
+    end
+    extension = attempts["extension"]
+    unless extension.is_a?(Hash)
+      errors << "#{prefix}.extension must be a mapping"
+      return
+    end
+    extension_unknown = extension.keys - %w[attempts triggers]
+    unless extension_unknown.empty?
+      errors << "#{prefix}.extension has unknown fields: #{extension_unknown.sort.join(', ')}"
+    end
+    %w[attempts triggers].each do |field|
+      errors << "#{prefix}.extension missing #{field}" unless extension.key?(field)
+    end
+    extension_attempts = extension["attempts"]
+    expected_start = consecutive_attempts?(baseline, 1) ? baseline.last + 1 : nil
+    unless expected_start && consecutive_attempts?(extension_attempts, expected_start)
+      errors << "#{prefix}.extension.attempts must continue immediately after baseline"
+    end
+    validate_attempt_triggers(errors, extension["triggers"], prefix)
+  end
+
+  def consecutive_attempts?(values, first)
+    values.is_a?(Array) && !values.empty? &&
+      values.all? { |value| integer_at_least?(value, 1) } &&
+      values == (first...(first + values.length)).to_a
+  end
+
+  def validate_attempt_triggers(errors, triggers, prefix)
+    trigger_prefix = "#{prefix}.extension.triggers"
+    unless triggers.is_a?(Hash)
+      errors << "#{trigger_prefix} must be a mapping"
+      return
+    end
+    unknown = triggers.keys - %w[any_failure relative_spread]
+    errors << "#{trigger_prefix} has unknown fields: #{unknown.sort.join(', ')}" unless unknown.empty?
+    %w[any_failure relative_spread].each do |field|
+      errors << "#{trigger_prefix} missing #{field}" unless triggers.key?(field)
+    end
+    unless boolean?(triggers["any_failure"])
+      errors << "#{trigger_prefix}.any_failure must be boolean"
+    end
+    spread = triggers["relative_spread"]
+    unless spread.is_a?(Hash)
+      errors << "#{trigger_prefix}.relative_spread must be a mapping"
+      return
+    end
+    spread_unknown = spread.keys - %w[metric greater_than]
+    unless spread_unknown.empty?
+      errors << "#{trigger_prefix}.relative_spread has unknown fields: #{spread_unknown.sort.join(', ')}"
+    end
+    %w[metric greater_than].each do |field|
+      errors << "#{trigger_prefix}.relative_spread missing #{field}" unless spread.key?(field)
+    end
+    unless spread["metric"] == "rtf"
+      errors << "#{trigger_prefix}.relative_spread.metric must be rtf"
+    end
+    threshold = spread["greater_than"]
+    unless threshold.is_a?(Numeric) && threshold.positive?
+      errors << "#{trigger_prefix}.relative_spread.greater_than must be positive"
     end
   end
 

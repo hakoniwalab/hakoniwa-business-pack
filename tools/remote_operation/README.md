@@ -79,7 +79,15 @@ REGISTERED
   <- LAUNCH  -> LAUNCHED [-> JOINED]
   <- RUN     -> RUNNING -> TERMINATED
   <- CLEANUP -> CLEANED
+  <- COLLECT -> COLLECTING -> COLLECTED
+  <- NEXT_ATTEMPT | BATCH_COMPLETE
 ```
+
+For conditional extension, the server alone evaluates the paired baseline
+results. It sends `NEXT_ATTEMPT` when the Experiment's extension trigger fires,
+otherwise `BATCH_COMPLETE`. The client never makes an independent spread
+decision. A run profile selects the named attempt set while the Experiment owns
+the concrete attempt numbers and threshold.
 
 `JOINED` is optional because the Conductor server can observe all joined
 clients directly. Any active phase may report `FAILED`; cleanup remains a

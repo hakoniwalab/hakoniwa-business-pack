@@ -155,6 +155,32 @@ class ExperimentValidationTest < Minitest::Test
     assert_empty validate(value)
     assert_equal 1, value.dig("runtime", "conductor", "real_sleep_msec")
     refute value.fetch("matrix").key?("conductor_real_sleep_msec")
+    assert_equal [1, 2, 3], value.dig("matrix", "attempts", "baseline")
+    assert_equal [4, 5], value.dig("matrix", "attempts", "extension", "attempts")
+  end
+
+  def test_rejects_attempt_extension_gap
+    value = load_experiment_yaml(
+      File.join(
+        ROOT,
+        "recipes/experiments/drone-fleet-performance/multi-host-scaling.yaml"
+      )
+    )
+    value.dig("matrix", "attempts", "extension")["attempts"] = [5, 6]
+
+    assert validate(value).any? { |error| error.include?("continue immediately") }
+  end
+
+  def test_rejects_unknown_attempt_spread_metric
+    value = load_experiment_yaml(
+      File.join(
+        ROOT,
+        "recipes/experiments/drone-fleet-performance/multi-host-scaling.yaml"
+      )
+    )
+    value.dig("matrix", "attempts", "extension", "triggers", "relative_spread")["metric"] = "cpu"
+
+    assert validate(value).any? { |error| error.include?("metric must be rtf") }
   end
 
   def test_rejects_incomplete_allocation_order
