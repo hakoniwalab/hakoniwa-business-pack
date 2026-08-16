@@ -11,6 +11,10 @@ import drone_fleet_single_host as yaml_support
 
 
 class DroneFleetMultiHostScalingTest(unittest.TestCase):
+    def test_clean_is_a_host_local_lifecycle_command(self) -> None:
+        parsed = scaling.parser().parse_args(["clean"])
+        self.assertEqual(parsed.command, "clean")
+
     def test_scaling_recipe_uses_scalar_sleep_and_attempt_one(self) -> None:
         raw, counts, attempts = scaling.load_scaling(scaling.DEFAULT_EXPERIMENT)
 

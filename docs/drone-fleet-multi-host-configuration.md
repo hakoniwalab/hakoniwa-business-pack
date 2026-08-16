@@ -209,6 +209,19 @@ python3 tools/recipe/drone_fleet_multi_host_scaling.py run
 python3 tools/recipe/drone_fleet_multi_host_scaling.py stop
 ```
 
+Before retrying the same attempt, run `clean` on each host after it has stopped:
+
+```bash
+python3 tools/recipe/drone_fleet_multi_host_scaling.py clean
+```
+
+`clean` removes only the selected host's Launcher session/log, local execution
+logs and validation output, plus current-attempt result copies for every host
+(including results previously collected with `scp`). Shared generated
+configuration, host bundles, and the `.hako` host selection are preserved, so
+another `configure` is unnecessary. It refuses to run while the Launcher
+session is active; use `stop` first.
+
 Each host writes its existing per-host measurement under:
 
 ```text

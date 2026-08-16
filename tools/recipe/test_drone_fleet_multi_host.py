@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 import drone_fleet_multi_host as recipe
+import drone_fleet_multi_host_scaling as scaling
 import drone_fleet_single_host as yaml_support
 
 
@@ -297,10 +298,91 @@ class DroneFleetMultiHostTest(unittest.TestCase):
             "run",
             "status",
             "stop",
+            "clean",
         ):
             parsed = recipe.parser().parse_args([command])
             self.assertEqual(parsed.command, command)
             self.assertFalse(hasattr(parsed, "host"))
+
+    def test_clean_removes_only_selected_stopped_host_run_artifacts(self) -> None:
+        raw, _counts, _attempts = scaling.load_scaling(scaling.DEFAULT_EXPERIMENT)
+        resolved = recipe.validate_experiment(scaling.resolve_condition(raw, 64))
+        state = {
+            "selection": {"host_id": "srv-01", "role": "server"},
+            "resolved": resolved,
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            paths = recipe.SimpleNamespace(
+                recipe_logs=output / "local/srv-01/logs",
+                recipe_validation=output / "local/srv-01/validation",
+                runtime_root=output / "runtime/srv-01",
+            )
+            trial = recipe.measurement_trial_path(resolved, output, "srv-01")
+            collected_client_trial = recipe.measurement_trial_path(
+                resolved, output, "cli-01"
+            )
+            for directory in (
+                paths.recipe_logs,
+                paths.recipe_validation,
+                paths.runtime_root,
+                trial,
+                collected_client_trial,
+            ):
+                directory.mkdir(parents=True)
+                (directory / "artifact.txt").write_text("old", encoding="utf-8")
+            recipe.atomic_json(
+                paths.runtime_root / "launcher-session.json",
+                {"state": "TERMINATED"},
+            )
+            preserved = output / "bundles/srv-01/config/launcher.json"
+            preserved.parent.mkdir(parents=True)
+            preserved.write_text("{}", encoding="utf-8")
+            other_host = output / "local/cli-01/logs/client.out"
+            other_host.parent.mkdir(parents=True)
+            other_host.write_text("keep", encoding="utf-8")
+            with (
+                mock.patch.object(recipe, "load_local_selection", return_value=state),
+                mock.patch.object(recipe, "host_runtime_paths", return_value=paths),
+            ):
+                self.assertEqual(recipe.clean_local(output), 0)
+            for removed in (
+                paths.recipe_logs,
+                paths.recipe_validation,
+                paths.runtime_root,
+                trial,
+                collected_client_trial,
+            ):
+                self.assertFalse(removed.exists())
+            self.assertTrue(preserved.is_file())
+            self.assertTrue(other_host.is_file())
+
+    def test_clean_rejects_an_active_launcher_session(self) -> None:
+        raw, _counts, _attempts = scaling.load_scaling(scaling.DEFAULT_EXPERIMENT)
+        resolved = recipe.validate_experiment(scaling.resolve_condition(raw, 64))
+        state = {
+            "selection": {"host_id": "cli-01", "role": "client"},
+            "resolved": resolved,
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            paths = recipe.SimpleNamespace(
+                recipe_logs=output / "local/cli-01/logs",
+                recipe_validation=output / "local/cli-01/validation",
+                runtime_root=output / "runtime/cli-01",
+            )
+            paths.runtime_root.mkdir(parents=True)
+            recipe.atomic_json(
+                paths.runtime_root / "launcher-session.json",
+                {"state": "ACTIVATED"},
+            )
+            with (
+                mock.patch.object(recipe, "load_local_selection", return_value=state),
+                mock.patch.object(recipe, "host_runtime_paths", return_value=paths),
+                self.assertRaisesRegex(recipe.RecipeError, "run stop before clean"),
+            ):
+                recipe.clean_local(output)
+            self.assertTrue(paths.runtime_root.is_dir())
 
     def test_open_viewer_is_server_only_and_uses_global_drone_count(self) -> None:
         resolved = recipe.validate_experiment(self.experiment())

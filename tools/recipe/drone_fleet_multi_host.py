@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import platform
+import shutil
 import subprocess
 import sys
 import urllib.error
@@ -547,12 +548,12 @@ def host_runtime_paths(output_root: Path, host_id: str) -> SimpleNamespace:
     )
 
 
-def prepare_host_measurement(
-    resolved: dict[str, Any], output_root: Path, host_id: str, config_hash: str
-) -> tuple[Path, Path] | None:
+def measurement_trial_path(
+    resolved: dict[str, Any], output_root: Path, host_id: str
+) -> Path:
     measurement = resolved["measurement"]
     if measurement.get("enabled") is not True:
-        return None
+        raise RecipeError("measurement is not enabled")
     configuration_id = _required_text(
         measurement.get("configuration_id"), "measurement.configuration_id"
     )
@@ -565,7 +566,7 @@ def prepare_host_measurement(
     result_root = Path(directory)
     if result_root.is_absolute() or ".." in result_root.parts:
         raise RecipeError("results.directory must stay inside the Recipe workspace")
-    trial = (
+    return (
         output_root
         / result_root
         / series
@@ -574,6 +575,19 @@ def prepare_host_measurement(
         / configuration_id
         / f"attempt-{attempt:02d}"
     )
+
+
+def prepare_host_measurement(
+    resolved: dict[str, Any], output_root: Path, host_id: str, config_hash: str
+) -> tuple[Path, Path] | None:
+    measurement = resolved["measurement"]
+    if measurement.get("enabled") is not True:
+        return None
+    configuration_id = _required_text(
+        measurement.get("configuration_id"), "measurement.configuration_id"
+    )
+    attempt = _positive(measurement.get("attempt"), "measurement.attempt")
+    trial = measurement_trial_path(resolved, output_root, host_id)
     trial.mkdir(parents=True, exist_ok=True)
     coordination = dict(
         _mapping(
@@ -969,6 +983,65 @@ def launcher_control(
     return result.returncode
 
 
+def _validate_managed_clean_path(path: Path, output_root: Path) -> None:
+    if path.is_symlink():
+        raise RecipeError(f"refusing to clean symlinked path: {path}")
+    root = output_root.resolve()
+    target = path.resolve()
+    if target == root or root not in target.parents:
+        raise RecipeError(f"refusing to clean path outside Recipe work: {path}")
+
+
+def _remove_managed_path(path: Path) -> None:
+    if not path.exists():
+        print(f"[SKIP] absent: {path}")
+        return
+    if path.is_dir():
+        shutil.rmtree(path)
+    else:
+        path.unlink()
+    print(f"[CLEAN] {path}")
+
+
+def clean_local(output_root: Path) -> int:
+    state = load_local_selection(output_root)
+    host_id = state["selection"]["host_id"]
+    paths = host_runtime_paths(output_root, host_id)
+    session = paths.runtime_root / "launcher-session.json"
+    if session.is_file():
+        try:
+            session_state = json.loads(session.read_text(encoding="utf-8")).get(
+                "state"
+            )
+        except (OSError, json.JSONDecodeError) as exc:
+            raise RecipeError(
+                f"cannot inspect Launcher session before clean: {exc}"
+            ) from exc
+        if session_state not in {"TERMINATED", "FAILED"}:
+            raise RecipeError(
+                f"Launcher session is {session_state!r}; run stop before clean"
+            )
+    targets = [
+        paths.recipe_logs,
+        paths.recipe_validation,
+        paths.runtime_root,
+    ]
+    if state["resolved"]["measurement"].get("enabled") is True:
+        targets.extend(
+            measurement_trial_path(state["resolved"], output_root, result_host_id)
+            for result_host_id in state["resolved"]["deployment"]["hosts"]
+        )
+    for target in targets:
+        _validate_managed_clean_path(target, output_root)
+    for target in targets:
+        _remove_managed_path(target)
+    print(
+        f"[OK] cleaned local run artifacts: {host_id}; "
+        "configuration and host selection were preserved"
+    )
+    return 0
+
+
 def git_identity(path: Path) -> dict[str, Any]:
     def output(*args: str) -> str:
         result = subprocess.run(
@@ -1308,6 +1381,9 @@ def parser() -> argparse.ArgumentParser:
     commands.add_parser("run", help="start the simulation from the selected server")
     commands.add_parser("status", help="show the local Launcher status")
     commands.add_parser("stop", help="stop the locally selected host")
+    commands.add_parser(
+        "clean", help="remove stopped host-local logs, session, and attempt results"
+    )
     return result
 
 
@@ -1321,8 +1397,11 @@ def main(argv: list[str] | None = None) -> int:
         "run",
         "status",
         "stop",
+        "clean",
     }:
         try:
+            if args.command == "clean":
+                return clean_local(output_root)
             if args.command == "doctor":
                 return doctor_local(
                     output_root,
