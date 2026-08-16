@@ -153,7 +153,7 @@ class ExperimentValidationTest < Minitest::Test
     )
 
     assert_empty validate(value)
-    assert_equal 10, value.dig("runtime", "conductor", "real_sleep_msec")
+    assert_equal 1, value.dig("runtime", "conductor", "real_sleep_msec")
     refute value.fetch("matrix").key?("conductor_real_sleep_msec")
   end
 
