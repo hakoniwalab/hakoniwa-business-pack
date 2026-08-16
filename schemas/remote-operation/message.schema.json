@@ -28,6 +28,7 @@
         "LAUNCH",
         "RUN",
         "CLEANUP",
+        "COLLECT",
         "ABORT",
         "REGISTERED",
         "PREPARING",
@@ -37,6 +38,8 @@
         "RUNNING",
         "TERMINATED",
         "CLEANED",
+        "COLLECTING",
+        "COLLECTED",
         "FAILED"
       ]
     },
@@ -83,7 +86,7 @@
       "then": {
         "properties": {
           "type": {
-            "enum": ["PREPARE", "LAUNCH", "RUN", "CLEANUP", "ABORT"]
+            "enum": ["PREPARE", "LAUNCH", "RUN", "CLEANUP", "COLLECT", "ABORT"]
           }
         }
       }
@@ -105,6 +108,8 @@
               "RUNNING",
               "TERMINATED",
               "CLEANED",
+              "COLLECTING",
+              "COLLECTED",
               "FAILED"
             ]
           }

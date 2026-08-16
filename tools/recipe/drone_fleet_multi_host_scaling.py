@@ -424,7 +424,7 @@ def parser() -> argparse.ArgumentParser:
     configure_parser = commands.add_parser("configure")
     configure_parser.add_argument("--host", required=True)
     configure_parser.add_argument("--drone-count", type=int, required=True)
-    for command in ("doctor", "start", "run", "status", "stop", "clean"):
+    for command in ("doctor", "start", "run", "status", "stop", "clean", "collect"):
         commands.add_parser(command)
     summarize_parser = commands.add_parser("summarize")
     summarize_parser.add_argument("--drone-count", type=int)

@@ -171,6 +171,69 @@ Only results need transfer. Initial experiments do not require remote command
 execution, configuration push, a shared filesystem, or an inbound connection
 to WSL2.
 
+### Automated single-attempt vertical slice
+
+`multi_host_scaling_attempt.py` automates one complete scaling condition over
+the constrained PDU remote-operation protocol. It configures both hosts,
+checks them, starts `srv-01` before `cli-01`, waits for the Conductor join
+barrier, runs the measurement, stops both Launchers, collects host-local
+stdout/stderr, transfers the client attempt as a verified ZIP, and invokes the
+existing paired summarizer on `srv-01`.
+
+For the current 256-UAV, 1-ms condition, start `srv-01` on the Mac first:
+
+```bash
+python3 tools/workspace.py run -- \
+  python3 -m tools.remote_operation.multi_host_scaling_attempt \
+  --session-id mh-uav256-attempt01 \
+  --drone-count 256 \
+  --output-root work/recipes/drone-fleet-multi-host-automation-smoke \
+  --clean \
+  server
+```
+
+Then start the persistent worker for this run on WSL2:
+
+```bash
+python3 tools/workspace.py run -- \
+  python3 -m tools.remote_operation.multi_host_scaling_attempt \
+  --session-id mh-uav256-attempt01 \
+  --drone-count 256 \
+  --output-root work/recipes/drone-fleet-multi-host-automation-smoke \
+  --clean \
+  client
+```
+
+The first validation deliberately uses a separate output root so the manually
+collected results under `work/recipes/drone-fleet-multi-host/` remain intact.
+`--clean` is explicit because it removes the selected condition's previous
+attempt result below the chosen output root. Omit it only for a genuinely empty
+attempt directory. The same session ID, output-root spelling, and
+Git/configuration identity are required on both peers. The control and artifact
+ports default to `54200` and `54201`; WSL2 initiates both connections.
+
+After collection, each host attempt is self-contained:
+
+```text
+results/<series>/hosts/<host-id>/<configuration-id>/attempt-XX/
+├── result.json
+├── execution-summary.json
+├── machine-samples.jsonl
+├── resolved-measurement.json
+└── evidence/
+    ├── manifest.json
+    ├── logs/          # every Launcher-managed .out/.err file
+    ├── validation/
+    └── runtime/       # Launcher session and lifecycle log
+```
+
+The client ZIP and `.part` file live only below
+`runtime/remote-operation/`. The server validates the transfer checksum and
+the extracted result's `host_id`, `configuration_id`, `attempt`, and
+`config_hash` before publishing it at the canonical `cli-01` result path. The
+verified ZIP is removed after extraction; transfer and control JSONL logs are
+retained under the remote-operation runtime directory.
+
 ## Headless scaling preflight
 
 `multi-host-scaling.yaml` is the ICRA-oriented, headless scaling Recipe. Its

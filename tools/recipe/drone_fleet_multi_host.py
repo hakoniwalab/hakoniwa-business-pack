@@ -1106,6 +1106,51 @@ def clean_local(output_root: Path) -> int:
     return 0
 
 
+def collect_local_evidence(output_root: Path) -> int:
+    """Snapshot host-local logs beside the existing per-attempt result."""
+
+    state = load_local_selection(output_root)
+    host_id = state["selection"]["host_id"]
+    paths = host_runtime_paths(output_root, host_id)
+    trial = measurement_trial_path(state["resolved"], output_root, host_id)
+    result = trial / "result.json"
+    if not result.is_file():
+        raise RecipeError(f"measurement result is missing: {result}")
+    evidence = trial / "evidence"
+    _validate_managed_clean_path(evidence, output_root)
+    if evidence.exists():
+        _remove_managed_path(evidence)
+    evidence.mkdir(parents=True)
+    copied: list[str] = []
+    for label, source in (
+        ("logs", paths.recipe_logs),
+        ("validation", paths.recipe_validation),
+        ("runtime", paths.runtime_root),
+    ):
+        if not source.is_dir():
+            continue
+        if any(path.is_symlink() for path in source.rglob("*")):
+            raise RecipeError(f"refusing to collect symlinked evidence: {source}")
+        destination = evidence / label
+        shutil.copytree(source, destination)
+        copied.append(label)
+    payload = json.loads(result.read_text(encoding="utf-8"))
+    metadata = _mapping(payload.get("metadata"), "result.metadata")
+    manifest = {
+        "version": 1,
+        "host_id": host_id,
+        "configuration_id": metadata.get("configuration_id"),
+        "attempt": metadata.get("attempt"),
+        "run_id": payload.get("run_id"),
+        "config_hash": metadata.get("config_hash"),
+        "directories": copied,
+    }
+    atomic_json(evidence / "manifest.json", manifest)
+    print(f"[OK] collected attempt evidence: {trial}")
+    print("Included: result files, " + (", ".join(copied) if copied else "manifest"))
+    return 0
+
+
 def git_identity(path: Path) -> dict[str, Any]:
     def output(*args: str) -> str:
         result = subprocess.run(
@@ -1448,6 +1493,9 @@ def parser() -> argparse.ArgumentParser:
     commands.add_parser(
         "clean", help="remove stopped host-local logs, session, and attempt results"
     )
+    commands.add_parser(
+        "collect", help="snapshot local stdout/stderr and runtime evidence into the attempt"
+    )
     return result
 
 
@@ -1462,10 +1510,13 @@ def main(argv: list[str] | None = None) -> int:
         "status",
         "stop",
         "clean",
+        "collect",
     }:
         try:
             if args.command == "clean":
                 return clean_local(output_root)
+            if args.command == "collect":
+                return collect_local_evidence(output_root)
             if args.command == "doctor":
                 return doctor_local(
                     output_root,

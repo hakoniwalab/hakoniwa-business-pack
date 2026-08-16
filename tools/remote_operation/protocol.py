@@ -21,7 +21,9 @@ SCHEMA_PATH = (
     / "message.schema.json"
 )
 
-COMMAND_TYPES = frozenset({"PREPARE", "LAUNCH", "RUN", "CLEANUP", "ABORT"})
+COMMAND_TYPES = frozenset(
+    {"PREPARE", "LAUNCH", "RUN", "CLEANUP", "COLLECT", "ABORT"}
+)
 STATUS_TYPES = frozenset(
     {
         "REGISTERED",
@@ -32,6 +34,8 @@ STATUS_TYPES = frozenset(
         "RUNNING",
         "TERMINATED",
         "CLEANED",
+        "COLLECTING",
+        "COLLECTED",
         "FAILED",
     }
 )
@@ -64,7 +68,8 @@ COMMAND_TRANSITIONS = {
     "LAUNCH": frozenset({"RUN", "ABORT"}),
     "RUN": frozenset({"CLEANUP", "ABORT"}),
     "ABORT": frozenset({"CLEANUP"}),
-    "CLEANUP": frozenset(),
+    "CLEANUP": frozenset({"COLLECT"}),
+    "COLLECT": frozenset(),
 }
 STATUS_TRANSITIONS = {
     None: frozenset({"REGISTERED", "FAILED"}),
@@ -78,7 +83,9 @@ STATUS_TRANSITIONS = {
     "RUNNING": frozenset({"TERMINATED", "FAILED"}),
     "TERMINATED": frozenset({"CLEANED", "FAILED"}),
     "FAILED": frozenset({"CLEANED"}),
-    "CLEANED": frozenset(),
+    "CLEANED": frozenset({"COLLECTING", "FAILED"}),
+    "COLLECTING": frozenset({"COLLECTED", "FAILED"}),
+    "COLLECTED": frozenset(),
 }
 
 

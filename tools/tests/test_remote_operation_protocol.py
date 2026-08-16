@@ -31,6 +31,11 @@ def status(message_type: str = "READY", **overrides):
 
 
 class RemoteOperationProtocolTest(unittest.TestCase):
+    def test_collection_follows_cleanup(self) -> None:
+        protocol.validate_transition("command", "CLEANUP", "COLLECT")
+        protocol.validate_transition("status", "CLEANED", "COLLECTING")
+        protocol.validate_transition("status", "COLLECTING", "COLLECTED")
+
     def test_schema_and_implementation_controlled_values_match(self) -> None:
         schema = json.loads(protocol.SCHEMA_PATH.read_text(encoding="utf-8"))
         properties = schema["properties"]
