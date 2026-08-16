@@ -460,7 +460,10 @@ class DroneFleetMultiHostTest(unittest.TestCase):
                 ),
                 0,
             )
-        self.assertEqual(run.call_args.args[0][-2:], ["start", "/runtime/launcher-session.json"])
+        self.assertEqual(
+            run.call_args.args[0][-2:],
+            ["start", str(paths.runtime_root / "launcher-session.json")],
+        )
         joined.assert_called_once_with(Path("/output"), paths.recipe_logs)
 
     def test_run_readiness_requires_every_current_session_participant(self) -> None:
@@ -512,17 +515,18 @@ class DroneFleetMultiHostTest(unittest.TestCase):
                 recipe.ensure_conductor_clients_joined(output, logs)
 
     def test_launcher_manual_run_contract_probe(self) -> None:
+        foundation_python = Path("/foundation/python")
         completed = recipe.SimpleNamespace(returncode=0)
         with mock.patch.object(recipe.subprocess, "run", return_value=completed) as run:
             self.assertEqual(
-                recipe.launcher_supports_manual_run(Path("/foundation/python")),
+                recipe.launcher_supports_manual_run(foundation_python),
                 (True, "background activate-only and control start"),
             )
-        self.assertEqual(run.call_args.args[0][:2], ["/foundation/python", "-c"])
+        self.assertEqual(run.call_args.args[0][:2], [str(foundation_python), "-c"])
 
         completed.returncode = 1
         with mock.patch.object(recipe.subprocess, "run", return_value=completed):
-            ok, detail = recipe.launcher_supports_manual_run(Path("/foundation/python"))
+            ok, detail = recipe.launcher_supports_manual_run(foundation_python)
         self.assertFalse(ok)
         self.assertIn("rebuild hakoniwa-pdu-python", detail)
 
