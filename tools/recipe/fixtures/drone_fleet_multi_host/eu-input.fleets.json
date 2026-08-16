@@ -1,0 +1,65 @@
+{
+  "mode": "simple",
+  "execution_nodes": ["cli-01"],
+  "pdudef": "pdudef_visual_state.json",
+  "connection_pairs": [
+    { "client_node_id": "cli-01", "server_node_id": "srv-01-01" }
+  ],
+  "comm_defaults": {
+    "tcp": {
+      "base_port": 54011,
+      "connection_initiator": "client"
+    }
+  },
+  "conductor_defaults": {
+    "delta_time_usec": 10000,
+    "max_delay_time_usec": 20000
+  },
+  "robot_types": {
+    "VisualStatePublisher": {
+      "pdutypes": "pdutypes_visual_state.json"
+    }
+  },
+  "robots": [
+    {
+      "name": "DroneVisualStatePublisher",
+      "type": "VisualStatePublisher"
+    }
+  ],
+  "pdu_type_groups": [
+    {
+      "id": "visual-state-cli-01",
+      "robot_types": [
+        {
+          "robot_type": "VisualStatePublisher",
+          "pdu_names": ["drone_visual_state_array_1"]
+        }
+      ],
+      "transfer_policy_id": "immediate-atomic"
+    }
+  ],
+  "eu_types": {
+    "VisualStatePublisherEU": {
+      "writes": ["visual-state-cli-01"],
+      "reads": []
+    }
+  },
+  "execution_units": [
+    {
+      "name": "vsp-cli-01",
+      "eu_type": "VisualStatePublisherEU",
+      "robot_bindings": [
+        {
+          "robot_name": "DroneVisualStatePublisher",
+          "robot_type": "VisualStatePublisher"
+        }
+      ]
+    }
+  ],
+  "unit_placement": {
+    "mode": "manual",
+    "nodes": {
+      "cli-01": ["vsp-cli-01"]
+    }
+  }
+}

@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/hakoniwalab/hakoniwa-conductor/schemas/eu-input-v1.schema.json",
+  "title": "Hakoniwa Conductor EU input v1",
+  "description": "Public input contract for Hakoniwa Conductor configuration generation.",
+  "type": "object",
+  "required": ["mode", "execution_nodes", "connection_pairs"],
+  "properties": {
+    "mode": { "enum": ["simple", "rd"] },
+    "execution_nodes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/nonEmptyString" }
+    },
+    "pdudef": { "$ref": "#/$defs/fileName" },
+    "connection_pairs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["client_node_id", "server_node_id"],
+        "properties": {
+          "client_node_id": { "$ref": "#/$defs/nonEmptyString" },
+          "server_node_id": { "$ref": "#/$defs/nonEmptyString" },
+          "server_machine_id": { "$ref": "#/$defs/nonEmptyString" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "comm_defaults": {
+      "type": "object",
+      "properties": {
+        "tcp": {
+          "type": "object",
+          "properties": {
+            "base_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "connection_initiator": { "enum": ["server", "client"] }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "conductor_defaults": {
+      "type": "object",
+      "properties": {
+        "delta_time_usec": { "type": "integer", "minimum": 1 },
+        "max_delay_time_usec": { "type": "integer", "minimum": 1 },
+        "real_sleep_msec": { "type": "integer", "minimum": 0 },
+        "simtime_publish_mode": { "enum": ["immediate", "delta_boundary"] },
+        "simtime_publish_interval_usec": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": true
+    },
+    "robot_types": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["pdutypes"],
+        "properties": { "pdutypes": { "$ref": "#/$defs/fileName" } },
+        "additionalProperties": false
+      }
+    },
+    "robots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "type"],
+        "properties": {
+          "name": { "$ref": "#/$defs/nonEmptyString" },
+          "type": { "$ref": "#/$defs/nonEmptyString" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "pdu_groups": { "type": "array", "items": { "type": "object" } },
+    "pdu_type_groups": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/pduTypeGroup" }
+    },
+    "eu_types": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/euType" }
+    },
+    "execution_units": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/nonEmptyString" },
+          { "$ref": "#/$defs/executionUnit" }
+        ]
+      }
+    },
+    "execution_units_auto": { "type": "array" },
+    "eu_pdu_bindings": { "type": "array" },
+    "unit_placement": {
+      "type": "object",
+      "required": ["mode"],
+      "properties": {
+        "mode": { "enum": ["manual", "auto"] },
+        "nodes": { "type": "object" },
+        "strategy": { "enum": ["round_robin"] },
+        "targets": { "type": "array", "items": { "$ref": "#/$defs/nonEmptyString" } },
+        "block_size": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "pduKeyGroups": false,
+    "bridge_connections": false
+  },
+  "oneOf": [
+    { "required": ["pdu_groups"], "not": { "required": ["pdu_type_groups"] } },
+    { "required": ["pdu_type_groups"], "not": { "required": ["pdu_groups"] } }
+  ],
+  "additionalProperties": true,
+  "$defs": {
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "fileName": { "type": "string", "minLength": 1, "pattern": "^[^/\\\\]+$" },
+    "stringList": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/nonEmptyString" }
+    },
+    "pduTypeGroup": {
+      "type": "object",
+      "required": ["id", "robot_types", "transfer_policy_id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "robot_types": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["robot_type", "pdu_names"],
+            "properties": {
+              "robot_type": { "$ref": "#/$defs/nonEmptyString" },
+              "pdu_names": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "$ref": "#/$defs/nonEmptyString" }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "transfer_policy_id": { "$ref": "#/$defs/nonEmptyString" }
+      },
+      "additionalProperties": false
+    },
+    "euType": {
+      "type": "object",
+      "required": ["writes", "reads"],
+      "properties": {
+        "writes": { "$ref": "#/$defs/stringList" },
+        "reads": { "$ref": "#/$defs/stringList" }
+      },
+      "additionalProperties": false
+    },
+    "executionUnit": {
+      "type": "object",
+      "required": ["name", "eu_type"],
+      "properties": {
+        "name": { "$ref": "#/$defs/nonEmptyString" },
+        "eu_type": { "$ref": "#/$defs/nonEmptyString" },
+        "robot_bindings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["robot_name", "robot_type"],
+            "properties": {
+              "robot_name": { "$ref": "#/$defs/nonEmptyString" },
+              "robot_type": { "$ref": "#/$defs/nonEmptyString" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

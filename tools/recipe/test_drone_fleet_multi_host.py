@@ -10,6 +10,10 @@ import drone_fleet_multi_host as recipe
 import drone_fleet_multi_host_scaling as scaling
 import drone_fleet_single_host as yaml_support
 
+FIXTURE_ROOT = Path(__file__).with_name("fixtures") / "drone_fleet_multi_host"
+CONDUCTOR_SCHEMA_FIXTURE = FIXTURE_ROOT / "eu-input-v1.schema.json"
+CONDUCTOR_INPUT_FIXTURE = FIXTURE_ROOT / "eu-input.fleets.json"
+
 
 class DroneFleetMultiHostTest(unittest.TestCase):
     def experiment(self) -> dict:
@@ -79,13 +83,7 @@ class DroneFleetMultiHostTest(unittest.TestCase):
     def test_legacy_conductor_input_matches_authoritative_reference(self) -> None:
         resolved = recipe.validate_experiment(self.experiment())
         generated = recipe.build_conductor_input(resolved)
-        expected = json.loads(
-            (
-                recipe.DEFAULT_CONDUCTOR_ROOT
-                / "eu-config"
-                / "eu-input.fleets.json"
-            ).read_text(encoding="utf-8")
-        )
+        expected = json.loads(CONDUCTOR_INPUT_FIXTURE.read_text(encoding="utf-8"))
         self.assertEqual(generated, expected)
 
     def test_materializes_deterministic_role_specific_bundles(self) -> None:
@@ -99,12 +97,14 @@ class DroneFleetMultiHostTest(unittest.TestCase):
                     recipe.DEFAULT_EXPERIMENT,
                     output,
                     conductor,
+                    CONDUCTOR_SCHEMA_FIXTURE,
                     write=True,
                 )
                 second = recipe.materialize(
                     recipe.DEFAULT_EXPERIMENT,
                     output,
                     conductor,
+                    CONDUCTOR_SCHEMA_FIXTURE,
                     write=True,
                 )
 
@@ -154,7 +154,11 @@ class DroneFleetMultiHostTest(unittest.TestCase):
                 recipe, "git_identity", return_value={"revision": "abc", "dirty": False}
             ):
                 recipe.materialize(
-                    recipe.DEFAULT_EXPERIMENT, output, conductor, write=False
+                    recipe.DEFAULT_EXPERIMENT,
+                    output,
+                    conductor,
+                    CONDUCTOR_SCHEMA_FIXTURE,
+                    write=False,
                 )
             self.assertFalse(output.exists())
 
