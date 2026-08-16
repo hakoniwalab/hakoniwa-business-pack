@@ -748,6 +748,10 @@ profiles:
             self.assertIn("visual-state-publisher", serialized)
             self.assertIn("web-bridge-fleets", serialized)
             self.assertIn("threejs-viewer-webserver", serialized)
+            self.assertEqual(
+                assets["threejs-viewer-webserver"]["activation_timing"],
+                "after_start",
+            )
 
     def test_headless_launcher_omits_visualization_processes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

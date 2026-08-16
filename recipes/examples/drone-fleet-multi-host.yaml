@@ -383,6 +383,7 @@ demo:
     - configure --host srv-01|cli-01
     - doctor
     - start
+    - open-viewer  # server only; operator presses Connect before run
     - run  # server only; explicitly invokes hako-cmd start
     - status
     - stop
@@ -399,18 +400,22 @@ demo:
     - id: start_server
       action: Start the Mac listeners and Conductor server before accepting the WSL2 client.
       command: python tools/recipe/drone_fleet_multi_host.py start
-      status: blocked
+      status: verified
+    - id: open_server_viewer
+      action: Open the Three.js viewer on the Mac and press Connect before the synchronized run.
+      command: python tools/recipe/drone_fleet_multi_host.py open-viewer
+      status: verified
     - id: join_client
       action: Start the WSL2 client locally and connect outbound to 192.168.2.100.
       command: python tools/recipe/drone_fleet_multi_host.py start
-      status: blocked
+      status: verified
     - id: run_simulation
       action: After both hosts are ready, explicitly start the simulation from the Mac server.
       command: python tools/recipe/drone_fleet_multi_host.py run
-      status: blocked
+      status: verified
     - id: verify_connectivity
       action: Verify all 256 IDs, both visual-state chunks, synchronized lifecycle, browser updates, and behavioral completion.
-      status: blocked
+      status: verified
   cleanup:
     expected_behavior:
       - Both host-local sessions reach a terminal state and only recorded Recipe-owned processes are stopped.

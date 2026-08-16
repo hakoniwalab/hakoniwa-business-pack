@@ -217,10 +217,16 @@ class DroneFleetMultiHostTest(unittest.TestCase):
             self.assertTrue(server_launcher.external_conductor)
             self.assertTrue(server_launcher.web_bridge)
             self.assertTrue(server_launcher.viewer)
+            self.assertEqual(
+                server_launcher.viewer_activation_timing, "before_start"
+            )
             self.assertEqual(server_launcher.z_offset_m, 0.0)
             self.assertTrue(client_launcher.external_conductor)
             self.assertFalse(client_launcher.web_bridge)
             self.assertFalse(client_launcher.viewer)
+            self.assertEqual(
+                client_launcher.viewer_activation_timing, "after_start"
+            )
             self.assertEqual(client_launcher.z_offset_m, 2.0)
 
     def test_conductor_assets_follow_proven_server_client_scripts(self) -> None:
@@ -273,10 +279,49 @@ class DroneFleetMultiHostTest(unittest.TestCase):
         parsed = recipe.parser().parse_args(["configure", "--host", "server"])
         self.assertEqual(parsed.command, "configure")
         self.assertEqual(parsed.host, "server")
-        for command in ("doctor", "start", "run", "status", "stop"):
+        for command in (
+            "doctor",
+            "start",
+            "open-viewer",
+            "run",
+            "status",
+            "stop",
+        ):
             parsed = recipe.parser().parse_args([command])
             self.assertEqual(parsed.command, command)
             self.assertFalse(hasattr(parsed, "host"))
+
+    def test_open_viewer_is_server_only_and_uses_global_drone_count(self) -> None:
+        resolved = recipe.validate_experiment(self.experiment())
+        client_state = {
+            "selection": {"host_id": "cli-01", "role": "client"},
+            "resolved": resolved,
+        }
+        with mock.patch.object(recipe, "load_local_selection", return_value=client_state):
+            with self.assertRaisesRegex(recipe.RecipeError, "server-only"):
+                recipe.open_viewer_local(Path("/output"))
+
+        server_state = {
+            "selection": {"host_id": "srv-01", "role": "server"},
+            "resolved": resolved,
+        }
+        response = mock.MagicMock()
+        response.__enter__.return_value.status = 200
+        with (
+            mock.patch.object(recipe, "load_local_selection", return_value=server_state),
+            mock.patch.object(
+                recipe.urllib.request, "urlopen", return_value=response
+            ) as urlopen,
+            mock.patch.object(recipe.webbrowser, "open", return_value=True) as browser,
+        ):
+            self.assertEqual(recipe.open_viewer_local(Path("/output")), 0)
+
+        urlopen.assert_called_once_with(
+            "http://127.0.0.1:8000/index.html", timeout=2.0
+        )
+        viewer_url = browser.call_args.args[0]
+        self.assertIn("dynamicSpawn=true", viewer_url)
+        self.assertIn("maxDynamicDrones=256", viewer_url)
 
     def test_run_is_server_only_and_uses_launcher_control_start(self) -> None:
         resolved = recipe.validate_experiment(self.experiment())

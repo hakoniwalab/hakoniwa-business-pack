@@ -86,6 +86,7 @@ class LauncherRuntimeSpec:
     timeout_sec: float
     delta_time_msec: int = 20
     z_offset_m: float = 0.0
+    viewer_activation_timing: str = "after_start"
 
     def __post_init__(self) -> None:
         if self.local_drone_count < 1:
@@ -96,6 +97,10 @@ class LauncherRuntimeSpec:
             raise ValueError("web_bridge requires visualization")
         if self.viewer and not self.web_bridge:
             raise ValueError("viewer requires web_bridge")
+        if self.viewer_activation_timing not in {"before_start", "after_start"}:
+            raise ValueError(
+                "viewer_activation_timing must be before_start or after_start"
+            )
         if self.delta_time_msec < 1:
             raise ValueError("delta_time_msec must be positive")
 
@@ -260,7 +265,7 @@ def prepare_launcher(
         assets.append(
             {
                 "name": "threejs-viewer-webserver",
-                "activation_timing": "after_start",
+                "activation_timing": spec.viewer_activation_timing,
                 "command": str(python),
                 "args": ["-m", "http.server", "8000"],
                 "cwd": str(viewer_root),

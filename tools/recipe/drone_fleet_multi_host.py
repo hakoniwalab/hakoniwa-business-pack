@@ -11,6 +11,9 @@ import platform
 import re
 import subprocess
 import sys
+import urllib.error
+import urllib.request
+import webbrowser
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -449,6 +452,9 @@ def host_launcher_spec(
         timeout_sec=float(scenario["timeout_sec"]),
         delta_time_msec=int(scenario["delta_time_msec"]),
         z_offset_m=float(override.get("z_offset_m", 0.0)),
+        viewer_activation_timing=(
+            "before_start" if visual["viewer_host"] == host_id else "after_start"
+        ),
     )
 
 
@@ -527,6 +533,29 @@ def launcher_supports_manual_run(python: Path) -> tuple[bool, str]:
     if result.returncode == 0:
         return True, "background activate-only and control start"
     return False, "Foundation Launcher is stale; rebuild hakoniwa-pdu-python"
+
+
+def open_viewer_local(output_root: Path) -> int:
+    state = load_local_selection(output_root)
+    if state["selection"]["role"] != "server":
+        raise RecipeError("open-viewer is server-only")
+    health_url = "http://127.0.0.1:8000/index.html"
+    try:
+        with urllib.request.urlopen(health_url, timeout=2.0) as response:
+            if response.status >= 400:
+                raise RecipeError(
+                    f"Three.js viewer returned HTTP {response.status}: {health_url}"
+                )
+    except (OSError, urllib.error.URLError) as exc:
+        raise RecipeError(
+            "Three.js viewer is not ready; run start on srv-01 first"
+        ) from exc
+    drone_count = int(state["resolved"]["scale"]["drone_count"])
+    url = yaml_support.viewer_url(drone_count)
+    print(f"Opening {url}")
+    if not webbrowser.open(url):
+        print(f"Open this URL in a browser: {url}")
+    return 0
 
 
 def prepare_host_launcher(
@@ -1030,6 +1059,7 @@ def parser() -> argparse.ArgumentParser:
     )
     commands.add_parser("doctor", help="validate the locally selected host")
     commands.add_parser("start", help="activate the locally selected host assets")
+    commands.add_parser("open-viewer", help="open the server-side Three.js viewer")
     commands.add_parser("run", help="start the simulation from the selected server")
     commands.add_parser("status", help="show the local Launcher status")
     commands.add_parser("stop", help="stop the locally selected host")
@@ -1039,7 +1069,14 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     output_root = args.output_root.resolve()
-    if args.command in {"doctor", "start", "run", "status", "stop"}:
+    if args.command in {
+        "doctor",
+        "start",
+        "open-viewer",
+        "run",
+        "status",
+        "stop",
+    }:
         try:
             if args.command == "doctor":
                 return doctor_local(
@@ -1048,6 +1085,8 @@ def main(argv: list[str] | None = None) -> int:
                     resolve_conductor_root(args.conductor_root),
                     args.viewer_root.resolve(),
                 )
+            if args.command == "open-viewer":
+                return open_viewer_local(output_root)
             return launcher_control(
                 args.command,
                 output_root,
