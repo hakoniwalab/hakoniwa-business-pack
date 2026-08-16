@@ -20,7 +20,7 @@ class DroneFleetMultiHostScalingTest(unittest.TestCase):
 
         self.assertEqual(counts, [64, 128, 256])
         self.assertEqual(attempts, 1)
-        self.assertEqual(raw["runtime"]["conductor"]["real_sleep_msec"], 1)
+        self.assertEqual(raw["runtime"]["conductor"]["real_sleep_msec"], 0)
         self.assertNotIn("conductor_real_sleep_msec", raw["matrix"])
         self.assertEqual(
             raw["measurement"]["invalid_conditions"][
@@ -68,7 +68,7 @@ class DroneFleetMultiHostScalingTest(unittest.TestCase):
             {
                 "delta_time_usec": 1000,
                 "max_delay_time_usec": 20000,
-                "real_sleep_msec": 1,
+                "real_sleep_msec": 0,
                 "simtime_publish_mode": "delta_boundary",
                 "simtime_publish_interval_usec": 10000,
             },
@@ -172,12 +172,12 @@ class DroneFleetMultiHostScalingTest(unittest.TestCase):
                     / "results"
                     / series
                     / "summary"
-                    / "multi-host-scaling-sleep-001ms.json"
+                    / "multi-host-scaling-sleep-000ms.json"
                 ).read_text(encoding="utf-8")
             )
 
         self.assertTrue(report["complete"])
-        self.assertEqual(report["real_sleep_msec"], 1)
+        self.assertEqual(report["real_sleep_msec"], 0)
         self.assertEqual(report["results"][0]["rtf"], 1.5)
         self.assertEqual(
             report["results"][0]["cli-01_cpu_average_percent"], 83.0
