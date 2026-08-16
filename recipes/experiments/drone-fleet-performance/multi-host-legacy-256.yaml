@@ -1,0 +1,109 @@
+version: 1
+
+experiment:
+  id: drone-fleet-multi-host-legacy-256
+
+scale:
+  drone_count: 256
+  drones_per_process: auto
+  process_count: 16
+
+runtime:
+  mode: native
+  visualization: true
+  show_runner_real_time_sync: false
+  conductor:
+    implementation: hakoniwa-conductor-pro
+    profile: legacy-distributed-10ms
+    delta_time_usec: 10000
+    max_delay_time_usec: 20000
+    # The legacy implementation omits this setting and therefore sleeps for
+    # delta_time_usec (10 ms). This is intentionally not the later sweep.
+    real_sleep_msec: unspecified
+    simtime_publish_mode: legacy_simple
+
+deployment:
+  mode: multi_host
+  server_host: srv-01
+  transport:
+    type: tcp
+    connection_initiator: client
+    base_port: 54011
+  hosts:
+    srv-01:
+      role: server
+      platform: macos
+      execution_environment: native
+      machine_id: srv-01
+      machine_address: 192.168.2.100
+      node_id: srv-01-01
+      address: 192.168.2.100
+      drone_count: 128
+      process_count: 4
+      global_start_index: 0
+      launcher_mode: immediate
+    cli-01:
+      role: client
+      platform: linux
+      execution_environment: wsl2
+      machine_id: cli-01
+      machine_address: 192.168.2.104
+      node_id: cli-01
+      connect_to: srv-01
+      drone_count: 128
+      process_count: 12
+      global_start_index: 128
+      launcher_mode: activate-only
+
+visualization:
+  bridge_host: srv-01
+  viewer_host: srv-01
+  max_drones_per_packet: 128
+  bridge_subscriptions: [0, 1]
+  publishers:
+    srv-01:
+      chunk_index: 0
+      pdu_name: drone_visual_state_array_0
+      transfer_policy: immediate-atomic
+    cli-01:
+      chunk_index: 1
+      pdu_name: drone_visual_state_array_1
+      transfer_policy: immediate-atomic
+
+scenario:
+  type: hakoniwa-word
+  word: HAKONIWA
+  assignment_mode: nearest
+  letter_width_m: 2.0
+  letter_height_m: 4.0
+  letter_gap_m: 0.9
+  altitude_m: 4.0
+  duration_sec: 6.0
+  hold_sec: 10.0
+  speed_m_s: 14.0
+  timeout_sec: 240.0
+  delta_time_msec: 20
+  land: false
+  host_overrides:
+    cli-01:
+      z_offset_m: 2.0
+
+results:
+  enabled: true
+  directory: results/connectivity
+
+measurement:
+  enabled: false
+  mode: connectivity
+  series: multi-host-connectivity
+  configuration_id: legacy-256-vsp
+  attempt: 1
+  protocol_status: connectivity
+  time_coordination:
+    drone_delta_time_usec: 1000
+    fleet_delta_time_usec: 20000
+    conductor_delta_time_usec: 10000
+    conductor_max_delay_time_usec: 20000
+    conductor_real_sleep_msec: unspecified
+    simtime_publish_mode: legacy_simple
+    conductor_implementation: hakoniwa-conductor-pro

@@ -1,0 +1,128 @@
+schema_version: 1
+description: Shared contract for declarative Drone Fleet performance experiment inputs.
+
+document:
+  version_field: version
+  supported_versions: [1]
+  required_fields: [version, experiment, scale, runtime, scenario, results]
+  optional_fields: [matrix, measurement, deployment, visualization]
+
+sections:
+  experiment:
+    required_fields: [id]
+    optional_fields: []
+    extension_fields: false
+  scale:
+    required_fields: [drone_count, drones_per_process, process_count]
+    optional_fields: []
+    extension_fields: false
+  matrix:
+    required_fields: []
+    optional_fields: [drone_count, process_count, conductor_real_sleep_msec, attempts]
+    extension_fields: false
+  runtime:
+    required_fields: [mode, visualization, show_runner_real_time_sync]
+    optional_fields: [conductor]
+    extension_fields: false
+  scenario:
+    required_fields: [type]
+    optional_fields: []
+    extension_fields: true
+  results:
+    required_fields: [enabled, directory]
+    optional_fields: []
+    extension_fields: false
+  measurement:
+    required_fields: [enabled]
+    optional_fields:
+      - mode
+      - series
+      - configuration_id
+      - attempt
+      - protocol_status
+      - sampling_interval_sec
+      - temporal_sampling_interval_usec
+      - preflight_duration_sec
+      - preflight_settle_timeout_sec
+      - stop_conditions
+      - invalid_conditions
+      - warmup_virtual_time_sec
+      - time_coordination
+    extension_fields: false
+
+controlled_values:
+  runtime_modes: [native]
+  deployment_modes: [single_host, multi_host]
+  host_roles: [server, client]
+  transports: [tcp]
+  connection_initiators: [client]
+  host_platforms: [macos, linux, windows]
+  execution_environments: [native, wsl2]
+
+deployment:
+  required_fields: [mode]
+  optional_fields: [server_host, transport, hosts]
+  multi_host_required_fields: [server_host, transport, hosts]
+  transport:
+    required_fields: [type, connection_initiator, base_port]
+    optional_fields: []
+  host:
+    required_fields:
+      - role
+      - platform
+      - execution_environment
+      - node_id
+      - drone_count
+      - process_count
+      - global_start_index
+      - launcher_mode
+    optional_fields: [machine_id, machine_address, address, connect_to]
+    server_required_fields: [address]
+    server_forbidden_fields: [connect_to]
+    client_required_fields: [connect_to]
+    client_forbidden_fields: [address]
+
+visualization:
+  required_fields:
+    - bridge_host
+    - viewer_host
+    - max_drones_per_packet
+    - bridge_subscriptions
+    - publishers
+  optional_fields: []
+  publisher:
+    required_fields: [chunk_index, pdu_name, transfer_policy]
+    optional_fields: []
+
+conductor:
+  required_fields:
+    - implementation
+    - profile
+    - delta_time_usec
+    - max_delay_time_usec
+    - real_sleep_msec
+    - simtime_publish_mode
+  optional_fields: [simtime_publish_interval_usec]
+
+controlled_profiles:
+  conductor:
+    legacy-distributed-10ms:
+      implementation: hakoniwa-conductor-pro
+      delta_time_usec: 10000
+      max_delay_time_usec: 20000
+      real_sleep_msec: unspecified
+      simtime_publish_mode: legacy_simple
+
+semantics:
+  - Existing single-host experiment inputs may omit deployment; omitted deployment means single_host.
+  - A multi_host deployment has exactly one server and one or more clients.
+  - The server is the only listener and every client initiates an outbound TCP connection to it.
+  - Client addresses are intentionally absent because NAT or WSL2-private addresses are not configuration authority.
+  - Host drone ranges form one contiguous, non-overlapping partition of scale.drone_count starting at zero.
+  - Host process counts sum to scale.process_count.
+  - Multi-host visualization declares one publisher chunk for every host and places Bridge and Viewer on declared hosts.
+  - A controlled Conductor profile prevents timing parameters from drifting independently under a stable profile name.
+  - Host keys express stable roles such as server and client; platform and execution_environment map those roles to the current machines.
+  - machine_address records physical host metadata; address is the server address advertised to clients. A WSL2-private address is never an input.
+  - Scenario contents and detailed measurement policy remain Recipe-specific extensions; their common container and identity fields are validated here.
+  - Runtime manifests and result documents own resolved IPs, ports, revisions, hashes, PIDs, timestamps, and observed status.

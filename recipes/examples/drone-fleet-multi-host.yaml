@@ -1,0 +1,472 @@
+id: drone-fleet-multi-host
+title: Native Drone Fleet Multi-host Connectivity and Performance
+recipe_version: 0.1
+
+goal:
+  user_request: MacとWindows/WSL2を有線LANで接続し、複数Drone Service processを両hostへ配置して疎通と性能を段階的に検証したい
+  description: >
+    Establish one reproducible Mac-server and WSL2-client Drone Fleet topology.
+    First reproduce the legacy 256-UAV visual-state path, then use the same
+    placement contract for controlled Conductor timing pilots and Experiment C.
+
+feasibility:
+  status: partially_feasible
+  confidence: high
+  rationale:
+    - The previous Drone PRO scripts demonstrate server/client fleet execution, host-local VSP, and server-owned WebBridge/Viewer at larger scales.
+    - The Conductor PRO generated-fleets fixture demonstrates the same client-initiated TCP topology and visual-state transfer contract.
+    - A Business Pack operator and reproducible host-bundle generator have not yet been implemented.
+
+validation:
+  status: not_tested
+  summary: The source topology is evidence for feasibility; this Business Pack Recipe and its 256-UAV input have not yet run on the target Mac/WSL2 pair.
+  steps:
+    - id: schema_validation
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-business-pack
+          path: schemas/recipes/drone-fleet-performance/test_experiment_validation.rb
+          revision: local-working-tree
+    - id: target_host_connectivity
+      status: not_tested
+      evidence: []
+    - id: legacy_256_visualization
+      status: not_tested
+      evidence: []
+
+constraints:
+  - native-macos-server
+  - native-wsl2-ubuntu-client
+  - wired-lan-only
+  - client-initiated-tcp
+  - no-mac-to-wsl2-inbound-connection
+  - private-conductor-pro-checkout-required
+  - no-public-conductor-fallback
+  - connectivity-results-excluded-from-official-performance
+
+agency_boundary:
+  agent_actions:
+    - id: generate_host_bundles
+      description: Validate one experiment input and generate deterministic Mac and WSL2 host bundles under the Recipe workspace.
+      autonomous: true
+      preconditions: [user_requested_execution, operator_implemented]
+    - id: run_simulation_software
+      description: Start, inspect, smoke-test, and stop only the Recipe-owned simulation processes after both hosts pass doctor.
+      autonomous: true
+      preconditions: [user_requested_execution, both_hosts_ready]
+  human_decisions:
+    - id: approve_experiment_profile
+      description: Approve the process placement, timing profile, metrics, and profile-selection rule before official measurement.
+      status: required
+      required_before: [official_measurement]
+  human_actions:
+    - id: prepare_wired_network
+      description: Connect both physical machines to the isolated wired LAN and confirm the assigned host addresses.
+      confirmation_required: true
+      required_before: [network_preflight]
+    - id: start_wsl2_client
+      description: Start the client command inside WSL2 until the outbound supervisor/control path is implemented.
+      confirmation_required: true
+      required_before: [multi_host_start]
+  required_permissions:
+    - id: conductor_pro_access
+      description: Confirm access and entitlement to the private hakoniwa-conductor-pro checkout on both hosts.
+      status: required
+      required_before: [configure, simulation_execution]
+    - id: drone_license
+      description: Confirm that the intended experiment complies with the applicable Hakoniwa Drone license or PRO agreement.
+      status: required
+      required_before: [simulation_execution]
+
+target_environment:
+  required_for: multi-host-connectivity
+  status: specified
+  hosts:
+    - id: srv-01
+      os: macOS
+      architecture: arm64
+      execution_mode: native
+      network_role: server
+      wired_address: 192.168.2.100
+    - id: cli-01
+      os: Ubuntu under WSL2
+      architecture: x86_64
+      execution_mode: native-in-wsl2
+      network_role: outbound-client-only
+      physical_windows_address: 192.168.2.104
+  runtimes:
+    - name: Python
+      required: true
+      version: "3.12"
+      path: work/foundation/install/python
+
+execution_environment:
+  workspace:
+    mode: managed
+  required_for: multi-host-connectivity
+  status: specified
+  execution_mode: native-per-host
+  gui:
+    required: true
+    status: server-host-only
+  shared_memory:
+    required: true
+    access: host-local-only
+  python:
+    environment: foundation-venv
+    path: work/foundation/install/python
+    version: "3.12"
+    hakopy_available: required
+  hakoniwa:
+    install_prefix: work/foundation/install
+    hako_cmd_access: required
+  network:
+    transport: wired-tcp
+    listener_role: server-only
+    connection_direction: client-to-server
+
+recipe_local_requirements_schema_version: 1
+recipe_local_requirements:
+  hakoniwa-conductor-pro:
+    root:
+      default_path: ../hakoniwa-conductor-pro
+      override_env: HAKO_CONDUCTOR_PRO_ROOT
+      relative_to: recipe_repository
+    source:
+      type: local
+    required_artifacts:
+      - path: tools/hako.py
+        kind: executable
+      - path: eu-config
+        kind: directory
+      - path: CMakeLists.txt
+        kind: file
+
+native_runtime_requirements:
+  schema_version: 1
+  components:
+    hakoniwa-drone-core:
+      profile: public-v4.0.0
+      required_roles: [drone_service, visual_state_publisher]
+      optional_roles: []
+
+foundation_contract:
+  mode: required
+  reason: Each host uses a managed local Foundation for Core, Endpoint, RPC, Bridge, Python, Launcher, and Conductor PRO linkage.
+
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      shared_memory: true
+      hako_cmd: true
+      python_binding: true
+      measurement_library: true
+    build_limits:
+      asset_num: {min: 16}
+      pdu_channel_max: {min: 4096}
+      recv_event_max: {min: 2048}
+      service_client_max: {min: 128}
+      service_max: {min: 512}
+      client_name_len_max: {min: 64}
+      service_name_len_max: {min: 128}
+  hakoniwa-pdu-python:
+    version: {min: 1.6.6}
+    capabilities:
+      hako_launcher: true
+      launcher_background_lifecycle: true
+      shm_backend: true
+      external_rpc: true
+  hakoniwa-pdu-endpoint:
+    capabilities:
+      hakoniwa_core: true
+      core_callback: true
+      core_polling: true
+      tcp: true
+  hakoniwa-pdu-rpc:
+    capabilities:
+      rpc_client: true
+      rpc_server: true
+      tcp_mux: true
+      shared_native_library: true
+  hakoniwa-pdu-bridge-core:
+    capabilities:
+      library: true
+      hakoniwa_app: true
+      web_bridge: true
+      web_bridge_fleets_config_format: true
+
+experiment_contract:
+  schema: schemas/recipes/drone-fleet-performance/experiment.yaml
+  source: recipes/experiments/drone-fleet-performance/multi-host-legacy-256.yaml
+  user_inputs:
+    - scale.drone_count
+    - scale.process_count
+    - deployment.hosts.*.drone_count
+    - deployment.hosts.*.process_count
+    - deployment.hosts.*.global_start_index
+    - deployment.transport.base_port
+    - runtime.conductor.profile
+    - visualization.publishers
+  resolution:
+    - One validated input generates both host bundles and one shared config hash.
+    - WSL2 never contributes a listener or private Endpoint address to generated configuration.
+    - The legacy profile omits real_sleep_msec and therefore has an effective 10 ms sleep; it is not a real_sleep_msec=10 sweep result.
+    - Connectivity output is stored separately and never enters the official performance dataset.
+
+process_topology:
+  required_for: multi-host-demo
+  conductor_owner: server-srv-01-01
+  viewer_owner: server
+  hosts:
+    - id: server
+      role: server
+      drone_services: 4
+      drone_range: 0..127
+      launcher_mode: immediate
+      local_assets: [fleet, show, visual-state-publisher, web-bridge, viewer]
+    - id: client
+      role: client
+      drone_services: 12
+      drone_range: 128..255
+      launcher_mode: activate-only
+      local_assets: [fleet, show, visual-state-publisher]
+  notes:
+    - Each host owns a separate Core mmap domain.
+    - WSL2 initiates one full-duplex TCP connection to the Mac server.
+
+components:
+  - id: hakoniwa-drone-core
+    roles: [physics_runtime, simulation_core]
+    purpose: Run the host-partitioned Drone Service processes and host-local Visual State Publisher.
+  - id: hakoniwa-conductor
+    roles: [simulation_core, control_plane, time_sync]
+    purpose: Coordinate server/client lifecycle and simulation time using the explicitly supplied private PRO checkout.
+  - id: hakoniwa-core-pro
+    roles: [simulation_core, time_sync]
+    purpose: Supply each host-local Hakoniwa lifecycle and shared-memory domain.
+  - id: hakoniwa-pdu-endpoint
+    roles: [communication_infrastructure, integration_boundary]
+    purpose: Carry declared full-duplex TCP and host-local Core traffic.
+  - id: hakoniwa-pdu-rpc
+    roles: [control_plane, communication_infrastructure]
+    purpose: Carry distributed Conductor control-plane requests and responses.
+  - id: hakoniwa-pdu-bridge-core
+    roles: [bridge]
+    purpose: Transfer the WSL2 visual-state chunk to Mac and expose both chunks to WebBridge.
+  - id: hakoniwa-pdu-python
+    roles: [language_binding, control_plane]
+    purpose: Run Show assets and provide Launcher lifecycle control.
+  - id: hakoniwa-threejs-drone
+    roles: [visualizer]
+    purpose: Render the two visual-state chunks on the Mac server.
+
+connections:
+  - from: hakoniwa-conductor
+    to: hakoniwa-pdu-endpoint
+    interface: endpoint
+    data: [distributed-control, simulation-time]
+    contract:
+      status: partially_verified
+      requires:
+        - Mac advertises 192.168.2.100 and listens on the generated TCP ports.
+        - WSL2 initiates every inter-host connection.
+        - Both host bundles have the same experiment identity and config hash.
+      validation_notes:
+        - The generated-fleets fixture verifies the intended shape, not this target-machine execution.
+  - from: hakoniwa-pdu-bridge-core
+    to: hakoniwa-pdu-endpoint
+    interface: pdu
+    data: [drone_visual_state_array_1]
+    contract:
+      status: partially_verified
+      requires:
+        - Client chunk 1 uses immediate-atomic transfer to the Mac server.
+        - Server WebBridge subscribes to chunks 0 and 1.
+      validation_notes:
+        - The same route exists in the previous generated-fleets configuration.
+  - from: hakoniwa-drone-core
+    to: hakoniwa-core-pro
+    interface: pdu
+    data: [drone-state, drone-control, lifecycle]
+    contract:
+      status: not_tested
+      requires:
+        - Built-in Drone conductors are disabled when external Conductor PRO owns coordination.
+        - Global drone ranges are contiguous and non-overlapping.
+      validation_notes:
+        - The new Business Pack host bundles have not yet been generated or executed.
+
+data_flow:
+  summary: One experiment input becomes two host-local bundles connected only by declared client-initiated TCP routes.
+  steps:
+    - from: multi-host experiment YAML
+      to: Business Pack bundle generator
+      data: [host-placement, process-partition, network, timing, visualization]
+      description: Validate portable structure and compute one shared config identity.
+    - from: WSL2 Visual State Publisher
+      to: Mac WebBridge
+      data: [drone_visual_state_array_1]
+      description: Transfer chunk 1 atomically over the client-established TCP connection.
+    - from: Mac and WSL2 Drone Services
+      to: host-local Show assets
+      data: [drone RPC and lifecycle]
+      description: Execute one globally indexed 256-UAV scenario across two local Core domains.
+
+time_model:
+  mode: distributed-shared-simulation-time
+  components: [hakoniwa-conductor, hakoniwa-core-pro]
+  notes:
+    - The first connectivity profile fixes Conductor delta at 10 ms and maximum delay at 20 ms.
+    - real_sleep_msec is omitted for faithful legacy reproduction and is effectively 10 ms.
+    - Target 1 ms delta semantics and the 10/5/2/1/0 sleep sweep are separate later inputs.
+
+artifact_sets:
+  physics_artifacts:
+    description: Official Drone Core native distribution and MuJoCo runtime on each host.
+    status: not_tested
+    artifacts: []
+  visualization_artifacts:
+    description: Host-local VSP configuration, server WebBridge configuration, and Three.js viewer input.
+    status: not_tested
+    artifacts: []
+  pdu_artifacts:
+    description: Generated Endpoint, RPC, Bridge, PDU definition, and node-map files shared by both host bundles.
+    status: not_tested
+    artifacts: []
+  runtime_artifacts:
+    description: Resolved experiment, host bundles, config identity, logs, sessions, and connectivity evidence.
+    status: not_tested
+    artifacts: []
+
+artifacts:
+  - name: legacy-connectivity-input
+    kind: config
+    producer: hakoniwa-business-pack
+    consumer: [hakoniwa-business-pack]
+    path: recipes/experiments/drone-fleet-performance/multi-host-legacy-256.yaml
+  - name: server-host-bundle
+    kind: generated-config
+    producer: hakoniwa-business-pack
+    consumer: [hakoniwa-conductor, hakoniwa-drone-core]
+    path: work/recipes/drone-fleet-multi-host/bundles/srv-01
+  - name: client-host-bundle
+    kind: generated-config
+    producer: hakoniwa-business-pack
+    consumer: [hakoniwa-conductor, hakoniwa-drone-core]
+    path: work/recipes/drone-fleet-multi-host/bundles/cli-01
+  - name: connectivity-summary
+    kind: validation-evidence
+    producer: hakoniwa-business-pack
+    consumer: [operator, ai-agent]
+    path: work/recipes/drone-fleet-multi-host/results/connectivity/summary.json
+
+missing_pieces:
+  - Extend the initial host-bundle generator into Conductor/Endpoint/Bridge/Launcher configuration generation.
+  - Resolve and validate Conductor PRO source/build revisions on both hosts.
+  - Generate Foundation requirements independently for the Mac and WSL2 host roles.
+  - Implement network doctor, config-hash handshake, readiness, coordinated stop, and residue checks.
+  - Validate the 256-UAV VSP baseline on the physical wired-LAN target.
+  - Replace the manual WSL2 start gate with an outbound client supervisor before repeated official measurements.
+
+demo:
+  foundation_workflow: partially_implemented
+  objective: Display all 256 globally indexed UAVs from two hosts in the Mac browser and preserve machine-readable connectivity evidence.
+  operator_status: bundle_generation_only
+  intended_operations:
+    - configure --role server|client
+    - doctor --role server|client
+    - server --run-id <shared-run-id>
+    - client --run-id <shared-run-id>
+    - status
+    - stop
+    - smoke
+  steps:
+    - id: configure_server
+      action: On the Mac, generate both logical bundles and select the local server role.
+      command: python tools/recipe/drone_fleet_multi_host.py configure --role server
+      status: verified
+    - id: configure_client
+      action: In WSL2, generate both logical bundles and select the local client role.
+      command: python tools/recipe/drone_fleet_multi_host.py configure --role client
+      status: verified
+    - id: start_server
+      action: Start the Mac listeners and Conductor server before accepting the WSL2 client.
+      status: blocked
+    - id: join_client
+      action: Start the WSL2 client locally and connect outbound to 192.168.2.100.
+      status: blocked
+    - id: verify_connectivity
+      action: Verify all 256 IDs, both visual-state chunks, synchronized lifecycle, browser updates, and behavioral completion.
+      status: blocked
+  cleanup:
+    expected_behavior:
+      - Both host-local sessions reach a terminal state and only recorded Recipe-owned processes are stopped.
+    verification_checks:
+      - Confirm all generated listeners are closed.
+      - Confirm no recorded Drone, VSP, Show, Bridge, or Conductor process remains on either host.
+    cautions:
+      - Do not use broad process-name kills or attempt inbound cleanup from Mac to WSL2.
+
+expected_result: >
+  The Mac and WSL2 hosts join one lifecycle, cover global drone IDs 0 through
+  255 exactly once, publish visual-state chunks 0 and 1, render all 256 UAVs on
+  the Mac, complete the HAKONIWA scenario, and stop without Recipe-owned residue.
+
+implementation_plan:
+  - Validate the legacy input and materialize a canonical resolved experiment.
+  - Generate content-identical shared configuration plus role-specific Mac and WSL2 bundles.
+  - Add non-mutating host/network/revision doctor checks.
+  - Implement the initial two-terminal server/client lifecycle with config-hash matching.
+  - Add machine-readable connectivity smoke and bounded coordinated cleanup.
+  - Preserve the bundle and result contracts for the later three-run supervisor.
+
+acceptance_criteria:
+  - The Recipe never clones or falls back to the public Conductor package when Conductor PRO is absent.
+  - WSL2 has no listener address and initiates every inter-host connection.
+  - One input covers exactly 256 drones with no range gap or overlap.
+  - Mac uses four Drone processes and WSL2 uses twelve for the legacy baseline.
+  - VSP chunks 0 and 1 use 128 drones per packet and WebBridge subscribes to both.
+  - Connectivity evidence is not accepted as official performance evidence.
+  - The Recipe remains visibly blocked until the operator and target-host execution are implemented.
+
+source_catalogs:
+  - component_id: hakoniwa-drone-core
+  - component_id: hakoniwa-conductor
+  - component_id: hakoniwa-core-pro
+  - component_id: hakoniwa-pdu-endpoint
+  - component_id: hakoniwa-pdu-rpc
+  - component_id: hakoniwa-pdu-bridge-core
+  - component_id: hakoniwa-pdu-python
+  - component_id: hakoniwa-threejs-drone
+
+source_artifacts:
+  - repository: hakoniwalab/hakoniwa-business-pack
+    path: docs/drone-fleet-multi-host-configuration.md
+    revision: local-working-tree
+    relation: configuration-layer-and-role-selection-contract
+  - repository: hakoniwalab/hakoniwa-conductor-pro
+    path: eu-config/generated-fleets
+    revision: local-working-tree
+    relation: server-client-endpoint-and-visual-state-reference
+  - repository: hakoniwalab/hakoniwa-drone-pro
+    path: tools/launch-fleets-dist-simple-server.bash
+    revision: local-working-tree
+    relation: legacy-distributed-launch-contract
+  - repository: hakoniwalab/hakoniwa-drone-pro
+    path: tools/test-server-200x2.bash
+    revision: local-working-tree
+    relation: server-process-and-visualization-reference
+  - repository: hakoniwalab/hakoniwa-drone-pro
+    path: tools/test-client-200x2.bash
+    revision: local-working-tree
+    relation: client-process-and-visualization-reference
+
+tags:
+  - hakoniwa
+  - drone
+  - multi-host
+  - multi-process
+  - conductor
+  - connectivity
+  - performance
+  - experiment

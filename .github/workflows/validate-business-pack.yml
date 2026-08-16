@@ -33,6 +33,9 @@ jobs:
       - name: Test shared native runtime schema
         run: ruby schemas/test_native_runtime_validation.rb
 
+      - name: Test Drone Fleet performance experiment schema
+        run: ruby schemas/recipes/drone-fleet-performance/test_experiment_validation.rb
+
       - name: Test Foundation schemas
         run: ruby foundation/tools/test_validation.rb
 

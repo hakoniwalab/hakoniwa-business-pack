@@ -32,6 +32,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+try:
+    from tools.recipe import drone_fleet_runtime as fleet_runtime
+except ModuleNotFoundError:
+    import drone_fleet_runtime as fleet_runtime
+
 
 RECIPE_ID = "drone-fleet-single-host"
 OPERATOR_NAME = "drone_fleet_single_host.py"
@@ -1238,15 +1243,10 @@ def write_measurement_config(paths, experiment: Experiment) -> Path | None:
 
 
 def expected_partition_counts(drone_count: int, process_count: int) -> list[int]:
-    """Distribute drones evenly, assigning one extra to each final process."""
-    if process_count < 1 or process_count > drone_count:
-        raise RecipeError("process_count must be in [1, drone_count]")
-    base = drone_count // process_count
-    remainder = drone_count % process_count
-    counts = [base] * process_count
-    for index in range(process_count - remainder, process_count):
-        counts[index] += 1
-    return counts
+    try:
+        return fleet_runtime.expected_partition_counts(drone_count, process_count)
+    except ValueError as exc:
+        raise RecipeError(str(exc)) from exc
 
 
 def validate_materialized_experiment(paths, experiment: Experiment) -> list[str]:
@@ -1265,76 +1265,12 @@ def validate_materialized_experiment(paths, experiment: Experiment) -> list[str]
                     "run configure after changing scale or runtime settings"
                 )
 
-    fleet_root = paths.recipe_config / "drone" / "fleets"
-    service_root = fleet_root / "services"
-    if experiment.process_count == 1:
-        fleet_paths = [fleet_root / "api-current.json"]
-        service_paths = [service_root / "api-current-service.json"]
-    else:
-        fleet_paths = [
-            fleet_root / f"api-current-part{index}.json"
-            for index in range(1, experiment.process_count + 1)
-        ]
-        service_paths = [
-            service_root / f"api-current-service-part{index}.json"
-            for index in range(1, experiment.process_count + 1)
-        ]
-
-    expected_counts = expected_partition_counts(
-        experiment.drone_count, experiment.process_count
+    errors.extend(
+        fleet_runtime.validate_partitions(
+            paths.recipe_config,
+            fleet_runtime.single_host_spec(experiment),
+        )
     )
-    observed_names: list[str] = []
-    for index, (fleet_path, service_path, expected_count) in enumerate(
-        zip(fleet_paths, service_paths, expected_counts), start=1
-    ):
-        if not fleet_path.is_file():
-            errors.append(f"missing process {index} fleet partition: {fleet_path}")
-            continue
-        if not service_path.is_file():
-            errors.append(f"missing process {index} service partition: {service_path}")
-            continue
-        try:
-            fleet_payload = json.loads(fleet_path.read_text(encoding="utf-8"))
-            service_payload = json.loads(service_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            errors.append(f"invalid process {index} partition: {exc}")
-            continue
-        drones = fleet_payload.get("drones")
-        services = service_payload.get("services")
-        if not isinstance(drones, list):
-            errors.append(f"process {index} fleet partition has no drones list")
-            continue
-        if len(drones) != expected_count:
-            errors.append(
-                f"process {index} fleet partition has {len(drones)} drones; "
-                f"expected {expected_count}"
-            )
-        if not isinstance(services, list) or len(services) != expected_count * 5:
-            actual_service_count = len(services) if isinstance(services, list) else 0
-            errors.append(
-                f"process {index} service partition has {actual_service_count} "
-                f"services; expected {expected_count * 5}"
-            )
-        for drone in drones:
-            name = drone.get("name") if isinstance(drone, dict) else None
-            if not isinstance(name, str) or not name:
-                errors.append(f"process {index} fleet partition has an invalid drone name")
-                continue
-            observed_names.append(name)
-
-    if len(observed_names) != len(set(observed_names)):
-        errors.append("fleet partitions contain duplicate drone names")
-    expected_names = {f"Drone-{index}" for index in range(1, experiment.drone_count + 1)}
-    observed_name_set = set(observed_names)
-    if observed_name_set != expected_names:
-        missing = sorted(expected_names - observed_name_set)
-        unexpected = sorted(observed_name_set - expected_names)
-        detail: list[str] = []
-        if missing:
-            detail.append("missing=" + ",".join(missing[:5]))
-        if unexpected:
-            detail.append("unexpected=" + ",".join(unexpected[:5]))
-        errors.append("fleet partition coverage mismatch" + (": " + " ".join(detail) if detail else ""))
     return errors
 
 
@@ -1398,210 +1334,58 @@ def _run_checked(command: list[str], *, cwd: Path | None = None) -> None:
 
 
 def prepare_config(paths, drone_root: Path, experiment: Experiment) -> None:
-    config = paths.recipe_config
-    fleet = config / "drone" / "fleets" / "api-current.json"
-    service = config / "drone" / "fleets" / "services" / "api-current-service.json"
-    pdudef = config / "pdudef" / "drone-pdudef-current.json"
-    shared_service_path = "config/drone/fleets/services/api-current-service.json"
-    # Remove partitions from a previous process_count so the Recipe workspace
-    # describes only the currently resolved experiment.
-    for pattern_root, pattern in (
-        (config / "drone" / "fleets", "api-current-part*.json"),
-        (
-            config / "drone" / "fleets" / "services",
-            "api-current-service-part*.json",
-        ),
-    ):
-        if pattern_root.is_dir():
-            for stale_partition in pattern_root.glob(pattern):
-                stale_partition.unlink()
-    _run_checked(
-        [
-            sys.executable,
-            str(drone_root / "tools" / "gen_fleet_scale_config.py"),
-            "--drone-count",
-            str(experiment.drone_count),
-            "--fleet-path",
-            str(fleet),
-            "--pdudef-path",
-            str(pdudef),
-            "--service-config-path",
-            shared_service_path,
-            "--service-out-path",
-            str(service),
-            "--layout",
-            "packed-rings",
-        ],
-        cwd=paths.recipe_root,
-    )
-    if experiment.process_count > 1:
-        _run_checked(
-            [
-                sys.executable,
-                str(drone_root / "tools" / "gen_fleet_split_config.py"),
-                "--fleet-in",
-                str(fleet),
-                "--service-in",
-                str(service),
-                "--fleet-out-template",
-                str(config / "drone" / "fleets" / "api-current-part{part}.json"),
-                "--service-out-template",
-                str(
-                    config
-                    / "drone"
-                    / "fleets"
-                    / "services"
-                    / "api-current-service-part{part}.json"
-                ),
-                "--shared-service-config-path",
-                shared_service_path,
-                "--parts",
-                str(experiment.process_count),
-            ],
-            cwd=paths.recipe_root,
+    try:
+        fleet_runtime.prepare_config(
+            paths,
+            drone_root,
+            fleet_runtime.single_host_spec(experiment),
+            run_checked=_run_checked,
+            scenario_writer=lambda: write_generated_scenario(
+                paths, drone_root, experiment
+            ),
         )
-    for relative in (
-        Path("config/drone/fleets/types"),
-        Path("config/controller"),
-    ):
-        source = drone_root / relative
-        if not source.is_dir():
-            raise RecipeError(f"Drone Core configuration not found: {source}")
-        shutil.copytree(
-            source,
-            paths.recipe_root / relative,
-            dirs_exist_ok=True,
-            ignore=shutil.ignore_patterns(".DS_Store", "logs"),
-        )
-    source_pdutypes = drone_root / "config" / "pdudef" / "drone-pdutypes.json"
-    if not source_pdutypes.is_file():
-        raise RecipeError(f"Drone PDU types not found: {source_pdutypes}")
-    shutil.copy2(source_pdutypes, config / "pdudef" / "drone-pdutypes.json")
-    visual_output = config / "assets" / "visual_state_publisher"
-    visual_pdudef_names = (
-        "drone-visual-state.json",
-        "drone-visual-state-pdutypes.json",
-        "pdutypes_time.json",
-    )
-    if experiment.visualization:
-        for name in visual_pdudef_names:
-            source = drone_root / "config" / "pdudef" / name
-            if not source.is_file():
-                raise RecipeError(f"Drone visual-state PDU definition not found: {source}")
-            shutil.copy2(source, config / "pdudef" / name)
-        visual_source = drone_root / "config" / "assets" / "visual_state_publisher"
-        if not visual_source.is_dir():
-            raise RecipeError(f"Visual-state publisher configuration not found: {visual_source}")
-        shutil.copytree(
-            visual_source,
-            visual_output,
-            dirs_exist_ok=True,
-            ignore=shutil.ignore_patterns(".DS_Store", "logs"),
-        )
-        _run_checked(
-            [
-                sys.executable,
-                str(drone_root / "tools" / "gen_visual_state_publisher_config.py"),
-                "--base-config",
-                str(visual_output / "visual_state_publisher.json"),
-                "--out",
-                str(visual_output / "visual_state_publisher.runtime.json"),
-                "--global-drone-count",
-                str(experiment.drone_count),
-                "--local-drone-count",
-                str(experiment.drone_count),
-                "--max-drones-per-packet",
-                "512",
-            ],
-            cwd=paths.recipe_root,
-        )
-    else:
-        if visual_output.exists():
-            shutil.rmtree(visual_output)
-        for name in visual_pdudef_names:
-            stale = config / "pdudef" / name
-            if stale.exists():
-                stale.unlink()
-    write_generated_scenario(paths, drone_root, experiment)
+    except (FileNotFoundError, ValueError) as exc:
+        raise RecipeError(str(exc)) from exc
 
 
 def write_generated_scenario(paths, drone_root: Path, experiment: Experiment) -> Path:
-    formation_dir = paths.recipe_config / "scenario" / "formations"
-    formation = formation_dir / "formation-HAKONIWA.json"
-    minimum_points = (
-        RECOMMENDED_DRONES_PER_STROKE
-        if experiment.drone_count
-        >= HAKONIWA_STROKE_COUNT * RECOMMENDED_DRONES_PER_STROKE
-        else 1
-    )
     if experiment.drone_count < HAKONIWA_STROKE_COUNT:
         print(
             "[WARN] HAKONIWA has 26 stroke segments; with fewer than 26 "
             "drones, evenly sampled strokes are used and the complete word "
             "will not be visible."
         )
-    elif minimum_points == 1:
+    elif experiment.drone_count < (
+        HAKONIWA_STROKE_COUNT * RECOMMENDED_DRONES_PER_STROKE
+    ):
         print(
             "[WARN] HAKONIWA formation uses fewer than two drones per stroke; "
             "52 or more drones are recommended for readability."
         )
-    generator = drone_root / "tools" / "drone-show" / "gen_word_formation.py"
-    if not generator.is_file():
-        raise RecipeError(f"word formation generator not found: {generator}")
-    _run_checked(
-        [
-            sys.executable,
-            str(generator),
-            "--word",
-            experiment.word,
-            "--count",
-            str(experiment.drone_count),
-            "--out",
-            str(formation),
-            "--id",
-            experiment.word,
-            "--letter-width",
-            str(experiment.letter_width_m),
-            "--letter-height",
-            str(experiment.letter_height_m),
-            "--gap",
-            str(experiment.letter_gap_m),
-            "--scale",
-            "1.0",
-            "--min-seg-points",
-            str(minimum_points),
-        ],
-        cwd=paths.recipe_root,
-    )
-    show = {
-        "meta": {
-            "name": experiment.experiment_id,
-            "version": "1.0",
-            "drone_count": experiment.drone_count,
-        },
-        "options": {
-            "center": [0.0, 0.0, 0.0],
-            "scale": 1.0,
-            "base_alt": experiment.altitude_m,
-            "min_distance": 0.0,
-            "max_speed": experiment.speed_m_s,
-            "failure_policy": "hold",
-        },
-        "formation_files": [
-            {"id": experiment.word, "path": "formations/formation-HAKONIWA.json"}
-        ],
-        "timeline": [
-            {
-                "formation": experiment.word,
-                "duration_sec": experiment.duration_sec,
-                "hold_sec": experiment.hold_sec,
-            }
-        ],
-    }
-    output = paths.recipe_config / "scenario" / "show.json"
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(show, indent=2) + "\n", encoding="utf-8")
-    return output
+    # Keep the established warning text at the single-host UI boundary while
+    # delegating the actual scenario materialization to the shared runtime.
+    try:
+        return fleet_runtime.prepare_scenario(
+            paths,
+            drone_root,
+            fleet_runtime.ScenarioRuntimeSpec(
+                experiment_id=experiment.experiment_id,
+                local_drone_count=experiment.drone_count,
+                word=experiment.word,
+                letter_width_m=experiment.letter_width_m,
+                letter_height_m=experiment.letter_height_m,
+                letter_gap_m=experiment.letter_gap_m,
+                altitude_m=experiment.altitude_m,
+                duration_sec=experiment.duration_sec,
+                hold_sec=experiment.hold_sec,
+                speed_m_s=experiment.speed_m_s,
+                stroke_count=HAKONIWA_STROKE_COUNT,
+                recommended_drones_per_stroke=RECOMMENDED_DRONES_PER_STROKE,
+            ),
+            run_checked=_run_checked,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        raise RecipeError(str(exc)) from exc
 
 
 def binary_candidates(drone_root: Path, system_name: str) -> tuple[Path, ...]:
@@ -1719,40 +1503,6 @@ def write_launcher(
 ) -> Path:
     drone_binary = resolve_drone_binary(drone_root, system_name)
     python = resolve_foundation_python(paths, system_name)
-    shared_env = {
-        "set": {
-            "HAKO_CONFIG_PATH": str(paths.foundation_config / "cpp_core_config.json"),
-            "HAKO_PROFILE_SERVICE_CLIENT": "0",
-        }
-    }
-    service_assets: list[dict[str, Any]] = []
-    for index in range(1, experiment.process_count + 1):
-        fleet = (
-            "config/drone/fleets/api-current.json"
-            if experiment.process_count == 1
-            else f"config/drone/fleets/api-current-part{index}.json"
-        )
-        args = [fleet, "config/pdudef/drone-pdudef-current.json"]
-        if experiment.process_count > 1:
-            args += ["--asset-name", f"drone-{index}"]
-        # A single host has exactly one Core domain and therefore one
-        # Conductor owner.  The first Drone process owns the built-in
-        # Conductor; additional workload partitions disable theirs.
-        if index >= 2:
-            args.append("--disable-conductor")
-        asset: dict[str, Any] = {
-            "name": f"drone-service-{index}",
-            "activation_timing": "before_start",
-            "command": str(drone_binary),
-            "args": args,
-            "cwd": str(paths.recipe_root),
-            "env": shared_env,
-            "delay_sec": 2 if index == 1 else 1,
-        }
-        if index >= 2:
-            asset["depends_on"] = [f"drone-service-{index - 1}"]
-        service_assets.append(asset)
-
     trial = measurement_trial_dir(paths, experiment)
     summary = (
         trial / "execution-summary.json"
@@ -1766,151 +1516,49 @@ def write_launcher(
     )
     if not show_runner.is_file():
         raise RecipeError(f"Drone show runner not found: {show_runner}")
-    show_args = [
-        str(show_runner),
-        "--show-json",
-        str(paths.recipe_config / "scenario" / "show.json"),
-        "--service-config",
-        str(
-            paths.recipe_config
-            / "drone"
-            / "fleets"
-            / "services"
-            / "api-current-service.json"
-        ),
-        "--pdu-config-path",
-        str(paths.recipe_config / "pdudef" / "drone-pdudef-current.json"),
-        "--drone-count",
-        str(experiment.drone_count),
-        "--asset-name",
-        "ShowRunnerAsset",
-        "--proc-count",
-        str(experiment.process_count),
-        "--summary-json",
-        str(summary),
-        "--assign-mode",
-        "index",
-        "--speed",
-        str(experiment.speed_m_s),
-        "--timeout-sec",
-        str(experiment.timeout_sec),
-        "--delta-time-msec",
-        "20",
-        "--poll-sleep-msec",
-        "0",
-        "--final-hold-extra-sec",
-        "0",
-    ]
-    if experiment.show_runner_real_time_sync:
-        show_args.append("--real-time-sync")
-    if experiment.land:
-        show_args.append("--land")
-    show_env = shared_env
-    if experiment.measurement is not None:
-        show_env = {
-            "set": {
-                **shared_env["set"],
-                "HAKO_DRONE_ROOT": str(drone_root),
-                "HAKO_PERFORMANCE_CONFIG": str(paths.recipe_config / "measurement.json"),
-            }
-        }
-    assets: list[dict[str, Any]] = service_assets + [
-        {
-            "name": "show-runner",
-            "activation_timing": "before_start",
-            "command": str(python),
-            "args": show_args,
-            "cwd": str(drone_root),
-            "env": show_env,
-            "depends_on": [service_assets[-1]["name"]],
-            "delay_sec": 1,
-        },
-    ]
-    if experiment.visualization:
-        visual_state_publisher = resolve_visual_state_publisher(drone_root, system_name)
-        web_bridge = web_bridge_path(paths, system_name)
-        assets.extend(
-            [
-                {
-                    "name": "visual-state-publisher",
-                    "activation_timing": "before_start",
-                    "command": str(visual_state_publisher),
-                    "args": [
-                        str(
-                            paths.recipe_config
-                            / "assets"
-                            / "visual_state_publisher"
-                            / "visual_state_publisher.runtime.json"
-                        )
-                    ],
-                    "cwd": str(paths.recipe_root),
-                    "env": shared_env,
-                    "depends_on": ["show-runner"],
-                    "delay_sec": 2,
-                },
-                {
-                    "name": "web-bridge-fleets",
-                    "activation_timing": "before_start",
-                    "command": str(web_bridge),
-                    "args": [
-                        "--config-root",
-                        str(bridge_config_root(paths)),
-                        "--node-name",
-                        "web_bridge_fleets_node1",
-                        "--delta-time-step-usec",
-                        "20000",
-                        "--enable-ondemand",
-                    ],
-                    "cwd": str(paths.recipe_root),
-                    "env": shared_env,
-                    "depends_on": ["visual-state-publisher"],
-                },
-                {
-                    "name": "threejs-viewer-webserver",
-                    "activation_timing": "after_start",
-                    "command": str(python),
-                    "args": ["-m", "http.server", "8000"],
-                    "cwd": str(viewer_root),
-                    "depends_on": ["web-bridge-fleets"],
-                },
-            ]
+    visual_state_publisher = (
+        resolve_visual_state_publisher(drone_root, system_name)
+        if experiment.visualization
+        else None
+    )
+    try:
+        return fleet_runtime.prepare_launcher(
+            paths,
+            drone_root,
+            viewer_root,
+            fleet_runtime.LauncherRuntimeSpec(
+                local_drone_count=experiment.drone_count,
+                process_count=experiment.process_count,
+                visualization=experiment.visualization,
+                external_conductor=False,
+                web_bridge=experiment.visualization,
+                viewer=experiment.visualization,
+                show_runner_real_time_sync=experiment.show_runner_real_time_sync,
+                land=experiment.land,
+                speed_m_s=experiment.speed_m_s,
+                timeout_sec=experiment.timeout_sec,
+            ),
+            drone_binary=drone_binary,
+            python=python,
+            show_runner=show_runner,
+            summary=summary,
+            visual_state_publisher=visual_state_publisher,
+            web_bridge_binary=(
+                web_bridge_path(paths, system_name)
+                if experiment.visualization
+                else None
+            ),
+            web_bridge_config_root=(
+                bridge_config_root(paths) if experiment.visualization else None
+            ),
+            performance_config=(
+                paths.recipe_config / "measurement.json"
+                if experiment.measurement is not None
+                else None
+            ),
         )
-    library_paths = [
-        str(paths.install_prefix / "lib"),
-        str(drone_root / "lib"),
-        str(drone_root / "vendor" / "mujoco" / "lib"),
-    ]
-    launcher = {
-        "version": "0.1",
-        "defaults": {
-            "cwd": str(paths.recipe_root),
-            "stdout": str(paths.recipe_logs / "${asset}.out"),
-            "stderr": str(paths.recipe_logs / "${asset}.err"),
-            "start_grace_sec": 1,
-            "delay_sec": 1,
-            "env": {
-                "set": {
-                    "HAKO_CONFIG_PATH": str(paths.foundation_config / "cpp_core_config.json"),
-                    "HAKO_PROFILE_SERVICE_CLIENT": "0",
-                },
-                "prepend": {
-                    "lib_path": library_paths,
-                    "PATH": [
-                        str(python.parent),
-                        str(paths.install_prefix / "bin"),
-                        str(drone_binary.parent),
-                    ],
-                },
-            },
-        },
-        "assets": assets,
-    }
-    output = paths.recipe_config / "launcher.json"
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(launcher, indent=2) + "\n", encoding="utf-8")
-    return output
-
-
+    except ValueError as exc:
+        raise RecipeError(str(exc)) from exc
 def session_file(paths) -> Path:
     return paths.recipe_root / "runtime" / "launcher-session.json"
 

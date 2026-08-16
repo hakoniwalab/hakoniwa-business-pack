@@ -1,0 +1,746 @@
+#!/usr/bin/env python3
+"""Plan and materialize deterministic Drone Fleet multi-host bundles."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+
+try:
+    from tools.recipe import drone_fleet_runtime as fleet_runtime
+    from tools.recipe import drone_fleet_single_host as yaml_support
+except ModuleNotFoundError:
+    import drone_fleet_runtime as fleet_runtime
+    import drone_fleet_single_host as yaml_support
+
+
+RECIPE_ID = "drone-fleet-multi-host"
+ROOT = Path(__file__).absolute().parents[2]
+DEFAULT_EXPERIMENT = (
+    ROOT
+    / "recipes"
+    / "experiments"
+    / "drone-fleet-performance"
+    / "multi-host-legacy-256.yaml"
+)
+DEFAULT_CONDUCTOR_ROOT = ROOT.parent / "hakoniwa-conductor-pro"
+DEFAULT_DRONE_ROOT = ROOT.parent / "hakoniwa-drone-core"
+DEFAULT_CONDUCTOR_SCHEMA = (
+    ROOT.parent / "hakoniwa-conductor" / "schemas" / "eu-input-v1.schema.json"
+)
+WORK_ROOT = ROOT / "work" / "recipes" / RECIPE_ID
+
+
+class RecipeError(RuntimeError):
+    pass
+
+
+def _mapping(value: Any, label: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise RecipeError(f"{label} must be a mapping")
+    return value
+
+
+def _positive(value: Any, label: str, *, allow_zero: bool = False) -> int:
+    minimum = 0 if allow_zero else 1
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+        qualifier = "non-negative" if allow_zero else "positive"
+        raise RecipeError(f"{label} must be a {qualifier} integer")
+    return value
+
+
+def _required_text(value: Any, label: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise RecipeError(f"{label} must be a non-empty string")
+    return value
+
+
+def canonical_bytes(value: Any) -> bytes:
+    return json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+
+
+def digest(value: Any) -> str:
+    return hashlib.sha256(canonical_bytes(value)).hexdigest()
+
+
+def atomic_json(path: Path, value: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(path)
+
+
+def sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def validate_experiment(raw: dict[str, Any]) -> dict[str, Any]:
+    if raw.get("version") != 1:
+        raise RecipeError("experiment version must be 1")
+    identity = _mapping(raw.get("experiment"), "experiment")
+    experiment_id = _required_text(identity.get("id"), "experiment.id")
+    scale = _mapping(raw.get("scale"), "scale")
+    total_drones = _positive(scale.get("drone_count"), "scale.drone_count")
+    total_processes = _positive(scale.get("process_count"), "scale.process_count")
+    if scale.get("drones_per_process") != "auto":
+        raise RecipeError("scale.drones_per_process must be auto")
+
+    runtime = _mapping(raw.get("runtime"), "runtime")
+    if runtime.get("mode") != "native":
+        raise RecipeError("runtime.mode must be native")
+    if runtime.get("visualization") is not True:
+        raise RecipeError("legacy connectivity requires runtime.visualization true")
+    conductor = _mapping(runtime.get("conductor"), "runtime.conductor")
+    expected_conductor = {
+        "implementation": "hakoniwa-conductor-pro",
+        "profile": "legacy-distributed-10ms",
+        "delta_time_usec": 10000,
+        "max_delay_time_usec": 20000,
+        "real_sleep_msec": "unspecified",
+        "simtime_publish_mode": "legacy_simple",
+    }
+    for field, expected in expected_conductor.items():
+        if conductor.get(field) != expected:
+            raise RecipeError(
+                f"runtime.conductor.{field} must be {expected!r} for "
+                "legacy-distributed-10ms"
+            )
+
+    deployment = _mapping(raw.get("deployment"), "deployment")
+    if deployment.get("mode") != "multi_host":
+        raise RecipeError("deployment.mode must be multi_host")
+    server_host = _required_text(deployment.get("server_host"), "deployment.server_host")
+    transport = _mapping(deployment.get("transport"), "deployment.transport")
+    if transport.get("type") != "tcp" or transport.get("connection_initiator") != "client":
+        raise RecipeError("deployment transport must be client-initiated tcp")
+    base_port = _positive(transport.get("base_port"), "deployment.transport.base_port")
+    if base_port > 65535:
+        raise RecipeError("deployment.transport.base_port must be <= 65535")
+
+    hosts = _mapping(deployment.get("hosts"), "deployment.hosts")
+    if set(hosts) != {"srv-01", "cli-01"}:
+        raise RecipeError(
+            "this 1-by-1 Recipe requires exactly the stable host ids "
+            "srv-01 and cli-01"
+        )
+    expected_roles = {"srv-01": "server", "cli-01": "client"}
+    for host_id, expected_role in expected_roles.items():
+        host = _mapping(hosts[host_id], f"deployment.hosts.{host_id}")
+        if host.get("role") != expected_role:
+            raise RecipeError(
+                f"deployment.hosts.{host_id}.role must be {expected_role}"
+            )
+    servers = [host_id for host_id, host in hosts.items() if _mapping(host, f"host {host_id}").get("role") == "server"]
+    if servers != [server_host]:
+        raise RecipeError("deployment must contain exactly its declared server_host")
+
+    ranges: list[tuple[int, int, str]] = []
+    process_sum = 0
+    drone_sum = 0
+    for host_id, host_value in hosts.items():
+        host = _mapping(host_value, f"deployment.hosts.{host_id}")
+        role = host.get("role")
+        if role not in {"server", "client"}:
+            raise RecipeError(f"deployment.hosts.{host_id}.role is invalid")
+        expected_mode = "immediate" if role == "server" else "activate-only"
+        if host.get("launcher_mode") != expected_mode:
+            raise RecipeError(
+                f"deployment.hosts.{host_id}.launcher_mode must be {expected_mode}"
+            )
+        if role == "server":
+            _required_text(host.get("address"), f"deployment.hosts.{host_id}.address")
+            if "connect_to" in host:
+                raise RecipeError(f"server host {host_id} must not declare connect_to")
+        else:
+            if "address" in host:
+                raise RecipeError(f"client host {host_id} must not declare address")
+            if host.get("connect_to") != server_host:
+                raise RecipeError(f"client host {host_id} must connect_to {server_host}")
+        count = _positive(host.get("drone_count"), f"deployment.hosts.{host_id}.drone_count")
+        processes = _positive(host.get("process_count"), f"deployment.hosts.{host_id}.process_count")
+        if processes > count:
+            raise RecipeError(
+                f"deployment.hosts.{host_id}.process_count must not exceed drone_count"
+            )
+        start = _positive(
+            host.get("global_start_index"),
+            f"deployment.hosts.{host_id}.global_start_index",
+            allow_zero=True,
+        )
+        ranges.append((start, count, host_id))
+        drone_sum += count
+        process_sum += processes
+    if drone_sum != total_drones:
+        raise RecipeError("host drone counts must sum to scale.drone_count")
+    if process_sum != total_processes:
+        raise RecipeError("host process counts must sum to scale.process_count")
+    expected_start = 0
+    for start, count, host_id in sorted(ranges):
+        if start != expected_start:
+            raise RecipeError(
+                f"host drone ranges are not contiguous: {host_id} starts at "
+                f"{start}, expected {expected_start}"
+            )
+        expected_start += count
+
+    visualization = _mapping(raw.get("visualization"), "visualization")
+    for owner in ("bridge_host", "viewer_host"):
+        if visualization.get(owner) not in hosts:
+            raise RecipeError(f"visualization.{owner} must name a declared host")
+    packet_size = _positive(
+        visualization.get("max_drones_per_packet"),
+        "visualization.max_drones_per_packet",
+    )
+    publishers = _mapping(visualization.get("publishers"), "visualization.publishers")
+    if set(publishers) != set(hosts):
+        raise RecipeError("visualization.publishers must cover every host exactly once")
+    chunks: list[int] = []
+    for host_id, publisher_value in publishers.items():
+        publisher = _mapping(publisher_value, f"visualization.publishers.{host_id}")
+        chunk = _positive(
+            publisher.get("chunk_index"),
+            f"visualization.publishers.{host_id}.chunk_index",
+            allow_zero=True,
+        )
+        if publisher.get("pdu_name") != f"drone_visual_state_array_{chunk}":
+            raise RecipeError(f"publisher PDU name does not match chunk {chunk}")
+        if publisher.get("transfer_policy") != "immediate-atomic":
+            raise RecipeError("publisher transfer policy must be immediate-atomic")
+        chunks.append(chunk)
+    if len(chunks) != len(set(chunks)):
+        raise RecipeError("publisher chunk indices must be unique")
+    subscriptions = visualization.get("bridge_subscriptions")
+    if not isinstance(subscriptions, list) or sorted(subscriptions) != sorted(chunks):
+        raise RecipeError("bridge subscriptions must match publisher chunks")
+
+    scenario = _mapping(raw.get("scenario"), "scenario")
+    if scenario.get("type") != "hakoniwa-word" or scenario.get("word") != "HAKONIWA":
+        raise RecipeError("scenario must select the HAKONIWA word workload")
+    for field in (
+        "letter_width_m",
+        "letter_height_m",
+        "letter_gap_m",
+        "altitude_m",
+        "duration_sec",
+        "hold_sec",
+        "speed_m_s",
+        "timeout_sec",
+    ):
+        value = scenario.get(field)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+            raise RecipeError(f"scenario.{field} must be a non-negative number")
+    overrides = scenario.get("host_overrides", {})
+    if not isinstance(overrides, dict) or not set(overrides).issubset(hosts):
+        raise RecipeError("scenario.host_overrides must reference declared hosts")
+    for host_id, override_value in overrides.items():
+        override = _mapping(override_value, f"scenario.host_overrides.{host_id}")
+        if set(override) != {"z_offset_m"}:
+            raise RecipeError(
+                f"scenario.host_overrides.{host_id} only supports z_offset_m"
+            )
+        z_offset = override["z_offset_m"]
+        if isinstance(z_offset, bool) or not isinstance(z_offset, (int, float)):
+            raise RecipeError(
+                f"scenario.host_overrides.{host_id}.z_offset_m must be a number"
+            )
+
+    return {
+        "schema_version": 1,
+        "recipe_id": RECIPE_ID,
+        "experiment_id": experiment_id,
+        "scale": scale,
+        "runtime": runtime,
+        "deployment": deployment,
+        "visualization": visualization,
+        "scenario": scenario,
+        "results": _mapping(raw.get("results"), "results"),
+        "measurement": _mapping(raw.get("measurement"), "measurement"),
+        "derived": {
+            "server_host": server_host,
+            "host_ids": list(hosts),
+            "global_drone_range": [0, total_drones - 1],
+            "max_drones_per_packet": packet_size,
+        },
+    }
+
+
+def _run_checked(command: list[str], *, cwd: Path | None = None) -> None:
+    result = subprocess.run(command, cwd=cwd, check=False)
+    if result.returncode != 0:
+        raise RecipeError(
+            "command failed: " + subprocess.list2cmdline(command)
+        )
+
+
+def materialize_host_runtimes(
+    resolved: dict[str, Any],
+    output_root: Path,
+    drone_root: Path = DEFAULT_DRONE_ROOT,
+) -> dict[str, Path]:
+    """Generate both host-local Drone runtime trees from the shared materializer."""
+    drone_root = drone_root.resolve()
+    if not (drone_root / "tools" / "gen_fleet_scale_config.py").is_file():
+        raise RecipeError(f"hakoniwa-drone-core checkout is incomplete: {drone_root}")
+    generated: dict[str, Path] = {}
+    scenario = resolved["scenario"]
+    total_drones = resolved["scale"]["drone_count"]
+    visual = resolved["visualization"]
+    for host_id, host in resolved["deployment"]["hosts"].items():
+        bundle_root = output_root / "bundles" / host_id
+        config = bundle_root / "config"
+        (config / "pdudef").mkdir(parents=True, exist_ok=True)
+        paths = SimpleNamespace(recipe_root=bundle_root, recipe_config=config)
+        publisher = visual["publishers"][host_id]
+        fleet_spec = fleet_runtime.FleetRuntimeSpec(
+            local_drone_count=host["drone_count"],
+            process_count=host["process_count"],
+            visualization=True,
+            global_drone_count=total_drones,
+            global_start_index=host["global_start_index"],
+            output_chunk_base_index=publisher["chunk_index"],
+            max_drones_per_packet=visual["max_drones_per_packet"],
+        )
+        scenario_spec = fleet_runtime.ScenarioRuntimeSpec(
+            experiment_id=resolved["experiment_id"],
+            local_drone_count=host["drone_count"],
+            word=scenario["word"],
+            letter_width_m=float(scenario["letter_width_m"]),
+            letter_height_m=float(scenario["letter_height_m"]),
+            letter_gap_m=float(scenario["letter_gap_m"]),
+            altitude_m=float(scenario["altitude_m"]),
+            duration_sec=float(scenario["duration_sec"]),
+            hold_sec=float(scenario["hold_sec"]),
+            speed_m_s=float(scenario["speed_m_s"]),
+        )
+        try:
+            fleet_runtime.prepare_config(
+                paths,
+                drone_root,
+                fleet_spec,
+                run_checked=_run_checked,
+                scenario_writer=lambda p=paths, s=scenario_spec: (
+                    fleet_runtime.prepare_scenario(
+                        p, drone_root, s, run_checked=_run_checked
+                    )
+                ),
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            raise RecipeError(str(exc)) from exc
+        errors = fleet_runtime.validate_partitions(config, fleet_spec)
+        if errors:
+            raise RecipeError(f"{host_id} runtime validation failed: " + "; ".join(errors))
+        generated[host_id] = config
+    return generated
+
+
+def host_launcher_spec(
+    resolved: dict[str, Any], host_id: str
+) -> fleet_runtime.LauncherRuntimeSpec:
+    """Resolve portable launcher topology while keeping paths host-local."""
+    hosts = resolved["deployment"]["hosts"]
+    if host_id not in hosts:
+        raise RecipeError(f"unknown host id: {host_id}")
+    host = hosts[host_id]
+    scenario = resolved["scenario"]
+    visual = resolved["visualization"]
+    override = scenario.get("host_overrides", {}).get(host_id, {})
+    return fleet_runtime.LauncherRuntimeSpec(
+        local_drone_count=host["drone_count"],
+        process_count=host["process_count"],
+        visualization=True,
+        external_conductor=True,
+        web_bridge=visual["bridge_host"] == host_id,
+        viewer=visual["viewer_host"] == host_id,
+        show_runner_real_time_sync=bool(
+            resolved["runtime"]["show_runner_real_time_sync"]
+        ),
+        land=bool(scenario["land"]),
+        speed_m_s=float(scenario["speed_m_s"]),
+        timeout_sec=float(scenario["timeout_sec"]),
+        delta_time_msec=int(scenario["delta_time_msec"]),
+        z_offset_m=float(override.get("z_offset_m", 0.0)),
+    )
+
+
+def conductor_launcher_asset(
+    resolved: dict[str, Any],
+    host_id: str,
+    conductor_root: Path,
+    generated_root: Path,
+) -> dict[str, Any]:
+    """Translate the proven srv.bash/cli.bash contract into a Launcher asset."""
+    hosts = resolved["deployment"]["hosts"]
+    if host_id not in hosts:
+        raise RecipeError(f"unknown host id: {host_id}")
+    host = hosts[host_id]
+    role = host["role"]
+    script = conductor_root / ("srv.bash" if role == "server" else "cli.bash")
+    if not script.is_file():
+        raise RecipeError(f"Conductor {role} launcher script not found: {script}")
+    node_id = host["node_id"]
+    match = re.search(r"-(\d+)$", node_id)
+    if match is None:
+        raise RecipeError(f"cannot derive Conductor numeric id from node_id: {node_id}")
+    numeric_id = str(int(match.group(1)))
+    return {
+        "name": f"conductor-{role}",
+        "activation_timing": "before_start",
+        "command": "bash",
+        "args": [str(script), numeric_id, "simple", str(generated_root)],
+        "cwd": str(conductor_root),
+        "delay_sec": 1,
+    }
+
+
+def git_identity(path: Path) -> dict[str, Any]:
+    def output(*args: str) -> str:
+        result = subprocess.run(
+            ["git", *args], cwd=path, check=False, capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            return "unknown"
+        return result.stdout.strip()
+
+    return {
+        "revision": output("rev-parse", "HEAD"),
+        "dirty": bool(output("status", "--short")),
+    }
+
+
+def resolve_conductor_root(argument: Path | None = None) -> Path:
+    configured = os.environ.get("HAKO_CONDUCTOR_PRO_ROOT", "").strip()
+    root = argument or (Path(configured).expanduser() if configured else DEFAULT_CONDUCTOR_ROOT)
+    root = root.resolve()
+    required = [root / "tools" / "hako.py", root / "eu-config", root / "CMakeLists.txt"]
+    missing = [str(path) for path in required if not path.exists()]
+    if missing:
+        raise RecipeError(
+            "explicit hakoniwa-conductor-pro checkout is incomplete: "
+            + ", ".join(missing)
+            + "; public Conductor fallback is forbidden"
+        )
+    return root
+
+
+def resolve_conductor_schema(argument: Path | None = None) -> Path:
+    configured = os.environ.get("HAKO_CONDUCTOR_EU_INPUT_SCHEMA", "").strip()
+    path = argument or (
+        Path(configured).expanduser() if configured else DEFAULT_CONDUCTOR_SCHEMA
+    )
+    path = path.resolve()
+    if not path.is_file():
+        raise RecipeError(
+            "public Hakoniwa Conductor eu-input schema is missing: " + str(path)
+        )
+    schema = json.loads(path.read_text(encoding="utf-8"))
+    if schema.get("$id") != (
+        "https://github.com/hakoniwalab/hakoniwa-conductor/"
+        "schemas/eu-input-v1.schema.json"
+    ):
+        raise RecipeError(f"unexpected Conductor eu-input schema identity: {path}")
+    return path
+
+
+def build_conductor_input(resolved: dict[str, Any]) -> dict[str, Any]:
+    """Translate the Recipe contract into Conductor PRO's canonical eu-input."""
+    deployment = resolved["deployment"]
+    hosts = deployment["hosts"]
+    server_host_id = resolved["derived"]["server_host"]
+    server = hosts[server_host_id]
+    clients = [host for host in hosts.values() if host["role"] == "client"]
+    if len(clients) != 1:
+        raise RecipeError(
+            "the current Drone Fleet runtime generator requires exactly one client; "
+            "additional clients need explicit server-side node placement"
+        )
+    client = clients[0]
+    client_node = client["node_id"]
+    server_node = server["node_id"]
+    publisher = resolved["visualization"]["publishers"]
+    client_host_id = next(
+        host_id for host_id, host in hosts.items() if host["role"] == "client"
+    )
+    client_publisher = publisher[client_host_id]
+    visual_group = f"visual-state-{client_node}"
+    visual_eu_type = "VisualStatePublisherEU"
+    visual_eu = f"vsp-{client_node}"
+    conductor = resolved["runtime"]["conductor"]
+    transport = deployment["transport"]
+
+    # real_sleep_msec and simtime_publish_mode are intentionally omitted for
+    # the legacy profile. Their absence is part of the compatibility contract.
+    return {
+        "mode": "simple",
+        "execution_nodes": [client_node],
+        "pdudef": "pdudef_visual_state.json",
+        "connection_pairs": [
+            {
+                "client_node_id": client_node,
+                "server_node_id": server_node,
+            }
+        ],
+        "comm_defaults": {
+            "tcp": {
+                "base_port": transport["base_port"],
+                "connection_initiator": transport["connection_initiator"],
+            }
+        },
+        "conductor_defaults": {
+            "delta_time_usec": conductor["delta_time_usec"],
+            "max_delay_time_usec": conductor["max_delay_time_usec"],
+        },
+        "robot_types": {
+            "VisualStatePublisher": {
+                "pdutypes": "pdutypes_visual_state.json",
+            }
+        },
+        "robots": [
+            {
+                "name": "DroneVisualStatePublisher",
+                "type": "VisualStatePublisher",
+            }
+        ],
+        "pdu_type_groups": [
+            {
+                "id": visual_group,
+                "robot_types": [
+                    {
+                        "robot_type": "VisualStatePublisher",
+                        "pdu_names": [client_publisher["pdu_name"]],
+                    }
+                ],
+                "transfer_policy_id": client_publisher["transfer_policy"],
+            }
+        ],
+        "eu_types": {
+            visual_eu_type: {
+                "writes": [visual_group],
+                "reads": [],
+            }
+        },
+        "execution_units": [
+            {
+                "name": visual_eu,
+                "eu_type": visual_eu_type,
+                "robot_bindings": [
+                    {
+                        "robot_name": "DroneVisualStatePublisher",
+                        "robot_type": "VisualStatePublisher",
+                    }
+                ],
+            }
+        ],
+        "unit_placement": {
+            "mode": "manual",
+            "nodes": {client_node: [visual_eu]},
+        },
+    }
+
+
+def materialize(
+    experiment_path: Path,
+    output_root: Path,
+    conductor_root: Path | None = None,
+    conductor_schema: Path | None = None,
+    *,
+    write: bool,
+) -> dict[str, Any]:
+    raw = yaml_support.load_simple_yaml(experiment_path)
+    resolved = validate_experiment(raw)
+    conductor = resolve_conductor_root(conductor_root)
+    schema = resolve_conductor_schema(conductor_schema)
+    identities = {
+        "business_pack": git_identity(ROOT),
+        "hakoniwa_conductor": git_identity(schema.parents[1]),
+        "hakoniwa_conductor_pro": git_identity(conductor),
+    }
+    config_hash = digest(resolved)
+    hosts = resolved["deployment"]["hosts"]
+    conductor_input = build_conductor_input(resolved)
+    conductor_input_sha256 = digest(conductor_input)
+    bundles: dict[str, Any] = {}
+    for host_id, host in hosts.items():
+        visual = resolved["visualization"]
+        bundle = {
+            "schema_version": 1,
+            "recipe_id": RECIPE_ID,
+            "experiment_id": resolved["experiment_id"],
+            "config_hash": config_hash,
+            "host_id": host_id,
+            "host": host,
+            "server_host": resolved["derived"]["server_host"],
+            "transport": resolved["deployment"]["transport"],
+            "conductor": resolved["runtime"]["conductor"],
+            "shared_input_refs": {
+                "conductor": {
+                    "sha256": conductor_input_sha256,
+                }
+            },
+            "scenario": resolved["scenario"],
+            "visualization": {
+                "publisher": visual["publishers"][host_id],
+                "max_drones_per_packet": visual["max_drones_per_packet"],
+                "web_bridge": visual["bridge_host"] == host_id,
+                "viewer": visual["viewer_host"] == host_id,
+                "bridge_subscriptions": (
+                    visual["bridge_subscriptions"]
+                    if visual["bridge_host"] == host_id
+                    else []
+                ),
+            },
+            "source_identities": identities,
+        }
+        bundles[host_id] = bundle
+
+    index = {
+        "schema_version": 1,
+        "recipe_id": RECIPE_ID,
+        "experiment_id": resolved["experiment_id"],
+        "config_hash": config_hash,
+        "source_identities": identities,
+        "shared_inputs": {
+            "conductor": {
+                "path": "config/conductor/eu-input.json",
+                "sha256": conductor_input_sha256,
+                "format": "hakoniwa-conductor/eu-input-v1",
+                "schema": {
+                    "id": (
+                        "https://github.com/hakoniwalab/hakoniwa-conductor/"
+                        "schemas/eu-input-v1.schema.json"
+                    ),
+                    "sha256": sha256_file(schema),
+                },
+            }
+        },
+        "generation": {
+            "product": "hakoniwa-conductor-pro",
+            "operation": "configure",
+            "availability": "private",
+            "required_for": "regeneration",
+            "generated_artifacts_committed_for_publication": True,
+        },
+        "bundles": {
+            host_id: {
+                "path": f"bundles/{host_id}/manifest.json",
+                "sha256": digest(bundle),
+            }
+            for host_id, bundle in bundles.items()
+        },
+    }
+    if write:
+        atomic_json(output_root / "config" / "resolved-experiment.json", resolved)
+        for host_id, bundle in bundles.items():
+            atomic_json(output_root / "bundles" / host_id / "manifest.json", bundle)
+        atomic_json(
+            output_root
+            / "config"
+            / "conductor"
+            / "eu-input.json",
+            conductor_input,
+        )
+        server_host = hosts[resolved["derived"]["server_host"]]
+        atomic_json(
+            output_root / "config" / "conductor" / "node-ip-map.json",
+            {
+                "nodes": {
+                    server_host["machine_id"]: server_host["address"],
+                }
+            },
+        )
+        atomic_json(output_root / "bundle-index.json", index)
+    return {
+        "resolved": resolved,
+        "bundles": bundles,
+        "index": index,
+        "component_inputs": {"conductor": conductor_input},
+    }
+
+
+def run_conductor_configure(conductor_root: Path, eu_input_path: Path) -> None:
+    command = [
+        sys.executable,
+        str(conductor_root / "tools" / "hako.py"),
+        "configure",
+        "--config",
+        str(eu_input_path),
+    ]
+    result = subprocess.run(command, cwd=conductor_root, check=False)
+    if result.returncode != 0:
+        raise RecipeError(
+            f"hakoniwa-conductor-pro configure failed with rc={result.returncode}"
+        )
+
+
+def parser() -> argparse.ArgumentParser:
+    result = argparse.ArgumentParser(description=__doc__)
+    result.add_argument("--experiment", type=Path, default=DEFAULT_EXPERIMENT)
+    result.add_argument("--conductor-root", type=Path)
+    result.add_argument("--conductor-schema", type=Path)
+    result.add_argument("--drone-root", type=Path, default=DEFAULT_DRONE_ROOT)
+    result.add_argument("--output-root", type=Path, default=WORK_ROOT)
+    commands = result.add_subparsers(dest="command", required=True)
+    commands.add_parser("plan", help="validate and print the resolved host plan")
+    commands.add_parser(
+        "configure", help="materialize shared inputs and generated configuration"
+    )
+    return result
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parser().parse_args(argv)
+    try:
+        result = materialize(
+            args.experiment.resolve(),
+            args.output_root.resolve(),
+            args.conductor_root,
+            args.conductor_schema,
+            write=args.command == "configure",
+        )
+        if args.command == "configure":
+            host_configs = materialize_host_runtimes(
+                result["resolved"], args.output_root.resolve(), args.drone_root
+            )
+            conductor_root = resolve_conductor_root(args.conductor_root)
+            run_conductor_configure(
+                conductor_root,
+                args.output_root.resolve() / "config" / "conductor" / "eu-input.json",
+            )
+    except (RecipeError, yaml_support.RecipeError) as exc:
+        print(f"[ERROR] {exc}", file=sys.stderr)
+        return 1
+    index = result["index"]
+    print(f"Experiment: {index['experiment_id']}")
+    print(f"Config hash: {index['config_hash']}")
+    for host_id, metadata in index["bundles"].items():
+        print(f"Host bundle: {host_id} -> {metadata['path']} ({metadata['sha256']})")
+    if args.command == "plan":
+        print("Plan is read-only; run configure to write the bundles.")
+    else:
+        print(f"[OK] bundle index: {args.output_root.resolve() / 'bundle-index.json'}")
+        print(
+            f"[OK] generated Conductor config: "
+            f"{args.output_root.resolve() / 'config/conductor/generated'}"
+        )
+        for host_id, config in host_configs.items():
+            print(f"[OK] host runtime: {host_id} -> {config}")
+    dirty = [name for name, value in index["source_identities"].items() if value["dirty"]]
+    if dirty:
+        print("[WARN] dirty source identities: " + ", ".join(dirty))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
