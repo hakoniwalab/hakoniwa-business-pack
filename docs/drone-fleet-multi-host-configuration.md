@@ -95,6 +95,22 @@ Because generation is deterministic, configuration bundles do not need to be
 transferred between the machines. Before a run, both sides compare the input,
 configuration, schema, and source revision hashes.
 
+### Effective configuration and binary identity
+
+The Experiment YAML and `eu-input.json` describe intent; they are not by
+themselves proof of the settings used by a run. `configure` therefore verifies
+that all five Conductor timing fields (`delta_time_usec`,
+`max_delay_time_usec`, `real_sleep_msec`, `simtime_publish_mode`, and
+`simtime_publish_interval_usec`) have the expected value in both generated role
+configurations. `doctor` repeats this check before launch.
+
+The launcher invokes the exact `hakoniwa-conductor-pro/cmake-build/main_server`
+or `main_client` binary checked by `doctor`, with the corresponding generated
+configuration passed explicitly. It does not use a wrapper that may resolve an
+older binary from an installed prefix. A performance result is valid for its
+declared timing profile only when this effective-config and executable-identity
+contract passes on every host.
+
 ## Workspace layout v1
 
 ```text
@@ -217,3 +233,8 @@ python3 tools/recipe/drone_fleet_multi_host_scaling.py summarize
 
 Summary filenames include the scalar sleep value, so pilot results from
 different settings do not overwrite one another.
+
+Results produced before the effective timing contract was introduced may still
+demonstrate multi-host connectivity, but must not be used as timing-profile
+performance evidence unless their generated role configurations and executed
+binary identities can be reconstructed and verified.

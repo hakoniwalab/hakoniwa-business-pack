@@ -81,6 +81,42 @@ class DroneFleetMultiHostScalingTest(unittest.TestCase):
             loaded = yaml_support.load_simple_yaml(path)
         self.assertEqual(loaded, condition)
 
+    def test_generated_timing_guard_checks_both_roles(self) -> None:
+        raw, _counts, _attempts = scaling.load_scaling(
+            scaling.DEFAULT_EXPERIMENT
+        )
+        resolved = multi_host.validate_experiment(
+            scaling.resolve_condition(raw, 64)
+        )
+        expected = multi_host.build_conductor_input(resolved)[
+            "conductor_defaults"
+        ]
+        with tempfile.TemporaryDirectory() as temporary:
+            generated = Path(temporary)
+            conductor = generated / "conductor"
+            conductor.mkdir()
+            for name in ("srv-01.json", "cli-01.json"):
+                (conductor / name).write_text(
+                    json.dumps(expected), encoding="utf-8"
+                )
+            self.assertEqual(
+                multi_host.generated_conductor_timing_errors(
+                    resolved, generated
+                ),
+                [],
+            )
+            broken = dict(expected)
+            broken.pop("simtime_publish_interval_usec")
+            (conductor / "cli-01.json").write_text(
+                json.dumps(broken), encoding="utf-8"
+            )
+            errors = multi_host.generated_conductor_timing_errors(
+                resolved, generated
+            )
+
+        self.assertEqual(len(errors), 1)
+        self.assertIn("cli-01.simtime_publish_interval_usec", errors[0])
+
     def test_summary_pairs_host_results_and_uses_server_rtf(self) -> None:
         raw, _counts, _attempts = scaling.load_scaling(
             scaling.DEFAULT_EXPERIMENT

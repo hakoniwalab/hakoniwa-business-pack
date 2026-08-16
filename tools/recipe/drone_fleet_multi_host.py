@@ -8,7 +8,6 @@ import hashlib
 import json
 import os
 import platform
-import re
 import subprocess
 import sys
 import urllib.error
@@ -503,25 +502,28 @@ def conductor_launcher_asset(
     conductor_root: Path,
     generated_root: Path,
 ) -> dict[str, Any]:
-    """Translate the proven srv.bash/cli.bash contract into a Launcher asset."""
+    """Pin the Launcher to the selected Conductor PRO checkout build."""
     hosts = resolved["deployment"]["hosts"]
     if host_id not in hosts:
         raise RecipeError(f"unknown host id: {host_id}")
     host = hosts[host_id]
     role = host["role"]
-    script = conductor_root / ("srv.bash" if role == "server" else "cli.bash")
-    if not script.is_file():
-        raise RecipeError(f"Conductor {role} launcher script not found: {script}")
-    node_id = host["node_id"]
-    match = re.search(r"-(\d+)$", node_id)
-    if match is None:
-        raise RecipeError(f"cannot derive Conductor numeric id from node_id: {node_id}")
-    numeric_id = str(int(match.group(1)))
+    binary = conductor_binary(conductor_root, role)
+    if binary is None:
+        raise RecipeError(
+            f"Conductor {role} binary is missing under {conductor_root}; "
+            "run python tools/hako.py build"
+        )
+    config_name = host_id if role == "server" else host["node_id"]
+    config = generated_root / "conductor" / f"{config_name}.json"
+    args = ["--config", str(config)]
+    if role == "server":
+        args.extend(["--server-node-id", host["node_id"], "--enable-conductor"])
     return {
         "name": f"conductor-{role}",
         "activation_timing": "before_start",
-        "command": "bash",
-        "args": [str(script), numeric_id, "simple", str(generated_root)],
+        "command": str(binary),
+        "args": args,
         "cwd": str(conductor_root),
         "delay_sec": 1,
     }
@@ -614,9 +616,66 @@ def conductor_binary(conductor_root: Path, role: str) -> Path | None:
         conductor_root / "build" / name,
         conductor_root / "build-rd" / name,
     ):
-        if candidate.is_file():
+        if candidate.is_file() and os.access(candidate, os.X_OK):
             return candidate
     return None
+
+
+CONDUCTOR_TIMING_FIELDS = (
+    "delta_time_usec",
+    "max_delay_time_usec",
+    "real_sleep_msec",
+    "simtime_publish_mode",
+    "simtime_publish_interval_usec",
+)
+
+
+def generated_conductor_timing_errors(
+    resolved: dict[str, Any], generated_root: Path
+) -> list[str]:
+    expected = build_conductor_input(resolved)["conductor_defaults"]
+    errors: list[str] = []
+    for host_id, host in resolved["deployment"]["hosts"].items():
+        role = host["role"]
+        config_name = host_id if role == "server" else host["node_id"]
+        path = generated_root / "conductor" / f"{config_name}.json"
+        if not path.is_file():
+            errors.append(f"{host_id}: missing {path}")
+            continue
+        try:
+            config = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            errors.append(f"{host_id}: cannot read {path}: {exc}")
+            continue
+        if not isinstance(config, dict):
+            errors.append(f"{host_id}: generated config must be a JSON object")
+            continue
+        for field in CONDUCTOR_TIMING_FIELDS:
+            if field not in expected:
+                continue
+            actual = config.get(field, "<omitted>")
+            wanted = expected[field]
+            if actual != wanted:
+                errors.append(
+                    f"{host_id}.{field}={actual!r}, expected {wanted!r}"
+                )
+    return errors
+
+
+def conductor_binary_contract(binary: Path) -> tuple[bool, str]:
+    try:
+        result = subprocess.run(
+            [str(binary), "--help"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError as exc:
+        return False, f"cannot execute {binary}: {exc}"
+    help_text = result.stdout + result.stderr
+    if "--real-sleep-msec" not in help_text:
+        return False, f"stale binary without timing-profile support: {binary}"
+    return True, str(binary)
 
 
 def launcher_supports_manual_run(python: Path) -> tuple[bool, str]:
@@ -779,11 +838,16 @@ def doctor_local(
         )
         checks.append(("Launcher manual-run contract", launcher_ok, launcher_detail))
     binary = conductor_binary(conductor_root, role)
+    binary_ok, binary_detail = (
+        conductor_binary_contract(binary)
+        if binary is not None
+        else (False, f"missing under {conductor_root}; run python tools/hako.py build")
+    )
     checks.append(
         (
             f"Conductor {role}",
-            binary is not None,
-            str(binary) if binary else f"missing under {conductor_root}; run python tools/hako.py build",
+            binary_ok,
+            binary_detail,
         )
     )
     conductor_config = (
@@ -795,6 +859,19 @@ def doctor_local(
         / f"{host_id if role == 'server' else state['resolved']['deployment']['hosts'][host_id]['node_id']}.json"
     )
     checks.append(("Conductor config", conductor_config.is_file(), str(conductor_config)))
+    generated_root = output_root / "config" / "conductor" / "generated"
+    timing_errors = generated_conductor_timing_errors(
+        state["resolved"], generated_root
+    )
+    checks.append(
+        (
+            "Conductor timing contract",
+            not timing_errors,
+            "server/client generated configs match the Recipe"
+            if not timing_errors
+            else "; ".join(timing_errors),
+        )
+    )
     host = state["resolved"]["deployment"]["hosts"][host_id]
     visualization = state["resolved"]["visualization"]
     publisher = (
@@ -1282,6 +1359,15 @@ def main(argv: list[str] | None = None) -> int:
                 conductor_root,
                 output_root / "config" / "conductor" / "eu-input.json",
             )
+            timing_errors = generated_conductor_timing_errors(
+                result["resolved"],
+                output_root / "config" / "conductor" / "generated",
+            )
+            if timing_errors:
+                raise RecipeError(
+                    "generated Conductor timing contract mismatch: "
+                    + "; ".join(timing_errors)
+                )
             selection = write_local_selection(
                 result["resolved"], result["index"], args.host
             )

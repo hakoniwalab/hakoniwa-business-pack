@@ -229,14 +229,17 @@ class DroneFleetMultiHostTest(unittest.TestCase):
             )
             self.assertEqual(client_launcher.z_offset_m, 2.0)
 
-    def test_conductor_assets_follow_proven_server_client_scripts(self) -> None:
+    def test_conductor_assets_pin_checkout_binaries_and_configs(self) -> None:
         resolved = recipe.validate_experiment(self.experiment())
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             conductor = root / "conductor"
-            conductor.mkdir()
-            (conductor / "srv.bash").write_text("#!/bin/bash\n")
-            (conductor / "cli.bash").write_text("#!/bin/bash\n")
+            build = conductor / "cmake-build"
+            build.mkdir(parents=True)
+            (build / "main_server").write_text("")
+            (build / "main_client").write_text("")
+            (build / "main_server").chmod(0o755)
+            (build / "main_client").chmod(0o755)
             generated = root / "generated"
             server = recipe.conductor_launcher_asset(
                 resolved, "srv-01", conductor, generated
@@ -245,14 +248,22 @@ class DroneFleetMultiHostTest(unittest.TestCase):
                 resolved, "cli-01", conductor, generated
             )
         self.assertEqual(server["name"], "conductor-server")
+        self.assertEqual(server["command"], str(build / "main_server"))
         self.assertEqual(
             server["args"],
-            [str(conductor / "srv.bash"), "1", "simple", str(generated)],
+            [
+                "--config",
+                str(generated / "conductor" / "srv-01.json"),
+                "--server-node-id",
+                "srv-01-01",
+                "--enable-conductor",
+            ],
         )
         self.assertEqual(client["name"], "conductor-client")
+        self.assertEqual(client["command"], str(build / "main_client"))
         self.assertEqual(
             client["args"],
-            [str(conductor / "cli.bash"), "1", "simple", str(generated)],
+            ["--config", str(generated / "conductor" / "cli-01.json")],
         )
 
     def test_local_selection_accepts_unique_role_and_rejects_stale_hash(self) -> None:
