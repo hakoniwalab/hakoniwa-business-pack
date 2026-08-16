@@ -9,10 +9,10 @@ matrix:
   workloads:
     uav_032:
       drone_count: 32
-      process_count: [1, 2, 4, 6]
+      process_count: [1, 2, 4, 6, 8, 12, 15]
     uav_064:
       drone_count: 64
-      process_count: [1, 2, 4, 6, 8]
+      process_count: [1, 2, 4, 6, 8, 12, 15]
     uav_128:
       drone_count: 128
       process_count: [1, 2, 4, 6, 8, 12, 15]

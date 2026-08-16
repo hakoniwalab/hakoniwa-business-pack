@@ -67,12 +67,12 @@ class DroneFleetPerformanceBTest(unittest.TestCase):
         self.assertEqual(
             matrix.workload_groups(workloads),
             [
-                (32, [1, 2, 4, 6]),
-                (64, [1, 2, 4, 6, 8]),
+                (32, [1, 2, 4, 6, 8, 12, 15]),
+                (64, [1, 2, 4, 6, 8, 12, 15]),
                 (128, [1, 2, 4, 6, 8, 12, 15]),
             ],
         )
-        self.assertEqual(len(workloads), 16)
+        self.assertEqual(len(workloads), 21)
         self.assertEqual(attempts, 3)
         assert base.measurement is not None
         self.assertEqual(base.measurement.conductor_implementation, "embedded")

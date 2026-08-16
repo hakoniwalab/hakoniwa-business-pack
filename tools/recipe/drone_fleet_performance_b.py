@@ -34,8 +34,8 @@ DEFAULT_EXPERIMENT = (
     / "multi-process-scaling.yaml"
 )
 WORKLOAD_GRID = {
-    32: [1, 2, 4, 6],
-    64: [1, 2, 4, 6, 8],
+    32: [1, 2, 4, 6, 8, 12, 15],
+    64: [1, 2, 4, 6, 8, 12, 15],
     128: [1, 2, 4, 6, 8, 12, 15],
 }
 MAX_SIMULATOR_PROCESSES = 15
