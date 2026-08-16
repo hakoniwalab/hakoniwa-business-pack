@@ -30,11 +30,6 @@ from tools.remote_operation.pdu_transport import PduJsonTransport, write_tcp_end
 
 ROOT = Path(__file__).resolve().parents[2]
 OPERATOR = ROOT / "tools" / "recipe" / "drone_fleet_multi_host_scaling.py"
-DEFAULT_RUNTIME = (
-    ROOT / "work" / "recipes" / multi_host.RECIPE_ID / "runtime" / "remote-operation"
-)
-
-
 class AttemptError(RuntimeError):
     pass
 
@@ -256,7 +251,7 @@ def server(args: argparse.Namespace) -> int:
 
 def parser() -> argparse.ArgumentParser:
     p=argparse.ArgumentParser(description=__doc__); p.add_argument("--experiment",type=Path,default=scaling.DEFAULT_EXPERIMENT)
-    p.add_argument("--output-root",type=Path,default=scaling.WORK_ROOT); p.add_argument("--runtime-dir",type=Path,default=DEFAULT_RUNTIME)
+    p.add_argument("--output-root",type=Path,default=scaling.WORK_ROOT); p.add_argument("--runtime-dir",type=Path)
     p.add_argument("--drone-count",type=int,default=256); p.add_argument("--session-id",required=True); p.add_argument("--clean",action="store_true")
     p.add_argument("--timeout-sec",type=float,default=600.0); sub=p.add_subparsers(dest="role",required=True)
     s=sub.add_parser("server"); s.add_argument("--listen-address",default="192.168.2.100"); s.add_argument("--control-port",type=int,default=54200); s.add_argument("--artifact-port",type=int,default=54201)
@@ -265,7 +260,8 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None=None) -> int:
-    args=parser().parse_args(argv); args.experiment=args.experiment.resolve(); args.output_root=args.output_root.resolve(); args.runtime_dir=args.runtime_dir.resolve()
+    args=parser().parse_args(argv); args.experiment=args.experiment.resolve(); args.output_root=args.output_root.resolve()
+    args.runtime_dir=(args.runtime_dir.resolve() if args.runtime_dir is not None else args.output_root / "runtime" / "remote-operation")
     try: return server(args) if args.role=="server" else client(args)
     except Exception as exc:
         print(f"[ERROR] {exc}",file=sys.stderr)

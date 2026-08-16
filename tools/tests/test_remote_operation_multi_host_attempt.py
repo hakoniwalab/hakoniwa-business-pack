@@ -31,6 +31,7 @@ class MultiHostScalingAttemptTest(unittest.TestCase):
         self.assertEqual(server.control_port, client.control_port)
         self.assertEqual(server.artifact_port, client.artifact_port)
         self.assertEqual(server.drone_count, 256)
+        self.assertIsNone(server.runtime_dir)
 
     def test_verified_client_attempt_is_published_at_receiver_path(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
