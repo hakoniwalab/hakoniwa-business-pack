@@ -10,7 +10,7 @@ scale:
 
 matrix:
   drone_count: [64, 128, 256]
-  attempts: 1
+  attempts: 3
 
 runtime:
   mode: native

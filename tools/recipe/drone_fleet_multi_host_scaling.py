@@ -7,6 +7,7 @@ import argparse
 import copy
 import csv
 import json
+import statistics
 from pathlib import Path
 from typing import Any
 
@@ -73,8 +74,6 @@ def load_scaling(path: Path) -> tuple[dict[str, Any], list[int], int]:
     ):
         raise ScalingError("matrix.drone_count must be unique and ascending")
     attempts = _positive(matrix.get("attempts"), "matrix.attempts")
-    if attempts != 1:
-        raise ScalingError("the current scaling preflight requires matrix.attempts=1")
     conductor = raw.get("runtime", {}).get("conductor", {})
     if conductor.get("profile") != "icra-target-delta-boundary":
         raise ScalingError(
@@ -99,8 +98,8 @@ def load_scaling(path: Path) -> tuple[dict[str, Any], list[int], int]:
         raise ScalingError("measurement.enabled must be true")
     if measurement.get("configuration_id") != "auto":
         raise ScalingError("measurement.configuration_id must be auto")
-    if measurement.get("attempt") != attempts:
-        raise ScalingError("measurement.attempt must match matrix.attempts")
+    if measurement.get("attempt") != 1:
+        raise ScalingError("measurement.attempt must be the template value 1")
     return raw, drone_counts, attempts
 
 
@@ -108,7 +107,7 @@ def configuration_id(drone_count: int, real_sleep_msec: int) -> str:
     return f"uav-{drone_count:03d}-sleep-{real_sleep_msec:03d}ms"
 
 
-def resolve_condition(raw: dict[str, Any], drone_count: int) -> dict[str, Any]:
+def resolve_condition(raw: dict[str, Any], drone_count: int, attempt: int = 1) -> dict[str, Any]:
     result = copy.deepcopy(raw)
     matrix = result.pop("matrix")
     allowed = matrix["drone_count"]
@@ -150,19 +149,22 @@ def resolve_condition(raw: dict[str, Any], drone_count: int) -> dict[str, Any]:
     sleep = int(result["runtime"]["conductor"]["real_sleep_msec"])
     measurement = result["measurement"]
     measurement["configuration_id"] = configuration_id(drone_count, sleep)
-    measurement["attempt"] = 1
+    attempts = _positive(matrix.get("attempts"), "matrix.attempts")
+    if attempt < 1 or attempt > attempts:
+        raise ScalingError(f"attempt {attempt} is outside 1..{attempts}")
+    measurement["attempt"] = attempt
     return result
 
 
 def generated_experiment_path(
-    output_root: Path, drone_count: int, real_sleep_msec: int
+    output_root: Path, drone_count: int, real_sleep_msec: int, attempt: int = 1
 ) -> Path:
     return (
         output_root
         / "matrix"
         / "multi-host-scaling"
         / configuration_id(drone_count, real_sleep_msec)
-        / "attempt-01.yaml"
+        / f"attempt-{attempt:02d}.yaml"
     )
 
 
@@ -191,9 +193,9 @@ def configure(args: argparse.Namespace) -> int:
         raise ScalingError(
             f"--drone-count must be one of: {', '.join(map(str, counts))}"
         )
-    condition = resolve_condition(raw, args.drone_count)
+    condition = resolve_condition(raw, args.drone_count, args.attempt)
     sleep = int(condition["runtime"]["conductor"]["real_sleep_msec"])
-    generated = generated_experiment_path(args.output_root, args.drone_count, sleep)
+    generated = generated_experiment_path(args.output_root, args.drone_count, sleep, args.attempt)
     yaml_support.write_simple_yaml(generated, condition)
     args.generated_experiment = generated
     delegated = delegate_arguments(args, "configure")
@@ -295,6 +297,31 @@ def validate_result_identity(
         raise ScalingError(f"result identity mismatch in {path}: " + "; ".join(mismatches))
 
 
+def _statistics(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    configurations = sorted({str(row["configuration_id"]) for row in rows})
+    metrics = (
+        "rtf", "srv-01_rtf", "cli-01_rtf",
+        "srv-01_cpu_average_percent", "cli-01_cpu_average_percent",
+        "srv-01_cpu_max_percent", "cli-01_cpu_max_percent",
+    )
+    for configuration in configurations:
+        selected = [row for row in rows if row["configuration_id"] == configuration]
+        entry: dict[str, Any] = {
+            "configuration_id": configuration,
+            "attempt_count": len(selected),
+            "success_count": sum(row["status"] == "success" for row in selected),
+            "attempts": [row["attempt"] for row in selected],
+        }
+        for metric in metrics:
+            values = [float(row[metric]) for row in selected if row.get(metric) is not None]
+            entry[metric] = ({"count": len(values), "mean": statistics.fmean(values),
+                "pstdev": statistics.pstdev(values), "min": min(values), "max": max(values),
+                "values": values} if values else None)
+        result.append(entry)
+    return result
+
+
 def summarize(
     path: Path, output_root: Path, selected_drone_count: int | None = None
 ) -> int:
@@ -316,71 +343,40 @@ def summarize(
     for count in counts:
         config_id = configuration_id(count, sleep)
         payloads: dict[str, dict[str, Any]] = {}
-        for host_id in host_ids:
-            result = result_path(
-                output_root,
-                results_directory,
-                series,
-                host_id,
-                config_id,
-                attempts,
-            )
-            if not result.is_file():
-                missing.append(str(result))
-                continue
-            try:
-                payload = json.loads(result.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError) as exc:
-                raise ScalingError(f"cannot read result {result}: {exc}") from exc
-            if not isinstance(payload, dict):
-                raise ScalingError(f"result must be a JSON object: {result}")
-            validate_result_identity(
-                payload,
-                path=result,
-                host_id=host_id,
-                configuration_id=config_id,
-                attempt=attempts,
-                real_sleep_msec=sleep,
-            )
-            payloads[host_id] = payload
-        paired = set(payloads) == set(host_ids)
-        hashes = {
-            payload.get("metadata", {}).get("config_hash")
-            for payload in payloads.values()
-        }
-        if paired and (None in hashes or len(hashes) != 1):
-            raise ScalingError(f"config hash mismatch for {config_id}: {hashes}")
-        statuses = {payload.get("status") for payload in payloads.values()}
-        host_rtf = {
-            host_id: _number(payload.get("performance"), "rtf")
-            for host_id, payload in payloads.items()
-        }
-        host_cpu_average = {
-            host_id: _number(payload.get("machine"), "cpu_average_percent")
-            for host_id, payload in payloads.items()
-        }
-        host_cpu_max = {
-            host_id: _number(payload.get("machine"), "cpu_max_percent")
-            for host_id, payload in payloads.items()
-        }
-        rows.append(
-            {
-                "configuration_id": config_id,
-                "drone_count": count,
-                "real_sleep_msec": sleep,
-                "attempt": attempts,
-                "paired": paired,
-                "status": "success" if paired and statuses == {"success"} else "incomplete",
-                "rtf": host_rtf.get(server_host),
-                "srv-01_rtf": host_rtf.get("srv-01"),
-                "cli-01_rtf": host_rtf.get("cli-01"),
-                "srv-01_cpu_average_percent": host_cpu_average.get("srv-01"),
-                "cli-01_cpu_average_percent": host_cpu_average.get("cli-01"),
-                "srv-01_cpu_max_percent": host_cpu_max.get("srv-01"),
-                "cli-01_cpu_max_percent": host_cpu_max.get("cli-01"),
-                "config_hash": next(iter(hashes)) if len(hashes) == 1 else None,
-            }
-        )
+        for attempt in range(1, attempts + 1):
+            payloads: dict[str, dict[str, Any]] = {}
+            for host_id in host_ids:
+                result = result_path(output_root, results_directory, series,
+                    host_id, config_id, attempt)
+                if not result.is_file():
+                    missing.append(str(result)); continue
+                try: payload = json.loads(result.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError) as exc:
+                    raise ScalingError(f"cannot read result {result}: {exc}") from exc
+                if not isinstance(payload, dict):
+                    raise ScalingError(f"result must be a JSON object: {result}")
+                validate_result_identity(payload, path=result, host_id=host_id,
+                    configuration_id=config_id, attempt=attempt,
+                    real_sleep_msec=sleep)
+                payloads[host_id] = payload
+            paired = set(payloads) == set(host_ids)
+            hashes = {payload.get("metadata", {}).get("config_hash") for payload in payloads.values()}
+            if paired and (None in hashes or len(hashes) != 1):
+                raise ScalingError(f"config hash mismatch for {config_id} attempt {attempt}: {hashes}")
+            statuses = {payload.get("status") for payload in payloads.values()}
+            host_rtf = {host_id: _number(payload.get("performance"), "rtf") for host_id,payload in payloads.items()}
+            host_cpu_average = {host_id: _number(payload.get("machine"), "cpu_average_percent") for host_id,payload in payloads.items()}
+            host_cpu_max = {host_id: _number(payload.get("machine"), "cpu_max_percent") for host_id,payload in payloads.items()}
+            rows.append({"configuration_id":config_id,"drone_count":count,
+                "real_sleep_msec":sleep,"attempt":attempt,"paired":paired,
+                "status":"success" if paired and statuses=={"success"} else "incomplete",
+                "rtf":host_rtf.get(server_host),"srv-01_rtf":host_rtf.get("srv-01"),
+                "cli-01_rtf":host_rtf.get("cli-01"),
+                "srv-01_cpu_average_percent":host_cpu_average.get("srv-01"),
+                "cli-01_cpu_average_percent":host_cpu_average.get("cli-01"),
+                "srv-01_cpu_max_percent":host_cpu_max.get("srv-01"),
+                "cli-01_cpu_max_percent":host_cpu_max.get("cli-01"),
+                "config_hash":next(iter(hashes)) if len(hashes)==1 else None})
     summary_root = output_root / results_directory / series / "summary"
     summary_root.mkdir(parents=True, exist_ok=True)
     summary_stem = f"multi-host-scaling-sleep-{sleep:03d}ms"
@@ -398,6 +394,7 @@ def summarize(
             "complete": not missing,
             "missing_results": missing,
             "results": rows,
+            "statistics": _statistics(rows),
         },
     )
     with csv_path.open("w", encoding="utf-8", newline="") as stream:
@@ -424,6 +421,7 @@ def parser() -> argparse.ArgumentParser:
     configure_parser = commands.add_parser("configure")
     configure_parser.add_argument("--host", required=True)
     configure_parser.add_argument("--drone-count", type=int, required=True)
+    configure_parser.add_argument("--attempt", type=int, default=1)
     for command in ("doctor", "start", "run", "status", "stop", "clean", "collect"):
         commands.add_parser(command)
     summarize_parser = commands.add_parser("summarize")
@@ -455,6 +453,7 @@ def main(argv: list[str] | None = None) -> int:
             args.output_root,
             int(configured["resolved"]["scale"]["drone_count"]),
             int(configured["resolved"]["runtime"]["conductor"]["real_sleep_msec"]),
+            int(configured["resolved"]["measurement"]["attempt"]),
         )
         return multi_host.main(delegate_arguments(args, args.command))
     except (ScalingError, multi_host.RecipeError) as exc:

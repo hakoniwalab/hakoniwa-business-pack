@@ -33,6 +33,19 @@ class MultiHostScalingAttemptTest(unittest.TestCase):
         self.assertEqual(server.drone_count, 256)
         self.assertIsNone(server.runtime_dir)
 
+    def test_batch_derives_one_session_per_attempt(self) -> None:
+        args = attempt.parser().parse_args(
+            ["--session-id", "mh-batch-01", "server"]
+        )
+        self.assertEqual(
+            [attempt._session(args, number, 3) for number in range(1, 4)],
+            [
+                "mh-batch-01-attempt-01",
+                "mh-batch-01-attempt-02",
+                "mh-batch-01-attempt-03",
+            ],
+        )
+
     def test_verified_client_attempt_is_published_at_receiver_path(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

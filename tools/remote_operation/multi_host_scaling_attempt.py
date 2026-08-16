@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run one multi-host scaling attempt and collect cli-01 evidence on srv-01."""
+"""Run a multi-host scaling attempt batch and collect cli-01 evidence."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ def _run(args: argparse.Namespace, host: str, operation: str, extra: list[str] |
     command.append(operation)
     if extra:
         command.extend(extra)
-    log_dir = args.runtime_dir / host / "operations"
+    log_dir = args.runtime_dir / host / f"attempt-{args.current_attempt:02d}" / "operations"
     log_dir.mkdir(parents=True, exist_ok=True)
     result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=False)
     (log_dir / f"{operation}.stdout.log").write_text(result.stdout, encoding="utf-8")
@@ -51,12 +51,13 @@ def _run(args: argparse.Namespace, host: str, operation: str, extra: list[str] |
         raise AttemptError(result.stderr.strip() or result.stdout.strip() or f"{operation} failed")
 
 
-def _prepare(args: argparse.Namespace, host: str) -> dict[str, Any]:
-    if args.clean:
+def _prepare(args: argparse.Namespace, host: str, attempt: int) -> dict[str, Any]:
+    args.current_attempt = attempt
+    if args.clean and attempt == 1:
         selection = multi_host.LOCAL_SELECTION
         if selection.is_file() and (args.output_root / "bundle-index.json").is_file():
             _run(args, host, "clean")
-    _run(args, host, "configure", ["--host", host, "--drone-count", str(args.drone_count)])
+    _run(args, host, "configure", ["--host", host, "--drone-count", str(args.drone_count), "--attempt", str(attempt)])
     state = multi_host.load_local_selection(args.output_root)
     if state["selection"]["host_id"] != host:
         raise AttemptError("configured local host identity does not match")
@@ -69,6 +70,22 @@ def _prepare(args: argparse.Namespace, host: str) -> dict[str, Any]:
         raise AttemptError(f"result already exists; rerun with --clean: {trial}")
     args.prepared_host = host
     return state
+
+
+def _session(args: argparse.Namespace, attempt: int, total: int) -> str:
+    return args.session_id if total == 1 else f"{args.session_id}-attempt-{attempt:02d}"
+
+
+def _attach_operation_evidence(args: argparse.Namespace, trial: Path, host: str) -> None:
+    target = trial / "evidence" / "remote-operation"
+    target.mkdir(parents=True, exist_ok=True)
+    source = args.runtime_dir / host / f"attempt-{args.current_attempt:02d}"
+    operations = source / "operations"
+    if operations.is_dir():
+        shutil.copytree(operations, target / "operations", dirs_exist_ok=True)
+    control = source / "control-events.jsonl"
+    if control.is_file():
+        shutil.copy2(control, target / "control-events.jsonl")
 
 
 def _identity(state: dict[str, Any]) -> tuple[str, str, int]:
@@ -168,83 +185,97 @@ def _extract_client_archive(archive: Path, staging: Path, destination: Path,
 
 
 def client(args: argparse.Namespace) -> int:
-    state = _prepare(args, "cli-01")
-    log = args.runtime_dir / "cli-01" / "control-events.jsonl"; log.unlink(missing_ok=True)
+    _raw, _counts, attempts = scaling.load_scaling(args.experiment)
+    state = _prepare(args, "cli-01", 1)
     config = write_tcp_endpoint_config(args.runtime_dir / "cli-01" / "control-endpoint",
         role="client", address=args.server_address, port=args.control_port)
     transport = PduJsonTransport(config); transport.start(); transport.wait_connected(args.timeout_sec)
-    status_seq = 1; command_seq = 1
-    _send(transport, log, _message(state, args.session_id, "cli-01", status_seq, "status", "REGISTERED"), "cli-01"); status_seq += 1
     try:
-        while True:
-            message = _receive(transport, log, state, args.session_id, "srv-01", command_seq, "command", args.timeout_sec, "cli-01"); command_seq += 1
-            command = message["type"]
-            if command == "PREPARE":
-                _send(transport, log, _message(state,args.session_id,"cli-01",status_seq,"status","PREPARING"),"cli-01"); status_seq += 1
-                _run(args,"cli-01","doctor"); statuses=["READY"]
-            elif command == "LAUNCH": _run(args,"cli-01","start"); statuses=["LAUNCHED"]
-            elif command == "RUN":
-                _send(transport,log,_message(state,args.session_id,"cli-01",status_seq,"status","RUNNING"),"cli-01"); status_seq += 1
-                _wait_result(state,args.output_root,"cli-01",args.timeout_sec); statuses=["TERMINATED"]
-            elif command in {"CLEANUP","ABORT"}: _run(args,"cli-01","stop"); statuses=["CLEANED"]
-            elif command == "COLLECT":
-                _send(transport,log,_message(state,args.session_id,"cli-01",status_seq,"status","COLLECTING"),"cli-01"); status_seq += 1
-                _run(args,"cli-01","collect")
-                trial=multi_host.measurement_trial_path(state["resolved"],args.output_root,"cli-01")
-                archive=create_zip([trial],args.runtime_dir/"cli-01"/f"{args.session_id}-cli-01.zip")
-                acfg=write_tcp_endpoint_config(args.runtime_dir/"cli-01"/"artifact-endpoint",role="client",address=args.server_address,port=args.artifact_port)
-                at=_artifact_transport(acfg); at.start(); at.wait_connected(args.timeout_sec)
-                try: send_file(at,archive,session_id=args.session_id,timeout_sec=args.timeout_sec,chunk_size=32*1024,event_log=args.runtime_dir/"cli-01"/"artifact-events.jsonl")
-                finally: at.close()
-                statuses=["COLLECTED"]
-            else: raise AttemptError(f"unsupported command: {command}")
-            for value in statuses:
-                _send(transport,log,_message(state,args.session_id,"cli-01",status_seq,"status",value),"cli-01"); status_seq += 1
-            if command == "COLLECT": return 0
+        for attempt in range(1, attempts + 1):
+            if attempt > 1: state = _prepare(args, "cli-01", attempt)
+            session = _session(args, attempt, attempts)
+            log=args.runtime_dir/"cli-01"/f"attempt-{attempt:02d}"/"control-events.jsonl"; log.unlink(missing_ok=True)
+            status_seq=1; command_seq=1
+            _send(transport,log,_message(state,session,"cli-01",status_seq,"status","REGISTERED"),"cli-01"); status_seq+=1
+            while True:
+                message=_receive(transport,log,state,session,"srv-01",command_seq,"command",args.timeout_sec,"cli-01"); command_seq+=1
+                command=message["type"]
+                if command=="PREPARE":
+                    _send(transport,log,_message(state,session,"cli-01",status_seq,"status","PREPARING"),"cli-01"); status_seq+=1
+                    _run(args,"cli-01","doctor"); statuses=["READY"]
+                elif command=="LAUNCH": _run(args,"cli-01","start"); statuses=["LAUNCHED"]
+                elif command=="RUN":
+                    _send(transport,log,_message(state,session,"cli-01",status_seq,"status","RUNNING"),"cli-01"); status_seq+=1
+                    _wait_result(state,args.output_root,"cli-01",args.timeout_sec); statuses=["TERMINATED"]
+                elif command in {"CLEANUP","ABORT"}: _run(args,"cli-01","stop"); statuses=["CLEANED"]
+                elif command=="COLLECT":
+                    _send(transport,log,_message(state,session,"cli-01",status_seq,"status","COLLECTING"),"cli-01"); status_seq+=1
+                    _run(args,"cli-01","collect")
+                    trial=multi_host.measurement_trial_path(state["resolved"],args.output_root,"cli-01")
+                    _attach_operation_evidence(args,trial,"cli-01")
+                    archive=create_zip([trial],args.runtime_dir/"cli-01"/f"attempt-{attempt:02d}"/f"{session}-cli-01.zip")
+                    artifact_port=args.artifact_port + attempt - 1
+                    acfg=write_tcp_endpoint_config(args.runtime_dir/"cli-01"/f"artifact-endpoint-{attempt:02d}",role="client",address=args.server_address,port=artifact_port)
+                    at=_artifact_transport(acfg); at.start(); at.wait_connected(args.timeout_sec)
+                    try: send_file(at,archive,session_id=session,timeout_sec=args.timeout_sec,chunk_size=32*1024,event_log=args.runtime_dir/"cli-01"/f"attempt-{attempt:02d}"/"artifact-events.jsonl")
+                    finally: at.close()
+                    statuses=["COLLECTED"]
+                else: raise AttemptError(f"unsupported command: {command}")
+                for value in statuses:
+                    _send(transport,log,_message(state,session,"cli-01",status_seq,"status",value),"cli-01"); status_seq+=1
+                if command=="COLLECT": break
+        return 0
     finally: transport.close()
 
 
 def server(args: argparse.Namespace) -> int:
-    state = _prepare(args,"srv-01")
-    log=args.runtime_dir/"srv-01"/"control-events.jsonl"; log.unlink(missing_ok=True)
+    _raw, _counts, attempts = scaling.load_scaling(args.experiment)
+    state = _prepare(args,"srv-01",1)
     cfg=write_tcp_endpoint_config(args.runtime_dir/"srv-01"/"control-endpoint",role="server",address=args.listen_address,port=args.control_port)
     transport=PduJsonTransport(cfg); transport.start(); print(f"Waiting for cli-01 on {args.listen_address}:{args.control_port}")
-    transport.wait_connected(args.timeout_sec); status_seq=1; command_seq=1
-    registered=_receive(transport,log,state,args.session_id,"cli-01",status_seq,"status",args.timeout_sec,"srv-01"); status_seq+=1
-    if registered["type"]!="REGISTERED": raise AttemptError("expected REGISTERED")
+    transport.wait_connected(args.timeout_sec)
     try:
-        def command(value: str, expected: list[str]) -> None:
-            nonlocal command_seq,status_seq
-            _send(transport,log,_message(state,args.session_id,"srv-01",command_seq,"command",value),"srv-01"); command_seq+=1
-            for wanted in expected:
-                got=_receive(transport,log,state,args.session_id,"cli-01",status_seq,"status",args.timeout_sec,"srv-01"); status_seq+=1
-                if got["type"]!=wanted: raise AttemptError(f"expected {wanted}, received {got['type']}")
-        _run(args,"srv-01","doctor"); command("PREPARE",["PREPARING","READY"])
-        _run(args,"srv-01","start"); command("LAUNCH",["LAUNCHED"])
-        _send(transport,log,_message(state,args.session_id,"srv-01",command_seq,"command","RUN"),"srv-01"); command_seq+=1
-        running=_receive(transport,log,state,args.session_id,"cli-01",status_seq,"status",args.timeout_sec,"srv-01"); status_seq+=1
-        if running["type"]!="RUNNING": raise AttemptError("expected RUNNING")
-        _run(args,"srv-01","run"); _wait_result(state,args.output_root,"srv-01",args.timeout_sec)
-        terminated=_receive(transport,log,state,args.session_id,"cli-01",status_seq,"status",args.timeout_sec,"srv-01"); status_seq+=1
-        if terminated["type"]!="TERMINATED": raise AttemptError("expected TERMINATED")
-        _run(args,"srv-01","stop"); command("CLEANUP",["CLEANED"]); _run(args,"srv-01","collect")
-        acfg=write_tcp_endpoint_config(args.runtime_dir/"srv-01"/"artifact-endpoint",role="server",address=args.listen_address,port=args.artifact_port)
-        at=_artifact_transport(acfg); at.start()
-        _send(transport,log,_message(state,args.session_id,"srv-01",command_seq,"command","COLLECT"),"srv-01"); command_seq+=1
-        collecting=_receive(transport,log,state,args.session_id,"cli-01",status_seq,"status",args.timeout_sec,"srv-01"); status_seq+=1
-        if collecting["type"]!="COLLECTING": raise AttemptError("expected COLLECTING")
-        at.wait_connected(args.timeout_sec)
-        incoming=args.runtime_dir/"srv-01"/"incoming"; incoming.mkdir(parents=True,exist_ok=True)
-        try: received=receive_file(at,incoming,session_id=args.session_id,timeout_sec=args.timeout_sec,max_bytes=1024**3,event_log=args.runtime_dir/"srv-01"/"artifact-events.jsonl")
-        finally: at.close()
-        collected=_receive(transport,log,state,args.session_id,"cli-01",status_seq,"status",args.timeout_sec,"srv-01")
-        if collected["type"]!="COLLECTED": raise AttemptError("expected COLLECTED")
-        destination=multi_host.measurement_trial_path(state["resolved"],args.output_root,"cli-01")
-        _extract_client_archive(Path(received["artifact"]),args.runtime_dir/"srv-01"/"staging",destination,state)
-        Path(received["artifact"]).unlink()
+        for attempt in range(1,attempts+1):
+            if attempt>1: state=_prepare(args,"srv-01",attempt)
+            session=_session(args,attempt,attempts)
+            log=args.runtime_dir/"srv-01"/f"attempt-{attempt:02d}"/"control-events.jsonl"; log.unlink(missing_ok=True)
+            status_seq=1; command_seq=1
+            registered=_receive(transport,log,state,session,"cli-01",status_seq,"status",args.timeout_sec,"srv-01"); status_seq+=1
+            if registered["type"]!="REGISTERED": raise AttemptError("expected REGISTERED")
+            def command(value: str, expected: list[str]) -> None:
+                nonlocal command_seq,status_seq
+                _send(transport,log,_message(state,session,"srv-01",command_seq,"command",value),"srv-01"); command_seq+=1
+                for wanted in expected:
+                    got=_receive(transport,log,state,session,"cli-01",status_seq,"status",args.timeout_sec,"srv-01"); status_seq+=1
+                    if got["type"]!=wanted: raise AttemptError(f"expected {wanted}, received {got['type']}")
+            _run(args,"srv-01","doctor"); command("PREPARE",["PREPARING","READY"])
+            _run(args,"srv-01","start"); command("LAUNCH",["LAUNCHED"])
+            _send(transport,log,_message(state,session,"srv-01",command_seq,"command","RUN"),"srv-01"); command_seq+=1
+            running=_receive(transport,log,state,session,"cli-01",status_seq,"status",args.timeout_sec,"srv-01"); status_seq+=1
+            if running["type"]!="RUNNING": raise AttemptError("expected RUNNING")
+            _run(args,"srv-01","run"); _wait_result(state,args.output_root,"srv-01",args.timeout_sec)
+            terminated=_receive(transport,log,state,session,"cli-01",status_seq,"status",args.timeout_sec,"srv-01"); status_seq+=1
+            if terminated["type"]!="TERMINATED": raise AttemptError("expected TERMINATED")
+            _run(args,"srv-01","stop"); command("CLEANUP",["CLEANED"]); _run(args,"srv-01","collect")
+            trial=multi_host.measurement_trial_path(state["resolved"],args.output_root,"srv-01"); _attach_operation_evidence(args,trial,"srv-01")
+            artifact_port=args.artifact_port + attempt - 1
+            acfg=write_tcp_endpoint_config(args.runtime_dir/"srv-01"/f"artifact-endpoint-{attempt:02d}",role="server",address=args.listen_address,port=artifact_port)
+            at=_artifact_transport(acfg); at.start()
+            _send(transport,log,_message(state,session,"srv-01",command_seq,"command","COLLECT"),"srv-01"); command_seq+=1
+            collecting=_receive(transport,log,state,session,"cli-01",status_seq,"status",args.timeout_sec,"srv-01"); status_seq+=1
+            if collecting["type"]!="COLLECTING": raise AttemptError("expected COLLECTING")
+            at.wait_connected(args.timeout_sec)
+            incoming=args.runtime_dir/"srv-01"/f"attempt-{attempt:02d}"/"incoming"; incoming.mkdir(parents=True,exist_ok=True)
+            try: received=receive_file(at,incoming,session_id=session,timeout_sec=args.timeout_sec,max_bytes=1024**3,event_log=args.runtime_dir/"srv-01"/f"attempt-{attempt:02d}"/"artifact-events.jsonl")
+            finally: at.close()
+            collected=_receive(transport,log,state,session,"cli-01",status_seq,"status",args.timeout_sec,"srv-01")
+            if collected["type"]!="COLLECTED": raise AttemptError("expected COLLECTED")
+            destination=multi_host.measurement_trial_path(state["resolved"],args.output_root,"cli-01")
+            _extract_client_archive(Path(received["artifact"]),args.runtime_dir/"srv-01"/f"attempt-{attempt:02d}"/"staging",destination,state)
+            Path(received["artifact"]).unlink()
         rc=scaling.summarize(args.experiment,args.output_root,args.drone_count)
         if rc: raise AttemptError("paired summary is incomplete")
-        print("[OK] multi-host attempt completed, collected, and summarized")
+        print(f"[OK] {attempts} multi-host attempts completed, collected, and summarized")
         return 0
     finally: transport.close()
 

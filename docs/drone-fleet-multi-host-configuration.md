@@ -171,9 +171,10 @@ Only results need transfer. Initial experiments do not require remote command
 execution, configuration push, a shared filesystem, or an inbound connection
 to WSL2.
 
-### Automated single-attempt vertical slice
+### Automated attempt batch
 
-`multi_host_scaling_attempt.py` automates one complete scaling condition over
+`multi_host_scaling_attempt.py` automates every declared attempt for one
+scaling condition over
 the constrained PDU remote-operation protocol. It configures both hosts,
 checks them, starts `srv-01` before `cli-01`, waits for the Conductor join
 barrier, runs the measurement, stops both Launchers, collects host-local
@@ -185,7 +186,7 @@ For the current 256-UAV, 1-ms condition, start `srv-01` on the Mac first:
 ```bash
 python3 tools/workspace.py run -- \
   python3 -m tools.remote_operation.multi_host_scaling_attempt \
-  --session-id mh-uav256-attempt01 \
+  --session-id mh-uav256-batch01 \
   --drone-count 256 \
   --output-root work/recipes/drone-fleet-multi-host-automation-smoke \
   --clean \
@@ -197,7 +198,7 @@ Then start the persistent worker for this run on WSL2:
 ```bash
 python3 tools/workspace.py run -- \
   python3 -m tools.remote_operation.multi_host_scaling_attempt \
-  --session-id mh-uav256-attempt01 \
+  --session-id mh-uav256-batch01 \
   --drone-count 256 \
   --output-root work/recipes/drone-fleet-multi-host-automation-smoke \
   --clean \
@@ -209,8 +210,14 @@ collected results under `work/recipes/drone-fleet-multi-host/` remain intact.
 `--clean` is explicit because it removes the selected condition's previous
 attempt result below the chosen output root. Omit it only for a genuinely empty
 attempt directory. The same session ID, output-root spelling, and
-Git/configuration identity are required on both peers. The control and artifact
-ports default to `54200` and `54201`; WSL2 initiates both connections.
+Git/configuration identity are required on both peers. The control port
+defaults to `54200`. Artifact transfers use `54201`, `54202`, and `54203` for
+attempts 1 through 3, avoiding immediate TCP-port reuse between archives. WSL2
+initiates every connection.
+The current Recipe declares three attempts. Both processes remain connected
+while `attempt-01`, `attempt-02`, and `attempt-03` are configured, run,
+collected, and transferred in order. Each attempt derives its own protocol
+session ID from the supplied batch ID.
 
 After collection, each host attempt is self-contained:
 
@@ -237,8 +244,8 @@ retained under the remote-operation runtime directory.
 ## Headless scaling preflight
 
 `multi-host-scaling.yaml` is the ICRA-oriented, headless scaling Recipe. Its
-matrix varies only the total UAV count (`64`, `128`, `256`) and currently uses
-one attempt. Equal allocation resolves each condition across `srv-01` and
+matrix varies only the total UAV count (`64`, `128`, `256`) and uses three
+attempts. Equal allocation resolves each condition across `srv-01` and
 `cli-01`; their Experiment B-derived process policy is 6 and 12 processes
 respectively. This differs from the legacy connectivity baseline, which used
 4 processes on `srv-01` and 12 on `cli-01`.

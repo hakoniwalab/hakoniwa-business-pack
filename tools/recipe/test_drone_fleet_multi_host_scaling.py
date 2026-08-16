@@ -19,11 +19,11 @@ class DroneFleetMultiHostScalingTest(unittest.TestCase):
         parsed = scaling.parser().parse_args(["collect"])
         self.assertEqual(parsed.command, "collect")
 
-    def test_scaling_recipe_uses_scalar_sleep_and_attempt_one(self) -> None:
+    def test_scaling_recipe_uses_scalar_sleep_and_three_attempts(self) -> None:
         raw, counts, attempts = scaling.load_scaling(scaling.DEFAULT_EXPERIMENT)
 
         self.assertEqual(counts, [64, 128, 256])
-        self.assertEqual(attempts, 1)
+        self.assertEqual(attempts, 3)
         self.assertEqual(raw["runtime"]["conductor"]["real_sleep_msec"], 1)
         self.assertNotIn("conductor_real_sleep_msec", raw["matrix"])
         self.assertEqual(
@@ -135,19 +135,19 @@ class DroneFleetMultiHostScalingTest(unittest.TestCase):
             output = Path(temporary)
             for drone_count in (64, 128, 256):
                 config_id = scaling.configuration_id(drone_count, sleep)
-                for host_id, rtf, cpu in (
-                    ("srv-01", 1.5, 72.0),
-                    ("cli-01", 1.4, 83.0),
-                ):
-                    path = scaling.result_path(
-                        output, raw["results"]["directory"], series, host_id, config_id
-                    )
-                    path.parent.mkdir(parents=True)
-                    path.write_text(
+                for attempt in range(1, 4):
+                    for host_id, rtf, cpu in (
+                        ("srv-01", 1.5 + attempt / 10, 72.0),
+                        ("cli-01", 1.4 + attempt / 10, 83.0),
+                    ):
+                        path = scaling.result_path(output, raw["results"]["directory"],
+                            series, host_id, config_id, attempt)
+                        path.parent.mkdir(parents=True)
+                        path.write_text(
                         json.dumps(
                             {
                                 "status": "success",
-                                "run_id": f"{config_id}-attempt-01",
+                                "run_id": f"{config_id}-attempt-{attempt:02d}",
                                 "performance": {"rtf": rtf},
                                 "machine": {
                                     "cpu_average_percent": cpu,
@@ -156,7 +156,7 @@ class DroneFleetMultiHostScalingTest(unittest.TestCase):
                                 "metadata": {
                                     "host_id": host_id,
                                     "configuration_id": config_id,
-                                    "attempt": 1,
+                                    "attempt": attempt,
                                     "config_hash": "shared-hash",
                                     "time_coordination": {
                                         "conductor_real_sleep_msec": sleep
@@ -164,8 +164,8 @@ class DroneFleetMultiHostScalingTest(unittest.TestCase):
                                 },
                             }
                         ),
-                        encoding="utf-8",
-                    )
+                            encoding="utf-8",
+                        )
 
             self.assertEqual(
                 scaling.summarize(scaling.DEFAULT_EXPERIMENT, output), 0
@@ -182,10 +182,12 @@ class DroneFleetMultiHostScalingTest(unittest.TestCase):
 
         self.assertTrue(report["complete"])
         self.assertEqual(report["real_sleep_msec"], 1)
-        self.assertEqual(report["results"][0]["rtf"], 1.5)
+        self.assertEqual(report["results"][0]["rtf"], 1.6)
         self.assertEqual(
             report["results"][0]["cli-01_cpu_average_percent"], 83.0
         )
+        self.assertEqual(report["statistics"][0]["rtf"]["mean"], 1.7)
+        self.assertEqual(report["statistics"][0]["success_count"], 3)
 
     def test_summary_rejects_a_result_from_another_host(self) -> None:
         raw, _counts, _attempts = scaling.load_scaling(
