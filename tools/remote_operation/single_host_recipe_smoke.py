@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Drive the proven one-drone Recipe through the remote-operation protocol.
 
-Both protocol peers run on localhost for this smoke.  The worker maps each
-enumerated wire command to a fixed local Recipe lifecycle; no received value is
-ever interpreted as a command line.
+``run`` keeps the localhost regression. ``server`` and ``client`` place the
+same peers on separate hosts. The worker maps each enumerated wire command to a
+fixed local Recipe lifecycle; no received value is interpreted as a command
+line.
 """
 
 from __future__ import annotations
@@ -179,8 +180,56 @@ def _send_status(
         error=error,
     )
     transport.send(message)
-    _append_event(event_log, "send", message)
+    _append_event(event_log, "send", message, display_host=CLIENT_HOST)
     return sequence + 1
+
+
+def _recipe_summary_path() -> Path:
+    return (
+        ROOT
+        / "work"
+        / "recipes"
+        / "drone-fleet-single-host"
+        / "validation"
+        / "execution-summary.json"
+    )
+
+
+def _validate_recipe_summary() -> dict[str, Any]:
+    summary = _recipe_summary_path()
+    try:
+        payload = json.loads(summary.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SmokeError(f"cannot read Recipe summary {summary}: {exc}") from exc
+    if payload.get("status") != "done" or payload.get("drone_count") != 1:
+        raise SmokeError(f"unexpected Recipe summary: {payload}")
+    return payload
+
+
+def _write_client_evidence(
+    runtime_dir: Path,
+    *,
+    experiment: Path,
+    session_id: str,
+) -> Path:
+    summary = _recipe_summary_path()
+    payload = _validate_recipe_summary()
+    evidence = {
+        "status": "success",
+        "session_id": session_id,
+        "protocol": "hakoniwa-pdu-endpoint/tcp/json",
+        "role": "client",
+        "host_id": CLIENT_HOST,
+        "recipe": "drone-fleet-single-host-ci",
+        "config_hash": _sha256(experiment),
+        "drone_count": payload["drone_count"],
+        "recipe_summary": str(summary),
+        "client_events": str(runtime_dir / "client-events.jsonl"),
+        "recipe_logs": str(runtime_dir / "recipe-logs"),
+    }
+    path = runtime_dir / "client-result.json"
+    path.write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
+    return path
 
 
 def worker(args: argparse.Namespace) -> int:
@@ -210,7 +259,7 @@ def worker(args: argparse.Namespace) -> int:
 
         while True:
             message = transport.receive(args.timeout_sec)
-            _append_event(event_log, "receive", message)
+            _append_event(event_log, "receive", message, display_host=CLIENT_HOST)
             _check_peer_message(
                 message,
                 experiment=experiment,
@@ -257,6 +306,13 @@ def worker(args: argparse.Namespace) -> int:
             elif message_type in {"CLEANUP", "ABORT"}:
                 _run_recipe("stop", experiment, log_dir)
                 cleaned = True
+                if message_type == "CLEANUP":
+                    evidence = _write_client_evidence(
+                        args.runtime_dir,
+                        experiment=experiment,
+                        session_id=args.session_id,
+                    )
+                    print(f"Client evidence: {evidence}", flush=True)
                 next_status = "CLEANED"
             else:  # Guarded by protocol validation; retained as fail-closed defense.
                 raise SmokeError(f"unsupported wire command: {message_type}")
@@ -362,6 +418,110 @@ def _receive_statuses(
     return sequence, current
 
 
+def _controller(
+    *,
+    transport: PduJsonTransport,
+    experiment: Path,
+    runtime_dir: Path,
+    session_id: str,
+    timeout_sec: float,
+    child: subprocess.Popen[str] | None = None,
+    verify_local_recipe: bool,
+) -> int:
+    event_log = runtime_dir / "server-events.jsonl"
+    event_log.unlink(missing_ok=True)
+    command_sequence = 1
+    status_sequence = 1
+    previous_command: str | None = None
+    previous_status: str | None = None
+    try:
+        transport.wait_connected(timeout_sec)
+        status_sequence, previous_status = _receive_statuses(
+            transport,
+            event_log,
+            experiment=experiment,
+            session_id=session_id,
+            expected_sequence=status_sequence,
+            previous_status=previous_status,
+            expected_types=("REGISTERED",),
+            timeout_sec=timeout_sec,
+        )
+
+        phases = (
+            ("PREPARE", ("PREPARING", "READY")),
+            ("LAUNCH", ("LAUNCHED",)),
+            ("RUN", ("RUNNING", "TERMINATED")),
+            ("CLEANUP", ("CLEANED",)),
+        )
+        for command_type, statuses in phases:
+            protocol.validate_transition("command", previous_command, command_type)
+            command_sequence = _send_command(
+                transport,
+                event_log,
+                experiment=experiment,
+                session_id=session_id,
+                sequence=command_sequence,
+                message_type=command_type,
+            )
+            previous_command = command_type
+            status_sequence, previous_status = _receive_statuses(
+                transport,
+                event_log,
+                experiment=experiment,
+                session_id=session_id,
+                expected_sequence=status_sequence,
+                previous_status=previous_status,
+                expected_types=statuses,
+                timeout_sec=timeout_sec,
+            )
+
+        if child is not None:
+            return_code = child.wait(timeout=timeout_sec)
+            if return_code != 0:
+                raise SmokeError(f"worker exited with rc={return_code}")
+        if verify_local_recipe:
+            _validate_recipe_summary()
+        evidence = {
+            "status": "success",
+            "session_id": session_id,
+            "protocol": "hakoniwa-pdu-endpoint/tcp/json",
+            "role": "server",
+            "host_id": SERVER_HOST,
+            "recipe": "drone-fleet-single-host-ci",
+            "config_hash": _sha256(experiment),
+            "drone_count": 1,
+            "server_events": str(event_log),
+            "client_result_location": (
+                str(runtime_dir / "client-result.json")
+                if verify_local_recipe
+                else "client host: client-result.json"
+            ),
+        }
+        if verify_local_recipe:
+            evidence.update(
+                {
+                    "recipe_summary": str(_recipe_summary_path()),
+                    "client_events": str(runtime_dir / "client-events.jsonl"),
+                    "recipe_logs": str(runtime_dir / "recipe-logs"),
+                }
+            )
+        evidence_path = runtime_dir / "server-result.json"
+        evidence_path.write_text(
+            json.dumps(evidence, indent=2) + "\n", encoding="utf-8"
+        )
+        # Compatibility with the original localhost smoke evidence name.
+        if verify_local_recipe:
+            (runtime_dir / "smoke-result.json").write_text(
+                json.dumps(evidence, indent=2) + "\n", encoding="utf-8"
+            )
+        print("[OK] remote-operation controlled Recipe completed")
+        print(f"Server evidence: {evidence_path}")
+        print(f"Server events  : {event_log}")
+        return 0
+    finally:
+        transport.close()
+
+
 def run(args: argparse.Namespace) -> int:
     experiment = args.experiment.resolve()
     if not experiment.is_file():
@@ -369,8 +529,10 @@ def run(args: argparse.Namespace) -> int:
     session_id = "local-recipe-" + uuid.uuid4().hex[:16]
     runtime_dir = args.runtime_dir.resolve()
     runtime_dir.mkdir(parents=True, exist_ok=True)
-    event_log = runtime_dir / "server-events.jsonl"
-    for stale in (event_log, runtime_dir / "client-events.jsonl"):
+    for stale in (
+        runtime_dir / "server-events.jsonl",
+        runtime_dir / "client-events.jsonl",
+    ):
         stale.unlink(missing_ok=True)
     port = _available_port()
     server_config = write_tcp_endpoint_config(
@@ -403,10 +565,6 @@ def run(args: argparse.Namespace) -> int:
         str(args.timeout_sec),
     ]
     child: subprocess.Popen[str] | None = None
-    command_sequence = 1
-    status_sequence = 1
-    previous_command: str | None = None
-    previous_status: str | None = None
     try:
         transport.start()
         with (
@@ -420,85 +578,16 @@ def run(args: argparse.Namespace) -> int:
                 stdout=stdout,
                 stderr=stderr,
             )
-        transport.wait_connected(args.timeout_sec)
-        status_sequence, previous_status = _receive_statuses(
-            transport,
-            event_log,
+        return _controller(
+            transport=transport,
             experiment=experiment,
+            runtime_dir=runtime_dir,
             session_id=session_id,
-            expected_sequence=status_sequence,
-            previous_status=previous_status,
-            expected_types=("REGISTERED",),
             timeout_sec=args.timeout_sec,
+            child=child,
+            verify_local_recipe=True,
         )
-
-        phases = (
-            ("PREPARE", ("PREPARING", "READY")),
-            ("LAUNCH", ("LAUNCHED",)),
-            ("RUN", ("RUNNING", "TERMINATED")),
-            ("CLEANUP", ("CLEANED",)),
-        )
-        for command_type, statuses in phases:
-            protocol.validate_transition("command", previous_command, command_type)
-            command_sequence = _send_command(
-                transport,
-                event_log,
-                experiment=experiment,
-                session_id=session_id,
-                sequence=command_sequence,
-                message_type=command_type,
-            )
-            previous_command = command_type
-            status_sequence, previous_status = _receive_statuses(
-                transport,
-                event_log,
-                experiment=experiment,
-                session_id=session_id,
-                expected_sequence=status_sequence,
-                previous_status=previous_status,
-                expected_types=statuses,
-                timeout_sec=args.timeout_sec,
-            )
-
-        return_code = child.wait(timeout=args.timeout_sec)
-        if return_code != 0:
-            raise SmokeError(f"worker exited with rc={return_code}")
-        summary = (
-            ROOT
-            / "work"
-            / "recipes"
-            / "drone-fleet-single-host"
-            / "validation"
-            / "execution-summary.json"
-        )
-        payload = json.loads(summary.read_text(encoding="utf-8"))
-        if payload.get("status") != "done" or payload.get("drone_count") != 1:
-            raise SmokeError(f"unexpected Recipe summary: {payload}")
-        evidence = {
-            "status": "success",
-            "session_id": session_id,
-            "protocol": "hakoniwa-pdu-endpoint/tcp/json",
-            "recipe": "drone-fleet-single-host-ci",
-            "drone_count": 1,
-            "recipe_summary": str(summary),
-            "server_events": str(event_log),
-            "client_events": str(runtime_dir / "client-events.jsonl"),
-        }
-        evidence_path = runtime_dir / "smoke-result.json"
-        evidence_path.write_text(
-            json.dumps(evidence, indent=2) + "\n", encoding="utf-8"
-        )
-        print("[OK] remote-operation controlled Recipe completed")
-        print(f"Recipe summary : {summary}")
-        print(f"Evidence       : {evidence_path}")
-        print(f"Server events  : {event_log}")
-        print(f"Client events  : {runtime_dir / 'client-events.jsonl'}")
-        print(f"Recipe logs    : {runtime_dir / 'recipe-logs'}")
-        print(f"Worker stdout  : {runtime_dir / 'worker.stdout.log'}")
-        print(f"Worker stderr  : {runtime_dir / 'worker.stderr.log'}")
-        return 0
     finally:
-        transport.close()
         if child is not None and child.poll() is None:
             child.terminate()
             try:
@@ -506,6 +595,65 @@ def run(args: argparse.Namespace) -> int:
             except subprocess.TimeoutExpired:
                 child.kill()
                 child.wait(timeout=5.0)
+
+
+def server(args: argparse.Namespace) -> int:
+    experiment = args.experiment.resolve()
+    if not experiment.is_file():
+        raise SmokeError(f"experiment does not exist: {experiment}")
+    runtime_dir = args.runtime_dir.resolve()
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    server_config = write_tcp_endpoint_config(
+        runtime_dir / "server-endpoint",
+        role="server",
+        address=args.listen_address,
+        port=args.port,
+    )
+    transport = PduJsonTransport(server_config)
+    transport.start()
+    print(
+        f"Waiting for {CLIENT_HOST} on {args.listen_address}:{args.port} "
+        f"(session={args.session_id})",
+        flush=True,
+    )
+    return _controller(
+        transport=transport,
+        experiment=experiment,
+        runtime_dir=runtime_dir,
+        session_id=args.session_id,
+        timeout_sec=args.timeout_sec,
+        child=None,
+        verify_local_recipe=False,
+    )
+
+
+def client(args: argparse.Namespace) -> int:
+    experiment = args.experiment.resolve()
+    if not experiment.is_file():
+        raise SmokeError(f"experiment does not exist: {experiment}")
+    runtime_dir = args.runtime_dir.resolve()
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    for stale in (runtime_dir / "client-events.jsonl", runtime_dir / "client-result.json"):
+        stale.unlink(missing_ok=True)
+    client_config = write_tcp_endpoint_config(
+        runtime_dir / "client-endpoint",
+        role="client",
+        address=args.server_address,
+        port=args.port,
+    )
+    worker_args = argparse.Namespace(
+        experiment=experiment,
+        runtime_dir=runtime_dir,
+        endpoint_config=client_config,
+        session_id=args.session_id,
+        timeout_sec=args.timeout_sec,
+    )
+    print(
+        f"Connecting to {args.server_address}:{args.port} "
+        f"(session={args.session_id})",
+        flush=True,
+    )
+    return worker(worker_args)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -517,6 +665,22 @@ def parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--experiment", type=Path, default=DEFAULT_EXPERIMENT)
     run_parser.add_argument("--runtime-dir", type=Path, default=DEFAULT_RUNTIME)
     run_parser.add_argument("--timeout-sec", type=float, default=120.0)
+
+    server_parser = subcommands.add_parser("server")
+    server_parser.add_argument("--experiment", type=Path, default=DEFAULT_EXPERIMENT)
+    server_parser.add_argument("--runtime-dir", type=Path, default=DEFAULT_RUNTIME)
+    server_parser.add_argument("--listen-address", default="192.168.2.100")
+    server_parser.add_argument("--port", type=int, default=54200)
+    server_parser.add_argument("--session-id", required=True)
+    server_parser.add_argument("--timeout-sec", type=float, default=300.0)
+
+    client_parser = subcommands.add_parser("client")
+    client_parser.add_argument("--experiment", type=Path, default=DEFAULT_EXPERIMENT)
+    client_parser.add_argument("--runtime-dir", type=Path, default=DEFAULT_RUNTIME)
+    client_parser.add_argument("--server-address", default="192.168.2.100")
+    client_parser.add_argument("--port", type=int, default=54200)
+    client_parser.add_argument("--session-id", required=True)
+    client_parser.add_argument("--timeout-sec", type=float, default=300.0)
 
     worker_parser = subcommands.add_parser("worker", help=argparse.SUPPRESS)
     worker_parser.add_argument("--experiment", type=Path, required=True)
@@ -532,6 +696,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "worker":
             return worker(args)
+        if args.command == "server":
+            return server(args)
+        if args.command == "client":
+            return client(args)
         return run(args)
     except (SmokeError, TransportError, OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)

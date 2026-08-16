@@ -14,6 +14,17 @@ from tools.remote_operation import single_host_recipe_smoke as recipe_smoke
 
 
 class RemoteOperationRecipeSmokeTest(unittest.TestCase):
+    def test_cross_host_server_and_client_commands_are_public(self) -> None:
+        server = recipe_smoke.parser().parse_args(
+            ["server", "--session-id", "cross-host-001"]
+        )
+        client = recipe_smoke.parser().parse_args(
+            ["client", "--session-id", "cross-host-001"]
+        )
+        self.assertEqual(server.listen_address, "192.168.2.100")
+        self.assertEqual(client.server_address, "192.168.2.100")
+        self.assertEqual(server.port, client.port)
+
     def test_recipe_operations_are_a_closed_local_mapping(self) -> None:
         completed = mock.Mock(returncode=0, stdout="ok", stderr="")
         with tempfile.TemporaryDirectory() as temporary:

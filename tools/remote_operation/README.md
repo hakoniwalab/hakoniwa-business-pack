@@ -34,6 +34,18 @@ The server binds to a Recipe-selected reachable address. Clients initiate the
 connection, so a WSL2-private address never needs to be published and the
 server never needs inbound access to a WSL2 guest.
 
+Control messages and result artifacts use separate protocol schemas, PDU
+channels, and TCP ports:
+
+| Purpose | Schema | PDU channel | Default TCP port |
+| --- | --- | ---: | ---: |
+| Recipe control/status | `message.schema.json` | 1 | 54200 |
+| ZIP artifact transfer | `artifact-message.schema.json` | 2 | 54201 |
+
+The artifact channel accepts only a declared ZIP, transfers it as validated
+base64 chunks, verifies its byte count and SHA-256 digest, and then publishes
+it atomically. It is not a file browser or a remote path API.
+
 This package owns:
 
 - JSON encode/decode and validation;
@@ -128,13 +140,96 @@ contains lines equivalent to:
 
 This is a control-plane integration smoke, not a performance measurement.
 
+## Run the same smoke on Mac and WSL2
+
+Use the Mac (`192.168.2.100`) as `srv-01` and WSL2 as `cli-01`. Both checkouts
+must contain the same experiment file, because the peers compare its SHA-256
+before executing any Recipe operation. The client makes the outbound TCP
+connection; the WSL2 private address is not used.
+
+First start the controller on the Mac:
+
+```bash
+python3 tools/workspace.py run -- \
+  python3 -m tools.remote_operation.single_host_recipe_smoke server \
+  --listen-address 192.168.2.100 \
+  --port 54200 \
+  --session-id cross-host-smoke-001
+```
+
+Then start the worker on WSL2 using exactly the same session ID:
+
+```bash
+python3 tools/workspace.py run -- \
+  python3 -m tools.remote_operation.single_host_recipe_smoke client \
+  --server-address 192.168.2.100 \
+  --port 54200 \
+  --session-id cross-host-smoke-001
+```
+
+The Mac sends the fixed lifecycle commands. WSL2 performs `configure`,
+`doctor`, `start`, `smoke`, and `stop` locally and writes
+`client-result.json`. The Mac writes `server-result.json`. A successful return
+from both commands proves the cross-host control path; artifact collection is
+the separate step below.
+
+## Package and transfer client results
+
+No SSH server, password, remote shell, or shared filesystem is required. Start
+the artifact receiver on the Mac after choosing an empty destination directory:
+
+```bash
+python3 tools/workspace.py run -- \
+  python3 -m tools.remote_operation.artifact_transfer receive \
+  --listen-address 192.168.2.100 \
+  --port 54201 \
+  --session-id cross-host-smoke-001 \
+  --output-dir work/remote-operation/received
+```
+
+Then package and send the evidence from WSL2:
+
+```bash
+python3 tools/workspace.py run -- \
+  python3 -m tools.remote_operation.artifact_transfer pack-send \
+  --server-address 192.168.2.100 \
+  --port 54201 \
+  --session-id cross-host-smoke-001 \
+  --source work/remote-operation/single-host-recipe-smoke \
+  --source work/recipes/drone-fleet-single-host/validation
+```
+
+The sender creates
+`work/remote-operation/artifacts/cross-host-smoke-001-client-results.zip`.
+The receiver saves that basename under its own `--output-dir`; the sender
+cannot choose an arbitrary receiver-side path. Existing destination files are
+never overwritten, so use a new session ID or move the previous ZIP before a
+repeat run. The receiver does not extract the archive.
+
+The transfer handshake is:
+
+```text
+cli-01                         srv-01
+  OFFER ----------------------->
+        <---------------- ACCEPT
+  CHUNK[0..N-1] --------------->
+  COMPLETE -------------------->
+        <-------------- VERIFIED
+```
+
+`VERIFIED` is returned only after the receiver has checked the declared byte
+count and SHA-256 digest and renamed the temporary `.part` file to its final
+`.zip` name. Failed or interrupted transfers remove the temporary file.
+
 ## Evidence and logs
 
 Each run writes the following files:
 
 ```text
 work/remote-operation/single-host-recipe-smoke/
-├── smoke-result.json          # final protocol/Recipe evidence
+├── smoke-result.json          # localhost compatibility evidence
+├── server-result.json         # controller evidence
+├── client-result.json         # worker/Recipe evidence
 ├── server-events.jsonl        # controller send/receive records
 ├── client-events.jsonl        # worker send/receive records
 ├── worker.stdout.log
@@ -183,6 +278,21 @@ Communication JSONL records include a local wall-clock recording time and the
 complete validated protocol message. They are suitable for diagnosing the
 last completed transition after a timeout or failure.
 
+Artifact transfer additionally writes:
+
+```text
+work/remote-operation/artifacts/
+├── <session>-client-results.zip
+├── sender-events.jsonl
+├── sender-result.json
+├── receiver-events.jsonl
+└── receiver-result.json
+```
+
+Sender files exist on the client and receiver files on the server. CHUNK event
+records contain the chunk index and decoded byte count but intentionally omit
+the base64 payload, keeping diagnostic logs small and auditable.
+
 ## Tests
 
 Run the dependency-free protocol and adapter tests:
@@ -192,6 +302,7 @@ python3 -m unittest \
   tools/tests/test_remote_operation_protocol.py \
   tools/tests/test_remote_operation_pdu_transport.py \
   tools/tests/test_remote_operation_recipe_smoke.py \
+  tools/tests/test_remote_operation_artifact.py \
   -v
 ```
 

@@ -86,6 +86,10 @@ class PduJsonTransport:
         *,
         endpoint_factory: Callable[[str, str], Any] | None = None,
         key_factory: Callable[..., Any] | None = None,
+        encoder: Callable[[dict[str, Any]], bytes] = encode_message,
+        decoder: Callable[[bytes], dict[str, Any]] = decode_message,
+        pdu_robot: str = PDU_ROBOT,
+        pdu_channel_id: int = PDU_CHANNEL_ID,
     ) -> None:
         if endpoint_factory is None or key_factory is None:
             try:
@@ -99,14 +103,16 @@ class PduJsonTransport:
             endpoint_factory = endpoint_factory or Endpoint
             key_factory = key_factory or PduResolvedKey
         self._endpoint = endpoint_factory("remote_operation", "inout")
-        self._key = key_factory(robot=PDU_ROBOT, channel_id=PDU_CHANNEL_ID)
+        self._key = key_factory(robot=pdu_robot, channel_id=pdu_channel_id)
         self._endpoint_config = Path(endpoint_config)
+        self._encoder = encoder
+        self._decoder = decoder
         self._received: queue.Queue[dict[str, Any] | Exception] = queue.Queue()
         self._opened = False
 
     def _on_receive(self, _key: Any, payload: bytes) -> None:
         try:
-            self._received.put(decode_message(payload))
+            self._received.put(self._decoder(payload))
         except Exception as exc:  # Preserve validation failure for the owner thread.
             self._received.put(exc)
 
@@ -129,7 +135,7 @@ class PduJsonTransport:
     def send(self, message: dict[str, Any]) -> None:
         if not self._opened:
             raise TransportError("transport is not started")
-        self._endpoint.send(self._key, encode_message(message))
+        self._endpoint.send(self._key, self._encoder(message))
 
     def receive(self, timeout_sec: float) -> dict[str, Any]:
         if not self._opened:
