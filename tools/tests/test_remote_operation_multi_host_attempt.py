@@ -59,11 +59,11 @@ class MultiHostScalingAttemptTest(unittest.TestCase):
             )
         )
         self.assertEqual(
-            [attempt._session(args, number, 3) for number in range(1, 4)],
+            [attempt._session(args, 256, number, 3) for number in range(1, 4)],
             [
-                "mh-batch-01-attempt-01",
-                "mh-batch-01-attempt-02",
-                "mh-batch-01-attempt-03",
+                "mh-batch-01-uav-256-attempt-01",
+                "mh-batch-01-uav-256-attempt-02",
+                "mh-batch-01-uav-256-attempt-03",
             ],
         )
 
@@ -79,6 +79,7 @@ class MultiHostScalingAttemptTest(unittest.TestCase):
         self.assertEqual(server.experiment, client.experiment)
         self.assertEqual(server.output_root, client.output_root)
         self.assertEqual(server.drone_count, 256)
+        self.assertEqual(server.drone_counts, [256])
         self.assertTrue(server.clean)
         self.assertEqual(server.control_port, client.control_port)
         self.assertEqual(server.artifact_port, client.artifact_port)
@@ -107,13 +108,14 @@ class MultiHostScalingAttemptTest(unittest.TestCase):
         _raw, counts, baseline_attempts = attempt.scaling.load_scaling(
             resolved.experiment
         )
-        self.assertEqual(resolved.session_id, "mh-scaling-uav256-attempts-01")
-        self.assertEqual(resolved.drone_count, 256)
+        self.assertEqual(resolved.session_id, "mh-scaling-matrix-01")
+        self.assertEqual(resolved.drone_counts, [64, 128, 256])
+        self.assertEqual(resolved.drone_count, 64)
         self.assertEqual(
             resolved.attempt_set,
             "baseline_with_conditional_extension",
         )
-        self.assertIn(resolved.drone_count, counts)
+        self.assertEqual(resolved.drone_counts, counts)
         self.assertEqual(baseline_attempts, 3)
         self.assertEqual(
             resolved.output_root.name,
@@ -129,6 +131,7 @@ class MultiHostScalingAttemptTest(unittest.TestCase):
         raw, _counts, _attempts = attempt.scaling.load_scaling(
             resolved.experiment
         )
+        resolved.drone_count = 256
         policy = attempt.scaling.attempt_policy(raw["matrix"])
         config_id = attempt.scaling.configuration_id(256, 1, "performance")
         with tempfile.TemporaryDirectory() as temporary:
@@ -177,6 +180,21 @@ class MultiHostScalingAttemptTest(unittest.TestCase):
         self.assertFalse(decision["failure_triggered"])
         self.assertTrue(decision["spread_triggered"])
         self.assertGreater(decision["relative_spread"], 0.05)
+
+    def test_artifact_ports_are_unique_across_conditions_and_attempts(self) -> None:
+        resolved = attempt.resolve_arguments(
+            attempt.parser().parse_args(
+                ["--profile", str(SCALING_ATTEMPTS_PROFILE), "server"]
+            )
+        )
+        ports = {
+            attempt._artifact_port(resolved, condition_index, attempt_number, 5)
+            for condition_index in range(3)
+            for attempt_number in range(1, 6)
+        }
+        self.assertEqual(len(ports), 15)
+        self.assertEqual(min(ports), resolved.artifact_port)
+        self.assertEqual(max(ports), resolved.artifact_port + 14)
 
     def test_clean_removes_only_deferred_extension_attempts_up_front(self) -> None:
         resolved = attempt.resolve_arguments(

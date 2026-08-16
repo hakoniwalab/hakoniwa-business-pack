@@ -80,11 +80,9 @@ def load_run_profile(path: Path) -> dict[str, Any]:
     selection = _mapping(
         root.get("selection"),
         "selection",
-        {"drone_count", "attempt_set"},
+        {"drone_counts", "attempt_set"},
     )
-    drone_count = selection.get("drone_count")
-    if isinstance(drone_count, bool) or not isinstance(drone_count, int) or drone_count < 1:
-        raise AttemptError("selection.drone_count must be a positive integer")
+    selected_counts = selection.get("drone_counts")
     attempt_set = selection.get("attempt_set")
     if attempt_set not in {
         "baseline",
@@ -115,10 +113,47 @@ def load_run_profile(path: Path) -> dict[str, Any]:
         raise AttemptError("timeout_sec must be a positive number")
 
     experiment_raw, counts, _attempts = scaling.load_scaling(experiment)
-    if drone_count not in counts:
-        raise AttemptError(
-            "selection.drone_count must be present in the Experiment matrix"
+    if selected_counts == "all":
+        drone_counts = list(counts)
+    elif (
+        isinstance(selected_counts, list)
+        and selected_counts
+        and all(
+            isinstance(value, int) and not isinstance(value, bool) and value > 0
+            for value in selected_counts
         )
+        and selected_counts == sorted(set(selected_counts))
+    ):
+        drone_counts = list(selected_counts)
+    else:
+        raise AttemptError(
+            "selection.drone_counts must be all or a unique ascending positive "
+            "integer list"
+        )
+    unknown_counts = [value for value in drone_counts if value not in counts]
+    if unknown_counts:
+        raise AttemptError(
+            "selection.drone_counts are outside the Experiment matrix: "
+            + ", ".join(map(str, unknown_counts))
+        )
+    policy = scaling.attempt_policy(experiment_raw["matrix"])
+    declared_attempts = policy["baseline"] + policy["extension"]
+    highest_artifact_port = (
+        ports["artifact_port"]
+        + (len(drone_counts) - 1) * len(declared_attempts)
+        + max(declared_attempts)
+        - 1
+    )
+    if highest_artifact_port > 65_535:
+        raise AttemptError(
+            "artifact port range exceeds 65535 for the selected matrix"
+        )
+    longest_session = (
+        f"{session_id}-uav-{max(drone_counts):03d}-attempt-"
+        f"{max(declared_attempts):02d}"
+    )
+    if len(longest_session) > 128:
+        raise AttemptError("operation.id is too long for matrix session identities")
     deployment = experiment_raw.get("deployment", {})
     server_host = deployment.get("server_host")
     hosts = deployment.get("hosts", {})
@@ -129,7 +164,7 @@ def load_run_profile(path: Path) -> dict[str, Any]:
     return {
         "session_id": session_id,
         "experiment": experiment,
-        "drone_count": drone_count,
+        "drone_counts": drone_counts,
         "attempt_set": attempt_set,
         "output_root": output_root,
         "clean": clean,
@@ -168,7 +203,8 @@ def resolve_arguments(args: argparse.Namespace) -> argparse.Namespace:
         profile = load_run_profile(args.profile.resolve())
         args.session_id = profile["session_id"]
         args.experiment = profile["experiment"]
-        args.drone_count = profile["drone_count"]
+        args.drone_counts = profile["drone_counts"]
+        args.drone_count = args.drone_counts[0]
         args.attempt_set = profile["attempt_set"]
         args.output_root = profile["output_root"]
         args.clean = profile["clean"]
@@ -185,6 +221,7 @@ def resolve_arguments(args: argparse.Namespace) -> argparse.Namespace:
         args.experiment = (args.experiment or scaling.DEFAULT_EXPERIMENT).resolve()
         args.output_root = (args.output_root or scaling.WORK_ROOT).resolve()
         args.drone_count = args.drone_count or 256
+        args.drone_counts = [args.drone_count]
         args.attempt_set = "baseline"
         args.clean = bool(args.clean)
         args.timeout_sec = args.timeout_sec or 600.0
@@ -209,7 +246,7 @@ def _run(args: argparse.Namespace, host: str, operation: str, extra: list[str] |
     command.append(operation)
     if extra:
         command.extend(extra)
-    log_dir = args.runtime_dir / host / f"attempt-{args.current_attempt:02d}" / "operations"
+    log_dir = _attempt_runtime_dir(args, host) / "operations"
     log_dir.mkdir(parents=True, exist_ok=True)
     result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=False)
     (log_dir / f"{operation}.stdout.log").write_text(result.stdout, encoding="utf-8")
@@ -265,14 +302,43 @@ def _clean_deferred_attempts(
         _run(args, host, "clean")
 
 
-def _session(args: argparse.Namespace, attempt: int, total: int) -> str:
-    return args.session_id if total == 1 else f"{args.session_id}-attempt-{attempt:02d}"
+def _session(
+    args: argparse.Namespace,
+    drone_count: int,
+    attempt: int,
+    total: int,
+) -> str:
+    condition = f"{args.session_id}-uav-{drone_count:03d}"
+    return condition if total == 1 else f"{condition}-attempt-{attempt:02d}"
+
+
+def _artifact_port(
+    args: argparse.Namespace,
+    condition_index: int,
+    attempt: int,
+    attempts_per_condition: int,
+) -> int:
+    return (
+        args.artifact_port
+        + condition_index * attempts_per_condition
+        + attempt
+        - 1
+    )
+
+
+def _attempt_runtime_dir(args: argparse.Namespace, host: str) -> Path:
+    return (
+        args.runtime_dir
+        / host
+        / f"uav-{args.drone_count:03d}"
+        / f"attempt-{args.current_attempt:02d}"
+    )
 
 
 def _attach_operation_evidence(args: argparse.Namespace, trial: Path, host: str) -> None:
     target = trial / "evidence" / "remote-operation"
     target.mkdir(parents=True, exist_ok=True)
-    source = args.runtime_dir / host / f"attempt-{args.current_attempt:02d}"
+    source = _attempt_runtime_dir(args, host)
     operations = source / "operations"
     if operations.is_dir():
         shutil.copytree(operations, target / "operations", dirs_exist_ok=True)
@@ -474,83 +540,89 @@ def client(args: argparse.Namespace) -> int:
     else:
         planned = baseline + extension
     session_total = len(baseline + extension)
-    if args.attempt_set == "baseline_with_conditional_extension":
-        _clean_deferred_attempts(args, "cli-01", extension)
     config = write_tcp_endpoint_config(args.runtime_dir / "cli-01" / "control-endpoint",
         role="client", address=args.server_address, port=args.control_port)
     transport = PduJsonTransport(config); transport.start(); transport.wait_connected(args.timeout_sec)
     try:
-        index = 0
-        while True:
-            attempt = planned[index]
-            state = _prepare(args, "cli-01", attempt)
-            session = _session(args, attempt, session_total)
-            log=args.runtime_dir/"cli-01"/f"attempt-{attempt:02d}"/"control-events.jsonl"; log.unlink(missing_ok=True)
-            status_seq=1; command_seq=1
-            _send(transport,log,_message(state,session,"cli-01",status_seq,"status","REGISTERED"),"cli-01"); status_seq+=1
+        for condition_index, drone_count in enumerate(args.drone_counts):
+            args.drone_count = drone_count
+            if args.attempt_set == "baseline_with_conditional_extension":
+                _clean_deferred_attempts(args, "cli-01", extension)
+            index = 0
             while True:
-                message=_receive(transport,log,state,session,"srv-01",command_seq,"command",args.timeout_sec,"cli-01"); command_seq+=1
-                command=message["type"]
-                if command=="PREPARE":
-                    _send(transport,log,_message(state,session,"cli-01",status_seq,"status","PREPARING"),"cli-01"); status_seq+=1
-                    _run(args,"cli-01","doctor"); statuses=["READY"]
-                elif command=="LAUNCH": _run(args,"cli-01","start"); statuses=["LAUNCHED"]
-                elif command=="RUN":
-                    _send(transport,log,_message(state,session,"cli-01",status_seq,"status","RUNNING"),"cli-01"); status_seq+=1
-                    _wait_result(state,args.output_root,"cli-01",args.timeout_sec); statuses=["TERMINATED"]
-                elif command in {"CLEANUP","ABORT"}: _run(args,"cli-01","stop"); statuses=["CLEANED"]
-                elif command=="COLLECT":
-                    _send(transport,log,_message(state,session,"cli-01",status_seq,"status","COLLECTING"),"cli-01"); status_seq+=1
-                    _run(args,"cli-01","collect")
-                    trial=multi_host.measurement_trial_path(state["resolved"],args.output_root,"cli-01")
-                    _attach_operation_evidence(args,trial,"cli-01")
-                    archive=create_zip([trial],args.runtime_dir/"cli-01"/f"attempt-{attempt:02d}"/f"{session}-cli-01.zip")
-                    artifact_port=args.artifact_port + attempt - 1
-                    acfg=write_tcp_endpoint_config(args.runtime_dir/"cli-01"/f"artifact-endpoint-{attempt:02d}",role="client",address=args.server_address,port=artifact_port)
-                    at=_artifact_transport(acfg); at.start(); at.wait_connected(args.timeout_sec)
-                    try: send_file(at,archive,session_id=session,timeout_sec=args.timeout_sec,chunk_size=32*1024,event_log=args.runtime_dir/"cli-01"/f"attempt-{attempt:02d}"/"artifact-events.jsonl")
-                    finally: at.close()
-                    statuses=["COLLECTED"]
-                else: raise AttemptError(f"unsupported command: {command}")
-                for value in statuses:
-                    _send(transport,log,_message(state,session,"cli-01",status_seq,"status",value),"cli-01"); status_seq+=1
-                if command=="COLLECT":
+                attempt = planned[index]
+                state = _prepare(args, "cli-01", attempt)
+                session = _session(args, drone_count, attempt, session_total)
+                attempt_dir = _attempt_runtime_dir(args, "cli-01")
+                log = attempt_dir / "control-events.jsonl"
+                log.unlink(missing_ok=True)
+                status_seq = 1
+                command_seq = 1
+                _send(transport, log, _message(state, session, "cli-01", status_seq, "status", "REGISTERED"), "cli-01")
+                status_seq += 1
+                while True:
+                    message = _receive(transport, log, state, session, "srv-01", command_seq, "command", args.timeout_sec, "cli-01")
+                    command_seq += 1
+                    command = message["type"]
+                    if command == "PREPARE":
+                        _send(transport, log, _message(state, session, "cli-01", status_seq, "status", "PREPARING"), "cli-01")
+                        status_seq += 1
+                        _run(args, "cli-01", "doctor")
+                        statuses = ["READY"]
+                    elif command == "LAUNCH":
+                        _run(args, "cli-01", "start")
+                        statuses = ["LAUNCHED"]
+                    elif command == "RUN":
+                        _send(transport, log, _message(state, session, "cli-01", status_seq, "status", "RUNNING"), "cli-01")
+                        status_seq += 1
+                        _wait_result(state, args.output_root, "cli-01", args.timeout_sec)
+                        statuses = ["TERMINATED"]
+                    elif command in {"CLEANUP", "ABORT"}:
+                        _run(args, "cli-01", "stop")
+                        statuses = ["CLEANED"]
+                    elif command == "COLLECT":
+                        _send(transport, log, _message(state, session, "cli-01", status_seq, "status", "COLLECTING"), "cli-01")
+                        status_seq += 1
+                        _run(args, "cli-01", "collect")
+                        trial = multi_host.measurement_trial_path(state["resolved"], args.output_root, "cli-01")
+                        _attach_operation_evidence(args, trial, "cli-01")
+                        archive = create_zip([trial], attempt_dir / f"{session}-cli-01.zip")
+                        artifact_port = _artifact_port(args, condition_index, attempt, session_total)
+                        acfg = write_tcp_endpoint_config(attempt_dir / "artifact-endpoint", role="client", address=args.server_address, port=artifact_port)
+                        at = _artifact_transport(acfg)
+                        at.start()
+                        at.wait_connected(args.timeout_sec)
+                        try:
+                            send_file(at, archive, session_id=session, timeout_sec=args.timeout_sec, chunk_size=32 * 1024, event_log=attempt_dir / "artifact-events.jsonl")
+                        finally:
+                            at.close()
+                        statuses = ["COLLECTED"]
+                    else:
+                        raise AttemptError(f"unsupported command: {command}")
+                    for value in statuses:
+                        _send(transport, log, _message(state, session, "cli-01", status_seq, "status", value), "cli-01")
+                        status_seq += 1
+                    if command == "COLLECT":
+                        break
+                decision = _receive(transport, log, state, session, "srv-01", command_seq, "command", args.timeout_sec, "cli-01")
+                if decision["type"] == "BATCH_COMPLETE":
+                    _send(transport, log, _message(state, session, "cli-01", status_seq, "status", "BATCH_COMPLETED"), "cli-01")
+                    return 0
+                if decision["type"] == "NEXT_CONDITION":
+                    if condition_index + 1 >= len(args.drone_counts):
+                        raise AttemptError("server requested an undeclared next condition")
                     break
-            decision = _receive(
-                transport,
-                log,
-                state,
-                session,
-                "srv-01",
-                command_seq,
-                "command",
-                args.timeout_sec,
-                "cli-01",
-            )
-            if decision["type"] == "BATCH_COMPLETE":
-                _send(
-                    transport,
-                    log,
-                    _message(
-                        state,
-                        session,
-                        "cli-01",
-                        status_seq,
-                        "status",
-                        "BATCH_COMPLETED",
-                    ),
-                    "cli-01",
-                )
-                break
-            if decision["type"] != "NEXT_ATTEMPT":
-                raise AttemptError(
-                    f"expected NEXT_ATTEMPT or BATCH_COMPLETE, received {decision['type']}"
-                )
-            index += 1
-            if index >= len(planned):
-                raise AttemptError("server requested an undeclared next attempt")
-        return 0
-    finally: transport.close()
+                if decision["type"] != "NEXT_ATTEMPT":
+                    raise AttemptError(
+                        "expected NEXT_ATTEMPT, NEXT_CONDITION, or BATCH_COMPLETE; "
+                        f"received {decision['type']}"
+                    )
+                index += 1
+                if index >= len(planned):
+                    raise AttemptError("server requested an undeclared next attempt")
+        raise AttemptError("server did not complete the selected condition matrix")
+    finally:
+        transport.close()
 
 
 def server(args: argparse.Namespace) -> int:
@@ -562,126 +634,146 @@ def server(args: argparse.Namespace) -> int:
     else:
         planned = baseline + extension
     session_total = len(baseline + extension)
-    if args.attempt_set == "baseline_with_conditional_extension":
-        _clean_deferred_attempts(args, "srv-01", extension)
-    cfg=write_tcp_endpoint_config(args.runtime_dir/"srv-01"/"control-endpoint",role="server",address=args.listen_address,port=args.control_port)
-    transport=PduJsonTransport(cfg); transport.start(); print(f"Waiting for cli-01 on {args.listen_address}:{args.control_port}")
+    cfg = write_tcp_endpoint_config(
+        args.runtime_dir / "srv-01" / "control-endpoint",
+        role="server",
+        address=args.listen_address,
+        port=args.control_port,
+    )
+    transport = PduJsonTransport(cfg)
+    transport.start()
+    print(f"Waiting for cli-01 on {args.listen_address}:{args.control_port}")
     transport.wait_connected(args.timeout_sec)
     try:
-        completed: list[int] = []
-        index = 0
-        while True:
-            attempt = planned[index]
-            state=_prepare(args,"srv-01",attempt)
-            session=_session(args,attempt,session_total)
-            log=args.runtime_dir/"srv-01"/f"attempt-{attempt:02d}"/"control-events.jsonl"; log.unlink(missing_ok=True)
-            status_seq=1; command_seq=1
-            registered=_receive(transport,log,state,session,"cli-01",status_seq,"status",args.timeout_sec,"srv-01"); status_seq+=1
-            if registered["type"]!="REGISTERED": raise AttemptError("expected REGISTERED")
-            def command(value: str, expected: list[str]) -> None:
-                nonlocal command_seq,status_seq
-                _send(transport,log,_message(state,session,"srv-01",command_seq,"command",value),"srv-01"); command_seq+=1
-                for wanted in expected:
-                    got=_receive(transport,log,state,session,"cli-01",status_seq,"status",args.timeout_sec,"srv-01"); status_seq+=1
-                    if got["type"]!=wanted: raise AttemptError(f"expected {wanted}, received {got['type']}")
-            _run(args,"srv-01","doctor"); command("PREPARE",["PREPARING","READY"])
-            _run(args,"srv-01","start"); command("LAUNCH",["LAUNCHED"])
-            _send(transport,log,_message(state,session,"srv-01",command_seq,"command","RUN"),"srv-01"); command_seq+=1
-            running=_receive(transport,log,state,session,"cli-01",status_seq,"status",args.timeout_sec,"srv-01"); status_seq+=1
-            if running["type"]!="RUNNING": raise AttemptError("expected RUNNING")
-            _run(args,"srv-01","run"); _wait_result(state,args.output_root,"srv-01",args.timeout_sec)
-            terminated=_receive(transport,log,state,session,"cli-01",status_seq,"status",args.timeout_sec,"srv-01"); status_seq+=1
-            if terminated["type"]!="TERMINATED": raise AttemptError("expected TERMINATED")
-            _run(args,"srv-01","stop"); command("CLEANUP",["CLEANED"]); _run(args,"srv-01","collect")
-            trial=multi_host.measurement_trial_path(state["resolved"],args.output_root,"srv-01"); _attach_operation_evidence(args,trial,"srv-01")
-            artifact_port=args.artifact_port + attempt - 1
-            acfg=write_tcp_endpoint_config(args.runtime_dir/"srv-01"/f"artifact-endpoint-{attempt:02d}",role="server",address=args.listen_address,port=artifact_port)
-            at=_artifact_transport(acfg); at.start()
-            _send(transport,log,_message(state,session,"srv-01",command_seq,"command","COLLECT"),"srv-01"); command_seq+=1
-            collecting=_receive(transport,log,state,session,"cli-01",status_seq,"status",args.timeout_sec,"srv-01"); status_seq+=1
-            if collecting["type"]!="COLLECTING": raise AttemptError("expected COLLECTING")
-            at.wait_connected(args.timeout_sec)
-            incoming=args.runtime_dir/"srv-01"/f"attempt-{attempt:02d}"/"incoming"; incoming.mkdir(parents=True,exist_ok=True)
-            try: received=receive_file(at,incoming,session_id=session,timeout_sec=args.timeout_sec,max_bytes=1024**3,event_log=args.runtime_dir/"srv-01"/f"attempt-{attempt:02d}"/"artifact-events.jsonl")
-            finally: at.close()
-            collected=_receive(transport,log,state,session,"cli-01",status_seq,"status",args.timeout_sec,"srv-01")
-            if collected["type"]!="COLLECTED": raise AttemptError("expected COLLECTED")
-            destination=multi_host.measurement_trial_path(state["resolved"],args.output_root,"cli-01")
-            _extract_client_archive(Path(received["artifact"]),args.runtime_dir/"srv-01"/f"attempt-{attempt:02d}"/"staging",destination,state)
-            Path(received["artifact"]).unlink()
-            completed.append(attempt)
+        completed_by_count: dict[int, list[int]] = {}
+        decisions_by_count: dict[int, dict[str, Any]] = {}
+        for condition_index, drone_count in enumerate(args.drone_counts):
+            args.drone_count = drone_count
+            if args.attempt_set == "baseline_with_conditional_extension":
+                _clean_deferred_attempts(args, "srv-01", extension)
+            completed: list[int] = []
+            index = 0
+            while True:
+                attempt = planned[index]
+                state = _prepare(args, "srv-01", attempt)
+                session = _session(args, drone_count, attempt, session_total)
+                attempt_dir = _attempt_runtime_dir(args, "srv-01")
+                log = attempt_dir / "control-events.jsonl"
+                log.unlink(missing_ok=True)
+                status_seq = 1
+                command_seq = 1
+                registered = _receive(transport, log, state, session, "cli-01", status_seq, "status", args.timeout_sec, "srv-01")
+                status_seq += 1
+                if registered["type"] != "REGISTERED":
+                    raise AttemptError("expected REGISTERED")
 
-            run_next = index + 1 < len(planned)
-            if (
-                args.attempt_set == "baseline_with_conditional_extension"
-                and attempt == baseline[-1]
-            ):
-                decision = extension_decision(args, policy, baseline)
-                multi_host.atomic_json(
-                    args.runtime_dir / "srv-01" / "extension-decision.json",
-                    decision,
-                )
-                run_next = bool(decision["required"])
-                spread_value = decision["relative_spread"]
-                spread_text = (
-                    f"{spread_value:.6f}"
-                    if isinstance(spread_value, (int, float))
-                    else "unavailable"
-                )
-                print(
-                    "[EXTEND] "
-                    f"required={run_next} spread={spread_text} "
-                    f"threshold={decision['relative_spread_threshold']:.6f} "
-                    f"failure={decision['failure_triggered']}",
-                    flush=True,
-                )
-            decision_type = "NEXT_ATTEMPT" if run_next else "BATCH_COMPLETE"
-            _send(
-                transport,
-                log,
-                _message(
-                    state,
-                    session,
-                    "srv-01",
-                    command_seq,
-                    "command",
-                    decision_type,
-                ),
-                "srv-01",
-            )
-            if not run_next:
-                completed_status = _receive(
-                    transport,
-                    log,
-                    state,
-                    session,
-                    "cli-01",
-                    status_seq + 1,
-                    "status",
-                    args.timeout_sec,
-                    "srv-01",
-                )
-                if completed_status["type"] != "BATCH_COMPLETED":
-                    raise AttemptError("expected BATCH_COMPLETED")
-                break
-            index += 1
-            if index >= len(planned):
-                raise AttemptError("attempt plan ended before BATCH_COMPLETE")
+                def command(value: str, expected: list[str]) -> None:
+                    nonlocal command_seq, status_seq
+                    _send(transport, log, _message(state, session, "srv-01", command_seq, "command", value), "srv-01")
+                    command_seq += 1
+                    for wanted in expected:
+                        got = _receive(transport, log, state, session, "cli-01", status_seq, "status", args.timeout_sec, "srv-01")
+                        status_seq += 1
+                        if got["type"] != wanted:
+                            raise AttemptError(f"expected {wanted}, received {got['type']}")
 
-        rc=scaling.summarize(
+                _run(args, "srv-01", "doctor")
+                command("PREPARE", ["PREPARING", "READY"])
+                _run(args, "srv-01", "start")
+                command("LAUNCH", ["LAUNCHED"])
+                _send(transport, log, _message(state, session, "srv-01", command_seq, "command", "RUN"), "srv-01")
+                command_seq += 1
+                running = _receive(transport, log, state, session, "cli-01", status_seq, "status", args.timeout_sec, "srv-01")
+                status_seq += 1
+                if running["type"] != "RUNNING":
+                    raise AttemptError("expected RUNNING")
+                _run(args, "srv-01", "run")
+                _wait_result(state, args.output_root, "srv-01", args.timeout_sec)
+                terminated = _receive(transport, log, state, session, "cli-01", status_seq, "status", args.timeout_sec, "srv-01")
+                status_seq += 1
+                if terminated["type"] != "TERMINATED":
+                    raise AttemptError("expected TERMINATED")
+                _run(args, "srv-01", "stop")
+                command("CLEANUP", ["CLEANED"])
+                _run(args, "srv-01", "collect")
+                trial = multi_host.measurement_trial_path(state["resolved"], args.output_root, "srv-01")
+                _attach_operation_evidence(args, trial, "srv-01")
+
+                artifact_port = _artifact_port(args, condition_index, attempt, session_total)
+                acfg = write_tcp_endpoint_config(attempt_dir / "artifact-endpoint", role="server", address=args.listen_address, port=artifact_port)
+                at = _artifact_transport(acfg)
+                at.start()
+                _send(transport, log, _message(state, session, "srv-01", command_seq, "command", "COLLECT"), "srv-01")
+                command_seq += 1
+                collecting = _receive(transport, log, state, session, "cli-01", status_seq, "status", args.timeout_sec, "srv-01")
+                status_seq += 1
+                if collecting["type"] != "COLLECTING":
+                    raise AttemptError("expected COLLECTING")
+                at.wait_connected(args.timeout_sec)
+                incoming = attempt_dir / "incoming"
+                incoming.mkdir(parents=True, exist_ok=True)
+                try:
+                    received = receive_file(at, incoming, session_id=session, timeout_sec=args.timeout_sec, max_bytes=1024**3, event_log=attempt_dir / "artifact-events.jsonl")
+                finally:
+                    at.close()
+                collected = _receive(transport, log, state, session, "cli-01", status_seq, "status", args.timeout_sec, "srv-01")
+                if collected["type"] != "COLLECTED":
+                    raise AttemptError("expected COLLECTED")
+                destination = multi_host.measurement_trial_path(state["resolved"], args.output_root, "cli-01")
+                _extract_client_archive(Path(received["artifact"]), attempt_dir / "staging", destination, state)
+                Path(received["artifact"]).unlink()
+                completed.append(attempt)
+
+                run_next = index + 1 < len(planned)
+                if args.attempt_set == "baseline_with_conditional_extension" and attempt == baseline[-1]:
+                    decision = extension_decision(args, policy, baseline)
+                    decision_path = args.runtime_dir / "srv-01" / f"uav-{drone_count:03d}" / "extension-decision.json"
+                    multi_host.atomic_json(decision_path, decision)
+                    decisions_by_count[drone_count] = decision
+                    run_next = bool(decision["required"])
+                    spread = decision["relative_spread"]
+                    spread_text = f"{spread:.6f}" if isinstance(spread, (int, float)) else "unavailable"
+                    print(
+                        f"[EXTEND][uav-{drone_count:03d}] required={run_next} "
+                        f"spread={spread_text} threshold={decision['relative_spread_threshold']:.6f} "
+                        f"failure={decision['failure_triggered']}",
+                        flush=True,
+                    )
+                if run_next:
+                    decision_type = "NEXT_ATTEMPT"
+                elif condition_index + 1 < len(args.drone_counts):
+                    decision_type = "NEXT_CONDITION"
+                else:
+                    decision_type = "BATCH_COMPLETE"
+                _send(transport, log, _message(state, session, "srv-01", command_seq, "command", decision_type), "srv-01")
+                if decision_type == "BATCH_COMPLETE":
+                    completed_status = _receive(transport, log, state, session, "cli-01", status_seq + 1, "status", args.timeout_sec, "srv-01")
+                    if completed_status["type"] != "BATCH_COMPLETED":
+                        raise AttemptError("expected BATCH_COMPLETED")
+                if not run_next:
+                    break
+                index += 1
+                if index >= len(planned):
+                    raise AttemptError("attempt plan ended before condition completion")
+
+            completed_by_count[drone_count] = completed
+            decision_path = args.runtime_dir / "srv-01" / f"uav-{drone_count:03d}" / "extension-decision.json"
+            if decision_path.is_file():
+                decisions_by_count[drone_count] = json.loads(decision_path.read_text(encoding="utf-8"))
+            rc=scaling.summarize(args.experiment,args.output_root,drone_count,attempt_numbers=completed)
+            if rc: raise AttemptError(f"paired summary is incomplete for {drone_count} UAV")
+            print(f"[OK] {drone_count} UAV attempts {','.join(map(str, completed))} summarized", flush=True)
+
+        scaling.summarize_matrix(
             args.experiment,
             args.output_root,
-            args.drone_count,
-            attempt_numbers=completed,
+            completed_by_count,
+            decisions_by_count,
         )
-        if rc: raise AttemptError("paired summary is incomplete")
-        print(
-            "[OK] multi-host attempts "
-            + ",".join(map(str, completed))
-            + " completed, collected, and summarized"
-        )
+        print("[OK] selected multi-host condition matrix completed", flush=True)
         return 0
-    finally: transport.close()
+    finally:
+        transport.close()
 
 
 def parser() -> argparse.ArgumentParser:

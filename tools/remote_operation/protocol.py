@@ -29,6 +29,7 @@ COMMAND_TYPES = frozenset(
         "CLEANUP",
         "COLLECT",
         "NEXT_ATTEMPT",
+        "NEXT_CONDITION",
         "BATCH_COMPLETE",
         "ABORT",
     }
@@ -79,8 +80,11 @@ COMMAND_TRANSITIONS = {
     "RUN": frozenset({"CLEANUP", "ABORT"}),
     "ABORT": frozenset({"CLEANUP"}),
     "CLEANUP": frozenset({"COLLECT"}),
-    "COLLECT": frozenset({"NEXT_ATTEMPT", "BATCH_COMPLETE"}),
+    "COLLECT": frozenset(
+        {"NEXT_ATTEMPT", "NEXT_CONDITION", "BATCH_COMPLETE"}
+    ),
     "NEXT_ATTEMPT": frozenset(),
+    "NEXT_CONDITION": frozenset(),
     "BATCH_COMPLETE": frozenset(),
 }
 STATUS_TRANSITIONS = {

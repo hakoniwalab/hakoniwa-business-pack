@@ -780,6 +780,75 @@ def summarize(
     return 0 if not missing else 1
 
 
+def summarize_matrix(
+    path: Path,
+    output_root: Path,
+    attempts_by_count: dict[int, list[int]],
+    extension_decisions: dict[int, dict[str, Any]] | None = None,
+) -> tuple[Path, Path]:
+    """Combine completed per-condition reports without assuming equal attempts."""
+    raw, declared_counts, _attempts = load_scaling(path)
+    if not attempts_by_count:
+        raise ScalingError("matrix summary requires at least one condition")
+    counts = list(attempts_by_count)
+    if counts != sorted(set(counts)) or any(count not in declared_counts for count in counts):
+        raise ScalingError("matrix summary counts must be unique declared conditions")
+    measurement = raw["measurement"]
+    if measurement["mode"] != "performance":
+        raise ScalingError("matrix summary is only available for performance mode")
+    results_directory = str(raw["results"]["directory"])
+    series = str(measurement["series"])
+    sleep = int(raw["runtime"]["conductor"]["real_sleep_msec"])
+    summary_root = output_root / results_directory / series / "summary"
+    conditions: list[dict[str, Any]] = []
+    all_rows: list[dict[str, Any]] = []
+    for count in counts:
+        stem = f"multi-host-scaling-sleep-{sleep:03d}ms-uav-{count:03d}"
+        condition_path = summary_root / f"{stem}.json"
+        if not condition_path.is_file():
+            raise ScalingError(f"condition summary is missing: {condition_path}")
+        payload = json.loads(condition_path.read_text(encoding="utf-8"))
+        expected_attempts = attempts_by_count[count]
+        if payload.get("complete") is not True or payload.get("attempt_numbers") != expected_attempts:
+            raise ScalingError(f"condition summary is incomplete or stale: {condition_path}")
+        rows = payload.get("results")
+        if not isinstance(rows, list):
+            raise ScalingError(f"condition summary results must be a list: {condition_path}")
+        all_rows.extend(rows)
+        conditions.append(
+            {
+                "drone_count": count,
+                "attempt_numbers": expected_attempts,
+                "extension_decision": (extension_decisions or {}).get(count),
+                "summary": str(condition_path),
+                "statistics": payload.get("statistics"),
+            }
+        )
+    matrix_stem = f"multi-host-scaling-sleep-{sleep:03d}ms-matrix"
+    json_path = summary_root / f"{matrix_stem}.json"
+    csv_path = summary_root / f"{matrix_stem}.csv"
+    multi_host.atomic_json(
+        json_path,
+        {
+            "experiment": "multi-host-scaling-matrix",
+            "protocol_status": measurement["protocol_status"],
+            "real_sleep_msec": sleep,
+            "drone_counts": counts,
+            "complete": True,
+            "conditions": conditions,
+            "results": all_rows,
+            "statistics": _statistics(all_rows),
+        },
+    )
+    with csv_path.open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=SUMMARY_FIELDS)
+        writer.writeheader()
+        writer.writerows(all_rows)
+    print(f"Matrix JSON : {json_path}")
+    print(f"Matrix CSV  : {csv_path}")
+    return json_path, csv_path
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument("--experiment", type=Path, default=DEFAULT_EXPERIMENT)

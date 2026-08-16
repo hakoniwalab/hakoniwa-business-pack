@@ -173,8 +173,8 @@ to WSL2.
 
 ### Automated attempt batch
 
-`multi_host_scaling_attempt.py` automates every declared attempt for one
-scaling condition over
+`multi_host_scaling_attempt.py` automates every declared attempt for one or
+more scaling conditions over
 the constrained PDU remote-operation protocol. It configures both hosts,
 checks them, starts `srv-01` before `cli-01`, waits for the Conductor join
 barrier, runs the measurement, stops both Launchers, collects host-local
@@ -214,7 +214,7 @@ Git/configuration identity are required on both peers. The control port
 defaults to `54200`. Artifact transfers use `54201`, `54202`, and `54203` for
 attempts 1 through 3, avoiding immediate TCP-port reuse between archives. WSL2
 initiates every connection.
-The current Recipe declares three attempts. Both processes remain connected
+The current Recipe declares three baseline attempts. Both processes remain connected
 while `attempt-01`, `attempt-02`, and `attempt-03` are configured, run,
 collected, and transferred in order. Each attempt derives its own protocol
 session ID from the supplied batch ID.
@@ -321,16 +321,18 @@ Both hosts consume the same baseline remote-operation profile:
 configs/remote-operation/multi-host-scaling-attempts.yaml
 ```
 
-It selects the 256-UAV condition and the dedicated
+It selects `drone_counts: all`, which resolves to the Experiment-owned
+`[64, 128, 256]` matrix, and uses the dedicated
 `drone-fleet-multi-host-attempt-extension-smoke` workspace, preserving the
 earlier automation-preflight results. The Experiment remains the
 authority for baseline attempts 1 through 3 and extension attempts 4 and 5;
 the remote-operation profile selects
 `attempt_set: baseline_with_conditional_extension` and does not duplicate
-either list. The server runs baseline attempts 1 through 3, evaluates the
-paired results, and sends either `NEXT_ATTEMPT` or `BATCH_COMPLETE` to the
-client. Attempts 4 and 5 therefore run in the same two host processes only when
-the declared trigger fires.
+either list. For each UAV count, the server runs baseline attempts 1 through
+3, evaluates that condition's paired results, and sends `NEXT_ATTEMPT`,
+`NEXT_CONDITION`, or `BATCH_COMPLETE` to the client. Attempts 4 and 5 therefore
+run only for the condition whose declared trigger fires. The control
+connection stays open while all selected conditions execute.
 
 ```bash
 # Mac
@@ -343,7 +345,20 @@ python3 tools/workspace.py run -- \
 python3 tools/workspace.py run -- \
   python3 -m tools.remote_operation.multi_host_scaling_attempt \
   --profile configs/remote-operation/multi-host-scaling-attempts.yaml \
-  client
+client
+```
+
+Runtime evidence is isolated by condition and attempt under
+`runtime/remote-operation/<host>/uav-XXX/attempt-YY/`. After every condition,
+the server writes its existing paired JSON/CSV summary. After the final
+condition it also writes the combined matrix reports:
+
+```text
+results/multi-host-scaling-preflight/summary/
+├── multi-host-scaling-sleep-001ms-uav-064.{json,csv}
+├── multi-host-scaling-sleep-001ms-uav-128.{json,csv}
+├── multi-host-scaling-sleep-001ms-uav-256.{json,csv}
+└── multi-host-scaling-sleep-001ms-matrix.{json,csv}
 ```
 
 Equal allocation resolves each condition across `srv-01` and

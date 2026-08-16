@@ -5,7 +5,7 @@ operation:
   experiment: recipes/experiments/drone-fleet-performance/multi-host-temporal-validation.yaml
 
 selection:
-  drone_count: 256
+  drone_counts: [256]
   attempt_set: baseline
 
 workspace:

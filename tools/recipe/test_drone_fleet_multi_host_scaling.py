@@ -345,6 +345,52 @@ class DroneFleetMultiHostScalingTest(unittest.TestCase):
         self.assertEqual(len(report["results"]), 5)
         self.assertEqual(report["statistics"][0]["attempt_count"], 5)
 
+    def test_matrix_summary_combines_conditions_with_different_attempt_counts(self) -> None:
+        raw, _counts, _attempts = scaling.load_scaling(scaling.DEFAULT_EXPERIMENT)
+        series = raw["measurement"]["series"]
+        summary_root_parts = ("results", series, "summary")
+        attempts_by_count = {64: [1, 2, 3], 128: [1, 2, 3, 4, 5]}
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            summary_root = output.joinpath(*summary_root_parts)
+            summary_root.mkdir(parents=True)
+            for count, attempt_numbers in attempts_by_count.items():
+                rows = [
+                    {
+                        "configuration_id": f"uav-{count:03d}-sleep-001ms",
+                        "drone_count": count,
+                        "attempt": number,
+                        "status": "success",
+                        "paired": True,
+                        "rtf": 1.0,
+                    }
+                    for number in attempt_numbers
+                ]
+                (summary_root / f"multi-host-scaling-sleep-001ms-uav-{count:03d}.json").write_text(
+                    json.dumps(
+                        {
+                            "complete": True,
+                            "attempt_numbers": attempt_numbers,
+                            "results": rows,
+                            "statistics": scaling._statistics(rows),
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+            json_path, csv_path = scaling.summarize_matrix(
+                scaling.DEFAULT_EXPERIMENT,
+                output,
+                attempts_by_count,
+                {128: {"required": True}},
+            )
+            report = json.loads(json_path.read_text(encoding="utf-8"))
+
+        self.assertTrue(csv_path.name.endswith("-matrix.csv"))
+        self.assertEqual(report["drone_counts"], [64, 128])
+        self.assertEqual(len(report["results"]), 8)
+        self.assertIsNone(report["conditions"][0]["extension_decision"])
+        self.assertTrue(report["conditions"][1]["extension_decision"]["required"])
+
     def test_temporal_summary_pairs_host_lag_and_world_time_boundaries(self) -> None:
         raw, _counts, _attempts = scaling.load_scaling(TEMPORAL_EXPERIMENT)
         sleep = raw["runtime"]["conductor"]["real_sleep_msec"]

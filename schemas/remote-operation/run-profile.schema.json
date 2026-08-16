@@ -35,9 +35,19 @@
     "selection": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["drone_count", "attempt_set"],
+      "required": ["drone_counts", "attempt_set"],
       "properties": {
-        "drone_count": {"type": "integer", "minimum": 1},
+        "drone_counts": {
+          "oneOf": [
+            {"const": "all"},
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {"type": "integer", "minimum": 1}
+            }
+          ]
+        },
         "attempt_set": {
           "enum": [
             "baseline",

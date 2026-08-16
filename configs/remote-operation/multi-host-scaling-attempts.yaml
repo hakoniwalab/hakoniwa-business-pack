@@ -1,11 +1,11 @@
 version: 1
 
 operation:
-  id: mh-scaling-uav256-attempts-01
+  id: mh-scaling-matrix-01
   experiment: recipes/experiments/drone-fleet-performance/multi-host-scaling.yaml
 
 selection:
-  drone_count: 256
+  drone_counts: all
   attempt_set: baseline_with_conditional_extension
 
 workspace:

@@ -30,6 +30,7 @@
         "CLEANUP",
         "COLLECT",
         "NEXT_ATTEMPT",
+        "NEXT_CONDITION",
         "BATCH_COMPLETE",
         "ABORT",
         "REGISTERED",
@@ -96,6 +97,7 @@
               "CLEANUP",
               "COLLECT",
               "NEXT_ATTEMPT",
+              "NEXT_CONDITION",
               "BATCH_COMPLETE",
               "ABORT"
             ]
