@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Hakoniwa Business Pack multi-host run profile",
+  "description": "A repository-managed invocation contract for one multi-host experiment. Both hosts consume the same profile and supply only their role.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "operation",
+    "selection",
+    "workspace",
+    "lifecycle",
+    "transport",
+    "timeout_sec"
+  ],
+  "properties": {
+    "version": {"const": 1},
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "experiment"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "experiment": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["drone_count"],
+      "properties": {
+        "drone_count": {"type": "integer", "minimum": 1}
+      }
+    },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["output_root"],
+      "properties": {
+        "output_root": {"type": "string", "minLength": 1}
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clean_before_run"],
+      "properties": {
+        "clean_before_run": {"type": "boolean"}
+      }
+    },
+    "transport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["control_port", "artifact_port"],
+      "properties": {
+        "control_port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "artifact_port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      }
+    },
+    "timeout_sec": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    }
+  }
+}

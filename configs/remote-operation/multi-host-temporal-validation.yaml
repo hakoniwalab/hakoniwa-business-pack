@@ -1,0 +1,20 @@
+version: 1
+
+operation:
+  id: mh-temporal-uav256-01
+  experiment: recipes/experiments/drone-fleet-performance/multi-host-temporal-validation.yaml
+
+selection:
+  drone_count: 256
+
+workspace:
+  output_root: work/recipes/drone-fleet-multi-host-temporal-smoke
+
+lifecycle:
+  clean_before_run: true
+
+transport:
+  control_port: 54200
+  artifact_port: 54201
+
+timeout_sec: 600.0

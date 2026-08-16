@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -32,6 +33,155 @@ ROOT = Path(__file__).resolve().parents[2]
 OPERATOR = ROOT / "tools" / "recipe" / "drone_fleet_multi_host_scaling.py"
 class AttemptError(RuntimeError):
     pass
+
+
+_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def _mapping(value: Any, label: str, allowed: set[str]) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise AttemptError(f"{label} must be a mapping")
+    unknown = sorted(set(value) - allowed)
+    if unknown:
+        raise AttemptError(f"unknown {label} fields: {', '.join(unknown)}")
+    return value
+
+
+def _repo_path(value: Any, label: str) -> Path:
+    if not isinstance(value, str) or not value:
+        raise AttemptError(f"{label} must be a non-empty repository-relative path")
+    path = Path(value)
+    if path.is_absolute() or ".." in path.parts:
+        raise AttemptError(f"{label} must stay inside the Business Pack repository")
+    return (ROOT / path).resolve()
+
+
+def load_run_profile(path: Path) -> dict[str, Any]:
+    raw = scaling.yaml_support.load_simple_yaml(path)
+    root = _mapping(
+        raw,
+        "profile",
+        {"version", "operation", "selection", "workspace", "lifecycle", "transport", "timeout_sec"},
+    )
+    if root.get("version") != 1:
+        raise AttemptError("profile.version must be 1")
+    operation = _mapping(root.get("operation"), "operation", {"id", "experiment"})
+    session_id = operation.get("id")
+    if (
+        not isinstance(session_id, str)
+        or len(session_id) > 128
+        or _IDENTIFIER_RE.fullmatch(session_id) is None
+    ):
+        raise AttemptError("operation.id must be a valid remote-operation identifier")
+    experiment = _repo_path(operation.get("experiment"), "operation.experiment")
+    if not experiment.is_file():
+        raise AttemptError(f"operation.experiment does not exist: {experiment}")
+    selection = _mapping(root.get("selection"), "selection", {"drone_count"})
+    drone_count = selection.get("drone_count")
+    if isinstance(drone_count, bool) or not isinstance(drone_count, int) or drone_count < 1:
+        raise AttemptError("selection.drone_count must be a positive integer")
+    workspace = _mapping(root.get("workspace"), "workspace", {"output_root"})
+    output_root = _repo_path(workspace.get("output_root"), "workspace.output_root")
+    lifecycle = _mapping(root.get("lifecycle"), "lifecycle", {"clean_before_run"})
+    clean = lifecycle.get("clean_before_run")
+    if not isinstance(clean, bool):
+        raise AttemptError("lifecycle.clean_before_run must be boolean")
+    transport = _mapping(root.get("transport"), "transport", {"control_port", "artifact_port"})
+    ports: dict[str, int] = {}
+    for key in ("control_port", "artifact_port"):
+        value = transport.get(key)
+        if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 65535:
+            raise AttemptError(f"transport.{key} must be an integer from 1 to 65535")
+        ports[key] = value
+    if ports["control_port"] == ports["artifact_port"]:
+        raise AttemptError("control and artifact ports must differ")
+    timeout = root.get("timeout_sec")
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout <= 0:
+        raise AttemptError("timeout_sec must be a positive number")
+
+    experiment_raw, counts, _attempts = scaling.load_scaling(experiment)
+    if drone_count not in counts:
+        raise AttemptError(
+            "selection.drone_count must be present in the Experiment matrix"
+        )
+    deployment = experiment_raw.get("deployment", {})
+    server_host = deployment.get("server_host")
+    hosts = deployment.get("hosts", {})
+    server = hosts.get(server_host) if isinstance(hosts, dict) else None
+    server_address = server.get("address") if isinstance(server, dict) else None
+    if not isinstance(server_address, str) or not server_address:
+        raise AttemptError("Experiment server host must declare a reachable address")
+    return {
+        "session_id": session_id,
+        "experiment": experiment,
+        "drone_count": drone_count,
+        "output_root": output_root,
+        "clean": clean,
+        "control_port": ports["control_port"],
+        "artifact_port": ports["artifact_port"],
+        "timeout_sec": float(timeout),
+        "server_address": server_address,
+    }
+
+
+def resolve_arguments(args: argparse.Namespace) -> argparse.Namespace:
+    if args.profile is not None:
+        override_fields = (
+            "experiment",
+            "output_root",
+            "runtime_dir",
+            "drone_count",
+            "session_id",
+            "clean",
+            "timeout_sec",
+            "listen_address",
+            "server_address",
+            "control_port",
+            "artifact_port",
+        )
+        supplied = [
+            field
+            for field in override_fields
+            if getattr(args, field, None) is not None
+        ]
+        if supplied:
+            raise AttemptError(
+                "--profile cannot be combined with CLI overrides: "
+                + ", ".join(supplied)
+            )
+        profile = load_run_profile(args.profile.resolve())
+        args.session_id = profile["session_id"]
+        args.experiment = profile["experiment"]
+        args.drone_count = profile["drone_count"]
+        args.output_root = profile["output_root"]
+        args.clean = profile["clean"]
+        args.timeout_sec = profile["timeout_sec"]
+        args.control_port = profile["control_port"]
+        args.artifact_port = profile["artifact_port"]
+        if args.role == "server":
+            args.listen_address = profile["server_address"]
+        else:
+            args.server_address = profile["server_address"]
+    else:
+        if args.session_id is None:
+            raise AttemptError("--session-id is required when --profile is not used")
+        args.experiment = (args.experiment or scaling.DEFAULT_EXPERIMENT).resolve()
+        args.output_root = (args.output_root or scaling.WORK_ROOT).resolve()
+        args.drone_count = args.drone_count or 256
+        args.clean = bool(args.clean)
+        args.timeout_sec = args.timeout_sec or 600.0
+        args.control_port = args.control_port or 54200
+        args.artifact_port = args.artifact_port or 54201
+        if args.role == "server":
+            args.listen_address = args.listen_address or "192.168.2.100"
+        else:
+            args.server_address = args.server_address or "192.168.2.100"
+    args.runtime_dir = (
+        args.runtime_dir.resolve()
+        if args.runtime_dir is not None
+        else args.output_root / "runtime" / "remote-operation"
+    )
+    return args
 
 
 def _run(args: argparse.Namespace, host: str, operation: str, extra: list[str] | None = None) -> None:
@@ -281,22 +431,22 @@ def server(args: argparse.Namespace) -> int:
 
 
 def parser() -> argparse.ArgumentParser:
-    p=argparse.ArgumentParser(description=__doc__); p.add_argument("--experiment",type=Path,default=scaling.DEFAULT_EXPERIMENT)
-    p.add_argument("--output-root",type=Path,default=scaling.WORK_ROOT); p.add_argument("--runtime-dir",type=Path)
-    p.add_argument("--drone-count",type=int,default=256); p.add_argument("--session-id",required=True); p.add_argument("--clean",action="store_true")
-    p.add_argument("--timeout-sec",type=float,default=600.0); sub=p.add_subparsers(dest="role",required=True)
-    s=sub.add_parser("server"); s.add_argument("--listen-address",default="192.168.2.100"); s.add_argument("--control-port",type=int,default=54200); s.add_argument("--artifact-port",type=int,default=54201)
-    c=sub.add_parser("client"); c.add_argument("--server-address",default="192.168.2.100"); c.add_argument("--control-port",type=int,default=54200); c.add_argument("--artifact-port",type=int,default=54201)
+    p=argparse.ArgumentParser(description=__doc__); p.add_argument("--profile",type=Path)
+    p.add_argument("--experiment",type=Path); p.add_argument("--output-root",type=Path); p.add_argument("--runtime-dir",type=Path)
+    p.add_argument("--drone-count",type=int); p.add_argument("--session-id"); p.add_argument("--clean",action="store_true",default=None)
+    p.add_argument("--timeout-sec",type=float); sub=p.add_subparsers(dest="role",required=True)
+    s=sub.add_parser("server"); s.add_argument("--listen-address"); s.add_argument("--control-port",type=int); s.add_argument("--artifact-port",type=int)
+    c=sub.add_parser("client"); c.add_argument("--server-address"); c.add_argument("--control-port",type=int); c.add_argument("--artifact-port",type=int)
     return p
 
 
 def main(argv: list[str] | None=None) -> int:
-    args=parser().parse_args(argv); args.experiment=args.experiment.resolve(); args.output_root=args.output_root.resolve()
-    args.runtime_dir=(args.runtime_dir.resolve() if args.runtime_dir is not None else args.output_root / "runtime" / "remote-operation")
-    try: return server(args) if args.role=="server" else client(args)
+    try:
+        args=resolve_arguments(parser().parse_args(argv))
+        return server(args) if args.role=="server" else client(args)
     except Exception as exc:
         print(f"[ERROR] {exc}",file=sys.stderr)
-        if getattr(args, "prepared_host", None) is not None:
+        if "args" in locals() and getattr(args, "prepared_host", None) is not None:
             try:
                 _run(args, args.prepared_host, "stop")
             except Exception as cleanup_exc:

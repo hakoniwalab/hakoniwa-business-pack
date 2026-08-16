@@ -61,6 +61,14 @@ A consuming Recipe owns:
 - result preservation and recovery policy;
 - the decision about which host is controller or worker.
 
+For repeatable multi-host experiments, both hosts should consume one checked-in
+run profile governed by `schemas/remote-operation/run-profile.schema.json`.
+The profile fixes the Experiment, condition, session, workspace, lifecycle,
+ports, and timeout; the command line supplies only `server` or `client`.
+Profile mode rejects CLI overrides so two hosts cannot silently select different
+conditions. The server address remains authoritative in the Experiment's
+deployment definition.
+
 ## Message lifecycle
 
 The current lifecycle is:

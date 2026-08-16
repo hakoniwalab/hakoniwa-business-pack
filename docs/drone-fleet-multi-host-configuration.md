@@ -219,6 +219,56 @@ while `attempt-01`, `attempt-02`, and `attempt-03` are configured, run,
 collected, and transferred in order. Each attempt derives its own protocol
 session ID from the supplied batch ID.
 
+### Automated Temporal Validation
+
+Temporal Validation uses the same remote-operation state machine and verified
+artifact transfer, but it is a separate one-attempt Experiment and result
+series. It enables the Core-to-slowest-local-Asset observer on both hosts. Its
+RTF is observer-instrumented validation evidence and must not be mixed with the
+performance series.
+
+Start the Mac server first:
+
+```bash
+python3 tools/workspace.py run -- \
+  python3 -m tools.remote_operation.multi_host_scaling_attempt \
+  --profile configs/remote-operation/multi-host-temporal-validation.yaml \
+  server
+```
+
+Then start the WSL2 client with the same version-controlled profile:
+
+```bash
+python3 tools/workspace.py run -- \
+  python3 -m tools.remote_operation.multi_host_scaling_attempt \
+  --profile configs/remote-operation/multi-host-temporal-validation.yaml \
+  client
+```
+
+The profile is the invocation authority for the Experiment path, selected UAV
+count, session identity, output root, cleanup policy, ports, and timeout. CLI
+overrides are rejected when `--profile` is present. The reachable server
+address is resolved from the Experiment deployment, so it is not duplicated in
+the profile. The profile contract is
+`schemas/remote-operation/run-profile.schema.json`.
+
+The server writes the paired report to:
+
+```text
+work/recipes/drone-fleet-multi-host-temporal-smoke/
+└── results/multi-host-temporal-validation/summary/
+    ├── multi-host-temporal-sleep-001ms-uav-256.json
+    └── multi-host-temporal-sleep-001ms-uav-256.csv
+```
+
+The report keeps each host's lag median, p95, maximum, accepted/rejected sample
+counts, and acceptance ratio. It also records the absolute difference between
+the hosts' measurement start and end virtual-time boundaries. No universal lag
+threshold is inferred by the tool; acceptance of those observed values remains
+an explicit experiment review decision. The run fails closed when either
+observer is disabled, either host has no accepted samples, identities differ,
+or the paired virtual-time boundaries are missing.
+
 After collection, each host attempt is self-contained:
 
 ```text

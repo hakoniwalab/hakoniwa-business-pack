@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Operate the attempt-1 ICRA multi-host scaling preflight."""
+"""Operate ICRA multi-host performance and Temporal Validation matrices."""
 
 from __future__ import annotations
 
@@ -42,6 +42,29 @@ SUMMARY_FIELDS = (
     "cli-01_cpu_average_percent",
     "srv-01_cpu_max_percent",
     "cli-01_cpu_max_percent",
+    "config_hash",
+)
+TEMPORAL_SUMMARY_FIELDS = (
+    "configuration_id",
+    "drone_count",
+    "real_sleep_msec",
+    "attempt",
+    "paired",
+    "status",
+    "world_time_start_difference_usec",
+    "world_time_end_difference_usec",
+    "srv-01_lag_median_usec",
+    "srv-01_lag_p95_usec",
+    "srv-01_lag_max_usec",
+    "srv-01_accepted_sample_count",
+    "srv-01_rejected_sample_count",
+    "srv-01_acceptance_ratio",
+    "cli-01_lag_median_usec",
+    "cli-01_lag_p95_usec",
+    "cli-01_lag_max_usec",
+    "cli-01_accepted_sample_count",
+    "cli-01_rejected_sample_count",
+    "cli-01_acceptance_ratio",
     "config_hash",
 )
 
@@ -100,11 +123,29 @@ def load_scaling(path: Path) -> tuple[dict[str, Any], list[int], int]:
         raise ScalingError("measurement.configuration_id must be auto")
     if measurement.get("attempt") != 1:
         raise ScalingError("measurement.attempt must be the template value 1")
+    mode = measurement.get("mode")
+    if mode not in {"performance", "temporal"}:
+        raise ScalingError("measurement.mode must be performance or temporal")
+    temporal_interval = measurement.get("temporal_sampling_interval_usec")
+    if mode == "temporal":
+        _positive(
+            temporal_interval,
+            "measurement.temporal_sampling_interval_usec",
+        )
+    elif temporal_interval is not None:
+        raise ScalingError(
+            "performance measurement must not set temporal_sampling_interval_usec"
+        )
     return raw, drone_counts, attempts
 
 
-def configuration_id(drone_count: int, real_sleep_msec: int) -> str:
-    return f"uav-{drone_count:03d}-sleep-{real_sleep_msec:03d}ms"
+def configuration_id(
+    drone_count: int,
+    real_sleep_msec: int,
+    measurement_mode: str = "performance",
+) -> str:
+    prefix = "temporal-" if measurement_mode == "temporal" else ""
+    return f"{prefix}uav-{drone_count:03d}-sleep-{real_sleep_msec:03d}ms"
 
 
 def resolve_condition(raw: dict[str, Any], drone_count: int, attempt: int = 1) -> dict[str, Any]:
@@ -148,7 +189,9 @@ def resolve_condition(raw: dict[str, Any], drone_count: int, attempt: int = 1) -
     )
     sleep = int(result["runtime"]["conductor"]["real_sleep_msec"])
     measurement = result["measurement"]
-    measurement["configuration_id"] = configuration_id(drone_count, sleep)
+    measurement["configuration_id"] = configuration_id(
+        drone_count, sleep, str(measurement["mode"])
+    )
     attempts = _positive(matrix.get("attempts"), "matrix.attempts")
     if attempt < 1 or attempt > attempts:
         raise ScalingError(f"attempt {attempt} is outside 1..{attempts}")
@@ -157,13 +200,17 @@ def resolve_condition(raw: dict[str, Any], drone_count: int, attempt: int = 1) -
 
 
 def generated_experiment_path(
-    output_root: Path, drone_count: int, real_sleep_msec: int, attempt: int = 1
+    output_root: Path,
+    drone_count: int,
+    real_sleep_msec: int,
+    attempt: int = 1,
+    measurement_mode: str = "performance",
 ) -> Path:
     return (
         output_root
         / "matrix"
         / "multi-host-scaling"
-        / configuration_id(drone_count, real_sleep_msec)
+        / configuration_id(drone_count, real_sleep_msec, measurement_mode)
         / f"attempt-{attempt:02d}.yaml"
     )
 
@@ -195,7 +242,10 @@ def configure(args: argparse.Namespace) -> int:
         )
     condition = resolve_condition(raw, args.drone_count, args.attempt)
     sleep = int(condition["runtime"]["conductor"]["real_sleep_msec"])
-    generated = generated_experiment_path(args.output_root, args.drone_count, sleep, args.attempt)
+    mode = str(condition["measurement"]["mode"])
+    generated = generated_experiment_path(
+        args.output_root, args.drone_count, sleep, args.attempt, mode
+    )
     yaml_support.write_simple_yaml(generated, condition)
     args.generated_experiment = generated
     delegated = delegate_arguments(args, "configure")
@@ -206,8 +256,9 @@ def configure(args: argparse.Namespace) -> int:
 def plan(path: Path) -> int:
     raw, counts, attempts = load_scaling(path)
     sleep = int(raw["runtime"]["conductor"]["real_sleep_msec"])
+    mode = str(raw["measurement"]["mode"])
     hosts = raw["deployment"]["hosts"]
-    print("Experiment C: multi-host scaling preflight")
+    print(f"Experiment C: multi-host {mode} preflight")
     print(f"real_sleep_msec: {sleep} (scalar)")
     print(f"attempts: {attempts}")
     for count in counts:
@@ -216,7 +267,7 @@ def plan(path: Path) -> int:
             f"{host_id}={host['drone_count']} UAV/{host['process_count']} proc"
             for host_id, host in resolved["deployment"]["hosts"].items()
         )
-        print(f"- {configuration_id(count, sleep)}: {placement}")
+        print(f"- {configuration_id(count, sleep, mode)}: {placement}")
     print(
         "Process policy: "
         + ", ".join(
@@ -263,6 +314,8 @@ def validate_result_identity(
     configuration_id: str,
     attempt: int,
     real_sleep_msec: int,
+    measurement_mode: str,
+    temporal_sampling_interval_usec: int | None = None,
 ) -> None:
     metadata = payload.get("metadata")
     if not isinstance(metadata, dict):
@@ -276,6 +329,11 @@ def validate_result_identity(
             configuration_id,
         ),
         "attempt": (metadata.get("attempt"), attempt),
+        "mode": (payload.get("mode"), measurement_mode),
+        "temporal_observer_enabled": (
+            metadata.get("temporal_observer_enabled"),
+            measurement_mode == "temporal",
+        ),
     }
     mismatches = [
         f"{field}={actual!r} (expected {wanted!r})"
@@ -293,8 +351,197 @@ def validate_result_identity(
             "time_coordination.conductor_real_sleep_msec="
             f"{actual_sleep!r} (expected {real_sleep_msec!r})"
         )
+    actual_temporal_interval = metadata.get("temporal_sampling_interval_usec")
+    if actual_temporal_interval != temporal_sampling_interval_usec:
+        mismatches.append(
+            "temporal_sampling_interval_usec="
+            f"{actual_temporal_interval!r} "
+            f"(expected {temporal_sampling_interval_usec!r})"
+        )
     if mismatches:
         raise ScalingError(f"result identity mismatch in {path}: " + "; ".join(mismatches))
+
+
+def _required_number(mapping: Any, key: str, path: Path) -> float:
+    value = _number(mapping, key)
+    if value is None:
+        raise ScalingError(f"{key} is missing or not numeric in {path}")
+    return value
+
+
+def _temporal_metrics(payload: dict[str, Any], path: Path) -> dict[str, float | int]:
+    temporal = payload.get("temporal")
+    if not isinstance(temporal, dict):
+        raise ScalingError(f"temporal result is missing: {path}")
+    accepted = temporal.get("accepted_sample_count")
+    rejected = temporal.get("rejected_sample_count")
+    sample_count = temporal.get("sample_count")
+    if isinstance(accepted, bool) or not isinstance(accepted, int) or accepted < 1:
+        raise ScalingError(f"accepted temporal samples are missing: {path}")
+    if isinstance(rejected, bool) or not isinstance(rejected, int) or rejected < 0:
+        raise ScalingError(f"rejected temporal sample count is invalid: {path}")
+    if (
+        isinstance(sample_count, bool)
+        or not isinstance(sample_count, int)
+        or sample_count != accepted + rejected
+    ):
+        raise ScalingError(f"temporal sample accounting is inconsistent: {path}")
+    acceptance_ratio = _required_number(temporal, "acceptance_ratio", path)
+    expected_ratio = accepted / sample_count
+    if not 0.0 <= acceptance_ratio <= 1.0 or abs(
+        acceptance_ratio - expected_ratio
+    ) > 1e-9:
+        raise ScalingError(f"temporal acceptance ratio is inconsistent: {path}")
+    return {
+        "lag_median_usec": _required_number(temporal, "lag_median_usec", path),
+        "lag_p95_usec": _required_number(temporal, "lag_p95_usec", path),
+        "lag_max_usec": _required_number(temporal, "lag_max_usec", path),
+        "accepted_sample_count": accepted,
+        "rejected_sample_count": rejected,
+        "acceptance_ratio": acceptance_ratio,
+    }
+
+
+def _temporal_summary(
+    raw: dict[str, Any],
+    counts: list[int],
+    attempts: int,
+    output_root: Path,
+    selected_drone_count: int | None,
+) -> int:
+    measurement = raw["measurement"]
+    series = str(measurement["series"])
+    results_directory = str(raw["results"]["directory"])
+    sleep = int(raw["runtime"]["conductor"]["real_sleep_msec"])
+    temporal_interval = int(measurement["temporal_sampling_interval_usec"])
+    host_ids = list(raw["deployment"]["allocation"]["host_order"])
+    if host_ids != ["srv-01", "cli-01"]:
+        raise ScalingError(
+            "multi-host Temporal Validation currently requires srv-01 and cli-01"
+        )
+    rows: list[dict[str, Any]] = []
+    missing: list[str] = []
+    for count in counts:
+        config_id = configuration_id(count, sleep, "temporal")
+        for attempt in range(1, attempts + 1):
+            payloads: dict[str, dict[str, Any]] = {}
+            metrics: dict[str, dict[str, float | int]] = {}
+            for host_id in host_ids:
+                result = result_path(
+                    output_root,
+                    results_directory,
+                    series,
+                    host_id,
+                    config_id,
+                    attempt,
+                )
+                if not result.is_file():
+                    missing.append(str(result))
+                    continue
+                try:
+                    payload = json.loads(result.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError) as exc:
+                    raise ScalingError(f"cannot read result {result}: {exc}") from exc
+                if not isinstance(payload, dict):
+                    raise ScalingError(f"result must be a JSON object: {result}")
+                validate_result_identity(
+                    payload,
+                    path=result,
+                    host_id=host_id,
+                    configuration_id=config_id,
+                    attempt=attempt,
+                    real_sleep_msec=sleep,
+                    measurement_mode="temporal",
+                    temporal_sampling_interval_usec=temporal_interval,
+                )
+                payloads[host_id] = payload
+                metrics[host_id] = _temporal_metrics(payload, result)
+            paired = set(payloads) == set(host_ids)
+            hashes = {
+                payload.get("metadata", {}).get("config_hash")
+                for payload in payloads.values()
+            }
+            if paired and (None in hashes or len(hashes) != 1):
+                raise ScalingError(
+                    f"config hash mismatch for {config_id} attempt {attempt}: {hashes}"
+                )
+            statuses = {payload.get("status") for payload in payloads.values()}
+            world_start = {
+                host_id: _number(payload.get("performance"), "world_time_start_usec")
+                for host_id, payload in payloads.items()
+            }
+            world_end = {
+                host_id: _number(payload.get("performance"), "world_time_end_usec")
+                for host_id, payload in payloads.items()
+            }
+            if paired and (None in world_start.values() or None in world_end.values()):
+                raise ScalingError(
+                    f"world-time boundary is missing for {config_id} attempt {attempt}"
+                )
+            row: dict[str, Any] = {
+                "configuration_id": config_id,
+                "drone_count": count,
+                "real_sleep_msec": sleep,
+                "attempt": attempt,
+                "paired": paired,
+                "status": (
+                    "success"
+                    if paired and statuses == {"success"}
+                    else "incomplete"
+                ),
+                "world_time_start_difference_usec": (
+                    abs(world_start["srv-01"] - world_start["cli-01"])
+                    if paired
+                    else None
+                ),
+                "world_time_end_difference_usec": (
+                    abs(world_end["srv-01"] - world_end["cli-01"])
+                    if paired
+                    else None
+                ),
+                "config_hash": next(iter(hashes)) if len(hashes) == 1 else None,
+            }
+            for host_id in host_ids:
+                host_metrics = metrics.get(host_id, {})
+                for key in (
+                    "lag_median_usec",
+                    "lag_p95_usec",
+                    "lag_max_usec",
+                    "accepted_sample_count",
+                    "rejected_sample_count",
+                    "acceptance_ratio",
+                ):
+                    row[f"{host_id}_{key}"] = host_metrics.get(key)
+            rows.append(row)
+
+    summary_root = output_root / results_directory / series / "summary"
+    summary_root.mkdir(parents=True, exist_ok=True)
+    stem = f"multi-host-temporal-sleep-{sleep:03d}ms"
+    if selected_drone_count is not None:
+        stem += f"-uav-{selected_drone_count:03d}"
+    json_path = summary_root / f"{stem}.json"
+    csv_path = summary_root / f"{stem}.csv"
+    multi_host.atomic_json(
+        json_path,
+        {
+            "validation": "multi-host-temporal",
+            "protocol_status": measurement["protocol_status"],
+            "real_sleep_msec": sleep,
+            "attempts": attempts,
+            "complete": not missing,
+            "missing_results": missing,
+            "results": rows,
+        },
+    )
+    with csv_path.open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=TEMPORAL_SUMMARY_FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"Temporal summary JSON: {json_path}")
+    print(f"Temporal summary CSV : {csv_path}")
+    paired_count = sum(1 for row in rows if row["paired"])
+    print(f"Paired               : {paired_count}/{len(rows)}")
+    return 0 if not missing else 1
 
 
 def _statistics(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -333,6 +580,11 @@ def summarize(
             )
         counts = [selected_drone_count]
     measurement = raw["measurement"]
+    mode = str(measurement["mode"])
+    if mode == "temporal":
+        return _temporal_summary(
+            raw, counts, attempts, output_root, selected_drone_count
+        )
     series = str(measurement["series"])
     results_directory = str(raw["results"]["directory"])
     sleep = int(raw["runtime"]["conductor"]["real_sleep_msec"])
@@ -341,7 +593,7 @@ def summarize(
     rows: list[dict[str, Any]] = []
     missing: list[str] = []
     for count in counts:
-        config_id = configuration_id(count, sleep)
+        config_id = configuration_id(count, sleep, mode)
         payloads: dict[str, dict[str, Any]] = {}
         for attempt in range(1, attempts + 1):
             payloads: dict[str, dict[str, Any]] = {}
@@ -357,7 +609,8 @@ def summarize(
                     raise ScalingError(f"result must be a JSON object: {result}")
                 validate_result_identity(payload, path=result, host_id=host_id,
                     configuration_id=config_id, attempt=attempt,
-                    real_sleep_msec=sleep)
+                    real_sleep_msec=sleep, measurement_mode=mode,
+                    temporal_sampling_interval_usec=None)
                 payloads[host_id] = payload
             paired = set(payloads) == set(host_ids)
             hashes = {payload.get("metadata", {}).get("config_hash") for payload in payloads.values()}
@@ -454,6 +707,7 @@ def main(argv: list[str] | None = None) -> int:
             int(configured["resolved"]["scale"]["drone_count"]),
             int(configured["resolved"]["runtime"]["conductor"]["real_sleep_msec"]),
             int(configured["resolved"]["measurement"]["attempt"]),
+            str(configured["resolved"]["measurement"]["mode"]),
         )
         return multi_host.main(delegate_arguments(args, args.command))
     except (ScalingError, multi_host.RecipeError) as exc:

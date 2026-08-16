@@ -10,6 +10,15 @@ import drone_fleet_multi_host_scaling as scaling
 import drone_fleet_single_host as yaml_support
 
 
+TEMPORAL_EXPERIMENT = (
+    Path(__file__).resolve().parents[2]
+    / "recipes"
+    / "experiments"
+    / "drone-fleet-performance"
+    / "multi-host-temporal-validation.yaml"
+)
+
+
 class DroneFleetMultiHostScalingTest(unittest.TestCase):
     def test_clean_is_a_host_local_lifecycle_command(self) -> None:
         parsed = scaling.parser().parse_args(["clean"])
@@ -31,6 +40,24 @@ class DroneFleetMultiHostScalingTest(unittest.TestCase):
                 "preflight_max_cpu_average_percent"
             ],
             100.0,
+        )
+
+    def test_temporal_recipe_is_one_separate_worst_case_attempt(self) -> None:
+        raw, counts, attempts = scaling.load_scaling(TEMPORAL_EXPERIMENT)
+
+        self.assertEqual(counts, [256])
+        self.assertEqual(attempts, 1)
+        self.assertEqual(raw["measurement"]["mode"], "temporal")
+        self.assertEqual(
+            raw["measurement"]["series"], "multi-host-temporal-validation"
+        )
+        self.assertEqual(
+            raw["measurement"]["temporal_sampling_interval_usec"], 20_000
+        )
+        condition = scaling.resolve_condition(raw, 256)
+        self.assertEqual(
+            condition["measurement"]["configuration_id"],
+            "temporal-uav-256-sleep-001ms",
         )
 
     def test_equal_allocation_keeps_process_policy_fixed(self) -> None:
@@ -147,6 +174,7 @@ class DroneFleetMultiHostScalingTest(unittest.TestCase):
                         json.dumps(
                             {
                                 "status": "success",
+                                "mode": "performance",
                                 "run_id": f"{config_id}-attempt-{attempt:02d}",
                                 "performance": {"rtf": rtf},
                                 "machine": {
@@ -158,6 +186,7 @@ class DroneFleetMultiHostScalingTest(unittest.TestCase):
                                     "configuration_id": config_id,
                                     "attempt": attempt,
                                     "config_hash": "shared-hash",
+                                    "temporal_observer_enabled": False,
                                     "time_coordination": {
                                         "conductor_real_sleep_msec": sleep
                                     },
@@ -209,12 +238,14 @@ class DroneFleetMultiHostScalingTest(unittest.TestCase):
             path.write_text(
                 json.dumps(
                     {
+                        "mode": "performance",
                         "run_id": f"{config_id}-attempt-01",
                         "metadata": {
                             "host_id": "cli-01",
                             "configuration_id": config_id,
                             "attempt": 1,
                             "config_hash": "shared-hash",
+                            "temporal_observer_enabled": False,
                             "time_coordination": {
                                 "conductor_real_sleep_msec": sleep
                             },
@@ -226,6 +257,189 @@ class DroneFleetMultiHostScalingTest(unittest.TestCase):
             with self.assertRaisesRegex(scaling.ScalingError, "host_id"):
                 scaling.summarize(
                     scaling.DEFAULT_EXPERIMENT,
+                    output,
+                    selected_drone_count=256,
+                )
+
+    def test_temporal_summary_pairs_host_lag_and_world_time_boundaries(self) -> None:
+        raw, _counts, _attempts = scaling.load_scaling(TEMPORAL_EXPERIMENT)
+        sleep = raw["runtime"]["conductor"]["real_sleep_msec"]
+        series = raw["measurement"]["series"]
+        config_id = scaling.configuration_id(256, sleep, "temporal")
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            for host_id, world_start, world_end, lag in (
+                ("srv-01", 1_060_000, 11_760_000, 2_000),
+                ("cli-01", 1_040_000, 11_740_000, 3_000),
+            ):
+                path = scaling.result_path(
+                    output,
+                    raw["results"]["directory"],
+                    series,
+                    host_id,
+                    config_id,
+                )
+                path.parent.mkdir(parents=True)
+                path.write_text(
+                    json.dumps(
+                        {
+                            "status": "success",
+                            "mode": "temporal",
+                            "run_id": f"{config_id}-attempt-01",
+                            "performance": {
+                                "world_time_start_usec": world_start,
+                                "world_time_end_usec": world_end,
+                            },
+                            "temporal": {
+                                "sample_count": 500,
+                                "lag_median_usec": lag,
+                                "lag_p95_usec": lag + 1_000,
+                                "lag_max_usec": lag + 2_000,
+                                "accepted_sample_count": 490,
+                                "rejected_sample_count": 10,
+                                "acceptance_ratio": 0.98,
+                            },
+                            "metadata": {
+                                "host_id": host_id,
+                                "configuration_id": config_id,
+                                "attempt": 1,
+                                "config_hash": "shared-hash",
+                                "temporal_observer_enabled": True,
+                                "temporal_sampling_interval_usec": 20_000,
+                                "time_coordination": {
+                                    "conductor_real_sleep_msec": sleep
+                                },
+                            },
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+
+            self.assertEqual(
+                scaling.summarize(
+                    TEMPORAL_EXPERIMENT,
+                    output,
+                    selected_drone_count=256,
+                ),
+                0,
+            )
+            report = json.loads(
+                (
+                    output
+                    / "results"
+                    / series
+                    / "summary"
+                    / "multi-host-temporal-sleep-001ms-uav-256.json"
+                ).read_text(encoding="utf-8")
+            )
+
+        self.assertTrue(report["complete"])
+        self.assertEqual(report["validation"], "multi-host-temporal")
+        row = report["results"][0]
+        self.assertEqual(row["world_time_start_difference_usec"], 20_000)
+        self.assertEqual(row["world_time_end_difference_usec"], 20_000)
+        self.assertEqual(row["srv-01_lag_median_usec"], 2_000)
+        self.assertEqual(row["cli-01_lag_p95_usec"], 4_000)
+        self.assertEqual(row["cli-01_acceptance_ratio"], 0.98)
+
+    def test_temporal_summary_rejects_disabled_observer(self) -> None:
+        raw, _counts, _attempts = scaling.load_scaling(TEMPORAL_EXPERIMENT)
+        sleep = raw["runtime"]["conductor"]["real_sleep_msec"]
+        series = raw["measurement"]["series"]
+        config_id = scaling.configuration_id(256, sleep, "temporal")
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            path = scaling.result_path(
+                output,
+                raw["results"]["directory"],
+                series,
+                "srv-01",
+                config_id,
+            )
+            path.parent.mkdir(parents=True)
+            path.write_text(
+                json.dumps(
+                    {
+                        "status": "success",
+                        "mode": "temporal",
+                        "run_id": f"{config_id}-attempt-01",
+                        "metadata": {
+                            "host_id": "srv-01",
+                            "configuration_id": config_id,
+                            "attempt": 1,
+                            "config_hash": "shared-hash",
+                            "temporal_observer_enabled": False,
+                            "time_coordination": {
+                                "conductor_real_sleep_msec": sleep
+                            },
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                scaling.ScalingError, "temporal_observer_enabled"
+            ):
+                scaling.summarize(
+                    TEMPORAL_EXPERIMENT,
+                    output,
+                    selected_drone_count=256,
+                )
+
+    def test_temporal_summary_rejects_inconsistent_sample_accounting(self) -> None:
+        raw, _counts, _attempts = scaling.load_scaling(TEMPORAL_EXPERIMENT)
+        sleep = raw["runtime"]["conductor"]["real_sleep_msec"]
+        series = raw["measurement"]["series"]
+        config_id = scaling.configuration_id(256, sleep, "temporal")
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            path = scaling.result_path(
+                output,
+                raw["results"]["directory"],
+                series,
+                "srv-01",
+                config_id,
+            )
+            path.parent.mkdir(parents=True)
+            path.write_text(
+                json.dumps(
+                    {
+                        "status": "success",
+                        "mode": "temporal",
+                        "run_id": f"{config_id}-attempt-01",
+                        "performance": {
+                            "world_time_start_usec": 1_000_000,
+                            "world_time_end_usec": 11_000_000,
+                        },
+                        "temporal": {
+                            "sample_count": 499,
+                            "lag_median_usec": 2_000,
+                            "lag_p95_usec": 3_000,
+                            "lag_max_usec": 4_000,
+                            "accepted_sample_count": 490,
+                            "rejected_sample_count": 10,
+                            "acceptance_ratio": 0.98,
+                        },
+                        "metadata": {
+                            "host_id": "srv-01",
+                            "configuration_id": config_id,
+                            "attempt": 1,
+                            "config_hash": "shared-hash",
+                            "temporal_observer_enabled": True,
+                            "temporal_sampling_interval_usec": 20_000,
+                            "time_coordination": {
+                                "conductor_real_sleep_msec": sleep
+                            },
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                scaling.ScalingError, "sample accounting"
+            ):
+                scaling.summarize(
+                    TEMPORAL_EXPERIMENT,
                     output,
                     selected_drone_count=256,
                 )

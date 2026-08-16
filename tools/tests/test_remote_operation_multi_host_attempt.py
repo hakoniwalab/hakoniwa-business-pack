@@ -9,6 +9,14 @@ from pathlib import Path
 from tools.remote_operation import multi_host_scaling_attempt as attempt
 
 
+PROFILE = (
+    Path(__file__).resolve().parents[2]
+    / "configs"
+    / "remote-operation"
+    / "multi-host-temporal-validation.yaml"
+)
+
+
 class MultiHostScalingAttemptTest(unittest.TestCase):
     def _state(self) -> dict:
         return {
@@ -22,20 +30,25 @@ class MultiHostScalingAttemptTest(unittest.TestCase):
         }
 
     def test_public_roles_share_ports_and_require_session(self) -> None:
-        server = attempt.parser().parse_args(
-            ["--session-id", "mh-001", "server"]
+        server = attempt.resolve_arguments(
+            attempt.parser().parse_args(["--session-id", "mh-001", "server"])
         )
-        client = attempt.parser().parse_args(
-            ["--session-id", "mh-001", "client"]
+        client = attempt.resolve_arguments(
+            attempt.parser().parse_args(["--session-id", "mh-001", "client"])
         )
         self.assertEqual(server.control_port, client.control_port)
         self.assertEqual(server.artifact_port, client.artifact_port)
         self.assertEqual(server.drone_count, 256)
-        self.assertIsNone(server.runtime_dir)
+        self.assertEqual(
+            server.runtime_dir,
+            server.output_root / "runtime" / "remote-operation",
+        )
 
     def test_batch_derives_one_session_per_attempt(self) -> None:
-        args = attempt.parser().parse_args(
-            ["--session-id", "mh-batch-01", "server"]
+        args = attempt.resolve_arguments(
+            attempt.parser().parse_args(
+                ["--session-id", "mh-batch-01", "server"]
+            )
         )
         self.assertEqual(
             [attempt._session(args, number, 3) for number in range(1, 4)],
@@ -45,6 +58,37 @@ class MultiHostScalingAttemptTest(unittest.TestCase):
                 "mh-batch-01-attempt-03",
             ],
         )
+
+    def test_profile_resolves_every_shared_invocation_argument(self) -> None:
+        server = attempt.resolve_arguments(
+            attempt.parser().parse_args(["--profile", str(PROFILE), "server"])
+        )
+        client = attempt.resolve_arguments(
+            attempt.parser().parse_args(["--profile", str(PROFILE), "client"])
+        )
+        self.assertEqual(server.session_id, "mh-temporal-uav256-01")
+        self.assertEqual(server.session_id, client.session_id)
+        self.assertEqual(server.experiment, client.experiment)
+        self.assertEqual(server.output_root, client.output_root)
+        self.assertEqual(server.drone_count, 256)
+        self.assertTrue(server.clean)
+        self.assertEqual(server.control_port, client.control_port)
+        self.assertEqual(server.artifact_port, client.artifact_port)
+        self.assertEqual(server.listen_address, "192.168.2.100")
+        self.assertEqual(client.server_address, "192.168.2.100")
+
+    def test_profile_rejects_cli_override(self) -> None:
+        parsed = attempt.parser().parse_args(
+            [
+                "--profile",
+                str(PROFILE),
+                "--session-id",
+                "typo-prone-override",
+                "server",
+            ]
+        )
+        with self.assertRaisesRegex(attempt.AttemptError, "CLI overrides"):
+            attempt.resolve_arguments(parsed)
 
     def test_verified_client_attempt_is_published_at_receiver_path(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
