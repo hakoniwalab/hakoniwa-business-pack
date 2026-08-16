@@ -273,10 +273,65 @@ class DroneFleetMultiHostTest(unittest.TestCase):
         parsed = recipe.parser().parse_args(["configure", "--host", "server"])
         self.assertEqual(parsed.command, "configure")
         self.assertEqual(parsed.host, "server")
-        for command in ("doctor", "start", "status", "stop"):
+        for command in ("doctor", "start", "run", "status", "stop"):
             parsed = recipe.parser().parse_args([command])
             self.assertEqual(parsed.command, command)
             self.assertFalse(hasattr(parsed, "host"))
+
+    def test_run_is_server_only_and_uses_launcher_control_start(self) -> None:
+        resolved = recipe.validate_experiment(self.experiment())
+        client_state = {
+            "selection": {"host_id": "cli-01", "role": "client"},
+            "resolved": resolved,
+        }
+        with mock.patch.object(recipe, "load_local_selection", return_value=client_state):
+            with self.assertRaisesRegex(recipe.RecipeError, "server-only"):
+                recipe.launcher_control(
+                    "run", Path("/output"), Path("/drone"), Path("/conductor"), Path("/viewer")
+                )
+
+        server_state = {
+            "selection": {"host_id": "srv-01", "role": "server"},
+            "resolved": resolved,
+        }
+        paths = recipe.SimpleNamespace(
+            runtime_root=Path("/runtime"),
+            recipe_config=Path("/config"),
+        )
+        completed = recipe.SimpleNamespace(returncode=0)
+        with (
+            mock.patch.object(recipe, "load_local_selection", return_value=server_state),
+            mock.patch.object(recipe, "host_runtime_paths", return_value=paths),
+            mock.patch.object(
+                recipe.yaml_support,
+                "resolve_foundation_python",
+                return_value=Path("/foundation/python"),
+            ),
+            mock.patch.object(recipe.yaml_support, "runtime_environment", return_value={}),
+            mock.patch.object(recipe.subprocess, "run", return_value=completed) as run,
+        ):
+            self.assertEqual(
+                recipe.launcher_control(
+                    "run", Path("/output"), Path("/drone"), Path("/conductor"), Path("/viewer")
+                ),
+                0,
+            )
+        self.assertEqual(run.call_args.args[0][-2:], ["start", "/runtime/launcher-session.json"])
+
+    def test_launcher_manual_run_contract_probe(self) -> None:
+        completed = recipe.SimpleNamespace(returncode=0)
+        with mock.patch.object(recipe.subprocess, "run", return_value=completed) as run:
+            self.assertEqual(
+                recipe.launcher_supports_manual_run(Path("/foundation/python")),
+                (True, "background activate-only and control start"),
+            )
+        self.assertEqual(run.call_args.args[0][:2], ["/foundation/python", "-c"])
+
+        completed.returncode = 1
+        with mock.patch.object(recipe.subprocess, "run", return_value=completed):
+            ok, detail = recipe.launcher_supports_manual_run(Path("/foundation/python"))
+        self.assertFalse(ok)
+        self.assertIn("rebuild hakoniwa-pdu-python", detail)
 
 
 if __name__ == "__main__":

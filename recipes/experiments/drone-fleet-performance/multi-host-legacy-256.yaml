@@ -41,7 +41,7 @@ deployment:
       drone_count: 128
       process_count: 4
       global_start_index: 0
-      launcher_mode: immediate
+      launcher_mode: activate-only
     cli-01:
       role: client
       platform: linux

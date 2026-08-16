@@ -72,9 +72,16 @@ need no host argument:
 ```bash
 python3 tools/recipe/drone_fleet_multi_host.py doctor
 python3 tools/recipe/drone_fleet_multi_host.py start
+python3 tools/recipe/drone_fleet_multi_host.py run  # srv-01 only, after both hosts are ready
 python3 tools/recipe/drone_fleet_multi_host.py status
 python3 tools/recipe/drone_fleet_multi_host.py stop
 ```
+
+`start` only activates host-local assets. Both hosts run it, server first and
+client second. After both sessions report `ACTIVATED`, a human runs `run` on
+`srv-01`. That command invokes `hako-cmd start`; Conductor propagates the Start
+event and the client starts its local Hakoniwa Core. Running `run` on a client
+is rejected.
 
 Each operation verifies that the stored host still exists in the current
 experiment, its role and platform match, and its configuration hash equals the

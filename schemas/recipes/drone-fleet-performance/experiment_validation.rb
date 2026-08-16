@@ -224,7 +224,7 @@ module ExperimentValidation
     forbidden.each do |field|
       errors << "#{prefix}.#{field} is forbidden for role #{role}" if host.key?(field)
     end
-    expected_launcher_mode = role == "server" ? "immediate" : "activate-only"
+    expected_launcher_mode = "activate-only"
     unless host["launcher_mode"] == expected_launcher_mode
       errors << "#{prefix}.launcher_mode must be #{expected_launcher_mode} for role #{role}"
     end

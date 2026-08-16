@@ -39,7 +39,7 @@ class ExperimentValidationTest < Minitest::Test
             "role" => "server", "platform" => "macos", "execution_environment" => "native",
             "machine_id" => "srv-01", "node_id" => "srv-01-01",
             "address" => "192.168.2.100", "drone_count" => 128, "process_count" => 4,
-            "global_start_index" => 0, "launcher_mode" => "immediate"
+            "global_start_index" => 0, "launcher_mode" => "activate-only"
           },
           "client" => {
             "role" => "client", "platform" => "linux", "execution_environment" => "wsl2",

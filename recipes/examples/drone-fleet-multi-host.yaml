@@ -230,7 +230,7 @@ process_topology:
       role: server
       drone_services: 4
       drone_range: 0..127
-      launcher_mode: immediate
+      launcher_mode: activate-only
       local_assets: [fleet, show, visual-state-publisher, web-bridge, viewer]
     - id: client
       role: client
@@ -383,6 +383,7 @@ demo:
     - configure --host srv-01|cli-01
     - doctor
     - start
+    - run  # server only; explicitly invokes hako-cmd start
     - status
     - stop
     - smoke
@@ -402,6 +403,10 @@ demo:
     - id: join_client
       action: Start the WSL2 client locally and connect outbound to 192.168.2.100.
       command: python tools/recipe/drone_fleet_multi_host.py start
+      status: blocked
+    - id: run_simulation
+      action: After both hosts are ready, explicitly start the simulation from the Mac server.
+      command: python tools/recipe/drone_fleet_multi_host.py run
       status: blocked
     - id: verify_connectivity
       action: Verify all 256 IDs, both visual-state chunks, synchronized lifecycle, browser updates, and behavioral completion.

@@ -232,7 +232,7 @@ def validate_experiment(raw: dict[str, Any]) -> dict[str, Any]:
         role = host.get("role")
         if role not in {"server", "client"}:
             raise RecipeError(f"deployment.hosts.{host_id}.role is invalid")
-        expected_mode = "immediate" if role == "server" else "activate-only"
+        expected_mode = "activate-only"
         if host.get("launcher_mode") != expected_mode:
             raise RecipeError(
                 f"deployment.hosts.{host_id}.launcher_mode must be {expected_mode}"
@@ -512,6 +512,23 @@ def conductor_binary(conductor_root: Path, role: str) -> Path | None:
     return None
 
 
+def launcher_supports_manual_run(python: Path) -> tuple[bool, str]:
+    probe = (
+        "from hakoniwa_pdu.apps.launcher.hako_launcher import BACKGROUND_MODES; "
+        "from hakoniwa_pdu.apps.launcher.hako_launcher_control import CONTROL_COMMANDS; "
+        "assert 'activate-only' in BACKGROUND_MODES and 'start' in CONTROL_COMMANDS"
+    )
+    result = subprocess.run(
+        [str(python), "-c", probe],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return True, "background activate-only and control start"
+    return False, "Foundation Launcher is stale; rebuild hakoniwa-pdu-python"
+
+
 def prepare_host_launcher(
     state: dict[str, Any],
     output_root: Path,
@@ -605,6 +622,11 @@ def doctor_local(
         )
     except yaml_support.RecipeError as exc:
         checks.append(("native runtime", False, str(exc)))
+    else:
+        launcher_ok, launcher_detail = launcher_supports_manual_run(
+            yaml_support.resolve_foundation_python(paths, system_name)
+        )
+        checks.append(("Launcher manual-run contract", launcher_ok, launcher_detail))
     binary = conductor_binary(conductor_root, role)
     checks.append(
         (
@@ -676,7 +698,9 @@ def launcher_control(
         return 1
     state = load_local_selection(output_root)
     host_id = state["selection"]["host_id"]
-    host = state["resolved"]["deployment"]["hosts"][host_id]
+    role = state["selection"]["role"]
+    if command == "run" and role != "server":
+        raise RecipeError("run is server-only; the client starts from the remote event")
     paths = host_runtime_paths(output_root, host_id)
     python = yaml_support.resolve_foundation_python(paths, platform.system())
     session = paths.runtime_root / "launcher-session.json"
@@ -687,12 +711,14 @@ def launcher_control(
             "hakoniwa_pdu.apps.launcher.hako_launcher",
             str(paths.recipe_config / "launcher.json"),
             "--mode",
-            host["launcher_mode"],
+            "activate-only",
             "--background",
             str(session),
         ]
     else:
-        operation = "terminate" if command == "stop" else "status"
+        operation = {"run": "start", "stop": "terminate", "status": "status"}[
+            command
+        ]
         argv = [
             str(python),
             "-m",
@@ -1003,7 +1029,8 @@ def parser() -> argparse.ArgumentParser:
         help="select this machine's host id (srv-01/cli-01) or unique role",
     )
     commands.add_parser("doctor", help="validate the locally selected host")
-    commands.add_parser("start", help="start the locally selected host")
+    commands.add_parser("start", help="activate the locally selected host assets")
+    commands.add_parser("run", help="start the simulation from the selected server")
     commands.add_parser("status", help="show the local Launcher status")
     commands.add_parser("stop", help="stop the locally selected host")
     return result
@@ -1012,7 +1039,7 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     output_root = args.output_root.resolve()
-    if args.command in {"doctor", "start", "status", "stop"}:
+    if args.command in {"doctor", "start", "run", "status", "stop"}:
         try:
             if args.command == "doctor":
                 return doctor_local(
