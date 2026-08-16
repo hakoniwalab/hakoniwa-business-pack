@@ -98,7 +98,7 @@ class MultiHostScalingAttemptTest(unittest.TestCase):
         with self.assertRaisesRegex(attempt.AttemptError, "CLI overrides"):
             attempt.resolve_arguments(parsed)
 
-    def test_scaling_attempts_profile_selects_conditional_extension(self) -> None:
+    def test_scaling_attempts_profile_selects_isolated_conditional_extension(self) -> None:
         resolved = attempt.resolve_arguments(
             attempt.parser().parse_args(
                 ["--profile", str(SCALING_ATTEMPTS_PROFILE), "server"]
@@ -117,7 +117,7 @@ class MultiHostScalingAttemptTest(unittest.TestCase):
         self.assertEqual(baseline_attempts, 3)
         self.assertEqual(
             resolved.output_root.name,
-            "drone-fleet-multi-host-automation-smoke",
+            "drone-fleet-multi-host-attempt-extension-smoke",
         )
 
     def test_extension_decision_uses_paired_baseline_rtf_spread(self) -> None:

@@ -321,8 +321,9 @@ Both hosts consume the same baseline remote-operation profile:
 configs/remote-operation/multi-host-scaling-attempts.yaml
 ```
 
-It selects the 256-UAV condition and the existing
-`drone-fleet-multi-host-automation-smoke` workspace. The Experiment remains the
+It selects the 256-UAV condition and the dedicated
+`drone-fleet-multi-host-attempt-extension-smoke` workspace, preserving the
+earlier automation-preflight results. The Experiment remains the
 authority for baseline attempts 1 through 3 and extension attempts 4 and 5;
 the remote-operation profile selects
 `attempt_set: baseline_with_conditional_extension` and does not duplicate
