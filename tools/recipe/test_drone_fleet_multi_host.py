@@ -435,11 +435,13 @@ class DroneFleetMultiHostTest(unittest.TestCase):
         paths = recipe.SimpleNamespace(
             runtime_root=Path("/runtime"),
             recipe_config=Path("/config"),
+            recipe_logs=Path("/logs"),
         )
         completed = recipe.SimpleNamespace(returncode=0)
         with (
             mock.patch.object(recipe, "load_local_selection", return_value=server_state),
             mock.patch.object(recipe, "host_runtime_paths", return_value=paths),
+            mock.patch.object(recipe, "ensure_conductor_clients_joined") as joined,
             mock.patch.object(
                 recipe.yaml_support,
                 "resolve_foundation_python",
@@ -455,6 +457,55 @@ class DroneFleetMultiHostTest(unittest.TestCase):
                 0,
             )
         self.assertEqual(run.call_args.args[0][-2:], ["start", "/runtime/launcher-session.json"])
+        joined.assert_called_once_with(Path("/output"), paths.recipe_logs)
+
+    def test_run_readiness_requires_every_current_session_participant(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            generated = output / "config/conductor/generated"
+            generated.mkdir(parents=True)
+            recipe.atomic_json(
+                generated / "remote-api.json",
+                {
+                    "participants": [
+                        {"name": "cli-name-01"},
+                        {"name": "cli-name-02"},
+                    ]
+                },
+            )
+            logs = output / "local/srv-01/logs"
+            logs.mkdir(parents=True)
+            server_log = logs / "conductor-server.out"
+            server_log.write_text(
+                "Handling join request from client: cli-name-02\n"
+                "Server run loop started.\n"
+                "Handling join request from client: cli-name-01\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(recipe.RecipeError, "missing: cli-name-02"):
+                recipe.ensure_conductor_clients_joined(output, logs)
+
+            with server_log.open("a", encoding="utf-8") as stream:
+                stream.write("Handling join request from client: cli-name-02\n")
+            recipe.ensure_conductor_clients_joined(output, logs)
+
+    def test_run_readiness_rejects_missing_server_session_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            generated = output / "config/conductor/generated"
+            generated.mkdir(parents=True)
+            recipe.atomic_json(
+                generated / "remote-api.json",
+                {"participants": [{"name": "cli-name-01"}]},
+            )
+            logs = output / "local/srv-01/logs"
+            logs.mkdir(parents=True)
+            (logs / "conductor-server.out").write_text(
+                "Handling join request from client: cli-name-01\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(recipe.RecipeError, "session marker"):
+                recipe.ensure_conductor_clients_joined(output, logs)
 
     def test_launcher_manual_run_contract_probe(self) -> None:
         completed = recipe.SimpleNamespace(returncode=0)

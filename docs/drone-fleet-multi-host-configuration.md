@@ -83,8 +83,11 @@ WebBridge and the static Three.js HTTP server. The operator then runs
 `open-viewer` on `srv-01` and presses Connect before starting the client. After
 both sessions report `ACTIVATED` and the client has joined, a human runs `run`
 on `srv-01`. That command invokes `hako-cmd start`; Conductor propagates the
-Start event and the client starts its local Hakoniwa Core. Running `run` or
-`open-viewer` on a client is rejected.
+Start event and the client starts its local Hakoniwa Core. Immediately before
+invoking it, `run` reads the generated `remote-api.json` participant set and
+requires current-session server-log Join evidence for every participant.
+Missing clients cause a fail-closed error and `hako-cmd start` is not invoked.
+Running `run` or `open-viewer` on a client is rejected.
 
 Each operation verifies that the stored host still exists in the current
 experiment, its role and platform match, and its configuration hash equals the

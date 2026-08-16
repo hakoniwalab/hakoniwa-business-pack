@@ -954,6 +954,8 @@ def launcher_control(
     if command == "run" and role != "server":
         raise RecipeError("run is server-only; the client starts from the remote event")
     paths = host_runtime_paths(output_root, host_id)
+    if command == "run":
+        ensure_conductor_clients_joined(output_root, paths.recipe_logs)
     python = yaml_support.resolve_foundation_python(paths, platform.system())
     session = paths.runtime_root / "launcher-session.json"
     if command == "start":
@@ -981,6 +983,68 @@ def launcher_control(
     env = yaml_support.runtime_environment(paths, drone_root, platform.system())
     result = subprocess.run(argv, cwd=ROOT, env=env, check=False)
     return result.returncode
+
+
+def expected_conductor_participants(output_root: Path) -> list[str]:
+    path = output_root / "config" / "conductor" / "generated" / "remote-api.json"
+    try:
+        config = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RecipeError(
+            f"cannot read generated Conductor participants: {path}: {exc}"
+        ) from exc
+    participants = config.get("participants")
+    if not isinstance(participants, list):
+        raise RecipeError(f"generated Conductor participants must be a list: {path}")
+    names: list[str] = []
+    for index, participant in enumerate(participants):
+        if not isinstance(participant, dict):
+            raise RecipeError(
+                f"generated participant[{index}] must be an object: {path}"
+            )
+        name = participant.get("name")
+        if not isinstance(name, str) or not name:
+            raise RecipeError(
+                f"generated participant[{index}].name must be non-empty: {path}"
+            )
+        if name in names:
+            raise RecipeError(f"duplicate generated participant name {name!r}: {path}")
+        names.append(name)
+    return names
+
+
+def ensure_conductor_clients_joined(output_root: Path, logs_root: Path) -> None:
+    expected = expected_conductor_participants(output_root)
+    log = logs_root / "conductor-server.out"
+    try:
+        content = log.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        raise RecipeError(
+            f"cannot read Conductor server readiness log: {log}: {exc}"
+        ) from exc
+    marker = "Server run loop started."
+    current_session_at = content.rfind(marker)
+    if current_session_at < 0:
+        raise RecipeError(
+            f"Conductor server is not ready; current session marker is absent: {log}"
+        )
+    current_session = content[current_session_at:]
+    joined = [
+        name
+        for name in expected
+        if f"Handling join request from client: {name}" in current_session
+    ]
+    missing = [name for name in expected if name not in joined]
+    if missing:
+        joined_text = ", ".join(joined) if joined else "none"
+        raise RecipeError(
+            "Conductor clients are not ready; "
+            f"joined: {joined_text}; missing: {', '.join(missing)}; log: {log}"
+        )
+    print(
+        "[OK] Conductor clients joined: "
+        + (", ".join(joined) if joined else "no remote participants")
+    )
 
 
 def _validate_managed_clean_path(path: Path, output_root: Path) -> None:
