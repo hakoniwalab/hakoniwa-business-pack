@@ -1,0 +1,191 @@
+id: drone-native-runtime-windows-distribution-is-published-but-unclaimed
+title: The Windows native Drone distribution is published but unclaimed by the native runtime contract
+status: candidate
+
+knowledge_type:
+  - interface_contract
+  - known_pitfall
+  - validation_rule
+
+summary: >
+  Drone Core v4.0.0 publishes win.zip in the same release, under the same naming
+  convention, and through the same publication flow as lnx.zip and mac.zip, and
+  the Catalog already lists Windows as a supported platform. The
+  native_runtime profile, however, declares only linux and macos, and the Recipe
+  refuses Windows at its entry point. Measuring the published Windows artifacts
+  shows most of the profile can be filled from evidence rather than inference:
+  the archive ships 7 of the 8 executables its siblings ship, and the PE import
+  tables give a concrete Windows dependency set that maps one-to-one onto the
+  existing linux and macos fields. Two questions stay open and are recorded as
+  such, not guessed at. Exactly one upstream packaging gap blocks the profile, and it is not
+  the PE dependency inspector the Runtime Primer already anticipates.
+
+observation:
+  context: >
+    Windows validation of Business Pack main at revision b2eff65, comparing the
+    three published Drone Core v4.0.0 archives against the Catalog native
+    runtime profile and the Recipe's Windows branches.
+  details:
+    - The Catalog lists Windows first under platforms.supported, while native_runtime.profiles.public-v4.0.0.platforms declares only linux and macos.
+    - The shared schema already admits the missing values; schemas/native-runtime.yaml enumerates platforms [linux, macos, windows] and dependency_inspectors [elf, macho, pe].
+    - The Runtime Primer already anticipates the inspector itself, describing delegation to "an ELF, Mach-O, or future PE adapter", so the inspector is declared future work rather than an oversight.
+    - win.zip is published in the same v4.0.0 release as lnx.zip and mac.zip, and the recorded sha256 of lnx.zip and mac.zip match the values pinned in the Recipe's PUBLIC_DRONE_ARCHIVES exactly, establishing that all three archives come from one publication flow.
+    - win.zip ships 7 executables; lnx.zip and mac.zip ship 8 each. Comparing basenames with the OS prefix removed, the only artifact absent on Windows is drone_visual_state_publisher.
+    - That single missing artifact is a required binary_role in both existing platform profiles, and the Recipe already names win/win-drone_visual_state_publisher.exe in visual_state_publisher_candidates.
+    - The other Windows binary role is present and correctly named; win/win-main_hako_drone_service.exe exists and matches binary_candidates' Windows branch.
+    - PE import inspection of win-main_hako_drone_service.exe lists KERNEL32.dll, MSVCP140.dll, OPENGL32.dll, VCRUNTIME140.dll, VCRUNTIME140_1.dll, glfw3.dll, mujoco.dll and eleven api-ms-win-crt-* API sets.
+    - On a Windows host with the Visual C++ redistributable already present, glfw3.dll and mujoco.dll are the only imports that resolve from nowhere at all; they are absent from the archive, from System32, and from PATH.
+    - Those two are the Windows counterparts of the values the existing profiles already declare, namely required_libraries libglfw.so.3 / libglfw.3.dylib and the mujoco managed runtime.
+    - The Recipe gates Windows before any of this is reachable, since SUPPORTED_NATIVE_SYSTEMS is ("Darwin", "Linux") and _mujoco_asset has no Windows branch, so a Windows run fails at prepare-native rather than at dependency inspection.
+    - Recipe code below that gate is already Windows-aware, including .exe suffixes, Scripts/python.exe resolution, and selecting PATH rather than LD_LIBRARY_PATH as the native library environment variable a PE inspector would need to honour.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: catalog/components/hakoniwa-drone-core.yaml
+      revision: b2eff65
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: schemas/native-runtime.yaml
+      revision: b2eff65
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/native_runtime_platforms.py
+      revision: b2eff65
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/recipe/drone_fleet_single_host.py
+      revision: b2eff65
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: docs/hakoniwa-runtime-primer.md
+      revision: b2eff65
+    - repository: toppers/hakoniwa-drone-core
+      path: NATIVE_RUNTIME_REQUIREMENTS.yaml
+      revision: main
+  runtime_evidence:
+    - description: >
+        Release asset digests for Drone Core v4.0.0. The rendered release page
+        does not expose sha256 values, so this correspondence is only
+        reproducible through the API. Command:
+        gh api repos/toppers/hakoniwa-drone-core/releases/tags/v4.0.0
+        --jq '.assets[]|"\(.name)\t\(.size)\t\(.digest)"'
+        Output:
+        lnx.zip 10946150 sha256:d8ef1418e8754dcb4048d808a700568f21dd9b328966ae2806f70285e273fc60;
+        mac.zip 3773318 sha256:c8f81a7aa0dc85d335c6568676dd4e958e30cf19d23668c1b96d2e4cebddbd3f;
+        win.zip 4107879 sha256:2931cb7844dbe74ec3dd5f4be5bb49f28757d268774010c90ea18e8266e59ac0.
+        The lnx.zip and mac.zip digests match PUBLIC_DRONE_ARCHIVES in
+        tools/recipe/drone_fleet_single_host.py character for character.
+    - description: >
+        Downloaded win.zip and confirmed its sha256 locally as
+        2931cb7844dbe74ec3dd5f4be5bb49f28757d268774010c90ea18e8266e59ac0,
+        matching the release metadata above.
+    - description: >
+        Contents of win.zip after extraction: hako_service_c.dll,
+        win-aircraft_service_ardupilot.exe, win-aircraft_service_px4.exe,
+        win-drone_service_rc.exe, win-drone_service_rc_mujoco.exe,
+        win-main_hako_aircraft_service_ardupilot.exe,
+        win-main_hako_aircraft_service_px4.exe,
+        win-main_hako_drone_service.exe, plus nine .lib files.
+        No win-drone_visual_state_publisher.exe is present.
+    - description: >
+        Executable counts after extracting all three archives: win 7, lnx 8,
+        mac 8. Set difference of basenames with the OS prefix removed yields
+        exactly one entry missing on Windows, drone_visual_state_publisher,
+        which is present as lnx/linux-drone_visual_state_publisher and
+        mac/mac-drone_visual_state_publisher.
+    - description: >
+        PE import table of win/win-main_hako_drone_service.exe, read with
+        objdump -p: KERNEL32.dll, MSVCP140.dll, OPENGL32.dll, VCRUNTIME140.dll,
+        VCRUNTIME140_1.dll, glfw3.dll, mujoco.dll, and api-ms-win-crt-
+        {convert,environment,filesystem,heap,locale,math,runtime,stdio,string,time,utility}-l1-1-0.dll.
+        win/hako_service_c.dll imports the same set minus OPENGL32.dll and glfw3.dll.
+    - description: >
+        Delay import directory check on both binaries, reading data directory
+        entry 13 straight from the PE optional header rather than relying on a
+        dumper's section listing: win-main_hako_drone_service.exe and
+        hako_service_c.dll both report RVA=0, size=0 there, while entry 1
+        (Import Table) is populated in each (RVA 0xd0de8 size 380, and
+        RVA 0xa0ed4 size 320 respectively). Both are PE32+. No dependency is
+        hidden behind delay-loading in v4.0.0.
+    - description: >
+        Resolution of each non-API-set import on a Windows 11 Pro 26200 x86_64
+        host that already has the Visual C++ redistributable installed.
+        KERNEL32.dll, MSVCP140.dll, OPENGL32.dll, VCRUNTIME140.dll and
+        VCRUNTIME140_1.dll all resolve from System32. glfw3.dll and mujoco.dll
+        resolve from nowhere: not from the extracted archive directory, not
+        from System32, not from PATH.
+  expert_input: []
+
+confidence: high
+
+contradictions:
+  - target: catalog/components/hakoniwa-drone-core.yaml
+    existing_claim: >
+      platforms.supported lists Windows alongside macOS, Linux and WSL2, while
+      native_runtime.profiles.public-v4.0.0.platforms declares only linux and
+      macos.
+    new_evidence: >
+      A Windows native distribution is already published for the pinned release
+      v4.0.0 and 7 of its 8 sibling executables are present, so the absent
+      windows profile reflects one packaging gap plus undeclared metadata
+      rather than an absent distribution.
+  - target: docs/hakoniwa-runtime-primer.md
+    existing_claim: >
+      Dependency discovery is delegated to "an ELF, Mach-O, or future PE
+      adapter", implying the PE inspector is the outstanding Windows work.
+    new_evidence: >
+      The PE inspector is necessary but not first. A Windows profile cannot be
+      declared at all until win.zip ships drone_visual_state_publisher, because
+      that binary is a required binary_role in both existing profiles, and the
+      component-owned NATIVE_RUNTIME_REQUIREMENTS.yaml has no windows block for
+      the Catalog to conform to.
+
+validation:
+  status: partially_verified
+  required:
+    - Confirm on a clean Windows runner, without a preinstalled Visual C++ redistributable, whether MSVCP140.dll, VCRUNTIME140.dll and VCRUNTIME140_1.dll still resolve, which determines whether they belong in required_libraries or are treated as a host prerequisite.
+    - Decide, as component owner, whether win-drone_visual_state_publisher.exe should be added to the Windows distribution, or whether the Windows profile should declare a reduced set of binary_roles.
+    - Decide whether toppers/hakoniwa-drone-core NATIVE_RUNTIME_REQUIREMENTS.yaml gains a windows block, since load_catalog_contract compares the Catalog profile against that component-owned contract and rejects any divergence.
+    - Confirm that no delay-loaded dependency appears in a later Windows build, since the import list above is complete only for the statically imported set.
+  notes:
+    - Delay-load imports add nothing to the dependency set for these two binaries. Reading data directory entry 13 (Delay Import Descriptor) directly from the PE optional header gives RVA=0, size=0 for both win-main_hako_drone_service.exe and hako_service_c.dll, against a populated entry 1 (Import Table) in each. The reported import list is therefore complete for v4.0.0, and a PE adapter can defer delay-load support without losing coverage today.
+    - The measurements above were taken on a developer workstation, which is why the Visual C++ runtime question is deferred to a clean runner rather than answered here.
+    - No Windows Recipe run was attempted, because SUPPORTED_NATIVE_SYSTEMS rejects Windows at prepare-native before dependency inspection is reachable.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog:
+    - hakoniwa-drone-core
+  runtime_primer: true
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - drone-fleet-single-host
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      kind: validator
+      path: tools/native_runtime_platforms.py
+      mode: detect-and-suggest-remediation
+      notes:
+        - A PE adapter can satisfy the existing DependencyAdapter protocol without shelling out, by parsing the import directory of the PE optional header directly. That avoids adding dumpbin, objdump or llvm-readobj to a job that currently installs no toolchain, and it keeps the tools tree free of third-party packages. It also lets the adapter's tests run on all three CI runners rather than only the Windows one.
+        - Report bare DLL names, since the caller already reduces missing entries with Path(name).name before comparing them against required_libraries.
+        - Read every path from the supplied environment mapping rather than os.environ, matching the existing ELF and Mach-O adapters. drone_fleet_single_host already selects PATH as the native library variable on Windows, so an adapter that honours the passed environment composes with it unchanged.
+        - Treat api-ms-win-* and ext-ms-win-* as resolved. Note that doing so unconditionally also hides minimum-OS-version mismatches against the API set schema, which is a deliberate trade rather than a free simplification.
+        - Any fixed set of always-present system DLLs is an approximation. Windows defines KnownDLLs through the registry and it varies with architecture, so the set belongs in one commented constant that is explicitly documented as an approximation.
+        - Keep vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, mujoco.dll and glfw3.dll out of any such set. Those are exactly the entries that should surface as missing so the contract can declare them, mirroring libglfw.so.3 and libglfw.3.dylib on the existing platforms.
+        - Do not describe the resulting search order as loader-accurate. Side-by-side manifests, already-loaded modules and package graphs are out of scope, and omitting the current working directory is stricter than the real loader. Both are reasonable for a pre-launch validator and both should be stated as policy in the code.
+        - Delay-load imports (data directory entry 13) are out of scope for a first adapter. Neither v4.0.0 Windows binary populates that directory, so nothing is lost today; the policy should be stated explicitly so that a future binary which does use delay-loading is a known gap rather than a silent one.
+
+promotion_rationale:
+  - The Catalog already claims Windows support, so the absent windows profile is an internal inconsistency in a component-owned contract rather than a gap in coverage.
+  - The one missing artifact is packaging work owned by the component, and identifying it is more actionable than reporting that the PE adapter is unimplemented, which the Runtime Primer already records as future work.
+  - The measured Windows dependency set maps directly onto the fields the existing linux and macos profiles use, so the profile can be authored from evidence rather than from inference once the packaging gap closes.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Reported from Windows validation only. No change to Recipe or validator code is proposed here.
