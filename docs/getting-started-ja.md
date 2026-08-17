@@ -231,25 +231,24 @@ macOS arm64 と Windows x64 で実行検証済みの **`mujoco-turtlebot3-wall-f
 
 リポジトリのルートで実行します。
 
-```bash
+~~~bash
 # 1. 隔離された作業シェルに入る（プロンプト先頭に (hako) が付く）
 python3.12 tools/workspace.py enter      # Windows: py -3.12 tools\workspace.py enter
 
 # 2. 何が足りないか確認（ビルドはしない）
-python tools/recipe.py doctor --recipe recipes/examples/mujoco-turtlebot3-wall-follower.yaml
+python3.12 tools/recipe.py doctor --recipe recipes/examples/mujoco-turtlebot3-wall-follower.yaml
 
 # 3. これから何を clone / build するか確認
-python tools/recipe.py plan   --recipe recipes/examples/mujoco-turtlebot3-wall-follower.yaml
+python3.12 tools/recipe.py plan   --recipe recipes/examples/mujoco-turtlebot3-wall-follower.yaml
 
 # 4. Foundation を構築（clone -> build -> install -> Python 依存導入）  ※初回は 10 分前後
-python tools/recipe.py configure --recipe recipes/examples/mujoco-turtlebot3-wall-follower.yaml
+python3.12 tools/recipe.py configure --recipe recipes/examples/mujoco-turtlebot3-wall-follower.yaml
 
-# 5. 使い方ガイド（HTML）を生成してブラウザで開く
+# 5. 使い方ガイド（HTML）を生成してブラウザで開く（configure 完了後は `python` で OK）
 python tools/recipe.py guide  --recipe recipes/examples/mujoco-turtlebot3-wall-follower.yaml --open
-```
+~~~
 
-`(hako)` シェルの中では `python` が Foundation venv の Python 3.12 を指すので、
-手順 2 以降は `python` で構いません。
+`configure` が完了すると、`(hako)` シェルの `python` は Foundation venv の Python 3.12 を指すようになります。以後の操作は `python` で構いません。
 
 手順 4 の最後に次のように出れば Foundation は完成です。
 
