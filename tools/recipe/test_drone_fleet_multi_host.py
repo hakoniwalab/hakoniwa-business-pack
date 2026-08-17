@@ -166,12 +166,20 @@ class DroneFleetMultiHostTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             conductor = self.conductor(root / "conductor")
+            package = root / "public-package"
+            (package / "bin").mkdir(parents=True)
             eu_input = root / "output/config/conductor/eu-input.json"
             with mock.patch.object(recipe.subprocess, "run") as run:
                 run.return_value.returncode = 0
-                recipe.run_conductor_configure(conductor, eu_input)
+                recipe.run_conductor_configure(conductor, package, eu_input)
             command = run.call_args.args[0]
             self.assertEqual(command[-3:], ["configure", "--config", str(eu_input)])
+            self.assertEqual(
+                run.call_args.kwargs["env"][
+                    "HAKONIWA_CONDUCTOR_GENERATOR_BIN_DIR"
+                ],
+                str((package / "bin").resolve()),
+            )
 
     def test_materializes_both_hosts_through_shared_runtime_specs(self) -> None:
         resolved = recipe.validate_experiment(self.experiment())
