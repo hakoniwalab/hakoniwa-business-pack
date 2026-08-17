@@ -1522,9 +1522,7 @@ def materialize(
     }
 
 
-def run_conductor_configure(
-    conductor_root: Path, conductor_package_root: Path, eu_input_path: Path
-) -> None:
+def run_conductor_configure(conductor_root: Path, eu_input_path: Path) -> None:
     command = [
         sys.executable,
         str(conductor_root / "tools" / "hako.py"),
@@ -1532,11 +1530,7 @@ def run_conductor_configure(
         "--config",
         str(eu_input_path),
     ]
-    env = os.environ.copy()
-    env["HAKONIWA_CONDUCTOR_GENERATOR_BIN_DIR"] = str(
-        (conductor_package_root / "bin").resolve()
-    )
-    result = subprocess.run(command, cwd=conductor_root, env=env, check=False)
+    result = subprocess.run(command, cwd=conductor_root, check=False)
     if result.returncode != 0:
         raise RecipeError(
             f"hakoniwa-conductor-pro configure failed with rc={result.returncode}"
@@ -1643,7 +1637,6 @@ def main(argv: list[str] | None = None) -> int:
             conductor_root = resolve_conductor_root(args.conductor_root)
             run_conductor_configure(
                 conductor_root,
-                runtime_package,
                 output_root / "config" / "conductor" / "eu-input.json",
             )
             timing_errors = generated_conductor_timing_errors(
