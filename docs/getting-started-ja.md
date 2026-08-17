@@ -159,12 +159,14 @@ sudo apt-get install -y git build-essential cmake ruby-full \
 
 Ubuntu 22.04 の標準 Python は 3.10 なので、3.12 を別途入れます。
 
-```bash
+~~~bash
+sudo apt-get update
+sudo apt-get install -y software-properties-common
 sudo add-apt-repository ppa:deadsnakes/ppa
 sudo apt-get update
 sudo apt-get install -y python3.12 python3.12-venv python3.12-dev
 python3.12 --version
-```
+~~~
 
 （Ubuntu 24.04 は `apt-get install python3.12 python3.12-venv` で入ります。
 pyenv などで 3.12 を用意しても構いません。）
