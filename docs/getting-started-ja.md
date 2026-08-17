@@ -154,7 +154,7 @@ cmake --version
 ```bash
 sudo apt-get update
 sudo apt-get install -y git build-essential cmake ruby-full \
-  libboost-dev libglfw3 libopengl0
+  libboost-dev libglfw3-dev libopengl-dev
 ```
 
 Ubuntu 22.04 の標準 Python は 3.10 なので、3.12 を別途入れます。
@@ -223,8 +223,9 @@ py -3.12 tools\foundation.py toolchain --recipe-id mujoco-turtlebot3-wall-follow
 ### 5.1 Recipe を選ぶ
 
 `recipes/examples/` から 1 つ選びます。最初におすすめなのは、
-macOS / Linux / Windows で検証済みの **`mujoco-turtlebot3-wall-follower`**
-（TurtleBot3 が LiDAR で壁沿いに走る）です。
+macOS arm64 と Windows x64 で実行検証済みの **`mujoco-turtlebot3-wall-follower`**
+（TurtleBot3 が LiDAR で壁沿いに走る）です。Linux も対応対象ですが、現時点では
+この Recipe の end-to-end 実行検証は記録されていません。
 
 ### 5.2 手順（OS 共通）
 
