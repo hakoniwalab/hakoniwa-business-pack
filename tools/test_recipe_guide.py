@@ -74,6 +74,7 @@ class RecipeGuideTest(unittest.TestCase):
             "native_runtime_platforms.py",
             "recipe.py",
             "recipe_portal.py",
+            "result_layout.py",
             "test_foundation.py",
             "test_recipe_guide.py",
             "test_workspace.py",
