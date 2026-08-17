@@ -423,14 +423,15 @@ Cはraw result自身がhost dimensionを持つため、その構造を維持す�
 ### 8.1 AVAILABLE: 共通result transfer tool
 
 共通transfer toolは、利用者がsource/destinationを直接入力する方式にしない。
-`result-layout`、experiment ID、producer IDから両方を解決する。
+`result-layout`、transfer group、producer IDから両方を解決する。B/Cのgroupは
+PerformanceとTemporal Validationを1つのZIPで扱う。
 
 CLI contractは次である。
 
 ```text
 python -m tools.remote_operation.result_transfer \
   --layout configs/result-layouts/drone-fleet-performance.yaml \
-  --experiment <experiment-a|experiment-b|experiment-b-temporal|experiment-c|experiment-c-temporal> \
+  --group <experiment-a|experiment-b|experiment-c> \
   --producer <wsl2|cli-01> \
   receive|send
 ```
@@ -441,7 +442,7 @@ Mac receiverを先に起動する。session IDは両hostで完全に一致させ
 python3 tools/workspace.py run -- \
   python3 -m tools.remote_operation.result_transfer \
   --layout configs/result-layouts/drone-fleet-performance.yaml \
-  --experiment experiment-b \
+  --group experiment-b \
   --producer wsl2 \
   --session-id result-b-wsl2-20260817-01 \
   receive --listen-address 192.168.2.100
@@ -453,17 +454,18 @@ python3 tools/workspace.py run -- \
 python3 tools/workspace.py run -- \
   python3 -m tools.remote_operation.result_transfer \
   --layout configs/result-layouts/drone-fleet-performance.yaml \
-  --experiment experiment-b \
+  --group experiment-b \
   --producer wsl2 \
   --session-id result-b-wsl2-20260817-01 \
   send --server-address 192.168.2.100
 ```
 
-AとB Temporalは`--experiment`だけを`experiment-a`または
-`experiment-b-temporal`へ変更する。Cのclient artifactを独立収集するときは
-`experiment-c` / `experiment-c-temporal`と`--producer cli-01`を使用する。
+Aは`--group experiment-a`を使用する。Cのclient artifactを独立収集するときは
+`--group experiment-c --producer cli-01`を使用する。
 ただしmulti-host attempt runnerが既にclient artifactを同じcanonical destinationへ
-配置済みの場合、共通toolは上書きを拒否するため再転送は不要である。
+配置済みの場合、hashが完全一致するdatasetは`skipped_existing_identical`となる。
+
+個別seriesだけを診断・転送するときは、従来どおり`--experiment <id>`も使用できる。
 
 toolは次を必須とする。
 
@@ -471,9 +473,10 @@ toolは次を必須とする。
 2. PDU artifact transportで送信し、receiverがZIP全体のSHA-256を検証する。
 3. stagingへ安全に展開し、absolute path、`..`、symlinkを拒否する。
 4. experiment、series、producer、configuration/attempt identityを検証する。
-5. destinationが既存の場合は黙って上書きせず停止する。
-6. 検証完了後だけdestinationへpublishする。
-7. sender/receiver双方へmachine-readableなtransfer evidenceを残す。
+5. source directoryが存在しないgroup memberは`skipped_missing_source`として記録する。
+6. destinationが既存で全file hashが一致すればSKIPし、異なれば上書きせず停止する。
+7. group内の新規destinationは、全datasetの検証完了後にまとめてpublishする。
+8. sender/receiver双方へmachine-readableなtransfer evidenceを残す。
 
 manifest schemaは次を正本とする。
 
@@ -485,7 +488,7 @@ schemas/remote-operation/result-transfer-manifest.schema.json
 
 ```text
 work/remote-operation/result-transfer/<session-id>/
-├── <experiment-id>-<producer-id>.zip
+├── <group-id>-<producer-id>.zip
 ├── sender-result.json / receiver-result.json
 ├── sender-events.jsonl / receiver-events.jsonl
 └── sender-endpoint/ / receiver-endpoint/
@@ -493,8 +496,8 @@ work/remote-operation/result-transfer/<session-id>/
 
 receiverはarchive全体のhash検証だけでは成功を返さない。manifest、各payload file、
 Experiment/layout hash、result内のseries/configuration/attempt/host identityを検証し、
-canonical destinationへのatomic publishが完了してから`VERIFIED`を返す。既存destinationを
-更新したい場合は、採用済みdatasetを明示的に退避してから新しいsession IDで再実行する。
+canonical destinationへのgroup publishが完了してから`VERIFIED`を返す。sourceが存在するが
+summary不完全、identity不一致、hash不一致の場合はSKIPせずgroup全体を失敗させる。
 
 ## 9. グラフ生成
 

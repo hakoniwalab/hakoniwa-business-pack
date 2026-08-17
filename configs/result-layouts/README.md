@@ -12,10 +12,12 @@ The distinction is intentional:
   series, so collection preserves that host path in the server workspace.
 - B and C Temporal Validation are separate series; their observer-instrumented
   results are never mixed into the performance series.
+- `transfer_groups` packages each Performance series together with its matching
+  Temporal Validation series while preserving their separate destinations.
 
-Future ZIP transfer, placement, aggregation, and plotting tools should resolve
-paths from this file instead of duplicating path literals. Existing measurement
-commands remain unchanged until the active measurement campaign is complete.
+ZIP transfer, placement, aggregation, and plotting tools resolve paths from
+this file instead of duplicating path literals. Measurement commands remain
+independent from collection and analysis.
 
 The machine-readable contract is
 `schemas/result-layouts/drone-fleet-performance.schema.json`. The dependency-free

@@ -261,6 +261,105 @@ def create_package(
     return output, manifest
 
 
+def _group_members(
+    layout: dict[str, Any], group_id: str, producer: str
+) -> list[str]:
+    try:
+        members = layout["transfer_groups"][group_id]["experiments"]
+    except KeyError as exc:
+        raise ResultTransferError(f"unknown transfer group: {group_id}") from exc
+    for experiment_id in members:
+        if producer not in layout["experiments"][experiment_id]["producers"]:
+            raise ResultTransferError(
+                f"{producer} is not a common producer for transfer group {group_id}"
+            )
+    return list(members)
+
+
+def create_group_package(
+    layout_path: Path,
+    group_id: str,
+    producer: str,
+    output: Path,
+) -> tuple[Path, dict[str, Any]]:
+    layout_path = layout_path.resolve()
+    layout = result_layout.load_layout(layout_path)
+    datasets = []
+    skipped = []
+    sources: dict[str, Path] = {}
+    for experiment_id in _group_members(layout, group_id, producer):
+        resolved = result_layout.resolve_experiment_paths(
+            layout, experiment_id, producer
+        )
+        if not resolved["source"].is_dir():
+            skipped.append(
+                {
+                    "experiment_id": experiment_id,
+                    "status": "skipped_missing_source",
+                }
+            )
+            continue
+        single, source, _destination = _manifest(
+            layout_path, layout, experiment_id, producer
+        )
+        datasets.append(
+            {
+                key: single[key]
+                for key in (
+                    "experiment_id",
+                    "participant_scope",
+                    "series",
+                    "source",
+                    "destination",
+                    "experiment",
+                    "files",
+                )
+            }
+        )
+        sources[experiment_id] = source
+    if not datasets:
+        raise ResultTransferError(
+            f"all sources are missing for transfer group {group_id}"
+        )
+    manifest = {
+        "schema_version": 2,
+        "kind": "hakoniwa-performance-result-transfer-group",
+        "group_id": group_id,
+        "producer_id": producer,
+        "layout": {
+            "path": _relative(layout_path),
+            "sha256": _sha256(layout_path),
+        },
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "datasets": datasets,
+        "skipped_sources": skipped,
+    }
+    output = output.resolve()
+    if output.suffix.lower() != ".zip":
+        raise ResultTransferError("result transfer package must use .zip")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = output.with_suffix(".zip.part")
+    temporary.unlink(missing_ok=True)
+    try:
+        with zipfile.ZipFile(
+            temporary, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6
+        ) as archive:
+            archive.writestr(
+                MANIFEST_NAME,
+                json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2)
+                + "\n",
+            )
+            for dataset in datasets:
+                experiment_id = dataset["experiment_id"]
+                for path, relative in _files(sources[experiment_id]):
+                    archive.write(path, f"payload/{experiment_id}/{relative}")
+        temporary.replace(output)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
+    return output, manifest
+
+
 def _safe_member(info: zipfile.ZipInfo) -> PurePosixPath:
     member = PurePosixPath(info.filename)
     mode = info.external_attr >> 16
@@ -418,8 +517,255 @@ def publish_package(
             shutil.rmtree(staging)
 
 
+def _read_group_package(
+    archive_path: Path,
+) -> tuple[dict[str, Any], dict[str, zipfile.ZipInfo]]:
+    with zipfile.ZipFile(archive_path) as archive:
+        infos: dict[str, zipfile.ZipInfo] = {}
+        for info in archive.infolist():
+            member = _safe_member(info)
+            name = str(member)
+            if name in infos:
+                raise ResultTransferError(f"duplicate ZIP member: {name}")
+            if not info.is_dir():
+                infos[name] = info
+        manifest_info = infos.get(MANIFEST_NAME)
+        if manifest_info is None:
+            raise ResultTransferError("result transfer manifest is missing")
+        if manifest_info.file_size > 1024 * 1024:
+            raise ResultTransferError("result transfer manifest is too large")
+        try:
+            manifest = json.loads(archive.read(MANIFEST_NAME).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ResultTransferError("result transfer manifest is invalid") from exc
+    if not isinstance(manifest, dict):
+        raise ResultTransferError("result transfer manifest must be an object")
+    expected_fields = {
+        "schema_version",
+        "kind",
+        "group_id",
+        "producer_id",
+        "layout",
+        "created_at",
+        "datasets",
+        "skipped_sources",
+    }
+    if set(manifest) != expected_fields:
+        raise ResultTransferError("group transfer manifest fields do not match the schema")
+    if (
+        manifest.get("schema_version") != 2
+        or manifest.get("kind")
+        != "hakoniwa-performance-result-transfer-group"
+    ):
+        raise ResultTransferError("unsupported group transfer manifest")
+    datasets = manifest.get("datasets")
+    skipped = manifest.get("skipped_sources")
+    if not isinstance(datasets, list) or not datasets or not isinstance(skipped, list):
+        raise ResultTransferError("group manifest datasets/skipped_sources are invalid")
+    expected_members = {MANIFEST_NAME}
+    seen_experiments = set()
+    for dataset in datasets:
+        required = {
+            "experiment_id",
+            "participant_scope",
+            "series",
+            "source",
+            "destination",
+            "experiment",
+            "files",
+        }
+        if not isinstance(dataset, dict) or set(dataset) != required:
+            raise ResultTransferError("invalid group dataset entry")
+        experiment_id = dataset.get("experiment_id")
+        if not isinstance(experiment_id, str) or experiment_id in seen_experiments:
+            raise ResultTransferError("duplicate or invalid group experiment identity")
+        seen_experiments.add(experiment_id)
+        probe = {
+            "schema_version": 1,
+            "kind": "hakoniwa-performance-result-transfer",
+            "producer_id": manifest.get("producer_id"),
+            "layout": manifest.get("layout"),
+            "created_at": manifest.get("created_at"),
+            **dataset,
+        }
+        _validate_manifest_shape(probe)
+        for entry in dataset["files"]:
+            name = f"payload/{experiment_id}/{entry['path']}"
+            expected_members.add(name)
+            info = infos.get(name)
+            if info is None or info.file_size != entry["size_bytes"]:
+                raise ResultTransferError(
+                    f"ZIP member size disagrees with manifest: {name}"
+                )
+    for item in skipped:
+        if (
+            not isinstance(item, dict)
+            or set(item) != {"experiment_id", "status"}
+            or item.get("status") != "skipped_missing_source"
+            or not isinstance(item.get("experiment_id"), str)
+            or item["experiment_id"] in seen_experiments
+        ):
+            raise ResultTransferError("invalid skipped source entry")
+        seen_experiments.add(item["experiment_id"])
+    if set(infos) != expected_members:
+        raise ResultTransferError("ZIP payload does not match the group manifest")
+    return manifest, infos
+
+
+def _destination_matches(
+    destination: Path, entries: list[dict[str, Any]]
+) -> bool:
+    if destination.is_symlink() or not destination.is_dir():
+        return False
+    actual: dict[str, Path] = {}
+    for path in destination.rglob("*"):
+        if path.is_symlink():
+            return False
+        if path.is_file():
+            actual[path.relative_to(destination).as_posix()] = path
+    expected = {entry["path"]: entry for entry in entries}
+    if set(actual) != set(expected):
+        return False
+    return all(
+        actual[name].stat().st_size == entry["size_bytes"]
+        and _sha256(actual[name]) == entry["sha256"]
+        for name, entry in expected.items()
+    )
+
+
+def publish_group_package(
+    archive_path: Path,
+    *,
+    layout_path: Path,
+    group_id: str,
+    producer: str,
+    staging: Path,
+    max_uncompressed_bytes: int,
+) -> dict[str, Any]:
+    layout_path = layout_path.resolve()
+    layout = result_layout.load_layout(layout_path)
+    members = _group_members(layout, group_id, producer)
+    manifest, infos = _read_group_package(archive_path)
+    if manifest.get("group_id") != group_id or manifest.get("producer_id") != producer:
+        raise ResultTransferError("group or producer identity mismatch")
+    expected_layout = {"path": _relative(layout_path), "sha256": _sha256(layout_path)}
+    if manifest.get("layout") != expected_layout:
+        raise ResultTransferError("group manifest layout identity mismatch")
+    declared = [item["experiment_id"] for item in manifest["datasets"]]
+    skipped = [item["experiment_id"] for item in manifest["skipped_sources"]]
+    if len(set(declared + skipped)) != len(members) or set(declared + skipped) != set(members):
+        raise ResultTransferError("group manifest does not account for every member")
+    total = sum(
+        entry["size_bytes"]
+        for dataset in manifest["datasets"]
+        for entry in dataset["files"]
+    )
+    if total > max_uncompressed_bytes:
+        raise ResultTransferError("uncompressed result group exceeds receiver limit")
+    if staging.exists():
+        shutil.rmtree(staging)
+    staging.mkdir(parents=True)
+    prepared: list[tuple[dict[str, Any], Path, Path, str]] = []
+    published: list[tuple[Path, Path]] = []
+    try:
+        with zipfile.ZipFile(archive_path) as archive:
+            for dataset in manifest["datasets"]:
+                experiment_id = dataset["experiment_id"]
+                probe = {
+                    "schema_version": 1,
+                    "kind": "hakoniwa-performance-result-transfer",
+                    "producer_id": producer,
+                    "layout": manifest["layout"],
+                    "created_at": manifest["created_at"],
+                    **dataset,
+                }
+                destination = _validate_expected(
+                    probe,
+                    layout_path=layout_path,
+                    layout=layout,
+                    experiment_id=experiment_id,
+                    producer=producer,
+                )
+                payload = staging / experiment_id / "payload"
+                payload.mkdir(parents=True)
+                for entry in dataset["files"]:
+                    relative = PurePosixPath(entry["path"])
+                    info = infos[f"payload/{experiment_id}/{relative}"]
+                    target = payload.joinpath(*relative.parts)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    digest = hashlib.sha256()
+                    size = 0
+                    with archive.open(info) as source, target.open("xb") as output:
+                        while chunk := source.read(1024 * 1024):
+                            size += len(chunk)
+                            if size > entry["size_bytes"]:
+                                raise ResultTransferError(
+                                    f"payload size mismatch: {experiment_id}/{relative}"
+                                )
+                            digest.update(chunk)
+                            output.write(chunk)
+                    if size != entry["size_bytes"] or digest.hexdigest() != entry["sha256"]:
+                        raise ResultTransferError(
+                            f"payload hash mismatch: {experiment_id}/{relative}"
+                        )
+                _validate_source(
+                    payload,
+                    experiment_id=experiment_id,
+                    series=dataset["series"],
+                    producer=producer,
+                    participant_scope=dataset["participant_scope"],
+                )
+                if destination.exists():
+                    if not _destination_matches(destination, dataset["files"]):
+                        raise ResultTransferError(
+                            f"canonical destination differs from transfer: {destination}"
+                        )
+                    status = "skipped_existing_identical"
+                else:
+                    status = "pending_publish"
+                prepared.append((dataset, payload, destination, status))
+        results = []
+        for dataset, payload, destination, status in prepared:
+            if status == "pending_publish":
+                if destination.exists():
+                    raise ResultTransferError(
+                        f"canonical destination appeared during transfer: {destination}"
+                    )
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                rollback = staging / "rollback" / dataset["experiment_id"]
+                payload.replace(destination)
+                published.append((destination, rollback))
+                status = "published"
+            results.append(
+                {
+                    "experiment_id": dataset["experiment_id"],
+                    "status": status,
+                    "destination": str(destination),
+                    "file_count": len(dataset["files"]),
+                }
+            )
+        results.extend(manifest["skipped_sources"])
+        return {
+            "status": "published",
+            "group_id": group_id,
+            "producer_id": producer,
+            "datasets": results,
+            "uncompressed_size_bytes": total,
+        }
+    except Exception:
+        for destination, rollback in reversed(published):
+            if destination.exists():
+                rollback.parent.mkdir(parents=True, exist_ok=True)
+                destination.replace(rollback)
+        raise
+    finally:
+        if staging.exists():
+            shutil.rmtree(staging)
+
+
 def _session(args: argparse.Namespace) -> str:
-    value = args.session_id or f"result-{args.experiment}-{args.producer}"
+    identity = args.group or args.experiment
+    value = args.session_id or f"result-{identity}-{args.producer}"
     return artifact_transfer._safe_session(value)
 
 
@@ -538,10 +884,133 @@ def receive_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def send_group_command(args: argparse.Namespace) -> int:
+    session_id = _session(args)
+    runtime = _runtime(args)
+    runtime.mkdir(parents=True, exist_ok=True)
+    archive = runtime / f"{args.group}-{args.producer}.zip"
+    if archive.exists():
+        raise ResultTransferError(f"transfer archive already exists: {archive}")
+    archive, manifest = create_group_package(
+        args.layout, args.group, args.producer, archive
+    )
+    event_log = runtime / "sender-events.jsonl"
+    event_log.unlink(missing_ok=True)
+    config = write_tcp_endpoint_config(
+        runtime / "sender-endpoint",
+        role="client",
+        address=args.server_address,
+        port=args.port,
+    )
+    transport = artifact_transfer._transport(config)
+    try:
+        transport.start()
+        print(f"Connecting result sender to {args.server_address}:{args.port}", flush=True)
+        for item in manifest["skipped_sources"]:
+            print(
+                f"[SKIP] {item['experiment_id']}: source does not exist",
+                flush=True,
+            )
+        transport.wait_connected(args.timeout_sec)
+        transfer = artifact_transfer.send_file(
+            transport,
+            archive,
+            session_id=session_id,
+            timeout_sec=args.timeout_sec,
+            chunk_size=args.chunk_size,
+            event_log=event_log,
+        )
+    finally:
+        transport.close()
+    evidence = {
+        "status": "success",
+        "role": "sender",
+        "recorded_at_unix_sec": time.time(),
+        "manifest": manifest,
+        "transfer": transfer,
+        "events": str(event_log),
+    }
+    evidence_path = runtime / "sender-result.json"
+    _write_evidence(evidence_path, evidence)
+    print(f"[OK] receiver published group {args.group}/{args.producer}")
+    print(f"Evidence: {evidence_path}")
+    return 0
+
+
+def receive_group_command(args: argparse.Namespace) -> int:
+    session_id = _session(args)
+    runtime = _runtime(args)
+    runtime.mkdir(parents=True, exist_ok=True)
+    incoming = runtime / "incoming"
+    event_log = runtime / "receiver-events.jsonl"
+    event_log.unlink(missing_ok=True)
+    config = write_tcp_endpoint_config(
+        runtime / "receiver-endpoint",
+        role="server",
+        address=args.listen_address,
+        port=args.port,
+    )
+    publication: dict[str, Any] = {}
+
+    def publish(archive: Path, _offer: dict[str, Any]) -> dict[str, Any]:
+        result = publish_group_package(
+            archive,
+            layout_path=args.layout,
+            group_id=args.group,
+            producer=args.producer,
+            staging=runtime / "staging",
+            max_uncompressed_bytes=args.max_uncompressed_bytes,
+        )
+        publication.update(result)
+        return result
+
+    transport = artifact_transfer._transport(config)
+    try:
+        transport.start()
+        print(f"Waiting for result group on {args.listen_address}:{args.port}", flush=True)
+        transport.wait_connected(args.timeout_sec)
+        transfer = artifact_transfer.receive_file(
+            transport,
+            incoming,
+            session_id=session_id,
+            timeout_sec=args.timeout_sec,
+            max_bytes=args.max_bytes,
+            event_log=event_log,
+            on_verified=publish,
+        )
+    finally:
+        transport.close()
+    evidence = {
+        "status": "success",
+        "role": "receiver",
+        "recorded_at_unix_sec": time.time(),
+        "publication": publication,
+        "transfer": transfer,
+        "events": str(event_log),
+    }
+    evidence_path = runtime / "receiver-result.json"
+    _write_evidence(evidence_path, evidence)
+    for item in publication["datasets"]:
+        print(
+            f"[{item['status'].upper()}] {item['experiment_id']}: "
+            f"{item.get('destination', '-')}",
+            flush=True,
+        )
+    print(f"Evidence: {evidence_path}")
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument("--layout", type=Path, default=result_layout.DEFAULT_LAYOUT)
-    result.add_argument("--experiment", choices=sorted(result_layout.load_layout()["experiments"]), required=True)
+    selection = result.add_mutually_exclusive_group(required=True)
+    current_layout = result_layout.load_layout()
+    selection.add_argument(
+        "--experiment", choices=sorted(current_layout["experiments"])
+    )
+    selection.add_argument(
+        "--group", choices=sorted(current_layout["transfer_groups"])
+    )
     result.add_argument("--producer", required=True)
     result.add_argument("--session-id")
     result.add_argument("--runtime-dir", type=Path, default=DEFAULT_RUNTIME)
@@ -562,14 +1031,19 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
         layout = result_layout.load_layout(args.layout)
-        experiment = layout["experiments"].get(args.experiment)
-        if experiment is None or args.producer not in experiment["producers"]:
-            raise ResultTransferError(
-                f"{args.producer} is not a producer for {args.experiment}"
-            )
+        if args.group:
+            _group_members(layout, args.group, args.producer)
+        else:
+            experiment = layout["experiments"].get(args.experiment)
+            if experiment is None or args.producer not in experiment["producers"]:
+                raise ResultTransferError(
+                    f"{args.producer} is not a producer for {args.experiment}"
+                )
         if args.command == "receive":
-            return receive_command(args)
-        return send_command(args)
+            return (
+                receive_group_command(args) if args.group else receive_command(args)
+            )
+        return send_group_command(args) if args.group else send_command(args)
     except (
         ResultTransferError,
         result_layout.ResultLayoutError,

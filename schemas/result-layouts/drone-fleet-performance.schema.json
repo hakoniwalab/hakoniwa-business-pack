@@ -3,7 +3,7 @@
   "title": "Drone Fleet performance result layout",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "schema", "roots", "participants", "experiments", "analysis", "semantics"],
+  "required": ["version", "schema", "roots", "participants", "experiments", "transfer_groups", "analysis", "semantics"],
   "properties": {
     "version": {"const": 1},
     "schema": {"const": "schemas/result-layouts/drone-fleet-performance.schema.json"},
@@ -34,6 +34,23 @@
       "type": "object",
       "minProperties": 1,
       "additionalProperties": {"$ref": "#/$defs/experimentLayout"}
+    },
+    "transfer_groups": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["experiments"],
+        "properties": {
+          "experiments": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          }
+        }
+      }
     },
     "analysis": {
       "type": "object",

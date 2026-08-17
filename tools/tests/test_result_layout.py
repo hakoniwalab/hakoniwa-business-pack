@@ -59,6 +59,16 @@ class ResultLayoutTest(unittest.TestCase):
             output = analysis["output_directory"].format(**self.layout["roots"])
             (result_layout.ROOT / output).resolve().relative_to(result_layout.ROOT)
 
+    def test_transfer_groups_pair_performance_and_temporal_series(self) -> None:
+        self.assertEqual(
+            self.layout["transfer_groups"]["experiment-b"]["experiments"],
+            ["experiment-b", "experiment-b-temporal"],
+        )
+        self.assertEqual(
+            self.layout["transfer_groups"]["experiment-c"]["experiments"],
+            ["experiment-c", "experiment-c-temporal"],
+        )
+
     def test_unknown_or_wrong_producer_is_rejected(self) -> None:
         with self.assertRaisesRegex(result_layout.ResultLayoutError, "not a producer"):
             result_layout.resolve_experiment_paths(

@@ -60,6 +60,14 @@ experiments:
     source: "{workspace}/results/{series}/hosts/{participant}"
     destination: "{workspace}/results/{series}/hosts/{participant}"
 
+transfer_groups:
+  experiment-a:
+    experiments: ["experiment-a"]
+  experiment-b:
+    experiments: ["experiment-b", "experiment-b-temporal"]
+  experiment-c:
+    experiments: ["experiment-c", "experiment-c-temporal"]
+
 analysis:
   experiment-a-host-comparison:
     inputs:

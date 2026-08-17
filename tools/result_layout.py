@@ -77,7 +77,7 @@ def load_layout(path: Path = DEFAULT_LAYOUT) -> dict[str, Any]:
     root = _mapping(
         raw,
         "layout",
-        {"version", "schema", "roots", "participants", "experiments", "analysis", "semantics"},
+        {"version", "schema", "roots", "participants", "experiments", "transfer_groups", "analysis", "semantics"},
     )
     if root["version"] != 1:
         raise ResultLayoutError("layout.version must be 1")
@@ -148,6 +148,33 @@ def load_layout(path: Path = DEFAULT_LAYOUT) -> dict[str, Any]:
         if expected_fragment not in f"/{experiment['source']}":
             raise ResultLayoutError(
                 f"layout experiment {experiment_id} source omits Experiment results.directory"
+            )
+
+    transfer_groups = root["transfer_groups"]
+    if not isinstance(transfer_groups, dict) or not transfer_groups:
+        raise ResultLayoutError("layout.transfer_groups must be a non-empty mapping")
+    for group_id, value in transfer_groups.items():
+        group = _mapping(
+            value,
+            f"layout.transfer_groups.{group_id}",
+            {"experiments"},
+        )
+        members = group["experiments"]
+        if (
+            not isinstance(members, list)
+            or not members
+            or len(set(members)) != len(members)
+            or any(member not in experiments for member in members)
+        ):
+            raise ResultLayoutError(
+                f"layout.transfer_groups.{group_id}.experiments must be unique known experiments"
+            )
+        common_producers = set(experiments[members[0]]["producers"])
+        for member in members[1:]:
+            common_producers &= set(experiments[member]["producers"])
+        if not common_producers:
+            raise ResultLayoutError(
+                f"layout.transfer_groups.{group_id} has no common producer"
             )
 
     analysis = root["analysis"]

@@ -1,57 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Hakoniwa performance result transfer manifest",
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "schema_version",
-    "kind",
-    "experiment_id",
-    "producer_id",
-    "participant_scope",
-    "series",
-    "source",
-    "destination",
-    "layout",
-    "experiment",
-    "created_at",
-    "files"
+  "oneOf": [
+    {"$ref": "#/$defs/singleManifest"},
+    {"$ref": "#/$defs/groupManifest"}
   ],
-  "properties": {
-    "schema_version": {"const": 1},
-    "kind": {"const": "hakoniwa-performance-result-transfer"},
-    "experiment_id": {"type": "string", "pattern": "^experiment-[a-z0-9-]+$"},
-    "producer_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
-    "participant_scope": {"enum": ["machine", "host"]},
-    "series": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
-    "source": {"$ref": "#/$defs/relativePath"},
-    "destination": {"$ref": "#/$defs/relativePath"},
-    "layout": {"$ref": "#/$defs/hashedInput"},
-    "experiment": {"$ref": "#/$defs/hashedInput"},
-    "created_at": {"type": "string", "format": "date-time"},
-    "files": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["path", "size_bytes", "sha256"],
-        "properties": {
-          "path": {"$ref": "#/$defs/relativePath"},
-          "size_bytes": {"type": "integer", "minimum": 0},
-          "sha256": {"$ref": "#/$defs/sha256"}
-        }
-      }
-    }
-  },
   "$defs": {
-    "relativePath": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\]+$"
-    },
-    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "hashedInput": {
+    "baseProperties": {
       "type": "object",
       "additionalProperties": false,
       "required": ["path", "sha256"],
@@ -59,6 +14,77 @@
         "path": {"$ref": "#/$defs/relativePath"},
         "sha256": {"$ref": "#/$defs/sha256"}
       }
-    }
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "size_bytes", "sha256"],
+      "properties": {
+        "path": {"$ref": "#/$defs/relativePath"},
+        "size_bytes": {"type": "integer", "minimum": 0},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["experiment_id", "participant_scope", "series", "source", "destination", "experiment", "files"],
+      "properties": {
+        "experiment_id": {"$ref": "#/$defs/experimentId"},
+        "participant_scope": {"enum": ["machine", "host"]},
+        "series": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+        "source": {"$ref": "#/$defs/relativePath"},
+        "destination": {"$ref": "#/$defs/relativePath"},
+        "experiment": {"$ref": "#/$defs/baseProperties"},
+        "files": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/file"}}
+      }
+    },
+    "skippedSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["experiment_id", "status"],
+      "properties": {
+        "experiment_id": {"$ref": "#/$defs/experimentId"},
+        "status": {"const": "skipped_missing_source"}
+      }
+    },
+    "singleManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "experiment_id", "producer_id", "participant_scope", "series", "source", "destination", "layout", "experiment", "created_at", "files"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "kind": {"const": "hakoniwa-performance-result-transfer"},
+        "experiment_id": {"$ref": "#/$defs/experimentId"},
+        "producer_id": {"$ref": "#/$defs/producerId"},
+        "participant_scope": {"enum": ["machine", "host"]},
+        "series": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+        "source": {"$ref": "#/$defs/relativePath"},
+        "destination": {"$ref": "#/$defs/relativePath"},
+        "layout": {"$ref": "#/$defs/baseProperties"},
+        "experiment": {"$ref": "#/$defs/baseProperties"},
+        "created_at": {"type": "string", "format": "date-time"},
+        "files": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/file"}}
+      }
+    },
+    "groupManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind", "group_id", "producer_id", "layout", "created_at", "datasets", "skipped_sources"],
+      "properties": {
+        "schema_version": {"const": 2},
+        "kind": {"const": "hakoniwa-performance-result-transfer-group"},
+        "group_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+        "producer_id": {"$ref": "#/$defs/producerId"},
+        "layout": {"$ref": "#/$defs/baseProperties"},
+        "created_at": {"type": "string", "format": "date-time"},
+        "datasets": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/dataset"}},
+        "skipped_sources": {"type": "array", "items": {"$ref": "#/$defs/skippedSource"}}
+      }
+    },
+    "relativePath": {"type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\]+$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "experimentId": {"type": "string", "pattern": "^experiment-[a-z0-9-]+$"},
+    "producerId": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"}
   }
 }
