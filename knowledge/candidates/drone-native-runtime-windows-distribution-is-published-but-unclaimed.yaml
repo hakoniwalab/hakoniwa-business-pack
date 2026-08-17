@@ -13,10 +13,11 @@ summary: >
   the Catalog already lists Windows as a supported platform. The
   native_runtime profile, however, declares only linux and macos, and the Recipe
   refuses Windows at its entry point. Measuring the published Windows artifacts
-  shows the profile is almost mechanically fillable: the archive ships 7 of the
-  8 executables its siblings ship, and the PE import tables give a concrete
-  Windows dependency set that maps one-to-one onto the existing linux and macos
-  fields. Exactly one upstream packaging gap blocks the profile, and it is not
+  shows most of the profile can be filled from evidence rather than inference:
+  the archive ships 7 of the 8 executables its siblings ship, and the PE import
+  tables give a concrete Windows dependency set that maps one-to-one onto the
+  existing linux and macos fields. Two questions stay open and are recorded as
+  such, not guessed at. Exactly one upstream packaging gap blocks the profile, and it is not
   the PE dependency inspector the Runtime Primer already anticipates.
 
 observation:
@@ -96,6 +97,14 @@ sources:
         {convert,environment,filesystem,heap,locale,math,runtime,stdio,string,time,utility}-l1-1-0.dll.
         win/hako_service_c.dll imports the same set minus OPENGL32.dll and glfw3.dll.
     - description: >
+        Delay import directory check on both binaries, reading data directory
+        entry 13 straight from the PE optional header rather than relying on a
+        dumper's section listing: win-main_hako_drone_service.exe and
+        hako_service_c.dll both report RVA=0, size=0 there, while entry 1
+        (Import Table) is populated in each (RVA 0xd0de8 size 380, and
+        RVA 0xa0ed4 size 320 respectively). Both are PE32+. No dependency is
+        hidden behind delay-loading in v4.0.0.
+    - description: >
         Resolution of each non-API-set import on a Windows 11 Pro 26200 x86_64
         host that already has the Visual C++ redistributable installed.
         KERNEL32.dll, MSVCP140.dll, OPENGL32.dll, VCRUNTIME140.dll and
@@ -134,8 +143,9 @@ validation:
     - Confirm on a clean Windows runner, without a preinstalled Visual C++ redistributable, whether MSVCP140.dll, VCRUNTIME140.dll and VCRUNTIME140_1.dll still resolve, which determines whether they belong in required_libraries or are treated as a host prerequisite.
     - Decide, as component owner, whether win-drone_visual_state_publisher.exe should be added to the Windows distribution, or whether the Windows profile should declare a reduced set of binary_roles.
     - Decide whether toppers/hakoniwa-drone-core NATIVE_RUNTIME_REQUIREMENTS.yaml gains a windows block, since load_catalog_contract compares the Catalog profile against that component-owned contract and rejects any divergence.
+    - Confirm that no delay-loaded dependency appears in a later Windows build, since the import list above is complete only for the statically imported set.
   notes:
-    - Delay-load imports were not inspected; both binaries do carry a delay import directory, so the listed dependency set may be incomplete on that axis.
+    - Delay-load imports add nothing to the dependency set for these two binaries. Reading data directory entry 13 (Delay Import Descriptor) directly from the PE optional header gives RVA=0, size=0 for both win-main_hako_drone_service.exe and hako_service_c.dll, against a populated entry 1 (Import Table) in each. The reported import list is therefore complete for v4.0.0, and a PE adapter can defer delay-load support without losing coverage today.
     - The measurements above were taken on a developer workstation, which is why the Visual C++ runtime question is deferred to a clean runner rather than answered here.
     - No Windows Recipe run was attempted, because SUPPORTED_NATIVE_SYSTEMS rejects Windows at prepare-native before dependency inspection is reachable.
 
@@ -164,6 +174,7 @@ promotion_targets:
         - Any fixed set of always-present system DLLs is an approximation. Windows defines KnownDLLs through the registry and it varies with architecture, so the set belongs in one commented constant that is explicitly documented as an approximation.
         - Keep vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll, mujoco.dll and glfw3.dll out of any such set. Those are exactly the entries that should surface as missing so the contract can declare them, mirroring libglfw.so.3 and libglfw.3.dylib on the existing platforms.
         - Do not describe the resulting search order as loader-accurate. Side-by-side manifests, already-loaded modules and package graphs are out of scope, and omitting the current working directory is stricter than the real loader. Both are reasonable for a pre-launch validator and both should be stated as policy in the code.
+        - Delay-load imports (data directory entry 13) are out of scope for a first adapter. Neither v4.0.0 Windows binary populates that directory, so nothing is lost today; the policy should be stated explicitly so that a future binary which does use delay-loading is a known gap rather than a silent one.
 
 promotion_rationale:
   - The Catalog already claims Windows support, so the absent windows profile is an internal inconsistency in a component-owned contract rather than a gap in coverage.
