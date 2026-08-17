@@ -46,6 +46,13 @@ The artifact channel accepts only a declared ZIP, transfers it as validated
 base64 chunks, verifies its byte count and SHA-256 digest, and then publishes
 it atomically. It is not a file browser or a remote path API.
 
+Performance-result collection adds a stricter layer in
+`result_transfer.py`. It resolves source and destination exclusively from
+`configs/result-layouts/drone-fleet-performance.yaml`, verifies the checked-in
+Experiment and layout hashes, validates every result identity and payload-file
+hash, and publishes only into an absent canonical destination. See
+`docs/drone-fleet-performance-validation-guide-ja.md` for the A/B/C commands.
+
 This package owns:
 
 - JSON encode/decode and validation;

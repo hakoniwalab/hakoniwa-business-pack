@@ -140,6 +140,10 @@ class ArtifactTransferTest(unittest.TestCase):
                             timeout_sec=2.0,
                             max_bytes=1024 * 1024,
                             event_log=root / "receiver-events.jsonl",
+                            on_verified=lambda path, _offer: {
+                                "status": "published",
+                                "artifact": str(path),
+                            },
                         )
                     )
                 except BaseException as exc:
@@ -164,6 +168,7 @@ class ArtifactTransferTest(unittest.TestCase):
             self.assertEqual(destination.read_bytes(), archive.read_bytes())
             self.assertEqual(received["sha256"], sent["sha256"])
             self.assertEqual(received["chunk_count"], sent["chunk_count"])
+            self.assertEqual(received["publication"]["status"], "published")
 
 
 if __name__ == "__main__":

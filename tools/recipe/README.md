@@ -6,6 +6,15 @@ Recipe固有のプロセス構成、Docker構成、smoke testはここへ分離�
 
 ## Drone Fleet性能測定
 
+Experiment A/B/Cの取得、構築、実行、result収集、グラフ生成、測定条件との
+トレーサビリティは
+[`docs/drone-fleet-performance-validation-guide-ja.md`](../../docs/drone-fleet-performance-validation-guide-ja.md)
+を正本とします。本節は各operatorの補足説明です。
+
+A/Bのcross-machine比較とCのmulti-host reportは
+`drone_fleet_performance_report.py`で生成します。入力・出力パスは
+`configs/result-layouts/drone-fleet-performance.yaml`から解決されます。
+
 ブラウザ表示用のDrone Fleetデモとは分離し、可視化なし、実時間同期なしで
 測定します。単一条件の確認では、Business Pack workspaceへ入ってから次を
 実行します。
@@ -107,7 +116,7 @@ single-process-scaling/summary/plots/scaling-overview.svg
 
 ### Experiment B：プロセス数の連続測定
 
-同一ホスト上で128機の論理ワークロードを固定し、シミュレータプロセス数だけを
+同一ホスト上で32、64、128機の論理ワークロードごとに、シミュレータプロセス数を
 `1, 2, 4, 6, 8, 12, 15`へ変える系列です。Experiment Aと同じ組み込み
 Conductorを使用し、外部Conductor PROはマルチホストのExperiment Cから使用します。
 各条件では128機をプロセス間へ可能な限り均等に静的分割します。

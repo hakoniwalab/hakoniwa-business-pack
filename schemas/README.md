@@ -26,9 +26,13 @@ Examples:
   constrained, state-machine-based coordination between Recipe hosts.
 - `schemas/remote-operation/artifact-message.schema.json` is the separate,
   chunked ZIP-evidence transfer contract used after remote execution.
+- `schemas/remote-operation/result-transfer-manifest.schema.json` governs the
+  identity and per-file hashes of a canonical performance-result package.
 - `schemas/remote-operation/run-profile.schema.json` governs the shared,
   repository-managed invocation profile consumed by both experiment hosts,
   including its named baseline/extension attempt selection.
+- `schemas/result-layouts/drone-fleet-performance.schema.json` governs the
+  shared Experiment A/B/C result source, collection, and analysis paths.
 - `schemas/recipes/drone-fleet-performance/experiment.yaml` is the contract for
   Drone Fleet performance inputs below
   `recipes/experiments/drone-fleet-performance/`.

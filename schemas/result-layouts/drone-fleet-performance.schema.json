@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Drone Fleet performance result layout",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "schema", "roots", "participants", "experiments", "analysis", "semantics"],
+  "properties": {
+    "version": {"const": 1},
+    "schema": {"const": "schemas/result-layouts/drone-fleet-performance.schema.json"},
+    "roots": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workspaces", "collection"],
+      "properties": {
+        "workspaces": {"$ref": "#/$defs/relativePath"},
+        "collection": {"$ref": "#/$defs/relativePath"}
+      }
+    },
+    "participants": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["scope", "platform", "execution_environment"],
+        "properties": {
+          "scope": {"enum": ["machine", "host"]},
+          "platform": {"enum": ["macos", "linux", "windows"]},
+          "execution_environment": {"enum": ["native", "wsl2"]}
+        }
+      }
+    },
+    "experiments": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"$ref": "#/$defs/experimentLayout"}
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/analysisLayout"}
+    },
+    "semantics": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    }
+  },
+  "$defs": {
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\]+$"
+    },
+    "pathTemplate": {
+      "allOf": [
+        {"$ref": "#/$defs/relativePath"},
+        {"type": "string", "pattern": "^[A-Za-z0-9._/{}/-]+$"}
+      ]
+    },
+    "experimentLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["experiment", "workspace", "series", "producers", "source", "destination"],
+      "properties": {
+        "experiment": {"$ref": "#/$defs/relativePath"},
+        "workspace": {"$ref": "#/$defs/pathTemplate"},
+        "series": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+        "producers": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "source": {"$ref": "#/$defs/pathTemplate"},
+        "destination": {"$ref": "#/$defs/pathTemplate"}
+      }
+    },
+    "analysisLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inputs", "output_directory", "output_stem", "formats"],
+      "properties": {
+        "inputs": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {"$ref": "#/$defs/pathTemplate"}
+        },
+        "output_directory": {"$ref": "#/$defs/pathTemplate"},
+        "output_stem": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+        "formats": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"enum": ["csv", "html", "json", "png", "svg"]}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,86 @@
+version: 1
+schema: schemas/result-layouts/drone-fleet-performance.schema.json
+
+roots:
+  workspaces: work/recipes
+  collection: exp-results
+
+participants:
+  mac:
+    scope: machine
+    platform: macos
+    execution_environment: native
+  wsl2:
+    scope: machine
+    platform: linux
+    execution_environment: wsl2
+  srv-01:
+    scope: host
+    platform: macos
+    execution_environment: native
+  cli-01:
+    scope: host
+    platform: linux
+    execution_environment: wsl2
+
+experiments:
+  experiment-a:
+    experiment: recipes/experiments/drone-fleet-performance/single-process-scaling.yaml
+    workspace: "{workspaces}/drone-fleet-single-process-scaling"
+    series: single-process-scaling
+    producers: ["mac", "wsl2"]
+    source: "{workspace}/results/{series}"
+    destination: "{collection}/{participant}/{series}"
+  experiment-b:
+    experiment: recipes/experiments/drone-fleet-performance/multi-process-scaling.yaml
+    workspace: "{workspaces}/drone-fleet-multi-process-scaling"
+    series: multi-process-scaling
+    producers: ["mac", "wsl2"]
+    source: "{workspace}/results/{series}"
+    destination: "{collection}/{participant}/{series}"
+  experiment-b-temporal:
+    experiment: recipes/experiments/drone-fleet-performance/single-host-temporal-validation.yaml
+    workspace: "{workspaces}/drone-fleet-multi-process-scaling"
+    series: single-host-temporal-validation
+    producers: ["mac", "wsl2"]
+    source: "{workspace}/results/{series}"
+    destination: "{collection}/{participant}/{series}"
+  experiment-c:
+    experiment: recipes/experiments/drone-fleet-performance/multi-host-scaling.yaml
+    workspace: "{workspaces}/drone-fleet-multi-host-attempt-extension-smoke"
+    series: multi-host-scaling-preflight
+    producers: ["srv-01", "cli-01"]
+    source: "{workspace}/results/{series}/hosts/{participant}"
+    destination: "{workspace}/results/{series}/hosts/{participant}"
+  experiment-c-temporal:
+    experiment: recipes/experiments/drone-fleet-performance/multi-host-temporal-validation.yaml
+    workspace: "{workspaces}/drone-fleet-multi-host-temporal-smoke"
+    series: multi-host-temporal-validation
+    producers: ["srv-01", "cli-01"]
+    source: "{workspace}/results/{series}/hosts/{participant}"
+    destination: "{workspace}/results/{series}/hosts/{participant}"
+
+analysis:
+  experiment-a-host-comparison:
+    inputs:
+      mac: "{collection}/mac/single-process-scaling"
+      wsl2: "{collection}/wsl2/single-process-scaling"
+    output_directory: "{collection}"
+    output_stem: experiment-a-host-comparison
+    formats: ["html", "svg", "png"]
+  experiment-b-host-comparison:
+    inputs:
+      mac: "{collection}/mac/multi-process-scaling"
+      wsl2: "{collection}/wsl2/multi-process-scaling"
+    output_directory: "{collection}"
+    output_stem: experiment-b-host-comparison
+    formats: ["html", "svg", "png"]
+  experiment-c-multi-host-scaling:
+    inputs:
+      performance: "{workspaces}/drone-fleet-multi-host-attempt-extension-smoke/results/multi-host-scaling-preflight"
+      temporal: "{workspaces}/drone-fleet-multi-host-temporal-smoke/results/multi-host-temporal-validation"
+    output_directory: "{workspaces}/drone-fleet-multi-host-attempt-extension-smoke/results/multi-host-scaling-preflight/summary/plots"
+    output_stem: experiment-c-multi-host-scaling
+    formats: ["html", "svg", "png"]
+
+semantics: ["Paths are repository-relative and use forward slashes on every platform.", "Experiment A and B producers write the same local path independently; collection adds the machine dimension.", "Experiment C results already contain the host dimension; cli-01 is transferred into the matching server-side host path.", "Performance and Temporal Validation use separate series and are never aggregated as one performance dataset.", "This file is the path authority for result transfer and cross-machine analysis tools.", "Changing a measurement output root requires updating the corresponding experiment and analysis entries together."]

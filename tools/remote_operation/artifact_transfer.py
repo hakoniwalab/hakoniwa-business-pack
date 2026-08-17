@@ -12,7 +12,7 @@ import time
 import uuid
 import zipfile
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from tools.remote_operation import artifact_protocol
 from tools.remote_operation.pdu_transport import (
@@ -299,6 +299,8 @@ def receive_file(
     timeout_sec: float,
     max_bytes: int,
     event_log: Path,
+    on_verified: Callable[[Path, dict[str, Any]], dict[str, Any] | None]
+    | None = None,
 ) -> dict[str, Any]:
     output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -393,8 +395,15 @@ def receive_file(
         ):
             raise ArtifactTransferError("received ZIP size or SHA-256 does not match the offer")
         temporary.replace(destination)
+        publication = None
+        if on_verified is not None:
+            try:
+                publication = on_verified(destination, offer)
+            except Exception:
+                destination.unlink(missing_ok=True)
+                raise
         reply("VERIFIED", size_bytes=received_size, sha256=actual_hash)
-        return {
+        result = {
             "status": "success",
             "session_id": session_id,
             "transfer_id": transfer_id,
@@ -405,6 +414,9 @@ def receive_file(
             "chunk_size": offer["chunk_size"],
             "chunk_count": offer["chunk_count"],
         }
+        if publication is not None:
+            result["publication"] = publication
+        return result
     except Exception as exc:
         temporary.unlink(missing_ok=True)
         if receiver_sequence == 2:
