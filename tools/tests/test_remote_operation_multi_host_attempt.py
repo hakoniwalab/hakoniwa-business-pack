@@ -86,6 +86,31 @@ class MultiHostScalingAttemptTest(unittest.TestCase):
         self.assertEqual(server.listen_address, "192.168.2.100")
         self.assertEqual(client.server_address, "192.168.2.100")
 
+    def test_temporal_batch_does_not_request_performance_matrix_summary(self) -> None:
+        resolved = attempt.resolve_arguments(
+            attempt.parser().parse_args(["--profile", str(PROFILE), "server"])
+        )
+        with mock.patch.object(attempt.scaling, "summarize_matrix") as summarize:
+            attempt._summarize_completed_batch(resolved, {256: [1]}, {})
+        summarize.assert_not_called()
+
+    def test_performance_batch_requests_matrix_summary(self) -> None:
+        resolved = attempt.resolve_arguments(
+            attempt.parser().parse_args(
+                ["--profile", str(SCALING_ATTEMPTS_PROFILE), "server"]
+            )
+        )
+        completed = {64: [1, 2, 3], 128: [1, 2, 3], 256: [1, 2, 3]}
+        decisions: dict[int, dict] = {}
+        with mock.patch.object(attempt.scaling, "summarize_matrix") as summarize:
+            attempt._summarize_completed_batch(resolved, completed, decisions)
+        summarize.assert_called_once_with(
+            resolved.experiment,
+            resolved.output_root,
+            completed,
+            decisions,
+        )
+
     def test_profile_rejects_cli_override(self) -> None:
         parsed = attempt.parser().parse_args(
             [

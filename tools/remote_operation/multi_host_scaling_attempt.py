@@ -773,6 +773,20 @@ def server(args: argparse.Namespace) -> int:
             if rc: raise AttemptError(f"paired summary is incomplete for {drone_count} UAV")
             print(f"[OK] {drone_count} UAV attempts {','.join(map(str, completed))} summarized", flush=True)
 
+        _summarize_completed_batch(args, completed_by_count, decisions_by_count)
+        return 0
+    finally:
+        transport.close()
+
+
+def _summarize_completed_batch(
+    args: argparse.Namespace,
+    completed_by_count: dict[int, list[int]],
+    decisions_by_count: dict[int, dict[str, Any]],
+) -> None:
+    raw, _declared_counts, _attempts = scaling.load_scaling(args.experiment)
+    mode = raw["measurement"]["mode"]
+    if mode == "performance":
         scaling.summarize_matrix(
             args.experiment,
             args.output_root,
@@ -780,9 +794,11 @@ def server(args: argparse.Namespace) -> int:
             decisions_by_count,
         )
         print("[OK] selected multi-host condition matrix completed", flush=True)
-        return 0
-    finally:
-        transport.close()
+        return
+    if mode == "temporal":
+        print("[OK] selected multi-host temporal validation completed", flush=True)
+        return
+    raise AttemptError(f"unsupported multi-host measurement mode: {mode!r}")
 
 
 def parser() -> argparse.ArgumentParser:
