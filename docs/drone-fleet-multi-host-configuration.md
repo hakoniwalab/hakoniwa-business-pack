@@ -12,27 +12,23 @@ Business Pack Experiment YAML
         v
 public Hakoniwa Conductor eu-input v1
         |
-        | hakoniwa-conductor-pro configure (private product)
+        | select matching committed public fixture
         v
-generated runtime configuration (published with the Recipe)
+generated runtime configuration (published in hakoniwa-conductor)
 ```
 
 - `hakoniwa-conductor/schemas/eu-input-v1.schema.json` is the public input
   contract.
 - Business Pack owns the translation from the experiment YAML to
   `eu-input.json`.
-- `hakoniwa-conductor-pro` owns the private generation implementation.
-- The Recipe declares that the private product is required for regeneration.
-- The schema-valid input and generated runtime files are publishable Recipe
-  artifacts. Running an unchanged published Recipe does not require generator
-  source.
-- `generation-manifest.json` records the input SHA-256 and generator revision.
+- `hakoniwa-conductor-pro` owns the private release-time generation implementation.
+- `hakoniwa-conductor` publishes the approved input and generated runtime fixtures.
+- Business Pack validates and copies those fixtures; it never invokes the private
+  generator on a user host.
 
-The legacy acceptance test compares the generated `eu-input.json` semantically
-with `hakoniwa-conductor-pro/eu-config/eu-input.fleets.json`. The Conductor
-runtime generator output is also compared with the existing `generated-fleets`
-reference, excluding explicitly documented provenance files and obsolete
-reference-only files.
+The acceptance test compares the Recipe-derived `eu-input.json` semantically
+with the selected public fixture input and checks every effective timing field
+before staging its generated runtime files.
 
 ## Stable identities
 
@@ -110,10 +106,10 @@ configurations. `doctor` repeats this check before launch.
 The launcher invokes the exact `bin/main_server` or `bin/main_client` from the
 verified public Hakoniwa Conductor v1.1.0 binary package, with the corresponding
 generated configuration passed explicitly. The private
-`hakoniwa-conductor-pro` checkout remains the configuration generator only; its
-build output is never a runtime fallback. A performance result is valid for its
-declared timing profile only when this effective-config and executable-identity
-contract passes on every host.
+generator is used only by maintainers before publishing the fixture; it is not
+resolved on an experiment host. A performance result is valid for its declared
+timing profile only when this effective-config and executable-identity contract
+passes on every host.
 
 ## Workspace layout v1
 
@@ -129,7 +125,6 @@ work/recipes/drone-fleet-multi-host/
 │       ├── eu-input.json
 │       ├── node-ip-map.json
 │       └── generated/
-│           ├── generation-manifest.json
 │           ├── execution-unit.json
 │           ├── conductor/
 │           ├── endpoint/

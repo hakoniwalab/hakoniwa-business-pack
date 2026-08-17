@@ -95,9 +95,9 @@ MuJoCo runtimeを準備する。MuJoCo versionを本書や呼び出し側へハ�
 ### 3.3 Experiment Cの追加セットアップ
 
 Cでは両hostに同じBusiness Pack revision、互換なFoundation、Drone native runtime、
-公開Hakoniwa Conductor v1.1.0 binary package、および設定生成用のConductor PRO
-checkoutが必要である。Conductor PROは既定ではBusiness Packのsibling
-`../hakoniwa-conductor-pro`として解決されるが、そのbuild成果物は実行には使わない。
+公開Hakoniwa Conductor v1.1.0 binary package、および公開repositoryにcommitされた
+生成済みmulti-host設定が必要である。ユーザー環境にConductor PRO checkoutやgenerator
+buildは必要ない。
 
 各hostで公開版のlicenseを確認し、binary packageを準備する。
 
@@ -106,7 +106,7 @@ python3 tools/recipe/hakoniwa_conductor.py configure \
   --version v1.1.0 --accept-license
 ```
 
-続いて、承認済みの生成用checkoutを配置してから次を実行する。
+続いて、公開`hakoniwa-conductor` repositoryをBusiness Packのsiblingへ配置して実行する。
 
 ```bash
 python tools/recipe.py configure \
@@ -114,15 +114,8 @@ python tools/recipe.py configure \
 python tools/recipe/drone_fleet_single_host.py prepare-native
 ```
 
-Conductor PRO checkoutでは次を実行する。
-
-```bash
-python tools/hako.py build
-```
-
-古いCMake cacheが別のFoundation prefixを保持している場合は、新規build directoryで
-再構成する。既存build directoryを削除するかは、そのcheckoutの所有者が内容を確認して
-判断する。Business Packはprivate checkoutを自動更新・resetしない。
+Business PackはExperiment profileと公開Fixtureの`eu-input.json`およびtiming fieldを
+照合してから、生成済み設定をRecipe workspaceへコピーする。
 
 両hostの最低限の固定情報は次である。
 

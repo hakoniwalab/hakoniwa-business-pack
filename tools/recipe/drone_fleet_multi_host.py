@@ -37,9 +37,13 @@ DEFAULT_EXPERIMENT = (
     / "drone-fleet-performance"
     / "multi-host-legacy-256.yaml"
 )
-DEFAULT_CONDUCTOR_ROOT = ROOT.parent / "hakoniwa-conductor-pro"
+DEFAULT_CONDUCTOR_ROOT = ROOT.parent / "hakoniwa-conductor"
 CONDUCTOR_PACKAGE_VERSION = "v1.1.0"
 CONDUCTOR_IMPLEMENTATION = f"hakoniwa-conductor-{CONDUCTOR_PACKAGE_VERSION}"
+CONDUCTOR_FIXTURES = {
+    "legacy-distributed-10ms": "drone-fleet-multi-host-legacy-visualization",
+    "icra-target-delta-boundary": "drone-fleet-multi-host-performance",
+}
 DEFAULT_DRONE_ROOT = ROOT.parent / "hakoniwa-drone-core"
 DEFAULT_VIEWER_ROOT = ROOT.parent / "hakoniwa-threejs-drone"
 DEFAULT_CONDUCTOR_SCHEMA = (
@@ -1188,18 +1192,73 @@ def git_identity(path: Path) -> dict[str, Any]:
 
 
 def resolve_conductor_root(argument: Path | None = None) -> Path:
-    configured = os.environ.get("HAKO_CONDUCTOR_PRO_ROOT", "").strip()
+    configured = os.environ.get("HAKO_CONDUCTOR_ROOT", "").strip()
     root = argument or (Path(configured).expanduser() if configured else DEFAULT_CONDUCTOR_ROOT)
     root = root.resolve()
-    required = [root / "tools" / "hako.py", root / "eu-config", root / "CMakeLists.txt"]
+    required = [
+        root / "schemas" / "eu-input-v1.schema.json",
+        *(
+            root / "samples" / fixture / "config"
+            for fixture in CONDUCTOR_FIXTURES.values()
+        ),
+    ]
     missing = [str(path) for path in required if not path.exists()]
     if missing:
         raise RecipeError(
-            "explicit hakoniwa-conductor-pro checkout is incomplete: "
+            "public hakoniwa-conductor fixture checkout is incomplete: "
             + ", ".join(missing)
-            + "; public Conductor fallback is forbidden"
         )
     return root
+
+
+def resolve_conductor_fixture(
+    resolved: dict[str, Any], conductor_root: Path, expected_input: dict[str, Any]
+) -> Path:
+    profile = resolved["runtime"]["conductor"]["profile"]
+    fixture_name = CONDUCTOR_FIXTURES.get(profile)
+    if fixture_name is None:
+        raise RecipeError(f"no public Conductor fixture for profile: {profile}")
+    fixture = conductor_root / "samples" / fixture_name / "config"
+    input_path = fixture / "input" / "eu-input.json"
+    generated = fixture / "generated"
+    try:
+        published_input = json.loads(input_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RecipeError(f"cannot read public Conductor fixture input: {exc}") from exc
+    if canonical_bytes(published_input) != canonical_bytes(expected_input):
+        raise RecipeError(
+            f"public Conductor fixture input does not match Recipe profile: {input_path}"
+        )
+    required = [
+        generated / "conductor" / "srv-01.json",
+        generated / "conductor" / "cli-01.json",
+        generated / "endpoint" / "endpoint_container.json",
+        generated / "bridge.json",
+        generated / "remote-api.json",
+        generated / "rpc.json",
+    ]
+    missing = [str(path) for path in required if not path.is_file()]
+    if missing:
+        raise RecipeError("public Conductor fixture is incomplete: " + ", ".join(missing))
+    timing_errors = generated_conductor_timing_errors(resolved, generated)
+    if timing_errors:
+        raise RecipeError(
+            "public Conductor fixture timing mismatch: " + "; ".join(timing_errors)
+        )
+    return fixture
+
+
+def stage_conductor_fixture(fixture: Path, output_root: Path) -> Path:
+    source = fixture / "generated"
+    destination = output_root / "config" / "conductor" / "generated"
+    if source.is_symlink() or any(path.is_symlink() for path in source.rglob("*")):
+        raise RecipeError(f"refusing symlinked public Conductor fixture: {source}")
+    if destination.exists():
+        _validate_managed_clean_path(destination, output_root)
+        shutil.rmtree(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source, destination)
+    return destination
 
 
 def resolve_conductor_package(argument: Path | None = None) -> Path:
@@ -1262,7 +1321,7 @@ def resolve_conductor_schema(argument: Path | None = None) -> Path:
 
 
 def build_conductor_input(resolved: dict[str, Any]) -> dict[str, Any]:
-    """Translate the Recipe contract into Conductor PRO's canonical eu-input."""
+    """Translate the Recipe contract into the public canonical eu-input."""
     deployment = resolved["deployment"]
     hosts = deployment["hosts"]
     server_host_id = resolved["derived"]["server_host"]
@@ -1270,7 +1329,7 @@ def build_conductor_input(resolved: dict[str, Any]) -> dict[str, Any]:
     clients = [host for host in hosts.values() if host["role"] == "client"]
     if len(clients) != 1:
         raise RecipeError(
-            "the current Drone Fleet runtime generator requires exactly one client; "
+            "the current Drone Fleet public fixtures require exactly one client; "
             "additional clients need explicit server-side node placement"
         )
     client = clients[0]
@@ -1396,10 +1455,11 @@ def materialize(
     resolved = validate_experiment(raw)
     conductor = resolve_conductor_root(conductor_root)
     schema = resolve_conductor_schema(conductor_schema)
+    conductor_input = build_conductor_input(resolved)
+    fixture = resolve_conductor_fixture(resolved, conductor, conductor_input)
     identities = {
         "business_pack": git_identity(ROOT),
-        "hakoniwa_conductor": git_identity(schema.parents[1]),
-        "hakoniwa_conductor_pro": git_identity(conductor),
+        "hakoniwa_conductor": git_identity(conductor),
         "hakoniwa_conductor_binary": (
             conductor_runtime_identity(conductor_package_root)
             if conductor_package_root is not None
@@ -1412,7 +1472,6 @@ def materialize(
     }
     config_hash = digest(resolved)
     hosts = resolved["deployment"]["hosts"]
-    conductor_input = build_conductor_input(resolved)
     conductor_input_sha256 = digest(conductor_input)
     bundles: dict[str, Any] = {}
     for host_id, host in hosts.items():
@@ -1479,11 +1538,10 @@ def materialize(
             }
         },
         "generation": {
-            "product": "hakoniwa-conductor-pro",
-            "operation": "configure",
-            "availability": "private",
-            "required_for": "regeneration",
-            "generated_artifacts_committed_for_publication": True,
+            "source": "hakoniwalab/hakoniwa-conductor",
+            "fixture": str(fixture.relative_to(conductor)),
+            "generated_by": "hakoniwa-conductor-pro",
+            "runtime_generation_required": False,
         },
         "bundles": {
             host_id: {
@@ -1494,6 +1552,7 @@ def materialize(
         },
     }
     if write:
+        stage_conductor_fixture(fixture, output_root)
         atomic_json(output_root / "config" / "resolved-experiment.json", resolved)
         for host_id, bundle in bundles.items():
             atomic_json(output_root / "bundles" / host_id / "manifest.json", bundle)
@@ -1522,28 +1581,13 @@ def materialize(
     }
 
 
-def run_conductor_configure(conductor_root: Path, eu_input_path: Path) -> None:
-    command = [
-        sys.executable,
-        str(conductor_root / "tools" / "hako.py"),
-        "configure",
-        "--config",
-        str(eu_input_path),
-    ]
-    result = subprocess.run(command, cwd=conductor_root, check=False)
-    if result.returncode != 0:
-        raise RecipeError(
-            f"hakoniwa-conductor-pro configure failed with rc={result.returncode}"
-        )
-
-
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument("--experiment", type=Path, default=DEFAULT_EXPERIMENT)
     result.add_argument(
         "--conductor-root",
         type=Path,
-        help="private hakoniwa-conductor-pro checkout used only for configuration generation",
+        help="public hakoniwa-conductor checkout containing generated fixtures",
     )
     result.add_argument(
         "--conductor-package-root",
@@ -1633,11 +1677,6 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "configure":
             host_configs = materialize_host_runtimes(
                 result["resolved"], output_root, args.drone_root
-            )
-            conductor_root = resolve_conductor_root(args.conductor_root)
-            run_conductor_configure(
-                conductor_root,
-                output_root / "config" / "conductor" / "eu-input.json",
             )
             timing_errors = generated_conductor_timing_errors(
                 result["resolved"],

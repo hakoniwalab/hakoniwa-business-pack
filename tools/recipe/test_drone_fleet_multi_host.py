@@ -20,10 +20,40 @@ class DroneFleetMultiHostTest(unittest.TestCase):
         return yaml_support.load_simple_yaml(recipe.DEFAULT_EXPERIMENT)
 
     def conductor(self, root: Path) -> Path:
-        (root / "tools").mkdir(parents=True)
-        (root / "tools" / "hako.py").write_text("#!/usr/bin/env python3\n")
-        (root / "eu-config").mkdir()
-        (root / "CMakeLists.txt").write_text("cmake_minimum_required(VERSION 3.20)\n")
+        (root / "schemas").mkdir(parents=True)
+        (root / "schemas/eu-input-v1.schema.json").write_text(
+            CONDUCTOR_SCHEMA_FIXTURE.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        legacy = (
+            root
+            / "samples"
+            / "drone-fleet-multi-host-legacy-visualization"
+            / "config"
+        )
+        performance = (
+            root / "samples" / "drone-fleet-multi-host-performance" / "config"
+        )
+        (legacy / "input").mkdir(parents=True)
+        (legacy / "input/eu-input.json").write_text(
+            CONDUCTOR_INPUT_FIXTURE.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        generated = legacy / "generated"
+        for relative, value in {
+            "conductor/srv-01.json": {
+                "delta_time_usec": 10000,
+                "max_delay_time_usec": 20000,
+            },
+            "conductor/cli-01.json": {
+                "delta_time_usec": 10000,
+                "max_delay_time_usec": 20000,
+            },
+            "endpoint/endpoint_container.json": {},
+            "bridge.json": {},
+            "remote-api.json": {},
+            "rpc.json": {},
+        }.items():
+            recipe.atomic_json(generated / relative, value)
+        performance.mkdir(parents=True)
         return root
 
     def test_current_legacy_experiment_is_valid(self) -> None:
@@ -162,16 +192,28 @@ class DroneFleetMultiHostTest(unittest.TestCase):
                 )
             self.assertFalse(output.exists())
 
-    def test_configure_invokes_private_conductor_with_shared_input(self) -> None:
+    def test_configure_stages_the_public_generated_fixture(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             conductor = self.conductor(root / "conductor")
-            eu_input = root / "output/config/conductor/eu-input.json"
-            with mock.patch.object(recipe.subprocess, "run") as run:
-                run.return_value.returncode = 0
-                recipe.run_conductor_configure(conductor, eu_input)
-            command = run.call_args.args[0]
-            self.assertEqual(command[-3:], ["configure", "--config", str(eu_input)])
+            output = root / "output"
+            with mock.patch.object(
+                recipe, "git_identity", return_value={"revision": "abc", "dirty": False}
+            ):
+                result = recipe.materialize(
+                    recipe.DEFAULT_EXPERIMENT,
+                    output,
+                    conductor,
+                    CONDUCTOR_SCHEMA_FIXTURE,
+                    write=True,
+                )
+            staged = output / "config/conductor/generated/conductor/srv-01.json"
+            self.assertTrue(staged.is_file())
+            self.assertEqual(
+                result["index"]["generation"]["fixture"],
+                "samples/drone-fleet-multi-host-legacy-visualization/config",
+            )
+            self.assertFalse(result["index"]["generation"]["runtime_generation_required"])
 
     def test_materializes_both_hosts_through_shared_runtime_specs(self) -> None:
         resolved = recipe.validate_experiment(self.experiment())

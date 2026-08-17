@@ -14,8 +14,8 @@ feasibility:
   confidence: high
   rationale:
     - The previous Drone PRO scripts demonstrate server/client fleet execution, host-local VSP, and server-owned WebBridge/Viewer at larger scales.
-    - The Conductor PRO generated-fleets fixture demonstrates the same client-initiated TCP topology and visual-state transfer contract.
-    - A Business Pack operator and reproducible host-bundle generator have not yet been implemented.
+    - Public generated Conductor fixtures define the client-initiated TCP topology and visual-state transfer contract.
+    - The Business Pack operator validates and stages those fixtures without private runtime generation.
 
 validation:
   status: not_tested
@@ -41,7 +41,7 @@ constraints:
   - client-initiated-tcp
   - no-mac-to-wsl2-inbound-connection
   - public-conductor-v1.1.0-binary-required
-  - private-conductor-pro-generator-required
+  - public-generated-conductor-fixtures-required
   - connectivity-results-excluded-from-official-performance
 
 agency_boundary:
@@ -73,10 +73,6 @@ agency_boundary:
       description: Review and accept the public Hakoniwa Conductor v1.1.0 license before downloading its runtime package on both hosts.
       status: required
       required_before: [configure, simulation_execution]
-    - id: conductor_pro_generator_access
-      description: Confirm access to hakoniwa-conductor-pro for deterministic configuration generation; its binaries are not used at runtime.
-      status: required
-      required_before: [configure]
     - id: drone_license
       description: Confirm that the intended experiment complies with the applicable Hakoniwa Drone license or PRO agreement.
       status: required
@@ -148,20 +144,22 @@ runtime_binary_packages:
 
 recipe_local_requirements_schema_version: 1
 recipe_local_requirements:
-  hakoniwa-conductor-pro:
+  hakoniwa-conductor:
     root:
-      default_path: ../hakoniwa-conductor-pro
-      override_env: HAKO_CONDUCTOR_PRO_ROOT
+      default_path: ../hakoniwa-conductor
+      override_env: HAKO_CONDUCTOR_ROOT
       relative_to: recipe_repository
     source:
-      type: local
+      type: git
+      url: https://github.com/hakoniwalab/hakoniwa-conductor.git
+      revision: main
     required_artifacts:
-      - path: tools/hako.py
-        kind: executable
-      - path: eu-config
-        kind: directory
-      - path: CMakeLists.txt
+      - path: schemas/eu-input-v1.schema.json
         kind: file
+      - path: samples/drone-fleet-multi-host-performance/config/generated
+        kind: directory
+      - path: samples/drone-fleet-multi-host-legacy-visualization/config/generated
+        kind: directory
 
 native_runtime_requirements:
   schema_version: 1
@@ -390,7 +388,7 @@ artifacts:
     path: work/recipes/drone-fleet-multi-host/results/connectivity/summary.json
 
 missing_pieces:
-  - Resolve and validate the public Conductor v1.1.0 package and private generator revision on both hosts.
+  - Resolve and validate the public Conductor v1.1.0 package and committed generated fixture on both hosts.
   - Generate Foundation requirements independently for the Mac and WSL2 host roles.
   - Implement network doctor, config-hash handshake, readiness, coordinated stop, and residue checks.
   - Validate the 256-UAV VSP baseline on the physical wired-LAN target.
@@ -461,7 +459,8 @@ implementation_plan:
 
 acceptance_criteria:
   - Runtime launcher commands use only the verified public Hakoniwa Conductor v1.1.0 package.
-  - The private Conductor PRO checkout is used only to regenerate configuration and never as a runtime binary fallback.
+  - Runtime configuration is copied only from generated fixtures committed to the public Hakoniwa Conductor repository.
+  - Neither a private Conductor PRO checkout nor runtime generation is required on user hosts.
   - WSL2 has no listener address and initiates every inter-host connection.
   - One input covers exactly 256 drones with no range gap or overlap.
   - Mac uses four Drone processes and WSL2 uses twelve for the legacy baseline.
@@ -484,14 +483,14 @@ source_artifacts:
     path: docs/drone-fleet-multi-host-configuration.md
     revision: local-working-tree
     relation: configuration-layer-and-role-selection-contract
-  - repository: hakoniwalab/hakoniwa-conductor-pro
-    path: eu-config/generated-fleets
-    revision: local-working-tree
-    relation: server-client-endpoint-and-visual-state-reference
   - repository: hakoniwalab/hakoniwa-conductor
-    path: releases/tag/v1.1.0
-    revision: v1.1.0
-    relation: verified-public-runtime-binary-package
+    path: samples/drone-fleet-multi-host-performance
+    revision: main
+    relation: public-generated-performance-runtime-fixture
+  - repository: hakoniwalab/hakoniwa-conductor
+    path: samples/drone-fleet-multi-host-legacy-visualization
+    revision: main
+    relation: public-generated-legacy-runtime-fixture
   - repository: hakoniwalab/hakoniwa-drone-pro
     path: tools/launch-fleets-dist-simple-server.bash
     revision: local-working-tree

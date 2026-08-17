@@ -253,7 +253,16 @@ def validate_foundation_contract(
 ) -> dict[str, str]:
     """Fail closed when installed Foundation ABI provenance differs from a package."""
 
-    from tools import foundation
+    try:
+        from tools import foundation
+    except ModuleNotFoundError:
+        # Direct script entry points place tools/recipe, rather than the
+        # repository root, at sys.path[0]. Keep their documented invocation
+        # form working when this late import is first reached by doctor.
+        root = str(business_pack_root())
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        from tools import foundation
 
     contract = read_build_contract(build_contract)
     expected = {

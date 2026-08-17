@@ -259,7 +259,8 @@ python tools/recipe/hakoniwa_conductor.py status --version v1.1.0
 `--accept-license`は人間の判断境界です。AIが暗黙に付与してはいけません。
 このRecipeはv1.0.0とv1.1.0のバイナリ準備だけを担当し、Conductorプロセスは
 起動しません。`drone_fleet_multi_host.py`はv1.1.0を実行用に固定し、
-Conductor PRO checkoutは設定生成だけに使用します。
+公開`hakoniwa-conductor` repositoryにcommitされた生成済み設定を使用します。
+実験hostにConductor PRO checkoutは不要です。
 
 生成済み設定を同梱した公開Python時刻同期サンプルは、別の実行Recipeで確認します。
 
