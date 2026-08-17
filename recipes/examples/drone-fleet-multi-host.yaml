@@ -40,8 +40,8 @@ constraints:
   - wired-lan-only
   - client-initiated-tcp
   - no-mac-to-wsl2-inbound-connection
-  - private-conductor-pro-checkout-required
-  - no-public-conductor-fallback
+  - public-conductor-v1.1.0-binary-required
+  - private-conductor-pro-generator-required
   - connectivity-results-excluded-from-official-performance
 
 agency_boundary:
@@ -69,10 +69,14 @@ agency_boundary:
       confirmation_required: true
       required_before: [multi_host_start]
   required_permissions:
-    - id: conductor_pro_access
-      description: Confirm access and entitlement to the private hakoniwa-conductor-pro checkout on both hosts.
+    - id: conductor_public_license
+      description: Review and accept the public Hakoniwa Conductor v1.1.0 license before downloading its runtime package on both hosts.
       status: required
       required_before: [configure, simulation_execution]
+    - id: conductor_pro_generator_access
+      description: Confirm access to hakoniwa-conductor-pro for deterministic configuration generation; its binaries are not used at runtime.
+      status: required
+      required_before: [configure]
     - id: drone_license
       description: Confirm that the intended experiment complies with the applicable Hakoniwa Drone license or PRO agreement.
       status: required
@@ -125,6 +129,23 @@ execution_environment:
     listener_role: server-only
     connection_direction: client-to-server
 
+runtime_binary_packages:
+  hakoniwa-conductor:
+    version: v1.1.0
+    distribution: public-binary
+    configure_command: python3 tools/recipe/hakoniwa_conductor.py configure --version v1.1.0 --accept-license
+    override_env: HAKO_CONDUCTOR_PACKAGE_ROOT
+    platform_package_root: work/recipes/hakoniwa-conductor-v1-1-0-binary-package/runtime/hakoniwa-conductor-v1.1.0-<platform>
+    required_artifacts:
+      - path: VERSION
+        kind: file
+      - path: metadata/build-contract.txt
+        kind: file
+      - path: bin/main_server
+        kind: executable
+      - path: bin/main_client
+        kind: executable
+
 recipe_local_requirements_schema_version: 1
 recipe_local_requirements:
   hakoniwa-conductor-pro:
@@ -152,7 +173,7 @@ native_runtime_requirements:
 
 foundation_contract:
   mode: required
-  reason: Each host uses a managed local Foundation for Core, Endpoint, RPC, Bridge, Python, Launcher, and Conductor PRO linkage.
+  reason: Each host uses a managed local Foundation for Core, Endpoint, RPC, Bridge, Python, Launcher, and public Conductor v1.1.0 linkage.
 
 foundation_requirements:
   hakoniwa-core-pro:
@@ -299,7 +320,7 @@ connections:
     contract:
       status: not_tested
       requires:
-        - Built-in Drone conductors are disabled when external Conductor PRO owns coordination.
+        - Built-in Drone conductors are disabled when external Hakoniwa Conductor v1.1.0 owns coordination.
         - Global drone ranges are contiguous and non-overlapping.
       validation_notes:
         - The new Business Pack host bundles have not yet been generated or executed.
@@ -369,7 +390,7 @@ artifacts:
     path: work/recipes/drone-fleet-multi-host/results/connectivity/summary.json
 
 missing_pieces:
-  - Resolve and validate Conductor PRO source/build revisions on both hosts.
+  - Resolve and validate the public Conductor v1.1.0 package and private generator revision on both hosts.
   - Generate Foundation requirements independently for the Mac and WSL2 host roles.
   - Implement network doctor, config-hash handshake, readiness, coordinated stop, and residue checks.
   - Validate the 256-UAV VSP baseline on the physical wired-LAN target.
@@ -439,7 +460,8 @@ implementation_plan:
   - Preserve the bundle and result contracts for the later three-run supervisor.
 
 acceptance_criteria:
-  - The Recipe never clones or falls back to the public Conductor package when Conductor PRO is absent.
+  - Runtime launcher commands use only the verified public Hakoniwa Conductor v1.1.0 package.
+  - The private Conductor PRO checkout is used only to regenerate configuration and never as a runtime binary fallback.
   - WSL2 has no listener address and initiates every inter-host connection.
   - One input covers exactly 256 drones with no range gap or overlap.
   - Mac uses four Drone processes and WSL2 uses twelve for the legacy baseline.
@@ -466,6 +488,10 @@ source_artifacts:
     path: eu-config/generated-fleets
     revision: local-working-tree
     relation: server-client-endpoint-and-visual-state-reference
+  - repository: hakoniwalab/hakoniwa-conductor
+    path: releases/tag/v1.1.0
+    revision: v1.1.0
+    relation: verified-public-runtime-binary-package
   - repository: hakoniwalab/hakoniwa-drone-pro
     path: tools/launch-fleets-dist-simple-server.bash
     revision: local-working-tree

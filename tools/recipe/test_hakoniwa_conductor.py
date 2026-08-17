@@ -19,6 +19,24 @@ class HakoniwaConductorRecipeTest(unittest.TestCase):
             conductor.detect_target("Linux", "AMD64").suffix,
             "linux-x86_64",
         )
+        target = conductor.detect_target("Darwin", "arm64", version="v1.1.0")
+        self.assertEqual(target.version, "v1.1.0")
+        self.assertEqual(
+            target.package_name,
+            "hakoniwa-conductor-v1.1.0-macos-arm64",
+        )
+        self.assertEqual(
+            conductor.detect_target(
+                "Linux", "x86_64", version="v1.1.0"
+            ).platform_contract,
+            "linux/x86_64",
+        )
+        self.assertEqual(
+            conductor.detect_target(
+                "Linux", "x86_64", version="v1.0.0"
+            ).platform_contract,
+            "linux/amd64",
+        )
 
     def test_rejects_unpublished_target(self):
         with self.assertRaises(conductor.ConductorRecipeError):

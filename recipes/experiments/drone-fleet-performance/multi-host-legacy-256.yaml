@@ -13,7 +13,7 @@ runtime:
   visualization: true
   show_runner_real_time_sync: false
   conductor:
-    implementation: hakoniwa-conductor-pro
+    implementation: hakoniwa-conductor-v1.1.0
     profile: legacy-distributed-10ms
     delta_time_usec: 10000
     max_delay_time_usec: 20000
@@ -106,4 +106,4 @@ measurement:
     conductor_max_delay_time_usec: 20000
     conductor_real_sleep_msec: unspecified
     simtime_publish_mode: legacy_simple
-    conductor_implementation: hakoniwa-conductor-pro
+    conductor_implementation: hakoniwa-conductor-v1.1.0

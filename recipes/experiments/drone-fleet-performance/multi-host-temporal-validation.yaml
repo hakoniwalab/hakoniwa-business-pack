@@ -17,7 +17,7 @@ runtime:
   visualization: false
   show_runner_real_time_sync: false
   conductor:
-    implementation: hakoniwa-conductor-pro
+    implementation: hakoniwa-conductor-v1.1.0
     profile: icra-target-delta-boundary
     delta_time_usec: 1000
     max_delay_time_usec: 20000

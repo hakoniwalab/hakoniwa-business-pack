@@ -23,7 +23,7 @@ class ExperimentValidationTest < Minitest::Test
       "runtime" => {
         "mode" => "native", "visualization" => true, "show_runner_real_time_sync" => false,
         "conductor" => {
-          "implementation" => "hakoniwa-conductor-pro", "profile" => "legacy-distributed-10ms",
+          "implementation" => "hakoniwa-conductor-v1.1.0", "profile" => "legacy-distributed-10ms",
           "delta_time_usec" => 10_000, "max_delay_time_usec" => 20_000,
           "real_sleep_msec" => "unspecified", "simtime_publish_mode" => "legacy_simple"
         }

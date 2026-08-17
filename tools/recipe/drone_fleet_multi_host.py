@@ -19,9 +19,11 @@ from types import SimpleNamespace
 from typing import Any
 
 try:
+    from tools.recipe import hakoniwa_conductor as conductor_package
     from tools.recipe import drone_fleet_runtime as fleet_runtime
     from tools.recipe import drone_fleet_single_host as yaml_support
 except ModuleNotFoundError:
+    import hakoniwa_conductor as conductor_package
     import drone_fleet_runtime as fleet_runtime
     import drone_fleet_single_host as yaml_support
 
@@ -36,6 +38,8 @@ DEFAULT_EXPERIMENT = (
     / "multi-host-legacy-256.yaml"
 )
 DEFAULT_CONDUCTOR_ROOT = ROOT.parent / "hakoniwa-conductor-pro"
+CONDUCTOR_PACKAGE_VERSION = "v1.1.0"
+CONDUCTOR_IMPLEMENTATION = f"hakoniwa-conductor-{CONDUCTOR_PACKAGE_VERSION}"
 DEFAULT_DRONE_ROOT = ROOT.parent / "hakoniwa-drone-core"
 DEFAULT_VIEWER_ROOT = ROOT.parent / "hakoniwa-threejs-drone"
 DEFAULT_CONDUCTOR_SCHEMA = (
@@ -190,14 +194,14 @@ def validate_experiment(raw: dict[str, Any]) -> dict[str, Any]:
     profile = conductor.get("profile")
     expected_conductor = {
         "legacy-distributed-10ms": {
-            "implementation": "hakoniwa-conductor-pro",
+            "implementation": CONDUCTOR_IMPLEMENTATION,
             "delta_time_usec": 10000,
             "max_delay_time_usec": 20000,
             "real_sleep_msec": "unspecified",
             "simtime_publish_mode": "legacy_simple",
         },
         "icra-target-delta-boundary": {
-            "implementation": "hakoniwa-conductor-pro",
+            "implementation": CONDUCTOR_IMPLEMENTATION,
             "delta_time_usec": 1000,
             "max_delay_time_usec": 20000,
             "simtime_publish_interval_usec": 10000,
@@ -500,20 +504,20 @@ def host_launcher_spec(
 def conductor_launcher_asset(
     resolved: dict[str, Any],
     host_id: str,
-    conductor_root: Path,
+    conductor_package_root: Path,
     generated_root: Path,
 ) -> dict[str, Any]:
-    """Pin the Launcher to the selected Conductor PRO checkout build."""
+    """Pin the Launcher to the verified public Conductor package."""
     hosts = resolved["deployment"]["hosts"]
     if host_id not in hosts:
         raise RecipeError(f"unknown host id: {host_id}")
     host = hosts[host_id]
     role = host["role"]
-    binary = conductor_binary(conductor_root, role)
+    binary = conductor_binary(conductor_package_root, role)
     if binary is None:
         raise RecipeError(
-            f"Conductor {role} binary is missing under {conductor_root}; "
-            "run python tools/hako.py build"
+            f"Conductor {role} binary is missing under {conductor_package_root}; "
+            "prepare the public v1.1.0 binary package"
         )
     config_name = host_id if role == "server" else host["node_id"]
     config = generated_root / "conductor" / f"{config_name}.json"
@@ -525,7 +529,7 @@ def conductor_launcher_asset(
         "activation_timing": "before_start",
         "command": str(binary),
         "args": args,
-        "cwd": str(conductor_root),
+        "cwd": str(conductor_package_root),
         "delay_sec": 1,
     }
 
@@ -623,15 +627,11 @@ def prepare_host_measurement(
     return config_path, trial
 
 
-def conductor_binary(conductor_root: Path, role: str) -> Path | None:
+def conductor_binary(conductor_package_root: Path, role: str) -> Path | None:
     name = "main_server" if role == "server" else "main_client"
-    for candidate in (
-        conductor_root / "cmake-build" / name,
-        conductor_root / "build" / name,
-        conductor_root / "build-rd" / name,
-    ):
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return candidate
+    candidate = conductor_package_root / "bin" / name
+    if candidate.is_file() and os.access(candidate, os.X_OK):
+        return candidate
     return None
 
 
@@ -738,7 +738,7 @@ def prepare_host_launcher(
     state: dict[str, Any],
     output_root: Path,
     drone_root: Path,
-    conductor_root: Path,
+    conductor_package_root: Path,
     viewer_root: Path,
 ) -> Path:
     host_id = state["selection"]["host_id"]
@@ -772,7 +772,7 @@ def prepare_host_launcher(
     leading = conductor_launcher_asset(
         state["resolved"],
         host_id,
-        conductor_root,
+        conductor_package_root,
         output_root / "config" / "conductor" / "generated",
     )
     try:
@@ -808,7 +808,7 @@ def prepare_host_launcher(
 def doctor_local(
     output_root: Path,
     drone_root: Path,
-    conductor_root: Path,
+    conductor_package_root: Path,
     viewer_root: Path,
 ) -> int:
     state = load_local_selection(output_root)
@@ -851,11 +851,14 @@ def doctor_local(
             yaml_support.resolve_foundation_python(paths, system_name)
         )
         checks.append(("Launcher manual-run contract", launcher_ok, launcher_detail))
-    binary = conductor_binary(conductor_root, role)
+    binary = conductor_binary(conductor_package_root, role)
     binary_ok, binary_detail = (
         conductor_binary_contract(binary)
         if binary is not None
-        else (False, f"missing under {conductor_root}; run python tools/hako.py build")
+        else (
+            False,
+            f"missing under {conductor_package_root}; prepare public {CONDUCTOR_PACKAGE_VERSION}",
+        )
     )
     checks.append(
         (
@@ -864,6 +867,20 @@ def doctor_local(
             binary_detail,
         )
     )
+    try:
+        installed = conductor_package.validate_foundation_contract(
+            conductor_package_root / "metadata" / "build-contract.txt",
+            paths.install_prefix,
+        )
+        checks.append(
+            (
+                "Conductor Foundation build contract",
+                True,
+                ", ".join(f"{name}={value}" for name, value in installed.items()),
+            )
+        )
+    except (conductor_package.ConductorRecipeError, OSError) as exc:
+        checks.append(("Conductor Foundation build contract", False, str(exc)))
     conductor_config = (
         output_root
         / "config"
@@ -933,7 +950,9 @@ def doctor_local(
         failed = failed or not ok
     if failed:
         return 1
-    launcher = prepare_host_launcher(state, output_root, drone_root, conductor_root, viewer_root)
+    launcher = prepare_host_launcher(
+        state, output_root, drone_root, conductor_package_root, viewer_root
+    )
     print(f"[OK] launcher: {launcher}")
     print(f"[OK] local host: {host_id} ({role})")
     return 0
@@ -943,10 +962,12 @@ def launcher_control(
     command: str,
     output_root: Path,
     drone_root: Path,
-    conductor_root: Path,
+    conductor_package_root: Path,
     viewer_root: Path,
 ) -> int:
-    if command == "start" and doctor_local(output_root, drone_root, conductor_root, viewer_root) != 0:
+    if command == "start" and doctor_local(
+        output_root, drone_root, conductor_package_root, viewer_root
+    ) != 0:
         return 1
     state = load_local_selection(output_root)
     host_id = state["selection"]["host_id"]
@@ -1181,6 +1202,46 @@ def resolve_conductor_root(argument: Path | None = None) -> Path:
     return root
 
 
+def resolve_conductor_package(argument: Path | None = None) -> Path:
+    """Resolve and verify the public Conductor runtime package for this Recipe."""
+
+    configured = os.environ.get("HAKO_CONDUCTOR_PACKAGE_ROOT", "").strip()
+    explicit = argument or (Path(configured).expanduser() if configured else None)
+    try:
+        target = conductor_package.detect_target(version=CONDUCTOR_PACKAGE_VERSION)
+        if explicit is not None:
+            package = explicit.resolve()
+            conductor_package.validate_package(package, target)
+            return package
+        result = conductor_package.doctor(CONDUCTOR_PACKAGE_VERSION)
+        return Path(str(result["package"])).resolve()
+    except (conductor_package.ConductorRecipeError, OSError) as exc:
+        raise RecipeError(
+            f"public Hakoniwa Conductor {CONDUCTOR_PACKAGE_VERSION} package is not "
+            "ready: "
+            f"{exc}; run `python3 tools/recipe/hakoniwa_conductor.py configure "
+            f"--version {CONDUCTOR_PACKAGE_VERSION} --accept-license`"
+        ) from exc
+
+
+def conductor_runtime_identity(package: Path) -> dict[str, Any]:
+    """Record the executable identity actually selected for a generated bundle."""
+
+    return {
+        "revision": CONDUCTOR_PACKAGE_VERSION,
+        "dirty": False,
+        "distribution": "public-binary",
+        "package": package.name,
+        "build_contract_sha256": sha256_file(
+            package / "metadata" / "build-contract.txt"
+        ),
+        "binaries": {
+            name: sha256_file(package / "bin" / name)
+            for name in ("main_server", "main_client")
+        },
+    }
+
+
 def resolve_conductor_schema(argument: Path | None = None) -> Path:
     configured = os.environ.get("HAKO_CONDUCTOR_EU_INPUT_SCHEMA", "").strip()
     path = argument or (
@@ -1329,6 +1390,7 @@ def materialize(
     conductor_schema: Path | None = None,
     *,
     write: bool,
+    conductor_package_root: Path | None = None,
 ) -> dict[str, Any]:
     raw = yaml_support.load_simple_yaml(experiment_path)
     resolved = validate_experiment(raw)
@@ -1338,6 +1400,15 @@ def materialize(
         "business_pack": git_identity(ROOT),
         "hakoniwa_conductor": git_identity(schema.parents[1]),
         "hakoniwa_conductor_pro": git_identity(conductor),
+        "hakoniwa_conductor_binary": (
+            conductor_runtime_identity(conductor_package_root)
+            if conductor_package_root is not None
+            else {
+                "revision": CONDUCTOR_PACKAGE_VERSION,
+                "dirty": False,
+                "distribution": "public-binary-declared",
+            }
+        ),
     }
     config_hash = digest(resolved)
     hosts = resolved["deployment"]["hosts"]
@@ -1469,7 +1540,16 @@ def run_conductor_configure(conductor_root: Path, eu_input_path: Path) -> None:
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument("--experiment", type=Path, default=DEFAULT_EXPERIMENT)
-    result.add_argument("--conductor-root", type=Path)
+    result.add_argument(
+        "--conductor-root",
+        type=Path,
+        help="private hakoniwa-conductor-pro checkout used only for configuration generation",
+    )
+    result.add_argument(
+        "--conductor-package-root",
+        type=Path,
+        help="verified public Hakoniwa Conductor v1.1.0 package override",
+    )
     result.add_argument("--conductor-schema", type=Path)
     result.add_argument("--drone-root", type=Path, default=DEFAULT_DRONE_ROOT)
     result.add_argument("--viewer-root", type=Path, default=DEFAULT_VIEWER_ROOT)
@@ -1521,7 +1601,7 @@ def main(argv: list[str] | None = None) -> int:
                 return doctor_local(
                     output_root,
                     args.drone_root.resolve(),
-                    resolve_conductor_root(args.conductor_root),
+                    resolve_conductor_package(args.conductor_package_root),
                     args.viewer_root.resolve(),
                 )
             if args.command == "open-viewer":
@@ -1530,19 +1610,25 @@ def main(argv: list[str] | None = None) -> int:
                 args.command,
                 output_root,
                 args.drone_root.resolve(),
-                resolve_conductor_root(args.conductor_root),
+                resolve_conductor_package(args.conductor_package_root),
                 args.viewer_root.resolve(),
             )
         except (RecipeError, yaml_support.RecipeError) as exc:
             print(f"[ERROR] {exc}", file=sys.stderr)
             return 1
     try:
+        runtime_package = (
+            resolve_conductor_package(args.conductor_package_root)
+            if args.command == "configure"
+            else None
+        )
         result = materialize(
             args.experiment.resolve(),
             output_root,
             args.conductor_root,
             args.conductor_schema,
             write=args.command == "configure",
+            conductor_package_root=runtime_package,
         )
         if args.command == "configure":
             host_configs = materialize_host_runtimes(

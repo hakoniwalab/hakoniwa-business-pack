@@ -14,7 +14,6 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from tools import foundation
 from tools.recipe import hakoniwa_conductor
 
 
@@ -116,89 +115,13 @@ def library_environment(domain: str) -> dict[str, str]:
     return env
 
 
-def read_build_contract(path: Path) -> dict[str, str]:
-    contract: dict[str, str] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if not line or line.startswith("#"):
-            continue
-        key, separator, value = line.partition("=")
-        if not separator or not key or not value:
-            raise TimeSyncError(f"invalid Conductor build contract line: {line!r}")
-        contract[key] = value
-    return contract
-
-
-def version_at_least(installed: str, required: str) -> bool:
-    try:
-        installed_parts = tuple(int(part) for part in installed.split("."))
-        required_parts = tuple(int(part) for part in required.split("."))
-    except ValueError:
-        return False
-    width = max(len(installed_parts), len(required_parts))
-    return installed_parts + (0,) * (width - len(installed_parts)) >= (
-        required_parts + (0,) * (width - len(required_parts))
-    )
-
-
 def validate_foundation_contract(build_contract: Path) -> dict[str, str]:
-    contract = read_build_contract(build_contract)
-    expected = {
-        "hakoniwa-core-pro": contract.get("hakoniwa_core_pro_ref"),
-        "hakoniwa-pdu-endpoint": contract.get("hakoniwa_pdu_endpoint_ref"),
-        "hakoniwa-pdu-rpc": contract.get("hakoniwa_pdu_rpc_ref"),
-        "hakoniwa-pdu-bridge-core": contract.get(
-            "hakoniwa_pdu_bridge_core_ref"
-        ),
-    }
-    missing_contract = [name for name, revision in expected.items() if not revision]
-    if missing_contract or not contract.get("hakoniwa_pdu_version"):
-        raise TimeSyncError(
-            "Conductor build contract is incomplete: "
-            + ", ".join(missing_contract or ["hakoniwa_pdu_version"])
+    try:
+        return hakoniwa_conductor.validate_foundation_contract(
+            build_contract, FOUNDATION_ROOT
         )
-
-    installed: dict[str, str] = {}
-    receipt_root = FOUNDATION_ROOT / "share" / "hakoniwa" / "receipts"
-    for component_id, required_revision in expected.items():
-        receipt_path = receipt_root / f"{component_id}.yaml"
-        if not receipt_path.is_file():
-            raise TimeSyncError(f"Foundation Receipt is missing: {receipt_path}")
-        receipt = foundation.load_receipt(receipt_path)
-        actual = receipt.get("component", {}).get("source_revision")
-        if actual != required_revision:
-            raise TimeSyncError(
-                f"Foundation revision mismatch for {component_id}: "
-                f"required={required_revision}, installed={actual}; "
-                "rebuild the Recipe Foundation before running this binary"
-            )
-        installed[component_id] = actual
-
-        if component_id == "hakoniwa-pdu-endpoint":
-            capabilities = receipt.get("capabilities", {})
-            missing = [
-                name
-                for name in ("hakoniwa_core", "core_callback", "core_polling", "tcp")
-                if capabilities.get(name) is not True
-            ]
-            if missing:
-                raise TimeSyncError(
-                    "Foundation Endpoint is missing required Conductor capabilities: "
-                    + ", ".join(missing)
-                )
-
-    pdu_receipt_path = receipt_root / "hakoniwa-pdu-python.yaml"
-    if not pdu_receipt_path.is_file():
-        raise TimeSyncError(f"Foundation Receipt is missing: {pdu_receipt_path}")
-    pdu_receipt = foundation.load_receipt(pdu_receipt_path)
-    installed_version = str(pdu_receipt.get("component", {}).get("version"))
-    required_version = contract["hakoniwa_pdu_version"]
-    if not version_at_least(installed_version, required_version):
-        raise TimeSyncError(
-            "Foundation hakoniwa-pdu version is too old: "
-            f"required>={required_version}, installed={installed_version}"
-        )
-    installed["hakoniwa-pdu-python"] = installed_version
-    return installed
+    except (hakoniwa_conductor.ConductorRecipeError, OSError) as exc:
+        raise TimeSyncError(str(exc)) from exc
 
 
 def doctor(package_root: Path, sample_root: Path) -> dict[str, object]:

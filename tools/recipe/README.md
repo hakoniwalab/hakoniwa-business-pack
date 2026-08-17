@@ -118,7 +118,8 @@ single-process-scaling/summary/plots/scaling-overview.svg
 
 同一ホスト上で32、64、128機の論理ワークロードごとに、シミュレータプロセス数を
 `1, 2, 4, 6, 8, 12, 15`へ変える系列です。Experiment Aと同じ組み込み
-Conductorを使用し、外部Conductor PROはマルチホストのExperiment Cから使用します。
+Conductorを使用し、外部の公開Hakoniwa Conductor v1.1.0はマルチホストの
+Experiment Cから使用します。
 各条件では128機をプロセス間へ可能な限り均等に静的分割します。
 
 ```bash
@@ -243,20 +244,22 @@ Recipe固有ライフサイクルを実装する場合も、このディレク�
 - `hakoniwa_conductor.py`
 - `hakoniwa_conductor_time_sync.py`
 
-## Hakoniwa Conductor v1.0.0
+## Hakoniwa Conductor binary package
 
 公開バイナリの準備Recipeは、ライセンス確認後にOS/CPUに対応するRelease ZIPを
 Business Packの`work/`へ取得し、SHA-256、プラットフォーム契約、11個の収録
 バイナリを検証します。システムディレクトリにはインストールしません。
 
 ```bash
-python tools/recipe/hakoniwa_conductor.py configure --accept-license
-python tools/recipe/hakoniwa_conductor.py doctor
-python tools/recipe/hakoniwa_conductor.py status
+python tools/recipe/hakoniwa_conductor.py configure --version v1.1.0 --accept-license
+python tools/recipe/hakoniwa_conductor.py doctor --version v1.1.0
+python tools/recipe/hakoniwa_conductor.py status --version v1.1.0
 ```
 
 `--accept-license`は人間の判断境界です。AIが暗黙に付与してはいけません。
-このRecipeはバイナリ準備だけを担当し、Conductorプロセスは起動しません。
+このRecipeはv1.0.0とv1.1.0のバイナリ準備だけを担当し、Conductorプロセスは
+起動しません。`drone_fleet_multi_host.py`はv1.1.0を実行用に固定し、
+Conductor PRO checkoutは設定生成だけに使用します。
 
 生成済み設定を同梱した公開Python時刻同期サンプルは、別の実行Recipeで確認します。
 

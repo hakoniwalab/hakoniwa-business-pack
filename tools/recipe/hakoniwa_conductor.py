@@ -16,12 +16,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 
-RECIPE_ID = "hakoniwa-conductor-v1-0-0-binary-package"
 VERSION = "v1.0.0"
-RELEASE_BASE = (
-    "https://github.com/hakoniwalab/hakoniwa-conductor/releases/download/"
-    f"{VERSION}"
-)
+SUPPORTED_VERSIONS = {"v1.0.0", "v1.1.0"}
 EXPECTED_BINARIES = {
     "bridge_gen",
     "conductor_config_gen",
@@ -43,6 +39,7 @@ class ConductorRecipeError(RuntimeError):
 
 @dataclass(frozen=True)
 class ReleaseTarget:
+    version: str
     os_name: str
     architecture: str
     suffix: str
@@ -50,7 +47,7 @@ class ReleaseTarget:
 
     @property
     def package_name(self) -> str:
-        return f"hakoniwa-conductor-{VERSION}-{self.suffix}"
+        return f"hakoniwa-conductor-{self.version}-{self.suffix}"
 
     @property
     def archive_name(self) -> str:
@@ -65,14 +62,30 @@ def business_pack_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def recipe_root() -> Path:
-    return business_pack_root() / "work" / "recipes" / RECIPE_ID
+def recipe_id(version: str) -> str:
+    if version not in SUPPORTED_VERSIONS:
+        raise ConductorRecipeError(f"unsupported Hakoniwa Conductor release: {version}")
+    return "hakoniwa-conductor-" + version.replace(".", "-") + "-binary-package"
+
+
+def recipe_root(version: str = VERSION) -> Path:
+    return business_pack_root() / "work" / "recipes" / recipe_id(version)
+
+
+def release_base(version: str) -> str:
+    recipe_id(version)
+    return (
+        "https://github.com/hakoniwalab/hakoniwa-conductor/releases/download/"
+        f"{version}"
+    )
 
 
 def detect_target(
     system: str | None = None,
     machine: str | None = None,
+    version: str = VERSION,
 ) -> ReleaseTarget:
+    recipe_id(version)
     system = system or platform.system()
     machine = (machine or platform.machine()).lower()
     normalized = {
@@ -81,19 +94,23 @@ def detect_target(
         "aarch64": "arm64",
     }.get(machine, machine)
     if system == "Darwin" and normalized == "arm64":
-        return ReleaseTarget("macOS", "arm64", "macos-arm64", "macos/arm64")
+        return ReleaseTarget(version, "macOS", "arm64", "macos-arm64", "macos/arm64")
     if system == "Linux" and normalized == "x86_64":
         return ReleaseTarget(
-            "Ubuntu 24.04", "x86_64", "linux-x86_64", "linux/amd64"
+            version,
+            "Ubuntu 24.04",
+            "x86_64",
+            "linux-x86_64",
+            "linux/x86_64" if version == "v1.1.0" else "linux/amd64",
         )
     raise ConductorRecipeError(
-        "v1.0.0 has no verified package for "
+        f"{version} has no verified package for "
         f"system={system!r}, architecture={normalized!r}"
     )
 
 
 def paths(target: ReleaseTarget) -> dict[str, Path]:
-    root = recipe_root()
+    root = recipe_root(target.version)
     assets = root / "assets"
     runtime = root / "runtime"
     return {
@@ -176,7 +193,7 @@ def validate_package(package: Path, target: ReleaseTarget) -> dict[str, object]:
     version_file = package / "VERSION"
     build_contract = package / "metadata" / "build-contract.txt"
     bin_dir = package / "bin"
-    if not version_file.is_file() or version_file.read_text().strip() != VERSION:
+    if not version_file.is_file() or version_file.read_text().strip() != target.version:
         raise ConductorRecipeError(f"VERSION is missing or invalid under {package}")
     if not build_contract.is_file():
         raise ConductorRecipeError(f"build contract is missing: {build_contract}")
@@ -197,12 +214,105 @@ def validate_package(package: Path, target: ReleaseTarget) -> dict[str, object]:
     for binary in bin_dir.iterdir():
         binary.chmod(binary.stat().st_mode | 0o111)
     return {
-        "version": VERSION,
+        "version": target.version,
         "platform": target.platform_contract,
         "package": str(package),
         "binaries": sorted(actual_binaries),
         "build_contract": str(build_contract),
     }
+
+
+def read_build_contract(path: Path) -> dict[str, str]:
+    contract: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line or line.startswith("#"):
+            continue
+        key, separator, value = line.partition("=")
+        if not separator or not key or not value:
+            raise ConductorRecipeError(
+                f"invalid Conductor build contract line: {line!r}"
+            )
+        contract[key] = value
+    return contract
+
+
+def _version_at_least(installed: str, required: str) -> bool:
+    try:
+        installed_parts = tuple(int(part) for part in installed.split("."))
+        required_parts = tuple(int(part) for part in required.split("."))
+    except ValueError:
+        return False
+    width = max(len(installed_parts), len(required_parts))
+    return installed_parts + (0,) * (width - len(installed_parts)) >= (
+        required_parts + (0,) * (width - len(required_parts))
+    )
+
+
+def validate_foundation_contract(
+    build_contract: Path, foundation_root: Path
+) -> dict[str, str]:
+    """Fail closed when installed Foundation ABI provenance differs from a package."""
+
+    from tools import foundation
+
+    contract = read_build_contract(build_contract)
+    expected = {
+        "hakoniwa-core-pro": contract.get("hakoniwa_core_pro_ref"),
+        "hakoniwa-pdu-endpoint": contract.get("hakoniwa_pdu_endpoint_ref"),
+        "hakoniwa-pdu-rpc": contract.get("hakoniwa_pdu_rpc_ref"),
+        "hakoniwa-pdu-bridge-core": contract.get("hakoniwa_pdu_bridge_core_ref"),
+    }
+    missing = [component for component, revision in expected.items() if not revision]
+    if missing or not contract.get("hakoniwa_pdu_version"):
+        raise ConductorRecipeError(
+            "Conductor build contract is incomplete: "
+            + ", ".join(missing or ["hakoniwa_pdu_version"])
+        )
+
+    installed: dict[str, str] = {}
+    receipt_root = foundation_root / "share" / "hakoniwa" / "receipts"
+    for component_id, required_revision in expected.items():
+        receipt_path = receipt_root / f"{component_id}.yaml"
+        if not receipt_path.is_file():
+            raise ConductorRecipeError(f"Foundation Receipt is missing: {receipt_path}")
+        receipt = foundation.load_receipt(receipt_path)
+        actual = receipt.get("component", {}).get("source_revision")
+        if actual != required_revision:
+            raise ConductorRecipeError(
+                f"Foundation revision mismatch for {component_id}: "
+                f"required={required_revision}, installed={actual}; "
+                "rebuild the Recipe Foundation for this Conductor package"
+            )
+        installed[component_id] = str(actual)
+
+        if component_id == "hakoniwa-pdu-endpoint":
+            capabilities = receipt.get("capabilities", {})
+            missing_capabilities = [
+                name
+                for name in ("hakoniwa_core", "core_callback", "core_polling", "tcp")
+                if capabilities.get(name) is not True
+            ]
+            if missing_capabilities:
+                raise ConductorRecipeError(
+                    "Foundation Endpoint is missing required Conductor capabilities: "
+                    + ", ".join(missing_capabilities)
+                )
+
+    pdu_receipt_path = receipt_root / "hakoniwa-pdu-python.yaml"
+    if not pdu_receipt_path.is_file():
+        raise ConductorRecipeError(
+            f"Foundation Receipt is missing: {pdu_receipt_path}"
+        )
+    pdu_receipt = foundation.load_receipt(pdu_receipt_path)
+    installed_version = str(pdu_receipt.get("component", {}).get("version"))
+    required_version = contract["hakoniwa_pdu_version"]
+    if not _version_at_least(installed_version, required_version):
+        raise ConductorRecipeError(
+            "Foundation hakoniwa-pdu version is too old: "
+            f"required>={required_version}, installed={installed_version}"
+        )
+    installed["hakoniwa-pdu-python"] = installed_version
+    return installed
 
 
 def extract_archive(
@@ -226,17 +336,18 @@ def extract_archive(
     return package
 
 
-def configure(accept_license: bool) -> dict[str, object]:
+def configure(accept_license: bool, version: str = VERSION) -> dict[str, object]:
     if not accept_license:
         raise ConductorRecipeError(
             "license acceptance is required; read "
             "https://github.com/hakoniwalab/hakoniwa-conductor/blob/"
-            "v1.0.0/LICENSE-NC-ja.md and rerun with --accept-license"
+            f"{version}/LICENSE-NC-ja.md and rerun with --accept-license"
         )
-    target = detect_target()
+    target = detect_target(version=version)
     resolved = paths(target)
-    download(f"{RELEASE_BASE}/{target.checksum_name}", resolved["checksum"])
-    download(f"{RELEASE_BASE}/{target.archive_name}", resolved["archive"])
+    base = release_base(version)
+    download(f"{base}/{target.checksum_name}", resolved["checksum"])
+    download(f"{base}/{target.archive_name}", resolved["archive"])
     digest = verify_checksum(resolved["archive"], resolved["checksum"])
     package = extract_archive(resolved["archive"], resolved["runtime"], target)
     result = validate_package(package, target)
@@ -250,8 +361,8 @@ def configure(accept_license: bool) -> dict[str, object]:
     return result
 
 
-def doctor() -> dict[str, object]:
-    target = detect_target()
+def doctor(version: str = VERSION) -> dict[str, object]:
+    target = detect_target(version=version)
     resolved = paths(target)
     if not resolved["archive"].is_file() or not resolved["checksum"].is_file():
         raise ConductorRecipeError(
@@ -263,8 +374,8 @@ def doctor() -> dict[str, object]:
     return result
 
 
-def status() -> dict[str, object]:
-    target = detect_target()
+def status(version: str = VERSION) -> dict[str, object]:
+    target = detect_target(version=version)
     resolved = paths(target)
     result: dict[str, object] = {
         "target": asdict(target),
@@ -274,7 +385,7 @@ def status() -> dict[str, object]:
     }
     if result["configured"]:
         try:
-            result["validation"] = doctor()
+            result["validation"] = doctor(version)
             result["status"] = "READY"
         except ConductorRecipeError as exc:
             result["status"] = "INCOMPATIBLE"
@@ -288,15 +399,24 @@ def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description=__doc__)
     commands = root.add_subparsers(dest="command", required=True)
     configure_parser = commands.add_parser(
-        "configure", help="download, verify, and extract the selected v1.0.0 package"
+        "configure", help="download, verify, and extract a selected release package"
     )
     configure_parser.add_argument(
         "--accept-license",
         action="store_true",
         help="confirm that the operator reviewed and accepted the applicable license",
     )
-    commands.add_parser("doctor", help="verify the downloaded package without network access")
-    commands.add_parser("status", help="show package selection and readiness")
+    doctor_parser = commands.add_parser(
+        "doctor", help="verify the downloaded package without network access"
+    )
+    status_parser = commands.add_parser("status", help="show package selection and readiness")
+    for command_parser in (configure_parser, doctor_parser, status_parser):
+        command_parser.add_argument(
+            "--version",
+            choices=sorted(SUPPORTED_VERSIONS),
+            default=VERSION,
+            help=f"release version (default: {VERSION})",
+        )
     return root
 
 
@@ -304,11 +424,11 @@ def main() -> int:
     args = parser().parse_args()
     try:
         if args.command == "configure":
-            result = configure(args.accept_license)
+            result = configure(args.accept_license, args.version)
         elif args.command == "doctor":
-            result = doctor()
+            result = doctor(args.version)
         else:
-            result = status()
+            result = status(args.version)
         print(json.dumps(result, indent=2))
         return 0
     except (ConductorRecipeError, OSError, urllib.error.URLError, zipfile.BadZipFile) as exc:

@@ -126,13 +126,13 @@ conductor:
 controlled_profiles:
   conductor:
     legacy-distributed-10ms:
-      implementation: hakoniwa-conductor-pro
+      implementation: hakoniwa-conductor-v1.1.0
       delta_time_usec: 10000
       max_delay_time_usec: 20000
       real_sleep_msec: unspecified
       simtime_publish_mode: legacy_simple
     icra-target-delta-boundary:
-      implementation: hakoniwa-conductor-pro
+      implementation: hakoniwa-conductor-v1.1.0
       delta_time_usec: 1000
       max_delay_time_usec: 20000
       simtime_publish_mode: delta_boundary

@@ -234,17 +234,17 @@ class DroneFleetMultiHostTest(unittest.TestCase):
             )
             self.assertEqual(client_launcher.z_offset_m, 2.0)
 
-    def test_conductor_assets_pin_checkout_binaries_and_configs(self) -> None:
+    def test_conductor_assets_pin_public_package_binaries_and_configs(self) -> None:
         resolved = recipe.validate_experiment(self.experiment())
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            conductor = root / "conductor"
-            build = conductor / "cmake-build"
-            build.mkdir(parents=True)
-            (build / "main_server").write_text("")
-            (build / "main_client").write_text("")
-            (build / "main_server").chmod(0o755)
-            (build / "main_client").chmod(0o755)
+            conductor = root / "hakoniwa-conductor-v1.1.0-test"
+            binaries = conductor / "bin"
+            binaries.mkdir(parents=True)
+            (binaries / "main_server").write_text("")
+            (binaries / "main_client").write_text("")
+            (binaries / "main_server").chmod(0o755)
+            (binaries / "main_client").chmod(0o755)
             generated = root / "generated"
             server = recipe.conductor_launcher_asset(
                 resolved, "srv-01", conductor, generated
@@ -253,7 +253,8 @@ class DroneFleetMultiHostTest(unittest.TestCase):
                 resolved, "cli-01", conductor, generated
             )
         self.assertEqual(server["name"], "conductor-server")
-        self.assertEqual(server["command"], str(build / "main_server"))
+        self.assertEqual(server["command"], str(binaries / "main_server"))
+        self.assertEqual(server["cwd"], str(conductor))
         self.assertEqual(
             server["args"],
             [
@@ -265,7 +266,8 @@ class DroneFleetMultiHostTest(unittest.TestCase):
             ],
         )
         self.assertEqual(client["name"], "conductor-client")
-        self.assertEqual(client["command"], str(build / "main_client"))
+        self.assertEqual(client["command"], str(binaries / "main_client"))
+        self.assertEqual(client["cwd"], str(conductor))
         self.assertEqual(
             client["args"],
             ["--config", str(generated / "conductor" / "cli-01.json")],
@@ -307,6 +309,34 @@ class DroneFleetMultiHostTest(unittest.TestCase):
             parsed = recipe.parser().parse_args([command])
             self.assertEqual(parsed.command, command)
             self.assertFalse(hasattr(parsed, "host"))
+
+    def test_resolve_conductor_package_uses_verified_v1_1_package(self) -> None:
+        package = Path("/verified/public-conductor")
+        with mock.patch.object(
+            recipe.conductor_package,
+            "doctor",
+            return_value={"package": str(package)},
+        ) as doctor:
+            self.assertEqual(recipe.resolve_conductor_package(), package)
+        doctor.assert_called_once_with("v1.1.0")
+
+    def test_runtime_identity_hashes_the_selected_public_binaries(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            package = Path(temporary) / "hakoniwa-conductor-v1.1.0-macos-arm64"
+            (package / "bin").mkdir(parents=True)
+            (package / "metadata").mkdir()
+            (package / "bin/main_server").write_bytes(b"server-v1.1")
+            (package / "bin/main_client").write_bytes(b"client-v1.1")
+            (package / "metadata/build-contract.txt").write_text(
+                "platform=macos/arm64\n", encoding="utf-8"
+            )
+            identity = recipe.conductor_runtime_identity(package)
+        self.assertEqual(identity["revision"], "v1.1.0")
+        self.assertEqual(identity["package"], package.name)
+        self.assertEqual(
+            identity["binaries"]["main_server"],
+            recipe.hashlib.sha256(b"server-v1.1").hexdigest(),
+        )
 
     def test_clean_removes_only_selected_stopped_host_run_artifacts(self) -> None:
         raw, _counts, _attempts = scaling.load_scaling(scaling.DEFAULT_EXPERIMENT)

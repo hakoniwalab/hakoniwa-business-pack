@@ -107,10 +107,11 @@ that all five Conductor timing fields (`delta_time_usec`,
 `simtime_publish_interval_usec`) have the expected value in both generated role
 configurations. `doctor` repeats this check before launch.
 
-The launcher invokes the exact `hakoniwa-conductor-pro/cmake-build/main_server`
-or `main_client` binary checked by `doctor`, with the corresponding generated
-configuration passed explicitly. It does not use a wrapper that may resolve an
-older binary from an installed prefix. A performance result is valid for its
+The launcher invokes the exact `bin/main_server` or `bin/main_client` from the
+verified public Hakoniwa Conductor v1.1.0 binary package, with the corresponding
+generated configuration passed explicitly. The private
+`hakoniwa-conductor-pro` checkout remains the configuration generator only; its
+build output is never a runtime fallback. A performance result is valid for its
 declared timing profile only when this effective-config and executable-identity
 contract passes on every host.
 

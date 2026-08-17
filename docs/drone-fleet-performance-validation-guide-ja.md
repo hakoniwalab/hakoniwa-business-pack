@@ -95,10 +95,18 @@ MuJoCo runtimeを準備する。MuJoCo versionを本書や呼び出し側へハ�
 ### 3.3 Experiment Cの追加セットアップ
 
 Cでは両hostに同じBusiness Pack revision、互換なFoundation、Drone native runtime、
-および利用権限のあるConductor PRO checkoutが必要である。Conductor PROは既定では
-Business Packのsibling `../hakoniwa-conductor-pro`として解決される。
+公開Hakoniwa Conductor v1.1.0 binary package、および設定生成用のConductor PRO
+checkoutが必要である。Conductor PROは既定ではBusiness Packのsibling
+`../hakoniwa-conductor-pro`として解決されるが、そのbuild成果物は実行には使わない。
 
-各hostで、承認済みcheckoutを配置してから次を実行する。
+各hostで公開版のlicenseを確認し、binary packageを準備する。
+
+```bash
+python3 tools/recipe/hakoniwa_conductor.py configure \
+  --version v1.1.0 --accept-license
+```
+
+続いて、承認済みの生成用checkoutを配置してから次を実行する。
 
 ```bash
 python tools/recipe.py configure \
