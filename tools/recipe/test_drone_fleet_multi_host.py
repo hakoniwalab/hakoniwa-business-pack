@@ -367,7 +367,7 @@ class DroneFleetMultiHostTest(unittest.TestCase):
                 return_value={"package": str(package)},
             ) as doctor,
         ):
-            self.assertEqual(recipe.resolve_conductor_package(), package)
+            self.assertEqual(recipe.resolve_conductor_package(), package.resolve())
         doctor.assert_called_once_with("v1.1.0")
 
     def test_runtime_identity_hashes_the_selected_public_binaries(self) -> None:
