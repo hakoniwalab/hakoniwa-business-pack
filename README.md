@@ -13,6 +13,8 @@
 実行と評価から得られた知見を Catalog、Recipe、Use Case へ継続的に還流し、
 接続の選択肢と実現できる価値を育てていきます。
 
+> 初めて利用する方は [`docs/getting-started-ja.md`](docs/getting-started-ja.md) から始めてください。環境構築から最初の Recipe 実行までを説明しています。
+
 ## AI Bootstrap Prompt
 
 If you are an AI agent, do not summarize this repository after reading only this
