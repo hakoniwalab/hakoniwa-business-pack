@@ -354,11 +354,19 @@ class DroneFleetMultiHostTest(unittest.TestCase):
 
     def test_resolve_conductor_package_uses_verified_v1_1_package(self) -> None:
         package = Path("/verified/public-conductor")
-        with mock.patch.object(
-            recipe.conductor_package,
-            "doctor",
-            return_value={"package": str(package)},
-        ) as doctor:
+        target = recipe.conductor_package.ReleaseTarget(
+            "v1.1.0", "Ubuntu 24.04", "x86_64", "linux-x86_64", "linux/x86_64"
+        )
+        with (
+            mock.patch.object(
+                recipe.conductor_package, "detect_target", return_value=target
+            ),
+            mock.patch.object(
+                recipe.conductor_package,
+                "doctor",
+                return_value={"package": str(package)},
+            ) as doctor,
+        ):
             self.assertEqual(recipe.resolve_conductor_package(), package)
         doctor.assert_called_once_with("v1.1.0")
 

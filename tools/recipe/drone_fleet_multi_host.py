@@ -1539,7 +1539,7 @@ def materialize(
         },
         "generation": {
             "source": "hakoniwalab/hakoniwa-conductor",
-            "fixture": str(fixture.relative_to(conductor)),
+            "fixture": fixture.relative_to(conductor).as_posix(),
             "generated_by": "hakoniwa-conductor-pro",
             "runtime_generation_required": False,
         },
