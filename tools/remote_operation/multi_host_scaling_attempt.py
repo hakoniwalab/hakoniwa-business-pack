@@ -261,7 +261,16 @@ def _prepare(args: argparse.Namespace, host: str, attempt: int) -> dict[str, Any
     if args.clean and attempt == 1:
         selection = multi_host.LOCAL_SELECTION
         if selection.is_file() and (args.output_root / "bundle-index.json").is_file():
-            _run(args, host, "clean")
+            try:
+                multi_host.load_local_selection(args.output_root)
+            except multi_host.RecipeError as exc:
+                print(
+                    "[SKIP] pre-configure clean: the active local selection does "
+                    f"not belong to this output root ({exc})",
+                    flush=True,
+                )
+            else:
+                _run(args, host, "clean")
     _run(args, host, "configure", ["--host", host, "--drone-count", str(args.drone_count), "--attempt", str(attempt)])
     state = multi_host.load_local_selection(args.output_root)
     if state["selection"]["host_id"] != host:

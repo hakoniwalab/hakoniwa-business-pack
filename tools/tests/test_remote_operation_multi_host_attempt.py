@@ -215,6 +215,60 @@ class MultiHostScalingAttemptTest(unittest.TestCase):
             [("configure", 4), ("clean", 4), ("configure", 5), ("clean", 5)],
         )
 
+    def test_prepare_skips_preclean_for_another_output_root_selection(self) -> None:
+        resolved = attempt.resolve_arguments(
+            attempt.parser().parse_args(
+                ["--profile", str(PROFILE), "server"]
+            )
+        )
+        state = {
+            "selection": {"host_id": "srv-01"},
+            "resolved": {
+                "measurement": {
+                    "enabled": True,
+                    "configuration_id": "temporal-uav-256-sleep-001ms",
+                    "attempt": 1,
+                    "series": "multi-host-temporal-validation",
+                },
+                "results": {"enabled": True, "directory": "results"},
+                "deployment": {"hosts": {"srv-01": {}, "cli-01": {}}},
+            },
+        }
+        calls: list[str] = []
+
+        def record(_args, _host, operation, _extra=None):
+            calls.append(operation)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            resolved.output_root = root / "output"
+            resolved.output_root.mkdir()
+            (resolved.output_root / "bundle-index.json").write_text("{}\n")
+            selection = root / "local-selection.json"
+            selection.write_text("{}\n")
+            with (
+                mock.patch.object(attempt.multi_host, "LOCAL_SELECTION", selection),
+                mock.patch.object(attempt, "_run", side_effect=record),
+                mock.patch.object(
+                    attempt.multi_host,
+                    "load_local_selection",
+                    side_effect=[
+                        attempt.multi_host.RecipeError(
+                            "local host selection belongs to another experiment"
+                        ),
+                        state,
+                    ],
+                ),
+                mock.patch.object(
+                    attempt.multi_host,
+                    "measurement_trial_path",
+                    return_value=resolved.output_root / "trial",
+                ),
+            ):
+                attempt._prepare(resolved, "srv-01", 1)
+
+        self.assertEqual(calls, ["configure", "clean"])
+
     def test_verified_client_attempt_is_published_at_receiver_path(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
