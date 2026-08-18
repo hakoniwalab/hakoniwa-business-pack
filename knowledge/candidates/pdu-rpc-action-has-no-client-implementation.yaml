@@ -1,0 +1,253 @@
+id: pdu-rpc-action-has-no-client-implementation
+title: The PDU-RPC Action API has headers and a server skeleton but no client implementation and no C API, so no goal can be originated from Python
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+
+summary: >
+  hakoniwa-pdu-rpc ships a complete-looking Action surface -- six headers covering
+  client and server endpoints, services client and server, types, and a C API -- plus
+  eleven design documents. The implementation behind it is two source files:
+  action_configuration.cpp and action_server_endpoint_impl.cpp. There is no
+  implementation for action_client_endpoint.hpp and no C source for c_action.h.
+  Because the Python CFFI binding reaches the library only through the C API, there
+  is no path from Python to originate a goal, and therefore no way to drive an Action
+  from a ROS 2 bridge or from a test harness today. The three Action contract tests
+  that pass on Windows exercise configuration parsing, server initialization, and
+  packet codec -- all server-side or pure-data concerns -- so a green test run does
+  not contradict any of this.
+
+observation:
+  context: >
+    Assessing whether a third-party ROS 2 action (Tobas
+    tobas_mission_msgs/ExecuteMission) could be bridged into Hakoniwa, at
+    hakoniwa-pdu-rpc revision 4f5471d, 2026-08-03. The assessment was source
+    inspection, not an attempted client run.
+  details:
+    - "What exists as headers: include/hakoniwa/pdu/action/ contains
+      action_client_endpoint.hpp, action_server_endpoint.hpp,
+      action_services_client.hpp, action_services_server.hpp, action_types.hpp and
+      c_action.h. The type surface is fully specified -- ClientEventType,
+      ServerEventType, Decision, TerminalStatus, GoalState and RuntimeCancelCause are
+      all defined with values."
+    - "What exists as implementation: src/ contains action_configuration.cpp and
+      action_server_endpoint_impl.cpp, and nothing else matching action. There is no
+      c_action.cpp. So the C API that the Python binding depends on is declared but
+      not defined."
+    - "Why that specifically blocks Python: the CFFI layer loads the shared library
+      and calls C entry points. With no C implementation for the Action surface, the
+      binding cannot expose goal origination at all -- this is not a matter of a
+      missing convenience wrapper."
+    - "Why the passing tests do not contradict it. On Windows all thirteen ctest
+      cases pass, and the first three are the Action ones:
+      hakoniwa_pdu_action_configuration_test, _server_initialization_test and
+      _packet_codec_test. Reading their names against their subjects: configuration
+      parsing, server-side initialization, and codec round-tripping. None of them
+      originates a goal from a client. A reader who sees 13/13 and concludes the
+      Action API is usable would be wrong."
+    - "Note that tools/hako.py test does not run them either -- it filters to four
+      RPC contract tests, so the Action tests only appear if every target is built
+      and ctest is invoked directly. That is a separate observation, raised upstream
+      as hakoniwa-pdu-rpc#67."
+    - "All eleven documents under docs/design/action/ carry an explicit
+      'Status: Draft' banner, so the protocol is not settled either."
+    - "Update, 2026-08-08: upstream maintainer tmori reported in PR #96 that this gap is
+      closed -- Action Client, Server, and Mux Server, plus the C API, Python CFFI API,
+      and TypedActionClient/TypedActionServer, are now implemented, at pdu-rpc revision
+      501ce5a (package-contract green) and pdu-ros revision f17e1cc (native integration
+      green), with all three tracked issues below closed. The observation above (headers
+      and design documents ahead of implementation at revision 4f5471d) remains an
+      accurate historical record of that revision and is left unchanged. The
+      reader-facing lesson it leaves behind is unaffected by the fix: a complete-looking
+      header surface, eleven design documents, and a green contract-test run do not by
+      themselves prove a feature is drivable. See resolution.notes for the current
+      implementation state and its independent re-verification in this workspace."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      path: include/hakoniwa/pdu/action
+      revision: 4f5471d
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      path: src
+      revision: 4f5471d
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      path: docs/design/action/09-implementation-policy.md
+      revision: 4f5471d
+  runtime_evidence:
+    - description: >-
+        External contributor's Windows 11 Pro x86_64 native environment, 2026-08-03.
+        Building every test target and running the full suite gives 13/13 pass, of
+        which ctest cases 1-3 are the Action contract tests. This is cited as
+        server-side and data-level coverage, not as evidence that a client works.
+    - description: >-
+        This workspace's own Windows 11 Pro x86_64 native environment, 2026-08-09, at
+        pdu-rpc revision 501ce5a: `ctest` on the built `hakoniwa-pdu-rpc` tree passes
+        25/25 (`_scratch/pdu-rpc-ctest-full.log`), 15 of which are Action tests
+        (`hakoniwa_pdu_action_*`, per `test/CMakeLists.txt`), including
+        `hakoniwa_pdu_action_client_endpoint_test`, `hakoniwa_pdu_action_tcp_e2e_test`
+        and the `_c_api_*` variants that exercise the Python-facing C API. Separately,
+        `configs/action-fibonacci-win/verify.ps1` drove a real Python `ActionClient`
+        against a real Python `ActionServer` over TCP loopback (both built on
+        `hakoniwa_pdu_rpc.dll` via CFFI) and passed both the positive path (full /
+        cancel-accept / cancel-reject, 2 consecutive cycles, exit 0) and the negative
+        path (`-SkipServer`, client correctly detects the missing server and exits 1),
+        logged in `_scratch/action-fibonacci-win-verify.log` and
+        `_scratch/verify-action-fibonacci-win-run1-20260809-033151.log`. This is a
+        goal actually originated from Python, which is precisely what this candidate
+        said did not exist.
+  expert_input: []
+
+confidence: high
+
+contradictions:
+  - target: the shape of the Action header surface
+    existing_claim: >-
+      A repository carrying client endpoint, services client, and C API headers for a
+      feature normally implies that feature can be driven.
+    new_evidence: >-
+      Here the headers are ahead of the implementation by design (the work is landing
+      incrementally), so header presence is not a usability signal for this feature
+      at this revision.
+
+validation:
+  status: verified
+  required:
+    - >-
+      Superseded 2026-08-08: upstream reports the client implementation and C API have
+      landed (pdu-rpc 501ce5a, pdu-ros f17e1cc), so "re-check once they land" no longer
+      applies. Superseded again 2026-08-09: this workspace re-executed a client run
+      against these revisions from its own Windows x64 native environment (see
+      resolution.notes), which is what remained of this requirement.
+    - >-
+      Superseded 2026-08-08: upstream confirmed the C API arrived together with the
+      client implementation rather than separately, closing this question.
+  notes:
+    - >-
+      IMPORTANT about how this was verified: by reading the source tree and by
+      observing that the passing contract tests are server-side and data-level. No
+      client run was attempted, so there is no failure output to show. The claim is
+      "the code to do this does not exist", which source inspection can establish;
+      it is not "we tried and it broke".
+    - >-
+      2026-08-09: superseded by execution. This workspace built pdu-rpc 501ce5a
+      natively on Windows x64, ran its full ctest suite (25/25, including 15 Action
+      tests), and drove a real Python-originated Action goal end to end via
+      configs/action-fibonacci-win. See resolution.notes for revisions and log paths.
+
+tracking:
+  # Corrected 2026-08-04. The upstream maintainer pointed at the issues that
+  # already track this work, so `open` is now accurate under MAINTAINER.md's
+  # definition (at least one follow-up issue exists). The earlier `none` was
+  # right only under the mistaken belief that nothing tracked it.
+  # Corrected 2026-08-08. Upstream maintainer tmori reported in PR #96 that the
+  # Action Client, Server, and Mux Server, plus the C API, Python CFFI API, and
+  # TypedActionClient/TypedActionServer, are implemented, and closed all three
+  # issues below as done. `implementation_status` moves from `open` to
+  # `resolved` under MAINTAINER.md's definition ("the tracked implementation
+  # work has landed").
+  implementation_status: resolved
+  issues:
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      number: 1
+      relation: fix
+      status: closed
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      number: 21
+      relation: fix
+      status: closed
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      number: 44
+      relation: documentation
+      status: closed
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: true
+  recipes: []
+  executable_guardrails: []
+
+promotion_rationale:
+  - >-
+    Anyone planning an Action integration will read the headers and the eleven design
+    documents and reasonably conclude the feature is available. The correction
+    belongs with component guidance, where implementation status is the subject.
+  - >-
+    On executable guardrails: none is proposed. The condition is "a source file does
+    not exist yet", which disappears the moment the work lands, and a check asserting
+    its absence would have to be deleted immediately afterwards.
+
+resolution:
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      issue: 1
+      revision: f17e1cc
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      issue: 21
+      revision: 501ce5a
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      issue: 44
+      revision: 501ce5a
+  verified: true
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - >-
+      Not filed upstream as a defect, deliberately. Incremental landing of a feature
+      is not a bug, and upstream is visibly mid-implementation (the Action headers and
+      server skeleton arrived in hakoniwa-pdu-rpc#64). What is worth recording is that
+      the surface currently over-promises relative to the implementation, so downstream
+      planning does not assume drivability.
+    - >-
+      This workspace has offered upstream a verification environment for
+      RuntimeCancelCause::TRANSPORT_DISCONNECTED once a client exists, in
+      hakoniwa-pdu-rpc#67, because a real cross-OS boundary that can be severed on
+      demand is available here.
+    - >-
+      Corrected 2026-08-04 after the upstream maintainer responded. The absence of
+      a client implementation and a C API is not an unnoticed gap: it is the
+      in-progress scope of hakoniwa-pdu-ros#1 (ROS 2 service/action server bridges
+      backed by PDU-RPC), hakoniwa-pdu-rpc#21 (backward-compatible Action feedback),
+      and hakoniwa-pdu-rpc#44 (Action Protocol design documentation). The framing
+      "filed as a candidate rather than an issue because incremental landing is not
+      a defect" was correct, but this candidate was written without knowing those
+      three existed. What remains useful here is only the reader-facing warning --
+      that the header surface and the passing contract tests together imply
+      drivability that does not exist yet.
+    - >-
+      Corrected 2026-08-08: upstream maintainer tmori reported, in a PR #96 comment,
+      that the Action Client, Server, and Mux Server, plus the C API, Python CFFI API,
+      and TypedActionClient/TypedActionServer, are implemented, at pdu-rpc revision
+      501ce5a (package-contract test green) and pdu-ros revision f17e1cc (native
+      integration green). All three tracked issues -- hakoniwa-pdu-ros#1,
+      hakoniwa-pdu-rpc#21, and hakoniwa-pdu-rpc#44 -- are closed as done. At that
+      point `resolution.verified` was deliberately left false: upstream's own
+      confirmation ran on macOS arm64 + Docker, and this candidate's authoring
+      environment (Windows x64 native) had not yet re-executed a client run against
+      these revisions.
+    - >-
+      Corrected 2026-08-09: `resolution.verified` flips to true. This workspace built
+      hakoniwa-pdu-rpc 501ce5a natively on Windows 11 Pro x86_64 and ran its ctest
+      suite directly (not filtered through tools/hako.py test): 25/25 pass, including
+      all 15 Action tests (`hakoniwa_pdu_action_*`), logged in
+      `_scratch/pdu-rpc-ctest-full.log`. It then drove a real Python-originated Action
+      goal end to end -- a Python `ActionClient` against a Python `ActionServer` over
+      TCP loopback via `hakoniwa_pdu_rpc.dll`'s CFFI surface, exactly the path this
+      candidate said did not exist -- through `configs/action-fibonacci-win/verify.ps1`
+      (`README.md` in that directory documents the scenarios). Both the positive path
+      (full / cancel-accept / cancel-reject, 2 consecutive cycles, port re-bind
+      confirmed, exit 0) and the negative path (`-SkipServer`, client detects the
+      missing server and exits 1 as designed) passed, logged in
+      `_scratch/action-fibonacci-win-verify.log` and
+      `_scratch/verify-action-fibonacci-win-run1-20260809-033151.log`. A separate
+      agent's adversarial re-verification of the same runs also reported PASS. Per
+      MAINTAINER.md ("closing an issue is not sufficient evidence for
+      resolution.verified: true" -- reproduce the relevant validation when
+      practical), this is exactly the relevant validation: a client run, on this
+      workspace's own Windows x64 native environment, against the cited revisions,
+      which is the specific item this candidate's own validation.required left open
+      on 2026-08-08.

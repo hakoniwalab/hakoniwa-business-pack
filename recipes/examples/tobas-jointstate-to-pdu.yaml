@@ -1,0 +1,597 @@
+id: tobas-jointstate-to-pdu
+title: Third-party ROS 2 flight controller state into a Hakoniwa PDU across an OS boundary
+recipe_version: 0.1
+
+goal:
+  user_request: >-
+    Bring a Tobas vehicle's joint state into Hakoniwa as a PDU without modifying the
+    Tobas stack, and know exactly where the verified part stops.
+  description: >-
+    Compose an unmodified Tobas ROS 2 stack with a Hakoniwa PDU peer on the other
+    side of an OS boundary, so that sensor_msgs/JointState published by the vendor
+    arrives decoded as a PDU. This fills the simulation-only Recipe that the tobas
+    catalog entry lists first under known_gaps. The state direction is measured; the
+    command direction and the vendor's services and actions are deliberately out of
+    scope and are recorded as gaps rather than glossed.
+
+feasibility:
+  status: partially_feasible
+  confidence: high
+  rationale:
+    - The state direction was demonstrated end to end, twice, with values matching a known input waveform.
+    - >-
+      The command direction was never attempted. It is a strict prerequisite of any
+      action or service work, so its absence bounds this Recipe rather than weakening
+      the part that was measured.
+    - >-
+      The only substantive vendor action, tobas_mission_msgs/ExecuteMission, carries
+      a goal shaped as a variable-length array of variable-size structs each holding
+      a byte array. That is a structural obstacle in the PDU representation, separate
+      from the Action protocol itself.
+    - Simulation only. No arming, no actuation, no real aircraft. The verified path reads one topic.
+
+validation:
+  status: partially_verified
+  verified_at: 2026-07-31
+  summary: >-
+    JointState reaches the peer correctly and repeatably, but it never enters a
+    Hakoniwa Core SHM channel, so no conductor participates and there is no shared
+    clock. The transport arrangement that made it work is a workaround for an
+    unexplained inbound-blocking behaviour on the host OS.
+  steps:
+    - id: jointstate_ros_to_pdu_over_tcp
+      status: verified
+      evidence:
+        - date: 2026-07-31
+      notes:
+        - Two consecutive passing runs, 1222 and 1185 PDUs, position non-empty on every one.
+        - >-
+          Values matched the sender's known sin/cos waveform, so this is not a
+          non-empty-only check. That distinction matters here: an earlier pass on this
+          same path looked green while the numeric arrays were in fact empty.
+        - One machine, one RMW implementation (rmw_cyclonedds_cpp), one pre-generated vehicle project.
+    - id: qos_relay_precondition
+      status: verified
+      evidence:
+        - date: 2026-07-31
+      notes:
+        - >-
+          Subscribing directly to the vendor's BEST_EFFORT topic yields zero messages
+          and no error at all, because the binding config cannot express QoS and the
+          subscription is RELIABLE. A relay republishing as RELIABLE is a precondition
+          of the bridge working, not an optimisation.
+        - >-
+          This is the failure mode behind pdu-ros-binding-has-no-qos-selection. If
+          that gap closes, this hop disappears rather than becoming a feature.
+    - id: reversed_tcp_role_workaround
+      status: verified
+      evidence:
+        - date: 2026-07-31
+      notes:
+        - >-
+          Inbound connections into the host time out identically on a port with a
+          firewall allow rule and on a port without one, while the reverse direction
+          works with no configuration at all. So the ROS 2 side listens and the host
+          side dials.
+        - This is a workaround. The cause is the next step.
+    - id: inbound_block_root_cause
+      status: blocked
+      notes:
+        - >-
+          Determining why the inbound direction is dropped requires enabling
+          packet-drop auditing, which is a security-setting change the contributor's
+          agent policy does not permit autonomously. Blocked by a boundary, not
+          unfinished.
+    - id: shm_leg_with_synthetic_jointstate
+      status: verified
+      evidence:
+        - date: 2026-08-03
+      notes:
+        - >-
+          Demonstrated in a separate configuration (configs/tobas-jointstate-shm/,
+          case T31, not one of this Recipe's own components), not with Tobas itself:
+          a registered asset (consumer.py) calls asset_register() and
+          conductor_start(), creating the channel and single-owning the conductor. A
+          second, unregistered external process (injector.py) attaches with
+          init_for_external() and writes a synthetic JointState. A third external
+          process (tap.py) polls the same channel directly to verify the written
+          values independently of the writer.
+        - >-
+          Two consecutive passing runs, exit 0. Two negative-path runs both exited
+          1; the writer-stopped case was confirmed by content, not merely by exit
+          code -- 198 polls returned zero valid samples.
+        - >-
+          Verification checked position^2 + velocity^2 == 1 and an inter-joint
+          phase offset of 0.1*i, an identity that only holds for this synthetic
+          waveform. A non-empty-only check would have missed a
+          looks-green-but-the-arrays-are-empty failure, the same class of false
+          positive already flagged in jointstate_ros_to_pdu_over_tcp above.
+        - >-
+          What this does and does not establish: the SHM channel read/write path,
+          the external-process priming and polling discipline, and the ownership
+          model are all verified. The bytes written were a synthetic waveform, not
+          Tobas telemetry, because bringing up the vendor stack is a human action.
+          Whether the SHM leg itself is correct does not depend on the byte
+          provenance, so this is recorded as a distinct, verified claim from
+          jointstate_into_hakoniwa_core below, which is about combining it with the
+          real Tobas data.
+        - >-
+          Known pitfalls worth carrying forward: an external write must be preceded
+          by a priming read (run_nowait()) or the write is lost; external writes
+          never call notify_write_pdu_done(), so readers must poll directly rather
+          than wait on notification; and startup order must be consumer, then sim
+          start, then a 1 second wait, then the external processes -- skipping the
+          wait produced 0xC0000005.
+    - id: jointstate_into_hakoniwa_core
+      status: not_tested
+      notes:
+        - >-
+          Until this is done no Hakoniwa conductor participates, so the composition is
+          a decode rather than a simulation.
+        - >-
+          The SHM leg itself is already verified, with synthetic data (see
+          shm_leg_with_synthetic_jointstate above). What remains here is narrower:
+          combining it with real Tobas JointState output, and replacing the
+          synthetic-waveform identity check with a validation method suited to an
+          unknown vendor waveform.
+    - id: pdu_to_ros_command_direction
+      status: not_tested
+      notes:
+        - Prerequisite of any action work.
+    - id: execute_mission_action
+      status: not_tested
+      notes:
+        - >-
+          Updated 2026-08-08. The blocker previously recorded here -- no Action
+          client implementation and no C API, so no goal could be originated from
+          Python -- is resolved. hakoniwa-pdu-rpc 501ce5a implements the Action
+          Client, Server and Mux Server, the C API and the Python CFFI API;
+          hakoniwa-pdu-ros f17e1cc adds an Action Client Bridge and Action Server
+          Bridge on top of it. See the candidate
+          pdu-rpc-action-has-no-client-implementation, whose
+          tracking.implementation_status is now resolved. Status here stays
+          not_tested because unexecutable-for-lack-of-a-client is no longer the
+          reason; what is untested is this specific goal against these specific
+          revisions.
+        - >-
+          Three things remain open, none of them the client-existence question: (a)
+          whether the ExecuteMission goal shape -- a variable-length array of
+          variable-size structs each holding a byte array -- has a workable PDU
+          representation, which has not been checked against the registry
+          generator; (b) the command direction (pdu_to_ros) is unverified, and
+          every Action path depends on it; (c) no combination with the Tobas side
+          has been attempted.
+
+agency_boundary:
+  agent_actions:
+    - id: maintain_recipe_docs
+      description: Maintain this Recipe and the related knowledge candidates.
+      autonomous: true
+      preconditions:
+        - documentation_task_only
+    - id: read_vendor_definition_layer
+      description: Read Tobas message, service and action definitions to determine type shapes.
+      autonomous: true
+      preconditions:
+        - apache2_definition_layer_only
+        - no_code_derivation
+  human_decisions:
+    - id: approve_vendor_license_scope
+      description: >-
+        Decide whether anything beyond the Apache-2.0 definition layer may be used.
+        Tobas is GPL-3.0-or-later with an Apache-2.0 definition layer and a separate
+        commercial agreement; reading behaviour and incorporating code are different
+        acts and only the first was done here.
+      status: required
+      required_before:
+        - any_gpl_derived_artifact
+        - any_redistribution
+    - id: approve_command_direction_scope
+      description: >-
+        Decide whether sending commands toward the vendor stack is in scope. Applies
+        to pdu_to_ros and to injecting action goals.
+      status: required
+      required_before:
+        - pdu_to_ros_enablement
+        - action_goal_injection
+    - id: approve_headless_project_generation
+      description: >-
+        Decide how to handle vehicle and project configuration. Tobas generates these
+        with a Qt setup assistant, and whether a headless path exists is unknown
+        rather than known-absent. The verified run consumed an already-generated
+        example project, which is how it avoided the question.
+      status: required
+      required_before:
+        - new_airframe_scenario
+    - id: approve_security_setting_change
+      description: Decide whether packet-drop auditing may be enabled to find the inbound-block root cause.
+      status: required
+      required_before:
+        - inbound_block_root_cause_investigation
+  human_actions:
+    - id: start_vendor_stack
+      description: Bring up the Tobas example stack before any reproduction.
+      status: required
+      confirmation_required: true
+      required_before:
+        - state_direction_reproduction
+  required_permissions:
+    - id: real_aircraft_actuation
+      description: Never in scope for this Recipe. Listed so its absence is explicit.
+      status: required
+      required_before:
+        - any_physical_flight
+  notes:
+    - Simulation only. Flight, arming, and real-aircraft actuation are outside this Recipe.
+    - The reversed TCP role is a workaround, not a solution; do not present it as the recommended topology.
+
+constraints:
+  - simulation-only
+  - state-direction-only
+  - no-actuation
+  - third-party-stack-unmodified
+  - ros2-side-listens-host-dials
+  - qos-relay-required-until-binding-supports-qos
+
+target_environment:
+  required_for: executable-demo
+  status: specified
+  os: Windows
+  os_version: current-supported-host
+  architecture: x64
+  execution_mode: headless
+  runtimes:
+    - name: Python
+      required: true
+      version: "3.12"
+      path: host-native
+    - name: ROS 2
+      required: true
+      version: jazzy
+      path: linux-side
+  network:
+    default_scope: linux-to-host
+    default_direction: ros2_side_listens
+  notes:
+    - >-
+      The verified environment was a native Windows host with the ROS 2 side in WSL2
+      Ubuntu-24.04. The same shape should hold for any host where inbound connections
+      into the host are blocked but outbound ones are not.
+    - No Hakoniwa Core install is required for the verified path.
+
+execution_environment:
+  required_for: executable-demo
+  status: specified
+  os: Windows
+  os_version: current-supported-host
+  architecture: x64
+  execution_mode: headless
+  gui:
+    required: false
+    status: not_required
+  shared_memory:
+    required: false
+    access: not_required
+  devices: []
+  python:
+    environment: >-
+      The ROS 2 side uses a venv created with --system-site-packages so rclpy stays
+      visible. The host side needs a locally built hakoniwa-pdu-endpoint C library
+      and cffi extension; the PyPI wheel does not carry them.
+    hakopy_available: not_required
+  hakoniwa:
+    install_prefix: not-required
+    hako_cmd_access: not_required
+  notes:
+    - >-
+      Vendor project generation is GUI-bound, but the verified run only read from an
+      already-generated example project, so the demo itself is headless.
+
+foundation_contract:
+  mode: not_required
+  reason: >-
+    This Recipe never uses the Foundation runtime. It builds hakoniwa-pdu-endpoint
+    locally and uses only its TCP transport: no Hakoniwa Core, no shared memory, no
+    hakopy, and no managed Workspace. The endpoint capability it depends on (TCP, and
+    explicitly not the Core binding) is stated in execution_environment and in the
+    hakoniwa-pdu-endpoint component entry, so no Foundation-managed requirement applies.
+
+components:
+  - id: tobas
+    roles:
+      - integration_boundary
+      - monitor
+    purpose: Third-party flight controller stack. Publishes the joint state and is not modified.
+  - id: hakoniwa-pdu-ros
+    roles:
+      - bridge
+    purpose: Converts the ROS 2 topic to a PDU in the ros_to_pdu direction.
+  - id: hakoniwa-pdu-endpoint
+    roles:
+      - communication_infrastructure
+    purpose: Carries the PDU across the OS boundary over TCP.
+
+connections:
+  - from: tobas
+    to: hakoniwa-pdu-ros
+    interface: ros2-topic
+    data:
+      - sensor_msgs/JointState at a nominal 50 Hz
+    contract:
+      status: verified
+      requires:
+        - source topic is BEST_EFFORT / KEEP_LAST(1) / VOLATILE
+        - a relay republishing as RELIABLE, because the binding cannot select QoS
+        - the vendor publisher is not modified
+      validation_notes:
+        - >-
+          Without the relay the bridge reports zero messages and no error, so this
+          contract fails silently rather than loudly.
+  - from: hakoniwa-pdu-ros
+    to: hakoniwa-pdu-endpoint
+    interface: pdu
+    data:
+      - JointState PDU, pdu_size 800 at four joints
+    contract:
+      status: verified
+      requires:
+        - pdu_size equals 192 + 152*N for N joints
+        - the consumer decodes primitive varrays itself if the installed generation leaves them raw
+      validation_notes:
+        - >-
+          A pdu_size that is too small is silently truncated by the transport, so the
+          loss is not detectable downstream. Joint names truncate at 128 bytes the
+          same way.
+
+# The host-side consumer is the contributor's own code and is not a catalog
+# component. Recorded with the same contract shape so the measured contract is
+# not lost.
+external_connections:
+  - from: hakoniwa-pdu-endpoint TCP server on the ROS 2 side
+    to: host-side PDU consumer (contributor's code)
+    interface: pdu
+    data:
+      - JointState PDU over TCP
+    contract:
+      status: verified
+      requires:
+        - the ROS 2 side reaches LISTEN before the host side dials
+      validation_notes:
+        - 1222 and 1185 PDUs across two consecutive runs, values matching the input waveform.
+    notes: >-
+      TCP roles are reversed relative to the obvious arrangement because inbound
+      connections into the host are dropped.
+    analogous_catalog_component: hakoniwa-pdu-endpoint
+  - from: host-side PDU consumer
+    to: Hakoniwa Core SHM channel
+    interface: pdu
+    data:
+      - JointState PDU into a Core channel
+    contract:
+      status: not_tested
+      requires:
+        - an external write needs a priming read first
+        - a registered asset must own the conductor
+      validation_notes:
+        - >-
+          Not attempted with this Recipe's own components, so status stays
+          not_tested rather than being promoted to verified. Corroborating
+          evidence exists (validation.steps.shm_leg_with_synthetic_jointstate,
+          2026-08-03) but comes from a separate configuration
+          (configs/tobas-jointstate-shm/) with its own registered asset and
+          external processes, not from the tobas, hakoniwa-pdu-ros and
+          hakoniwa-pdu-endpoint components listed in this Recipe. It shows the SHM
+          read/write contract and ownership model hold in general -- external
+          priming, direct polling instead of notify_write_pdu_done(), and startup
+          ordering -- but does not by itself demonstrate this Recipe's own
+          consumer performing that write.
+    notes: Without this leg the composition is a decode, not a simulation.
+    analogous_catalog_component: hakoniwa-pdu-endpoint
+
+data_flow:
+  summary: >-
+    The vendor publishes joint state on a BEST_EFFORT topic; a relay republishes it
+    as RELIABLE; the pdu-ros bridge converts it to a PDU; the endpoint serves it over
+    TCP from the ROS 2 side; the host peer dials in and decodes it.
+  steps:
+    - order: 1
+      description: Tobas publishes sensor_msgs/JointState at 50 Hz on a BEST_EFFORT topic.
+    - order: 2
+      description: A relay subscribes BEST_EFFORT and republishes RELIABLE, because the binding cannot select QoS.
+    - order: 3
+      description: The pdu-ros bridge subscribes the RELIABLE topic and converts to a JointState PDU.
+    - order: 4
+      description: hakoniwa-pdu-endpoint listens on the ROS 2 side and serves the PDU over TCP.
+    - order: 5
+      description: The host peer dials in after LISTEN is confirmed and decodes name, position, velocity and effort.
+
+time_model:
+  mode: external
+  components:
+    - vendor publish loop (50 Hz, wall clock)
+    - host-side consumer (wall clock)
+  notes:
+    - >-
+      There is no Hakoniwa conductor in this path, so there is no shared master clock
+      and no stepping. Both sides run on wall clock and the rate is the vendor's.
+    - Establishing a shared clock belongs to the Core leg, which is not part of this Recipe.
+
+artifact_sets:
+  runtime_artifacts:
+    description: Endpoint, TCP and PDU configuration for the two peers.
+    status: verified
+    artifacts:
+      - endpoint and comm configuration for the listening ROS 2 side
+      - endpoint and comm configuration for the dialing host side
+      - PDU definition and type table
+    notes:
+      - >-
+        The running implementation is the contributor's and is not part of this
+        repository; it is cited by date rather than by path.
+  pdu_artifacts:
+    description: PDU types used for the transfer.
+    status: verified
+    artifacts:
+      - sensor_msgs/JointState via the pdu-ros converter
+    notes:
+      - No IDL was authored. The converter already exists, so nothing needed generating.
+
+artifacts:
+  - name: JointState PDU
+    kind: pdu
+    producer: hakoniwa-pdu-ros bridge node
+    consumer: host-side PDU consumer
+    notes: pdu_size 800 at four joints.
+
+missing_pieces:
+  - >-
+      The command direction (pdu_to_ros) is unverified. Every action path needs it,
+      so it gates more than it appears to.
+  - >-
+      The PDU does not reach a Core SHM channel with this Recipe's own components,
+      so no conductor participates and there is no shared clock. This is now
+      narrower than it once was: the SHM leg itself is verified with synthetic
+      data in a separate configuration (see
+      validation.steps.shm_leg_with_synthetic_jointstate), so what remains is
+      carrying real Tobas telemetry across it and replacing the synthetic-waveform
+      identity check with a validation method suited to Tobas's actual signal.
+  - >-
+      Updated 2026-08-08. Vendor action bridging is no longer unexecutable.
+      hakoniwa-pdu-rpc 501ce5a implements the Action Client, Server and Mux Server,
+      the C API and the Python CFFI API; hakoniwa-pdu-ros f17e1cc adds Action
+      Client and Server Bridges. What remains is (a) whether the ExecuteMission
+      goal shape has a workable PDU representation (see the next item), (b) the
+      still-unverified command direction above, and (c) no attempt yet at
+      combining this with the Tobas side.
+  - >-
+      The ExecuteMission goal is a variable-length array of variable-size structs
+      each holding a byte array. No verified PDU representation for that shape is
+      known to the contributor. The registry generator was not read, so this is an
+      open question rather than a stated limitation.
+  - >-
+      Resolved by design, 2026-08-08. An externally caused abort (operator
+      override, a newer mission superseding a running one) maps to ABORTED with
+      the reason carried in the Result payload, not to a runtime cancel, and
+      preemption is Application policy rather than a protocol-level signal.
+      Both were open questions recorded in
+      pdu-rpc-action-cannot-express-external-abort-or-preemption-cause; tmori's
+      design response settled them, and hakoniwa-pdu-ros f17e1cc implements the
+      Action Result mapping. Kept here as a settled design note rather than
+      dropped outright, since no run against the real Tobas action has verified
+      it end to end.
+  - The root cause of the blocked inbound direction is unknown, so the transport arrangement rests on a workaround.
+
+demo:
+  objective: >-
+    Show that an unmodified third-party ROS 2 flight controller's joint state arrives
+    as a correctly decoded PDU on the other side of an OS boundary.
+  readiness:
+    lifecycle_state:
+      source: >-
+        not-applicable — no Hakoniwa conductor participates in this path; the PDU is
+        decoded in-process on the host side and never reaches a Core SHM channel.
+      required: none
+      sufficient: false
+    checks:
+      - id: ros2_side_listening
+        kind: process
+        target: the listening socket on the ROS 2 side
+        expected: >-
+          Listening before the host side dials. With no conductor there is no
+          lifecycle state that could imply this, so it must be observed directly.
+      - id: dial_order_respected
+        kind: log
+        target: the host dial attempt relative to the LISTEN confirmation
+        expected: >-
+          Dialing before LISTEN produces a connect failure and zero PDUs. This was hit
+          twice as a false negative during development, so it is a check rather than a
+          convention.
+      - id: qos_relay_running
+        kind: process
+        target: the BEST_EFFORT to RELIABLE relay
+        expected: >-
+          Running. Without it the RELIABLE subscription matches nothing and the bridge
+          reports zero messages with no error at all.
+      - id: pdu_size_matches_joint_count
+        kind: config
+        target: the declared pdu_size against 192 + 152*N
+        expected: >-
+          Equal. A value that is too small is silently truncated by the transport, so
+          the loss cannot be detected downstream.
+      - id: jointstate_arrays_consistent
+        kind: pdu
+        target: received JointState PDUs
+        expected: >-
+          At least one received, position non-empty, and name, position, velocity and
+          effort all the same length.
+      - id: no_teardown_residue
+        kind: process
+        target: process and port state after teardown
+        expected: No leftover process or listening socket on either side.
+    operator_handoff:
+      background: false
+      explain_command_return: true
+      next_actions:
+        - inspect-decoded-jointstate-values
+        - stop
+  steps:
+    - order: 1
+      component: tobas
+      action: A human brings up the vendor example stack. This is a human action, not an agent step.
+      command: manual-human-action
+    - order: 2
+      component: hakoniwa-pdu-ros
+      action: Start the relay and the ros_to_pdu bridge, and wait for the endpoint to reach LISTEN.
+      command: vendor-side bridge startup
+    - order: 3
+      component: hakoniwa-pdu-endpoint
+      action: Dial in from the host side after LISTEN is confirmed and decode the PDUs.
+      command: host-side consumer startup
+  observability:
+    success_signals:
+      - Received PDU count is non-zero and position is non-empty on every PDU.
+      - Decoded values follow the sender's known waveform.
+    failure_signals:
+      - Zero messages with no error, which means the QoS relay is absent.
+      - A connect failure, which means the dial preceded LISTEN.
+      - Non-empty arrays whose lengths disagree, which means a truncated pdu_size.
+    fixtures:
+      - An already-generated vendor example project.
+    automation:
+      - The host-side wrapper manages the remote job and asserts no residue.
+  verification_checks:
+    lifecycle:
+      - No conductor is involved; the check is that both peers are cleaned up.
+    behavior:
+      - Decoded joint values match the input waveform, not merely non-empty.
+    logs:
+      - Two consecutive passing runs recorded 2026-07-31.
+
+expected_result: >-
+  The host peer decodes sensor_msgs/JointState published by an unmodified
+  third-party stack, with all four arrays populated and consistent, over a
+  reversed-role TCP connection, and leaves no residue on teardown. The PDU does not
+  enter Hakoniwa Core, and no command flows back toward the vendor stack.
+
+source_catalogs:
+  - component_id: tobas
+    catalog_path: ../catalog/components/tobas.yaml
+  - component_id: hakoniwa-pdu-ros
+    catalog_path: ../catalog/components/hakoniwa-pdu-ros.yaml
+  - component_id: hakoniwa-pdu-endpoint
+    catalog_path: ../catalog/components/hakoniwa-pdu-endpoint.yaml
+
+source_artifacts:
+  - repository: hakoniwalab/hakoniwa-business-pack
+    path: catalog/components/tobas.yaml
+    description: >-
+      The vendor catalog entry whose known_gaps lists a simulation-only Recipe as its
+      first item. This Recipe is intended to fill that.
+
+tags:
+  - tobas
+  - ros2
+  - jointstate
+  - bridge
+  - third-party-integration
+  - simulation-only
