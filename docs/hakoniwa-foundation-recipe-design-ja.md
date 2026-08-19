@@ -1103,6 +1103,8 @@ Foundation root、schema、Receipt生成、共通Python venv、各Componentのlo
 7. Component manifest schemaとhost prerequisitesは各Component repositoryが所有する
 8. Business PackはCatalog、要求変換、依存順序、Foundation評価、Recipeへの引き渡しを所有する
 9. `doctor`は検出と説明を行い、host packageを暗黙にinstallしない
+10. source dependencyのrepository URL、revision、clone先、materializationはBusiness Pack、CI、または明示的な利用者setupが所有し、Component `hako.py`はmanifestで渡されたdependency rootの診断とbuildへの引き渡しを所有する
+11. Component `hako.py`の標準operationはsource dependencyを暗黙にclone、更新、reset、置換しない
 
 ## 20. 完了条件
 
