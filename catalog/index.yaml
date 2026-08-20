@@ -2,6 +2,26 @@ index_version: 0.1
 generated_by: catalog/tools/generate_index.rb
 description: Lightweight search index for Hakoniwa component catalogs.
 components:
+- id: athrill-target-v850e2m
+  name: Athrill V850E2M Target
+  category: simulation-core
+  secondary_categories:
+  - simulator
+  - integration
+  maturity: active
+  distribution: oss
+  summary: V850E2M instruction-set and device target that builds the athrill2 ECU
+    emulator from the common Athrill sources.
+  recipe_roles:
+  - simulation_core
+  connects_to: []
+  tags:
+  - athrill
+  - v850e2m
+  - ecu
+  - emulator
+  - msvc
+  catalog_path: components/athrill-target-v850e2m.yaml
 - id: hakoniwa-conductor-light
   name: Hakoniwa Conductor Light
   category: simulation-core
