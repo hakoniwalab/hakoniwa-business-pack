@@ -31,6 +31,7 @@ RECEIPT_REQUIRED_FIELDS = {
     "resolved_manifest",
 }
 ARTIFACT_PROBES = {
+    "athrill-target-v850e2m": ("bin/athrill2", "bin/athrill2.exe"),
     "hakoniwa-core-pro": ("bin/hako-cmd", "bin/hako-cmd.exe"),
     "hakoniwa-pdu-endpoint": ("lib/cmake/hakoniwa_pdu_endpoint",),
     "hakoniwa-pdu-rpc": ("lib/cmake/hakoniwa_pdu_rpc",),
@@ -1259,6 +1260,28 @@ build:
 
 paths:
   hakoniwa_core_root: {_yaml_string(prefix)}
+"""
+    elif component_id == "athrill-target-v850e2m":
+        athrill_source = source.parent / "athrill"
+        windows_host = platform.system() == "Windows"
+        content = f"""version: 1
+
+build:
+  type: Release
+  dir: {_yaml_string(build_dir)}
+  parallel: 0
+
+features:
+  exdev: {str(not windows_host).lower()}
+  mros: {str(not windows_host).lower()}
+  vdev: false
+
+validation:
+  tests: true
+
+paths:
+  athrill_root: {_yaml_string(athrill_source)}
+  vcpkg_root: {_yaml_string(vcpkg_root)}
 """
     else:
         raise FoundationError(

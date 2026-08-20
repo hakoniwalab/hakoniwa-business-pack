@@ -1,0 +1,200 @@
+id: athrill-target-v850e2m
+name: Athrill V850E2M Target
+repository:
+  owner: toppers
+  name: athrill-target-v850e2m
+  url: https://github.com/toppers/athrill-target-v850e2m
+  visibility: public
+distribution:
+  channel: oss
+  notes:
+    - Distributed under the TOPPERS License declared by the repository.
+verification:
+  verified_at: 2026-08-20
+  source_revision: 4ca6046
+  source_ref: hakoniwa
+summary: V850E2M instruction-set and device target that builds the athrill2 ECU emulator from the common Athrill sources.
+category:
+  primary: simulation-core
+  secondary:
+    - simulator
+    - integration
+
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - Cataloged from source, CMake configuration, and native Windows build and smoke evidence.
+
+capabilities:
+  - name: V850E2M CPU emulation
+    description: Builds the athrill2 executable with V850E2M decode, execution, MPU, debugger, and device implementations.
+    evidence:
+      - repository: toppers/athrill-target-v850e2m
+        path: CMakeLists.txt
+        revision: hakoniwa
+  - name: Business Pack build lifecycle
+    description: Provides manifest-driven doctor, configure, build, test, install, and smoke operations plus a Component Receipt.
+    evidence:
+      - repository: toppers/athrill-target-v850e2m
+        path: tools/hako.py
+        revision: hakoniwa
+  - name: Native Windows MSVC build
+    description: Supports MSVC, Ninja, and vcpkg while handling Visual Studio environment setup and WSL UNC workspaces.
+    evidence:
+      - repository: toppers/athrill-target-v850e2m
+        path: CMakePresets.json
+        revision: hakoniwa
+
+limitations:
+  - Native Windows currently disables EXDEV, legacy mROS, and VDEV.
+  - The smoke test verifies executable startup/usage only; target-program behavioral tests require a separate ELF and memory configuration.
+  - The Windows vcpkg manifest currently consumes the static getopt port, whose build emits an LGPL static-linking warning that must be reviewed before redistribution.
+
+interfaces:
+  inputs:
+    - name: V850 ELF program
+      kind: file
+      description: Target program image loaded by the emulator.
+    - name: Memory configuration
+      kind: config
+      description: Athrill memory and device configuration consumed at launch.
+  outputs:
+    - name: athrill2 executable
+      kind: command
+      description: Host-native V850E2M emulator and debugger.
+  protocols: []
+  configuration:
+    - path: hakoniwa-build.yaml
+      description: Business Pack build, feature, validation, and dependency-root manifest.
+
+dependencies:
+  required:
+    - name: Athrill common source
+      type: repository
+      notes: Supplies the common emulator, debugger, loader, bus, MPU, and platform compatibility sources.
+    - name: CMake and C compiler
+      type: tool
+      notes: Required for the portable build.
+  optional:
+    - name: vcpkg
+      type: package
+      notes: Required on Windows for PThreads4W and getopt-win32.
+
+platforms:
+  supported:
+    - macOS
+    - Linux
+    - Windows
+  notes:
+    - Native Windows x64 was verified with Visual Studio 2022, Ninja, CMake, and C:\project\vcpkg on 2026-08-20.
+
+connects_to: []
+
+recipe_roles:
+  - role: simulation_core
+    description: Emulates the instruction execution and devices of a V850E2M ECU target.
+
+typical_usecases:
+  - Build and debug embedded V850E2M software without target hardware.
+  - Reproduce an Athrill toolchain on macOS, Linux, and native Windows through one component-owned CLI.
+
+anti_usecases:
+  - Hardware-in-the-loop validation that requires physical ECU timing and peripherals.
+  - Windows scenarios requiring EXDEV, mROS, or VDEV before those features are ported.
+
+demo_candidates:
+  - name: V850E2M startup smoke
+    description: Build athrill2 and verify its usage/startup contract through CTest.
+    required_components:
+      - athrill-target-v850e2m
+    source_examples:
+      - repository: toppers/athrill-target-v850e2m
+        path: CMakeLists.txt
+        revision: hakoniwa
+
+operations:
+  build:
+    commands:
+      - python tools/hako.py doctor
+      - python tools/hako.py build
+    notes:
+      - The CLI owns Visual Studio initialization, UNC mapping, vcpkg selection, and resolved-build output.
+  test:
+    commands:
+      - python tools/hako.py smoke
+    notes:
+      - Runs the athrill2-usage CTest.
+  run:
+    commands:
+      - .hako/build/athrill2
+    notes:
+      - A target ELF and memory configuration are required for meaningful emulation.
+
+runtime_checks:
+  - id: build-readiness
+    kind: doctor
+    platforms:
+      - macos
+      - linux
+      - windows
+    command:
+      - python
+      - tools/hako.py
+      - doctor
+    working_directory: repository
+    output: text
+  - id: usage-smoke
+    kind: smoke-test
+    platforms:
+      - macos
+      - linux
+      - windows
+    command:
+      - python
+      - tools/hako.py
+      - smoke
+    working_directory: repository
+    output: text
+
+hako_cli:
+  contract_version: "1.1"
+  path: tools/hako.py
+  common_options:
+    - --config
+  commands:
+    - doctor
+    - configure
+    - build
+    - test
+    - install
+    - smoke
+
+known_gaps:
+  - Component CI does not yet run the new native Windows CLI path.
+  - A reviewed target-program smoke fixture is not yet included.
+
+source_refs:
+  - repository: toppers/athrill-target-v850e2m
+    path: CMakeLists.txt
+    revision: hakoniwa
+    description: Target composition, feature gates, install rule, and usage test.
+  - repository: toppers/athrill-target-v850e2m
+    path: CMakePresets.json
+    revision: hakoniwa
+    description: Native Windows MSVC and vcpkg presets.
+  - repository: toppers/athrill-target-v850e2m
+    path: tools/hako.py
+    revision: hakoniwa
+    description: Business Pack component lifecycle and Receipt implementation.
+  - repository: toppers/athrill
+    path: cmake/AthrillCore.cmake
+    revision: hakoniwa
+    description: Reusable common source and host-platform build configuration.
+
+tags:
+  - athrill
+  - v850e2m
+  - ecu
+  - emulator
+  - msvc

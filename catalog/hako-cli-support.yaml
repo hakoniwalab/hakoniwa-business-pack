@@ -7,6 +7,31 @@ description: >-
   actual command dispatch implemented by each repository.
 
 components:
+  athrill-target-v850e2m:
+    path: tools/hako.py
+    common_options:
+      - --config
+    commands:
+      doctor:
+        supported: true
+      configure:
+        supported: true
+        options:
+          - --dry-run
+      build:
+        supported: true
+        options:
+          - --dry-run
+      test:
+        supported: true
+      install:
+        supported: true
+      smoke:
+        supported: true
+    notes:
+      - "The manifest selects the Athrill common source checkout, build directory, target features, validation, and Windows vcpkg root."
+      - "On native Windows the CLI initializes MSVC and maps UNC workspaces before invoking CMake."
+
   hakoniwa-conductor-light:
     path: tools/hako.py
     common_options:

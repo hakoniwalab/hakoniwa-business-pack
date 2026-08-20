@@ -45,8 +45,15 @@
       "source": "../hakoniwa-pdu-python",
       "repository": "https://github.com/hakoniwalab/hakoniwa-pdu-python.git",
       "dependencies": ["hakoniwa-core-pro"],
-      "operations": ["doctor", "configure", "build", "install", "smoke"],
+      "operations": ["doctor", "build", "install", "smoke"],
       "receipt": "share/hakoniwa/receipts/hakoniwa-pdu-python.yaml"
+    },
+    "athrill-target-v850e2m": {
+      "source": "../athrill-target-v850e2m",
+      "repository": "https://github.com/toppers/athrill-target-v850e2m.git",
+      "dependencies": [],
+      "operations": ["doctor", "configure", "build", "install", "smoke"],
+      "receipt": "share/hakoniwa/receipts/athrill-target-v850e2m.yaml"
     }
   }
 }
