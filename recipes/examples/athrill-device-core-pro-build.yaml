@@ -1,0 +1,200 @@
+id: athrill-device-core-pro-build
+title: Athrill Core Pro EXDEV Portable Build
+recipe_version: 0.1
+goal:
+  user_request: Build portable Athrill hakotime and EV3 PDU external-device libraries against Hakoniwa Core Pro.
+  description: Resolve Core Pro through Foundation, build hakotime and hakopdu_ev3 from sibling Athrill sources, and verify their C logic and loadable EXDEV descriptors.
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - athrill-device revision 016b376 provides a standalone CMake build against the exported hakoniwa-core::shakoc target.
+    - The same source graph builds standalone hakotime and a hakopdu_ev3 library with hakotime statically linked.
+validation:
+  status: partially_verified
+  summary: Direct Release builds and all four CTest cases passed on Linux x64 and native Windows x64; on Linux the component-owned hako.py and Foundation Recipe configure path completed build, install, smoke, Receipt validation, and SATISFIED evaluation.
+  steps:
+    - id: linux_build_and_load
+      status: verified
+      evidence:
+        - repository: toppers/athrill-device
+          path: device/hako-exdev
+          revision: 016b3765305d8ccdbcff15cd9238967b892c978c
+    - id: windows_build_and_load
+      status: verified
+      evidence:
+        - repository: toppers/athrill-device
+          path: device/hako-exdev
+          revision: 016b3765305d8ccdbcff15cd9238967b892c978c
+    - id: foundation_component_lifecycle_linux
+      status: verified
+      evidence:
+        - repository: toppers/athrill-device
+          path: tools/hako.py
+          revision: 016b3765305d8ccdbcff15cd9238967b892c978c
+    - id: foundation_component_lifecycle_windows
+      status: not_tested
+      evidence:
+        - repository: toppers/athrill-device
+          path: test/test_hako.py
+          revision: 016b3765305d8ccdbcff15cd9238967b892c978c
+constraints:
+  - simulation-only-build
+  - no-ros-runtime
+  - core-pro-polling-api
+  - sibling-athrill-source-required
+target_environment:
+  required_for: build-and-load-test
+  status: specified
+  os: Windows | Linux
+  os_version: current-supported-host
+  architecture: x64
+  execution_mode: native
+  runtimes:
+    - name: Python
+      required: true
+      version: "3.12"
+      path: foundation
+  hakoniwa:
+    install_prefix: work/foundation/install
+    components_built: [hakoniwa-core-pro, athrill-device]
+execution_environment:
+  workspace:
+    mode: managed
+  required_for: build-and-load-test
+  status: specified
+  os: Windows | Linux
+  os_version: current-supported-host
+  architecture: x64
+  execution_mode: native
+  gui:
+    required: false
+    status: disabled
+  shared_memory:
+    required: false
+    access: build-only
+  hakoniwa:
+    install_prefix: work/foundation/install
+    hako_cmd_access: not-required
+foundation_contract:
+  mode: required
+  reason: Foundation supplies the exact Core Pro CMake package and shakoc runtime consumed by the EXDEV build.
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      shared_memory: true
+      cmake_package: true
+  athrill-device:
+    capabilities:
+      hakotime_static: true
+      hakotime_shared: true
+      hakopdu_ev3: true
+      core_pro_polling: true
+      exdev_load_test: true
+recipe_local_requirements_schema_version: 1
+recipe_local_requirements:
+  athrill:
+    root:
+      default_path: ../athrill
+      override_env: ATHRILL_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/toppers/athrill.git
+      revision: hakoniwa
+    required_artifacts:
+      - path: src/inc/athrill_exdev.h
+        kind: file
+components:
+  - id: hakoniwa-core-pro
+    roles: [simulation_core, communication_infrastructure, time_sync]
+    purpose: Supply the polling C API, shared-memory runtime, and exported shakoc CMake target.
+  - id: athrill-device
+    roles: [integration_boundary, time_sync, communication_infrastructure]
+    purpose: Build the standalone time and EV3 PDU EXDEV libraries.
+  - id: athrill-target-v850e2m
+    roles: [simulation_core]
+    purpose: Supply the representative Athrill target that loads the resulting EXDEV library.
+connections:
+  - from: athrill-device
+    to: hakoniwa-core-pro
+    interface: api
+    data: [polling asset lifecycle, world time, EV3 sensor and actuator PDUs]
+    contract:
+      status: partially_verified
+      requires: [hakoniwa-core::shakoc CMake package, shakoc runtime beside the EXDEV library]
+      validation_notes: [Compile/link and DLL/SO loading passed; live shared-memory exchange remains untested.]
+  - from: athrill-target-v850e2m
+    to: athrill-device
+    interface: file
+    data: [hakotime shared library, hakopdu_ev3 shared library]
+    contract:
+      status: partially_verified
+      requires: [Athrill EXDEV ABI version match, target memory configuration]
+      validation_notes: [Exported descriptors were loaded and checked; a target ELF was not executed.]
+data_flow:
+  summary: Athrill guest memory and clock callbacks are translated into Core Pro virtual time and EV3 shared-memory PDU operations.
+  steps:
+    - from: hakoniwa-core-pro
+      to: athrill-device
+      data: [world time, EV3 sensor PDU]
+      description: Core Pro polling APIs supply time and sensor state.
+    - from: athrill-device
+      to: hakoniwa-core-pro
+      data: [Athrill simulation time, EV3 actuator PDU]
+      description: The EXDEV reports ECU time and writes encoded actuator state.
+time_model:
+  mode: shared-simulation-time
+  components: [hakoniwa-core-pro, athrill-device, athrill-target-v850e2m]
+  notes:
+    - Hakoniwa microseconds are multiplied by the configured Athrill CPU MHz to derive instruction ticks.
+artifact_sets:
+  runtime_artifacts:
+    description: Portable standalone time and EV3 composite EXDEV libraries.
+    status: verified
+    artifacts: [hakotime static library, hakotime shared library, hakopdu_ev3 shared library]
+  pdu_artifacts:
+    description: Fixed EV3 RX and TX binary layouts.
+    status: verified
+    artifacts: [248-byte EV3 sensor PDU, 196-byte EV3 actuator PDU]
+artifacts:
+  - id: hakotime
+    kind: native-library
+    path: work/foundation/install
+  - id: hakopdu-ev3
+    kind: native-library
+    path: work/foundation/install
+missing_pieces:
+  - Execute the component-owned Foundation lifecycle on native Windows.
+  - Execute a target ELF with live Core Pro time and EV3 PDU traffic.
+  - Re-verify the Core Pro implementation on macOS.
+demo:
+  objective: Resolve, build, test, and install both EXDEV variants into Foundation without starting a simulation.
+  steps:
+    - id: prepare_foundation
+      command: python tools/recipe.py configure --recipe recipes/examples/athrill-device-core-pro-build.yaml
+      expected: Core Pro and athrill-device are installed with valid Component Receipts, and the Athrill common source is resolved.
+    - id: inspect_foundation
+      command: python tools/foundation.py doctor --recipe recipes/examples/athrill-device-core-pro-build.yaml
+      expected: Core Pro and athrill-device are SATISFIED.
+  cleanup:
+    expected_behavior: [No background process is started or left running.]
+    verification_checks: [Confirm no Athrill or Hakoniwa runtime process was started.]
+    cautions: [The EXDEV libraries are shared Foundation artifacts and may be reused by other Recipes.]
+expected_result: hakotime and hakopdu_ev3 are installed into Foundation from one Core Pro based source graph, all tests pass, and the athrill-device Receipt is SATISFIED.
+source_catalogs:
+  - component_id: athrill-device
+    catalog_path: ../catalog/components/athrill-device.yaml
+  - component_id: hakoniwa-core-pro
+    catalog_path: ../catalog/components/hakoniwa-core-pro.yaml
+  - component_id: athrill-target-v850e2m
+    catalog_path: ../catalog/components/athrill-target-v850e2m.yaml
+source_artifacts:
+  - repository: toppers/athrill-device
+    path: device/hako-exdev
+    revision: 016b3765305d8ccdbcff15cd9238967b892c978c
+    description: Core Pro based hakotime and hakopdu_ev3 implementation and tests.
+  - repository: toppers/athrill
+    path: src/inc/athrill_exdev.h
+    revision: 9b3190a0509310c5e02ba88fa47aa6a3fc58462f
+    description: Cross-platform EXDEV ABI consumed by the libraries.

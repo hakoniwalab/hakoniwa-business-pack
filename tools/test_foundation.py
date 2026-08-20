@@ -1147,6 +1147,49 @@ class FoundationInspectorTest(unittest.TestCase):
         self.assertIn("  mros: false", content)
         self.assertIn("  vdev: false", content)
 
+    def test_athrill_device_manifest_resolves_core_and_component_split(self) -> None:
+        paths = foundation.resolve_workspace(self.root, "test")
+        source = self.root / "athrill-device"
+        source.mkdir()
+
+        manifest = foundation.write_component_manifest(
+            "athrill-device",
+            source,
+            paths,
+            {
+                "capabilities": {
+                    "hakotime_static": True,
+                    "hakotime_shared": False,
+                    "hakopdu_ev3": True,
+                }
+            },
+        )
+
+        self.assertIsNotNone(manifest)
+        content = manifest.read_text(encoding="utf-8")
+        self.assertIn("  hakotime: false", content)
+        self.assertIn("  hakopdu_ev3: true", content)
+        self.assertIn(
+            f'  hakoniwa_core_root: "{paths.install_prefix}"', content
+        )
+        self.assertIn(f'  athrill_root: "{source.parent / "athrill"}"', content)
+
+    def test_athrill_device_does_not_require_saved_vcpkg_toolchain(self) -> None:
+        paths = foundation.resolve_workspace(self.root, "test")
+        source = self.root / "athrill-device"
+        source.mkdir()
+
+        with mock.patch.object(
+            foundation,
+            "load_foundation_toolchain",
+            side_effect=AssertionError("vcpkg must not be inspected"),
+        ):
+            manifest = foundation.write_component_manifest(
+                "athrill-device", source, paths, {}
+            )
+
+        self.assertIsNotNone(manifest)
+
 
 if __name__ == "__main__":
     unittest.main()
