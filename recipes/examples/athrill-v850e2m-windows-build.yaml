@@ -33,7 +33,7 @@ constraints:
   - visual-studio-2022
   - ninja-generator
   - explicit-vcpkg-root
-  - exdev-mros-vdev-disabled
+  - exdev-enabled-mros-vdev-disabled
 target_environment:
   required_for: build-and-smoke
   status: specified
@@ -78,7 +78,7 @@ foundation_requirements:
     capabilities:
       target_v850e2m: true
       usage_smoke: true
-      exdev: false
+      exdev: true
       mros: false
       vdev: false
 components:

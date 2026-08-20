@@ -40,14 +40,14 @@ capabilities:
         path: tools/hako.py
         revision: hakoniwa
   - name: Native Windows MSVC build
-    description: Supports MSVC, Ninja, and vcpkg while handling Visual Studio environment setup and WSL UNC workspaces.
+    description: Supports MSVC, Ninja, vcpkg, and EXDEV DLL loading while handling Visual Studio environment setup and WSL UNC workspaces.
     evidence:
       - repository: toppers/athrill-target-v850e2m
         path: CMakePresets.json
         revision: hakoniwa
 
 limitations:
-  - Native Windows currently disables EXDEV, legacy mROS, and VDEV.
+  - Native Windows disables legacy mROS and VDEV.
   - The smoke test verifies executable startup/usage only; target-program behavioral tests require a separate ELF and memory configuration.
 
 interfaces:
@@ -100,7 +100,7 @@ typical_usecases:
 
 anti_usecases:
   - Hardware-in-the-loop validation that requires physical ECU timing and peripherals.
-  - Windows scenarios requiring EXDEV, mROS, or VDEV before those features are ported.
+  - Windows scenarios requiring legacy mROS or VDEV.
 
 demo_candidates:
   - name: V850E2M startup smoke

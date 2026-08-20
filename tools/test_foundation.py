@@ -1119,6 +1119,34 @@ class FoundationInspectorTest(unittest.TestCase):
             index = command.index("--python-venv") + 1
             self.assertEqual(command[index], str(paths.foundation_python))
 
+    def test_athrill_manifest_enables_required_exdev_on_windows(self) -> None:
+        paths = foundation.resolve_workspace(self.root, "test")
+        source = self.root / "athrill-target-v850e2m"
+        source.mkdir()
+
+        with mock.patch.object(
+            foundation, "load_foundation_toolchain",
+            return_value={"vcpkg_root": "C:/project/vcpkg"},
+        ):
+            manifest = foundation.write_component_manifest(
+                "athrill-target-v850e2m",
+                source,
+                paths,
+                {
+                    "capabilities": {
+                        "exdev": True,
+                        "mros": False,
+                        "vdev": False,
+                    }
+                },
+            )
+
+        self.assertIsNotNone(manifest)
+        content = manifest.read_text(encoding="utf-8")
+        self.assertIn("  exdev: true", content)
+        self.assertIn("  mros: false", content)
+        self.assertIn("  vdev: false", content)
+
 
 if __name__ == "__main__":
     unittest.main()

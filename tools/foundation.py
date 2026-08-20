@@ -1263,7 +1263,7 @@ paths:
 """
     elif component_id == "athrill-target-v850e2m":
         athrill_source = source.parent / "athrill"
-        windows_host = platform.system() == "Windows"
+        exdev_enabled = required_capabilities.get("exdev", True) is True
         content = f"""version: 1
 
 build:
@@ -1272,8 +1272,8 @@ build:
   parallel: 0
 
 features:
-  exdev: {str(not windows_host).lower()}
-  mros: {str(not windows_host).lower()}
+  exdev: {str(exdev_enabled).lower()}
+  mros: false
   vdev: false
 
 validation:
