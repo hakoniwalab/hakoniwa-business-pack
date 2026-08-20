@@ -54,6 +54,14 @@
       "dependencies": [],
       "operations": ["doctor", "configure", "build", "install", "smoke"],
       "receipt": "share/hakoniwa/receipts/athrill-target-v850e2m.yaml"
+    },
+    "athrill-device": {
+      "source": "../athrill-device",
+      "repository": "https://github.com/toppers/athrill-device.git",
+      "revision": "hakoniwa",
+      "dependencies": ["hakoniwa-core-pro"],
+      "operations": ["doctor", "build", "install", "smoke"],
+      "receipt": "share/hakoniwa/receipts/athrill-device.yaml"
     }
   }
 }

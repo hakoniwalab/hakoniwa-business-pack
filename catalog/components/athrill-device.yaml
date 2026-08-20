@@ -1,0 +1,218 @@
+id: athrill-device
+name: Athrill Hakoniwa External Devices
+repository:
+  owner: toppers
+  name: athrill-device
+  url: https://github.com/toppers/athrill-device
+  visibility: public
+distribution:
+  channel: oss
+  notes:
+    - Distributed under the licenses declared by the repository and its dependencies.
+verification:
+  verified_at: 2026-08-20
+  source_revision: 016b3765305d8ccdbcff15cd9238967b892c978c
+  source_ref: hakoniwa
+summary: Portable Athrill EXDEV libraries that synchronize emulator time and exchange EV3 PDUs through Hakoniwa Core Pro.
+category:
+  primary: communication
+  secondary:
+    - integration
+    - time-sync
+    - binary-contract
+
+status:
+  maturity: experimental
+  catalog_confidence: high
+  notes:
+    - Linux and native Windows builds, unit tests, and real shared-library loading were verified.
+    - An end-to-end Athrill plus Hakoniwa runtime scenario has not yet been executed.
+
+capabilities:
+  - name: Standalone Athrill time synchronization
+    description: Builds hakotime as both a static library and a loadable EXDEV shared library for Hakoniwa virtual-time synchronization.
+    evidence:
+      - repository: toppers/athrill-device
+        path: device/hako-exdev/CMakeLists.txt
+        revision: 016b3765305d8ccdbcff15cd9238967b892c978c
+  - name: EV3 PDU external device
+    description: Builds hakopdu_ev3 as an Athrill EXDEV shared library with EV3 RX/TX PDU conversion and embedded hakotime logic.
+    evidence:
+      - repository: toppers/athrill-device
+        path: device/hako-exdev/src/hakopdu_ev3
+        revision: 016b3765305d8ccdbcff15cd9238967b892c978c
+  - name: Hakoniwa Core Pro polling integration
+    description: Uses the current Core Pro polling C API for asset registration, PDU exchange, and simulation-time notification.
+    evidence:
+      - repository: toppers/athrill-device
+        path: device/hako-exdev/src/runtime/hakoniwa_runtime.c
+        revision: 016b3765305d8ccdbcff15cd9238967b892c978c
+  - name: Native Windows and Linux CMake build
+    description: Produces hakotime and hakopdu_ev3 libraries with MSVC or GCC and verifies exported EXDEV descriptors by loading the resulting library.
+    evidence:
+      - repository: toppers/athrill-device
+        path: device/hako-exdev/test
+        revision: 016b3765305d8ccdbcff15cd9238967b892c978c
+
+limitations:
+  - The PDU implementation currently targets the fixed EV3 memory map and 248-byte RX / 196-byte TX wire contracts.
+  - macOS has not yet been re-verified for the new Core Pro implementation.
+  - The component-owned hako.py lifecycle and Component Receipt have been verified on Linux; the Windows lifecycle entry point remains to be executed.
+  - Runtime interoperability with a target ELF, Athrill process, and live Hakoniwa simulation remains unverified.
+
+interfaces:
+  inputs:
+    - name: Athrill device configuration
+      kind: config
+      description: Asset name, robot name, CPU frequency, and EV3 RX/TX channel IDs supplied by Athrill.
+    - name: Hakoniwa Core Pro polling API
+      kind: api
+      description: Asset lifecycle, virtual time, and shared-memory PDU operations.
+    - name: EV3 sensor PDU
+      kind: pdu
+      description: 248-byte EV3 sensor data read from Hakoniwa shared memory.
+  outputs:
+    - name: hakotime shared library
+      kind: file
+      description: Standalone Athrill EXDEV DLL, shared object, or dylib for virtual-time synchronization.
+    - name: hakotime static library
+      kind: file
+      description: Static time-synchronization core embedded by composite external devices.
+    - name: hakopdu_ev3 shared library
+      kind: file
+      description: EV3 PDU EXDEV with hakotime statically linked.
+    - name: EV3 actuator PDU
+      kind: pdu
+      description: 196-byte EV3 actuator data written to Hakoniwa shared memory.
+  protocols:
+    - name: Hakoniwa shared-memory PDU
+      role: local
+      notes: Accessed through Hakoniwa Core Pro rather than a private Unity connection.
+  configuration:
+    - path: device/hako-exdev/CMakeLists.txt
+      description: Build options for standalone hakotime and the EV3 composite EXDEV.
+    - path: hakoniwa-build.yaml
+      description: Business Pack component manifest for build profile, component selection, validation, and dependency roots.
+
+dependencies:
+  required:
+    - name: Hakoniwa Core Pro
+      type: library
+      notes: Supplies the hakoniwa-core::shakoc CMake target and polling C API.
+    - name: Athrill common source
+      type: repository
+      notes: Supplies the EXDEV ABI, device clock, memory operation, and host shared-library interfaces.
+    - name: CMake and C compiler
+      type: tool
+      notes: CMake 3.20 or newer and a C11 compiler are required.
+  optional: []
+
+platforms:
+  supported:
+    - Linux
+    - Windows
+  notes:
+    - GCC/Linux and Visual Studio 2022 x64 were verified on 2026-08-20.
+
+connects_to:
+  - component_id: hakoniwa-core-pro
+    direction: uses
+    interface: polling C API / shared-memory PDU / virtual time
+    notes: Core Pro is the only Hakoniwa runtime dependency of the new EXDEV libraries.
+  - component_id: athrill-target-v850e2m
+    direction: used_by
+    interface: Athrill EXDEV shared-library ABI
+    notes: The V850E2M emulator can load hakotime or hakopdu_ev3 through its EXDEV loader.
+
+data_contracts:
+  - name: Athrill EXDEV descriptor
+    description: Each shared library exports athrill_ex_device with the Athrill magic, version, memory, lifecycle, and clock callbacks.
+    source:
+      - repository: toppers/athrill-device
+        path: device/hako-exdev/test/exdev_load_test.c
+        revision: 016b3765305d8ccdbcff15cd9238967b892c978c
+  - name: EV3 PDU wire ABI
+    description: Sensor input is 248 bytes and actuator output is 196 bytes; the implementation checks the C layout at compile time.
+    source:
+      - repository: toppers/athrill-device
+        path: device/hako-exdev/src/hakopdu_ev3/hakopdu_ev3.c
+        revision: 016b3765305d8ccdbcff15cd9238967b892c978c
+
+recipe_roles:
+  - role: integration_boundary
+    description: Connects an Athrill-emulated ECU to Hakoniwa virtual time and PDU state.
+  - role: time_sync
+    description: Converts Hakoniwa microseconds into Athrill CPU ticks and reports simulated ECU time.
+  - role: communication_infrastructure
+    description: Maps EV3 guest memory reads and writes to Hakoniwa sensor and actuator PDUs.
+
+typical_usecases:
+  - Synchronize an Athrill ECU simulation with Hakoniwa world time.
+  - Connect EV3-compatible firmware running under Athrill to Hakoniwa PDU producers and consumers.
+  - Build a time-only EXDEV for targets that do not require the EV3 PDU memory device.
+
+anti_usecases:
+  - Direct Unity-specific time synchronization that bypasses Hakoniwa Core Pro.
+  - Arbitrary robot PDU schemas that do not match the EV3 fixed memory and wire contracts.
+  - Hardware timing certification or real ECU validation.
+
+demo_candidates:
+  - name: EV3 EXDEV build and load smoke
+    description: Build both libraries and load their exported Athrill descriptors on Windows and Linux.
+    required_components:
+      - athrill-device
+      - hakoniwa-core-pro
+      - athrill-target-v850e2m
+    source_examples:
+      - repository: toppers/athrill-device
+        path: device/hako-exdev/test
+        revision: 016b3765305d8ccdbcff15cd9238967b892c978c
+
+operations:
+  build:
+    commands:
+      - python tools/hako.py build
+    notes:
+      - Foundation generates a resolved manifest with the Core Pro install and Athrill common source paths.
+  test:
+    commands:
+      - python tools/hako.py test
+    notes:
+      - Four tests cover hakotime, EV3 PDU conversion, and real shared-library loading.
+  install:
+    commands:
+      - python tools/hako.py --install-dir <foundation-prefix> install
+    notes:
+      - Installs libraries and headers, then records capabilities, Core Pro dependency identity, artifacts, and the resolved manifest in a Component Receipt.
+  run:
+    commands: []
+    notes:
+      - Runtime execution requires an Athrill target ELF, memory configuration, and a running Hakoniwa system.
+
+known_gaps:
+  - Execute the component-owned Foundation lifecycle on native Windows.
+  - Add an end-to-end Athrill plus Core Pro runtime fixture with observable PDU and time progression.
+  - Re-verify the new implementation on macOS.
+
+source_refs:
+  - repository: toppers/athrill-device
+    path: device/hako-exdev/CMakeLists.txt
+    revision: 016b3765305d8ccdbcff15cd9238967b892c978c
+    description: Portable target graph, install rules, and tests.
+  - repository: toppers/athrill-device
+    path: device/hako-exdev/src/runtime/hakoniwa_runtime.c
+    revision: 016b3765305d8ccdbcff15cd9238967b892c978c
+    description: Hakoniwa Core Pro polling API adapter.
+  - repository: toppers/athrill
+    path: src/inc/athrill_exdev.h
+    revision: 9b3190a0509310c5e02ba88fa47aa6a3fc58462f
+    description: Cross-platform Athrill EXDEV ABI and export contract.
+
+tags:
+  - athrill
+  - exdev
+  - ev3
+  - pdu
+  - time-sync
+  - core-pro
+  - msvc

@@ -32,6 +32,11 @@ RECEIPT_REQUIRED_FIELDS = {
 }
 ARTIFACT_PROBES = {
     "athrill-target-v850e2m": ("bin/athrill2", "bin/athrill2.exe"),
+    "athrill-device": (
+        "lib/libhakotime.so",
+        "lib/libhakotime.dylib",
+        "bin/hakotime.dll",
+    ),
     "hakoniwa-core-pro": ("bin/hako-cmd", "bin/hako-cmd.exe"),
     "hakoniwa-pdu-endpoint": ("lib/cmake/hakoniwa_pdu_endpoint",),
     "hakoniwa-pdu-rpc": ("lib/cmake/hakoniwa_pdu_rpc",),
@@ -1174,7 +1179,17 @@ def write_component_manifest(
     build_dir = paths.foundation_build / component_id
     manifest = paths.foundation_build / f"{component_id}.yaml"
     prefix = paths.install_prefix
-    toolchain = load_foundation_toolchain(paths)
+    vcpkg_components = {
+        "hakoniwa-pdu-endpoint",
+        "hakoniwa-pdu-rpc",
+        "hakoniwa-pdu-bridge-core",
+        "athrill-target-v850e2m",
+    }
+    toolchain = (
+        load_foundation_toolchain(paths)
+        if component_id in vcpkg_components
+        else {}
+    )
     vcpkg_root = toolchain.get("vcpkg_root", "")
     required_capabilities = (required or {}).get("capabilities", {})
     if component_id == "hakoniwa-core-pro":
@@ -1282,6 +1297,29 @@ validation:
 paths:
   athrill_root: {_yaml_string(athrill_source)}
   vcpkg_root: {_yaml_string(vcpkg_root)}
+"""
+    elif component_id == "athrill-device":
+        athrill_source = source.parent / "athrill"
+        capabilities = required_capabilities
+        hakotime_enabled = capabilities.get("hakotime_shared", True) is True
+        hakopdu_enabled = capabilities.get("hakopdu_ev3", True) is True
+        content = f"""version: 1
+
+build:
+  type: Release
+  dir: {_yaml_string(build_dir)}
+  parallel: 0
+
+components:
+  hakotime: {str(hakotime_enabled).lower()}
+  hakopdu_ev3: {str(hakopdu_enabled).lower()}
+
+validation:
+  tests: true
+
+paths:
+  athrill_root: {_yaml_string(athrill_source)}
+  hakoniwa_core_root: {_yaml_string(prefix)}
 """
     else:
         raise FoundationError(

@@ -2,6 +2,33 @@ index_version: 0.1
 generated_by: catalog/tools/generate_index.rb
 description: Lightweight search index for Hakoniwa component catalogs.
 components:
+- id: athrill-device
+  name: Athrill Hakoniwa External Devices
+  category: communication
+  secondary_categories:
+  - integration
+  - time-sync
+  - binary-contract
+  maturity: experimental
+  distribution: oss
+  summary: Portable Athrill EXDEV libraries that synchronize emulator time and exchange
+    EV3 PDUs through Hakoniwa Core Pro.
+  recipe_roles:
+  - integration_boundary
+  - time_sync
+  - communication_infrastructure
+  connects_to:
+  - hakoniwa-core-pro
+  - athrill-target-v850e2m
+  tags:
+  - athrill
+  - exdev
+  - ev3
+  - pdu
+  - time-sync
+  - core-pro
+  - msvc
+  catalog_path: components/athrill-device.yaml
 - id: athrill-target-v850e2m
   name: Athrill V850E2M Target
   category: simulation-core
