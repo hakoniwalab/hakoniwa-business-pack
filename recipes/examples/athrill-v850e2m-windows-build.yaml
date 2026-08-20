@@ -99,7 +99,6 @@ artifacts:
     path: work/foundation/install/bin/athrill2.exe
 missing_pieces:
   - A reviewed V850E2M ELF/config fixture is still needed for behavioral emulation smoke coverage.
-  - Static getopt redistribution implications require license review.
 demo:
   prerequisites:
     - id: select_vcpkg

@@ -49,7 +49,6 @@ capabilities:
 limitations:
   - Native Windows currently disables EXDEV, legacy mROS, and VDEV.
   - The smoke test verifies executable startup/usage only; target-program behavioral tests require a separate ELF and memory configuration.
-  - The Windows vcpkg manifest currently consumes the static getopt port, whose build emits an LGPL static-linking warning that must be reviewed before redistribution.
 
 interfaces:
   inputs:
@@ -79,7 +78,7 @@ dependencies:
   optional:
     - name: vcpkg
       type: package
-      notes: Required on Windows for PThreads4W and getopt-win32.
+      notes: Required on Windows for PThreads4W.
 
 platforms:
   supported:
