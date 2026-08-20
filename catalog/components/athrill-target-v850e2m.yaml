@@ -11,8 +11,8 @@ distribution:
     - Distributed under the TOPPERS License declared by the repository.
 verification:
   verified_at: 2026-08-20
-  source_revision: 4ca6046
-  source_ref: hakoniwa
+  source_revision: 1c2cea9dd518dfad1388ef91c2c3068815702fc3
+  source_ref: master
 summary: V850E2M instruction-set and device target that builds the athrill2 ECU emulator from the common Athrill sources.
 category:
   primary: simulation-core
@@ -32,19 +32,19 @@ capabilities:
     evidence:
       - repository: toppers/athrill-target-v850e2m
         path: CMakeLists.txt
-        revision: hakoniwa
+        revision: 1c2cea9dd518dfad1388ef91c2c3068815702fc3
   - name: Business Pack build lifecycle
     description: Provides manifest-driven doctor, configure, build, test, install, and smoke operations plus a Component Receipt.
     evidence:
       - repository: toppers/athrill-target-v850e2m
         path: tools/hako.py
-        revision: hakoniwa
+        revision: 1c2cea9dd518dfad1388ef91c2c3068815702fc3
   - name: Native Windows MSVC build
     description: Supports MSVC, Ninja, vcpkg, and EXDEV DLL loading while handling Visual Studio environment setup and WSL UNC workspaces.
     evidence:
       - repository: toppers/athrill-target-v850e2m
         path: CMakePresets.json
-        revision: hakoniwa
+        revision: 1c2cea9dd518dfad1388ef91c2c3068815702fc3
 
 limitations:
   - Native Windows disables legacy mROS and VDEV.
@@ -110,7 +110,7 @@ demo_candidates:
     source_examples:
       - repository: toppers/athrill-target-v850e2m
         path: CMakeLists.txt
-        revision: hakoniwa
+        revision: 1c2cea9dd518dfad1388ef91c2c3068815702fc3
 
 operations:
   build:
@@ -176,19 +176,19 @@ known_gaps:
 source_refs:
   - repository: toppers/athrill-target-v850e2m
     path: CMakeLists.txt
-    revision: hakoniwa
+    revision: 1c2cea9dd518dfad1388ef91c2c3068815702fc3
     description: Target composition, feature gates, install rule, and usage test.
   - repository: toppers/athrill-target-v850e2m
     path: CMakePresets.json
-    revision: hakoniwa
+    revision: 1c2cea9dd518dfad1388ef91c2c3068815702fc3
     description: Native Windows MSVC and vcpkg presets.
   - repository: toppers/athrill-target-v850e2m
     path: tools/hako.py
-    revision: hakoniwa
+    revision: 1c2cea9dd518dfad1388ef91c2c3068815702fc3
     description: Business Pack component lifecycle and Receipt implementation.
   - repository: toppers/athrill
     path: cmake/AthrillCore.cmake
-    revision: hakoniwa
+    revision: 9b3190a0509310c5e02ba88fa47aa6a3fc58462f
     description: Reusable common source and host-platform build configuration.
 
 tags:

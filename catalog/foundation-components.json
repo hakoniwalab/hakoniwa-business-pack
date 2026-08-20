@@ -58,7 +58,7 @@
     "athrill-device": {
       "source": "../athrill-device",
       "repository": "https://github.com/toppers/athrill-device.git",
-      "revision": "hakoniwa",
+      "revision": "main",
       "dependencies": ["hakoniwa-core-pro"],
       "operations": ["doctor", "build", "install", "smoke"],
       "receipt": "share/hakoniwa/receipts/athrill-device.yaml"

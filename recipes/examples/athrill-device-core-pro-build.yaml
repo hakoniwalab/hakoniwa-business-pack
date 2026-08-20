@@ -12,7 +12,7 @@ feasibility:
     - The same source graph builds standalone hakotime and a hakopdu_ev3 library with hakotime statically linked.
 validation:
   status: partially_verified
-  summary: Direct Release builds and all four CTest cases passed on Linux x64 and native Windows x64; on Linux the component-owned hako.py and Foundation Recipe configure path completed build, install, smoke, Receipt validation, and SATISFIED evaluation.
+  summary: Direct Release builds and all four CTest cases passed on Linux x64, macOS arm64, and native Windows x64; on Linux and macOS the component-owned hako.py and Foundation Recipe configure path completed build, install, smoke, Receipt validation, and SATISFIED evaluation.
   steps:
     - id: linux_build_and_load
       status: verified
@@ -21,6 +21,12 @@ validation:
           path: device/hako-exdev
           revision: 016b3765305d8ccdbcff15cd9238967b892c978c
     - id: windows_build_and_load
+      status: verified
+      evidence:
+        - repository: toppers/athrill-device
+          path: device/hako-exdev
+          revision: 016b3765305d8ccdbcff15cd9238967b892c978c
+    - id: macos_foundation_build_and_load
       status: verified
       evidence:
         - repository: toppers/athrill-device
@@ -46,9 +52,9 @@ constraints:
 target_environment:
   required_for: build-and-load-test
   status: specified
-  os: Windows | Linux
+  os: macOS | Windows | Linux
   os_version: current-supported-host
-  architecture: x64
+  architecture: x64 | arm64
   execution_mode: native
   runtimes:
     - name: Python
@@ -63,9 +69,9 @@ execution_environment:
     mode: managed
   required_for: build-and-load-test
   status: specified
-  os: Windows | Linux
+  os: macOS | Windows | Linux
   os_version: current-supported-host
-  architecture: x64
+  architecture: x64 | arm64
   execution_mode: native
   gui:
     required: false
@@ -101,7 +107,7 @@ recipe_local_requirements:
     source:
       type: git
       url: https://github.com/toppers/athrill.git
-      revision: hakoniwa
+      revision: master
     required_artifacts:
       - path: src/inc/athrill_exdev.h
         kind: file
@@ -167,7 +173,6 @@ artifacts:
 missing_pieces:
   - Execute the component-owned Foundation lifecycle on native Windows.
   - Execute a target ELF with live Core Pro time and EV3 PDU traffic.
-  - Re-verify the Core Pro implementation on macOS.
 demo:
   objective: Resolve, build, test, and install both EXDEV variants into Foundation without starting a simulation.
   steps:

@@ -12,7 +12,7 @@ distribution:
 verification:
   verified_at: 2026-08-20
   source_revision: 016b3765305d8ccdbcff15cd9238967b892c978c
-  source_ref: hakoniwa
+  source_ref: main
 summary: Portable Athrill EXDEV libraries that synchronize emulator time and exchange EV3 PDUs through Hakoniwa Core Pro.
 category:
   primary: communication
@@ -25,7 +25,7 @@ status:
   maturity: experimental
   catalog_confidence: high
   notes:
-    - Linux and native Windows builds, unit tests, and real shared-library loading were verified.
+    - Linux, macOS arm64, and native Windows builds, unit tests, and real shared-library loading were verified.
     - An end-to-end Athrill plus Hakoniwa runtime scenario has not yet been executed.
 
 capabilities:
@@ -56,8 +56,7 @@ capabilities:
 
 limitations:
   - The PDU implementation currently targets the fixed EV3 memory map and 248-byte RX / 196-byte TX wire contracts.
-  - macOS has not yet been re-verified for the new Core Pro implementation.
-  - The component-owned hako.py lifecycle and Component Receipt have been verified on Linux; the Windows lifecycle entry point remains to be executed.
+  - The component-owned hako.py lifecycle and Component Receipt have been verified on Linux and macOS; the Windows lifecycle entry point remains to be executed.
   - Runtime interoperability with a target ELF, Athrill process, and live Hakoniwa simulation remains unverified.
 
 interfaces:
@@ -110,9 +109,10 @@ dependencies:
 platforms:
   supported:
     - Linux
+    - macOS
     - Windows
   notes:
-    - GCC/Linux and Visual Studio 2022 x64 were verified on 2026-08-20.
+    - GCC/Linux, AppleClang/macOS arm64, and Visual Studio 2022 x64 were verified on 2026-08-20.
 
 connects_to:
   - component_id: hakoniwa-core-pro
@@ -192,7 +192,6 @@ operations:
 known_gaps:
   - Execute the component-owned Foundation lifecycle on native Windows.
   - Add an end-to-end Athrill plus Core Pro runtime fixture with observable PDU and time progression.
-  - Re-verify the new implementation on macOS.
 
 source_refs:
   - repository: toppers/athrill-device
