@@ -122,7 +122,7 @@ connections:
     data: [polling asset lifecycle, world time, EV3 sensor and actuator PDUs]
     contract:
       status: partially_verified
-      requires: [hakoniwa-core::shakoc CMake package, shakoc runtime beside the EXDEV library]
+      requires: ["hakoniwa-core::shakoc CMake package", shakoc runtime beside the EXDEV library]
       validation_notes: [Compile/link and DLL/SO loading passed; live shared-memory exchange remains untested.]
   - from: athrill-target-v850e2m
     to: athrill-device
