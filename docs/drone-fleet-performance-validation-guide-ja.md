@@ -204,6 +204,48 @@ work/recipes/drone-fleet-single-process-scaling/results/
         └── experiment-a.csv
 ```
 
+### 5.4 Mac結果の収集とWSL2結果の転送
+
+Macで生成したresultを検証し、canonical destinationへ収集する。
+
+```bash
+python3 tools/workspace.py run -- \
+  python3 -m tools.remote_operation.result_transfer \
+  --group experiment-a \
+  --producer mac \
+  collect
+```
+
+次にMac receiverを起動する。
+
+```bash
+python3 tools/workspace.py run -- \
+  python3 -m tools.remote_operation.result_transfer \
+  --group experiment-a \
+  --producer wsl2 \
+  --session-id result-a-wsl2-YYYYMMDD-NN \
+  receive --listen-address 192.168.2.100
+```
+
+receiverの待受開始後、WSL2 senderを起動する。session IDはMacと完全に一致させる。
+
+```bash
+python3 tools/workspace.py run -- \
+  python3 -m tools.remote_operation.result_transfer \
+  --group experiment-a \
+  --producer wsl2 \
+  --session-id result-a-wsl2-YYYYMMDD-NN \
+  send --server-address 192.168.2.100
+```
+
+完了後、次の両方に`summary/experiment-a.json`と8条件のresultが存在し、各summaryが
+`complete: true`であることを確認する。
+
+```text
+exp-results/mac/single-process-scaling/
+exp-results/wsl2/single-process-scaling/
+```
+
 ## 6. Experiment B
 
 ### 6.1 条件確認
@@ -305,6 +347,48 @@ performance summaryや代表RTFへ混ぜない。
 
 process数とattempt数は`single-host-temporal-validation.yaml`の`matrix`が所有し、
 runnerはその宣言を読み取る。
+
+### 6.6 Mac結果の収集とWSL2結果の転送
+
+両machineでPerformanceとTemporal Validationが完了した後に収集する。Experiment Bの
+groupは両seriesを分離したまま1回で処理する。Mac resultは次で収集する。
+
+```bash
+python3 tools/workspace.py run -- \
+  python3 -m tools.remote_operation.result_transfer \
+  --group experiment-b \
+  --producer mac \
+  collect
+```
+
+WSL2 resultはMac receiverを先に起動する。
+
+```bash
+python3 tools/workspace.py run -- \
+  python3 -m tools.remote_operation.result_transfer \
+  --group experiment-b \
+  --producer wsl2 \
+  --session-id result-b-wsl2-YYYYMMDD-NN \
+  receive --listen-address 192.168.2.100
+```
+
+続いてWSL2 senderを起動する。
+
+```bash
+python3 tools/workspace.py run -- \
+  python3 -m tools.remote_operation.result_transfer \
+  --group experiment-b \
+  --producer wsl2 \
+  --session-id result-b-wsl2-YYYYMMDD-NN \
+  send --server-address 192.168.2.100
+```
+
+完了後、machineごとに次の2 seriesが配置される。
+
+```text
+exp-results/<mac|wsl2>/multi-process-scaling/
+exp-results/<mac|wsl2>/single-host-temporal-validation/
+```
 
 ## 7. Experiment C
 
@@ -477,6 +561,21 @@ Aは`--group experiment-a`を使用する。Cのclient artifactを独立収集�
 `--group experiment-c --producer cli-01`を使用する。
 ただしmulti-host attempt runnerが既にclient artifactを同じcanonical destinationへ
 配置済みの場合、hashが完全一致するdatasetは`skipped_existing_identical`となる。
+
+Mac自身が生成したA/B resultはネットワーク転送せず、同じ検証・publish処理を
+`collect`で実行する。Aの場合は次を使用する。
+
+```bash
+python3 tools/workspace.py run -- \
+  python3 -m tools.remote_operation.result_transfer \
+  --layout configs/result-layouts/drone-fleet-performance.yaml \
+  --group experiment-a \
+  --producer mac \
+  collect
+```
+
+Bは`--group experiment-b`へ変更する。既存destinationと全file hashが一致すれば
+`skipped_existing_identical`となり、異なる場合は上書きせず停止する。
 
 個別seriesだけを診断・転送するときは、従来どおり`--experiment <id>`も使用できる。
 

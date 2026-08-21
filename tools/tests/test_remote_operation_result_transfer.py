@@ -129,7 +129,7 @@ class ResultTransferTest(unittest.TestCase):
                     )
             self.assertFalse(destination.exists())
 
-    def test_path_traversal_and_existing_destination_are_rejected(self) -> None:
+    def test_path_traversal_and_different_existing_destination_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             layout_path, layout, resolved, _source, destination = self.fixture(root)
@@ -157,8 +157,11 @@ class ResultTransferTest(unittest.TestCase):
                         max_uncompressed_bytes=1024 * 1024,
                     )
                 destination.mkdir(parents=True)
+                (destination / "different.txt").write_text(
+                    "different\n", encoding="utf-8"
+                )
                 with self.assertRaisesRegex(
-                    result_transfer.ResultTransferError, "already exists"
+                    result_transfer.ResultTransferError, "differs from transfer"
                 ):
                     result_transfer.publish_package(
                         package,
@@ -168,6 +171,50 @@ class ResultTransferTest(unittest.TestCase):
                         staging=root / "staging",
                         max_uncompressed_bytes=1024 * 1024,
                     )
+
+    def test_collect_publishes_locally_and_is_idempotent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            layout_path, layout, resolved, _source, destination = self.fixture(root)
+            args = mock.Mock(
+                layout=layout_path,
+                experiment="experiment-b",
+                group=None,
+                producer="mac",
+                runtime_dir=root / "runtime",
+                session_id="collect-b-mac",
+                max_uncompressed_bytes=1024 * 1024,
+            )
+            with self.patches(root, layout, resolved):
+                first = result_transfer.collect_command(args)
+                first_evidence = json.loads(
+                    (
+                        root
+                        / "runtime"
+                        / "collect-b-mac"
+                        / "collector-result.json"
+                    ).read_text(encoding="utf-8")
+                )
+                second = result_transfer.collect_command(args)
+                second_evidence = json.loads(
+                    (
+                        root
+                        / "runtime"
+                        / "collect-b-mac"
+                        / "collector-result.json"
+                    ).read_text(encoding="utf-8")
+                )
+                published_summary = (
+                    destination / "summary" / "experiment-b.json"
+                ).is_file()
+        self.assertEqual(first, 0)
+        self.assertEqual(second, 0)
+        self.assertEqual(first_evidence["publication"]["status"], "published")
+        self.assertEqual(
+            second_evidence["publication"]["status"],
+            "skipped_existing_identical",
+        )
+        self.assertTrue(published_summary)
 
     def test_manifest_schema_is_valid_json_and_matches_version(self) -> None:
         schema = json.loads(result_transfer.MANIFEST_SCHEMA.read_text(encoding="utf-8"))
@@ -307,6 +354,43 @@ class ResultTransferTest(unittest.TestCase):
         )
         self.assertIn(manifest["skipped_sources"][0], publication["datasets"])
         self.assertFalse(temporal_exists)
+
+    def test_collect_group_publishes_available_local_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            layout_path, layout, resolved, _source, destination, _temporal = (
+                self.group_fixture(root, temporal=False)
+            )
+            args = mock.Mock(
+                layout=layout_path,
+                experiment=None,
+                group="experiment-b",
+                producer="mac",
+                runtime_dir=root / "runtime",
+                session_id="collect-group-b-mac",
+                max_uncompressed_bytes=1024 * 1024,
+            )
+            with self.group_patches(root, layout, resolved):
+                rc = result_transfer.collect_command(args)
+                evidence = json.loads(
+                    (
+                        root
+                        / "runtime"
+                        / "collect-group-b-mac"
+                        / "collector-result.json"
+                    ).read_text(encoding="utf-8")
+                )
+                published = destination.is_dir()
+        statuses = {
+            item["experiment_id"]: item["status"]
+            for item in evidence["publication"]["datasets"]
+        }
+        self.assertEqual(rc, 0)
+        self.assertTrue(published)
+        self.assertEqual(statuses["experiment-b"], "published")
+        self.assertEqual(
+            statuses["experiment-b-temporal"], "skipped_missing_source"
+        )
 
 
 if __name__ == "__main__":

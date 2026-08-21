@@ -50,8 +50,21 @@ Performance-result collection adds a stricter layer in
 `result_transfer.py`. It resolves source and destination exclusively from
 `configs/result-layouts/drone-fleet-performance.yaml`, verifies the checked-in
 Experiment and layout hashes, validates every result identity and payload-file
-hash, and publishes only into an absent canonical destination. See
+hash, and publishes into an absent canonical destination or verifies that an
+existing destination is byte-for-byte identical. See
 `docs/drone-fleet-performance-validation-guide-ja.md` for the A/B/C commands.
+
+Results produced on the collection host use the same validation and publication
+path without a network round trip:
+
+```bash
+python3 tools/workspace.py run -- \
+  python3 -m tools.remote_operation.result_transfer \
+  --group experiment-a --producer mac collect
+```
+
+An identical canonical dataset is skipped. A different existing dataset is
+never overwritten.
 
 This package owns:
 

@@ -9,6 +9,7 @@ import json
 import shutil
 import stat
 import sys
+import tempfile
 import time
 import zipfile
 from datetime import datetime, timezone
@@ -460,11 +461,26 @@ def publish_package(
         experiment_id=experiment_id,
         producer=producer,
     )
-    if destination.exists():
-        raise ResultTransferError(f"canonical destination already exists: {destination}")
     total = sum(entry["size_bytes"] for entry in manifest["files"])
     if total > max_uncompressed_bytes:
         raise ResultTransferError("uncompressed result exceeds receiver limit")
+    if destination.exists():
+        if not _destination_matches(destination, manifest["files"]):
+            raise ResultTransferError(
+                f"canonical destination differs from transfer: {destination}"
+            )
+        return {
+            "status": "skipped_existing_identical",
+            "experiment_id": experiment_id,
+            "producer_id": producer,
+            "series": manifest["series"],
+            "destination": str(destination),
+            "file_count": len(manifest["files"]),
+            "uncompressed_size_bytes": total,
+            "manifest_sha256": hashlib.sha256(
+                json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest(),
+        }
     if staging.exists():
         shutil.rmtree(staging)
     payload = staging / "payload"
@@ -778,6 +794,62 @@ def _write_evidence(path: Path, value: dict[str, Any]) -> None:
     path.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
 
 
+def collect_command(args: argparse.Namespace) -> int:
+    runtime = _runtime(args)
+    runtime.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="collect-", dir=runtime) as temporary:
+        temporary_root = Path(temporary)
+        archive = temporary_root / f"{args.group or args.experiment}-{args.producer}.zip"
+        if args.group:
+            _archive, manifest = create_group_package(
+                args.layout, args.group, args.producer, archive
+            )
+            publication = publish_group_package(
+                archive,
+                layout_path=args.layout,
+                group_id=args.group,
+                producer=args.producer,
+                staging=temporary_root / "staging",
+                max_uncompressed_bytes=args.max_uncompressed_bytes,
+            )
+        else:
+            _archive, manifest = create_package(
+                args.layout, args.experiment, args.producer, archive
+            )
+            publication = publish_package(
+                archive,
+                layout_path=args.layout,
+                experiment_id=args.experiment,
+                producer=args.producer,
+                staging=temporary_root / "staging",
+                max_uncompressed_bytes=args.max_uncompressed_bytes,
+            )
+    evidence = {
+        "status": "success",
+        "role": "collector",
+        "recorded_at_unix_sec": time.time(),
+        "manifest": manifest,
+        "publication": publication,
+    }
+    evidence_path = runtime / "collector-result.json"
+    _write_evidence(evidence_path, evidence)
+    if args.group:
+        for item in publication["datasets"]:
+            print(
+                f"[{item['status'].upper()}] {item['experiment_id']}: "
+                f"{item.get('destination', '-')}",
+                flush=True,
+            )
+    else:
+        print(
+            f"[{publication['status'].upper()}] {args.experiment}: "
+            f"{publication['destination']}",
+            flush=True,
+        )
+    print(f"Evidence: {evidence_path}")
+    return 0
+
+
 def send_command(args: argparse.Namespace) -> int:
     session_id = _session(args)
     runtime = _runtime(args)
@@ -1024,6 +1096,12 @@ def parser() -> argparse.ArgumentParser:
     send = commands.add_parser("send")
     send.add_argument("--server-address", default="192.168.2.100")
     send.add_argument("--chunk-size", type=int, default=artifact_transfer.DEFAULT_CHUNK_SIZE)
+    collect = commands.add_parser("collect")
+    collect.add_argument(
+        "--max-uncompressed-bytes",
+        type=int,
+        default=artifact_transfer.DEFAULT_MAX_BYTES,
+    )
     return result
 
 
@@ -1039,6 +1117,8 @@ def main(argv: list[str] | None = None) -> int:
                 raise ResultTransferError(
                     f"{args.producer} is not a producer for {args.experiment}"
                 )
+        if args.command == "collect":
+            return collect_command(args)
         if args.command == "receive":
             return (
                 receive_group_command(args) if args.group else receive_command(args)
