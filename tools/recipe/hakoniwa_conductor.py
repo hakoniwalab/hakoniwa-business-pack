@@ -32,6 +32,22 @@ EXPECTED_BINARIES = {
     "rpc_gen",
 }
 
+# v1.1.0 was built from the revisions recorded in its package contract.  The
+# revisions below were subsequently audited against those exact sources and
+# contain build/doctor/measurement tooling changes only; no C/C++ headers or
+# runtime implementation changed.  Keep this an explicit allow-list so an
+# arbitrary newer checkout can never bypass the binary ABI provenance guard.
+AUDITED_FOUNDATION_REVISION_COMPATIBILITY = {
+    (
+        "hakoniwa-core-pro",
+        "b8818ec47619f6026739f7d71e2d22829dea4752",
+    ): frozenset({"945ad77a34b1b86282bf74a04d79451d0eb2ebb8"}),
+    (
+        "hakoniwa-pdu-endpoint",
+        "93a926c520a76f401f52d7ba4e816e5ad54d7c36",
+    ): frozenset({"9015a17415fd4a2042de2528b835a265af85b165"}),
+}
+
 
 class ConductorRecipeError(RuntimeError):
     pass
@@ -286,7 +302,10 @@ def validate_foundation_contract(
             raise ConductorRecipeError(f"Foundation Receipt is missing: {receipt_path}")
         receipt = foundation.load_receipt(receipt_path)
         actual = receipt.get("component", {}).get("source_revision")
-        if actual != required_revision:
+        compatible_revisions = AUDITED_FOUNDATION_REVISION_COMPATIBILITY.get(
+            (component_id, str(required_revision)), frozenset()
+        )
+        if actual != required_revision and actual not in compatible_revisions:
             raise ConductorRecipeError(
                 f"Foundation revision mismatch for {component_id}: "
                 f"required={required_revision}, installed={actual}; "

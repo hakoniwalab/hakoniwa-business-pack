@@ -10,6 +10,62 @@ from tools.recipe import hakoniwa_conductor as conductor
 
 
 class HakoniwaConductorRecipeTest(unittest.TestCase):
+    def write_foundation_contract_fixture(
+        self,
+        root: Path,
+        *,
+        core_revision: str,
+        endpoint_revision: str,
+    ) -> tuple[Path, Path]:
+        contract = root / "build-contract.txt"
+        contract.write_text(
+            "hakoniwa_core_pro_ref="
+            "b8818ec47619f6026739f7d71e2d22829dea4752\n"
+            "hakoniwa_pdu_endpoint_ref="
+            "93a926c520a76f401f52d7ba4e816e5ad54d7c36\n"
+            "hakoniwa_pdu_rpc_ref="
+            "7ed378bacf76aca9ba65625d3c21c65bc83f7051\n"
+            "hakoniwa_pdu_bridge_core_ref="
+            "e5c567948b42512abc36a8cea2b4d8a151f6c145\n"
+            "hakoniwa_pdu_version=1.6.9\n",
+            encoding="utf-8",
+        )
+        foundation = root / "foundation"
+        receipts = foundation / "share" / "hakoniwa" / "receipts"
+        receipts.mkdir(parents=True)
+        revisions = {
+            "hakoniwa-core-pro": core_revision,
+            "hakoniwa-pdu-endpoint": endpoint_revision,
+            "hakoniwa-pdu-rpc": "7ed378bacf76aca9ba65625d3c21c65bc83f7051",
+            "hakoniwa-pdu-bridge-core": "e5c567948b42512abc36a8cea2b4d8a151f6c145",
+        }
+        for component_id, revision in revisions.items():
+            capabilities = (
+                "capabilities:\n"
+                "  hakoniwa_core: true\n"
+                "  core_callback: true\n"
+                "  core_polling: true\n"
+                "  tcp: true\n"
+                if component_id == "hakoniwa-pdu-endpoint"
+                else ""
+            )
+            (receipts / f"{component_id}.yaml").write_text(
+                "schema_version: 1\n"
+                "component:\n"
+                f"  id: {component_id}\n"
+                f'  source_revision: "{revision}"\n'
+                + capabilities,
+                encoding="utf-8",
+            )
+        (receipts / "hakoniwa-pdu-python.yaml").write_text(
+            "schema_version: 1\n"
+            "component:\n"
+            "  id: hakoniwa-pdu-python\n"
+            '  version: "1.6.9"\n',
+            encoding="utf-8",
+        )
+        return contract, foundation
+
     def test_detects_published_targets(self):
         self.assertEqual(
             conductor.detect_target("Darwin", "arm64").suffix,
@@ -84,6 +140,31 @@ class HakoniwaConductorRecipeTest(unittest.TestCase):
                 archive.writestr("../outside", "unsafe")
             with self.assertRaises(conductor.ConductorRecipeError):
                 conductor.extract_archive(archive_path, root / "runtime", target)
+
+    def test_foundation_contract_accepts_only_audited_forward_revisions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            contract, foundation = self.write_foundation_contract_fixture(
+                Path(tmp),
+                core_revision="945ad77a34b1b86282bf74a04d79451d0eb2ebb8",
+                endpoint_revision="9015a17415fd4a2042de2528b835a265af85b165",
+            )
+            installed = conductor.validate_foundation_contract(contract, foundation)
+            self.assertEqual(
+                installed["hakoniwa-core-pro"],
+                "945ad77a34b1b86282bf74a04d79451d0eb2ebb8",
+            )
+
+    def test_foundation_contract_still_rejects_unknown_revision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            contract, foundation = self.write_foundation_contract_fixture(
+                Path(tmp),
+                core_revision="unreviewed-core-revision",
+                endpoint_revision="93a926c520a76f401f52d7ba4e816e5ad54d7c36",
+            )
+            with self.assertRaisesRegex(
+                conductor.ConductorRecipeError, "revision mismatch"
+            ):
+                conductor.validate_foundation_contract(contract, foundation)
 
 
 if __name__ == "__main__":
