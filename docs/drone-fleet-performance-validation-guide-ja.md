@@ -21,6 +21,22 @@ observerを有効にしたTemporal Validationを別seriesで実施し、処理�
 本書は、実装済み機能を **AVAILABLE**、仕様だけを先に定義した機能を
 **PLANNED** と表記する。PLANNEDのコマンドは現時点では実行してはならない。
 
+### 1.1 正式測定matrix
+
+| 分類 | host | UAV数 | process数 | attempts | observer |
+| --- | --- | --- | --- | --- | --- |
+| Experiment A | Mac / WSL2 | `1,2,4,8,16,32,64,128` | `1` | `1` | OFF |
+| Experiment B | Mac / WSL2 | `32` | `1,2,4,6,8,12,15` | `3`、条件付きで`4,5` | OFF |
+| Experiment B | Mac / WSL2 | `64` | `1,2,4,6,8,12,15` | `3`、条件付きで`4,5` | OFF |
+| Experiment B | Mac / WSL2 | `128` | `1,2,4,6,8,12,15` | `3`、条件付きで`4,5` | OFF |
+| Temporal Validation B-max | Mac / WSL2 | `128` | `15` | `1` | ON |
+| Experiment C | Mac + WSL2 | `32/32,64/64,128/128` | `6/12` | paired `3`、条件付きで`4,5` | OFF |
+| Temporal Validation C-max | Mac + WSL2 | `128/128` | `6/12` | paired `1` | ON |
+
+条件付きextensionは、baseline中のfailure、またはrelative spreadが5%を超えた
+configurationだけを対象とする。spreadの主要指標はBが1 step平均wall-clock時間、
+CがRTFである。BとCのrunnerはいずれも、この判定とattempt 4/5の実行を自動で行う。
+
 ## 2. 正本と責務
 
 同じ数値やパスを複数の文書へ手作業で複製しない。正本は次のように分ける。
@@ -198,11 +214,14 @@ python tools/recipe/drone_fleet_performance_b.py plan
 
 `matrix.workloads`は明示的なsparse gridである。UAV数とprocess数の直積を暗黙生成しない。
 
-### 6.2 baseline実行と再開
+### 6.2 baseline・extensionの自動実行と再開
 
 ```bash
 python tools/recipe/drone_fleet_performance_b.py run
 ```
+
+`run`は全configurationのattempt 1..3を完了した後、failureまたは5%超のspreadを
+自動判定し、該当configurationだけattempt 4/5を続けて実行する。
 
 ```bash
 python tools/recipe/drone_fleet_performance_b.py run --resume
@@ -221,10 +240,10 @@ python tools/recipe/drone_fleet_performance_b.py run \
 python tools/recipe/drone_fleet_performance_b.py run --restart-series
 ```
 
-### 6.3 extension
+### 6.3 extensionの手動再判定
 
-baseline集計後、ばらつきまたはfailure条件に該当したconfigurationだけattempt 4/5を
-追加する。
+通常は`run`に含まれるため、次のコマンドを別途実行する必要はない。baselineだけを
+`--baseline-only`で取得した場合や、extension判定を再開するときに使用する。
 
 ```bash
 python tools/recipe/drone_fleet_performance_b.py extend
@@ -254,8 +273,8 @@ work/recipes/drone-fleet-multi-process-scaling/results/
 
 ### 6.5 Temporal Validation
 
-Performance run完了後、128 UAVのprocess分割における時間整合性を、observer有効の
-別seriesで検証する。現在のvalidation endpointは2 processと15 process、各1 attemptである。
+Performance run完了後、最大負荷点である128 UAV / 15 processの時間整合性を、
+observer有効の別seriesで1 attempt検証する。
 
 ```bash
 python tools/recipe/drone_fleet_temporal_b.py plan
@@ -274,7 +293,6 @@ python tools/recipe/drone_fleet_temporal_b.py run --resume
 ```text
 work/recipes/drone-fleet-multi-process-scaling/results/
 └── single-host-temporal-validation/
-    ├── temporal-uav-128-proc-02/attempt-01/
     ├── temporal-uav-128-proc-15/attempt-01/
     └── summary/
         ├── temporal-b.json
@@ -285,16 +303,14 @@ work/recipes/drone-fleet-multi-process-scaling/results/
 ratioである。Temporal ValidationのRTFはobserver overheadを含むため、Experiment Bの
 performance summaryや代表RTFへ混ぜない。
 
-現時点のendpoint process数`[2, 15]`はrunnerの`PROCESS_COUNTS`が所有している。
-測定条件をYAMLへ一元化する原則に合わせ、測定完了後に
-`single-host-temporal-validation.yaml`のmatrixへ移し、runnerをその入力へ接続する。
-これは **PLANNED** であり、進行中の測定条件は変更しない。
+process数とattempt数は`single-host-temporal-validation.yaml`の`matrix`が所有し、
+runnerはその宣言を読み取る。
 
 ## 7. Experiment C
 
 ### 7.1 実行profile
 
-現在のremote-operation profileは自動化preflight用である。
+正式測定用remote-operation profileは次である。
 
 ```text
 configs/remote-operation/multi-host-scaling-attempts.yaml
@@ -303,10 +319,6 @@ configs/remote-operation/multi-host-scaling-attempts.yaml
 このprofileはExperiment YAMLの64/128/256 UAVを1接続で順に実行し、各条件のbaseline
 attempt 1..3を測定する。failureまたはRTF relative spreadが宣言閾値を超えた条件だけ
 attempt 4/5へ進む。
-
-正式な再測定では、同じschemaを使い、`workspace.output_root`をresult layoutの
-canonical C workspaceへ向けた専用profileを作成する。このprofileは **PLANNED** であり、
-現在のpreflight測定中に切り替えない。
 
 ### 7.2 実行
 
@@ -619,7 +631,7 @@ python tools/recipe/drone_fleet_performance_report.py \
 
 #### Temporal Validation report
 
-- Bのprocess endpointごとのlag p95を図示し、median/maximum/acceptance ratioをderived tableへ保存
+- B-maxの15 processにおけるlag p95を図示し、median/maximum/acceptance ratioをderived tableへ保存
 - Cのhost別lag p95を図示し、lag統計、acceptance ratio、start/end virtual-time差をderived tableへ保存
 - performance summaryとは別入力として扱う
 - 対応するperformance datasetを参照するが、RTF集計には結合しない
@@ -638,8 +650,8 @@ manifestには次を含める。
 出力directory、stem、formatもresult layoutの`analysis`が正本である。現在のC出力は次になる。
 
 ```text
-work/recipes/drone-fleet-multi-host-attempt-extension-smoke/results/
-multi-host-scaling-preflight/summary/plots/experiment-c-multi-host-scaling.{html,svg,png}
+work/recipes/drone-fleet-multi-host-scaling/results/
+multi-host-scaling/summary/plots/experiment-c-multi-host-scaling.{html,svg,png}
 ```
 
 ## 10. 測定条件とYAMLの対応
@@ -665,8 +677,8 @@ multi-host-scaling-preflight/summary/plots/experiment-c-multi-host-scaling.{html
 | 系列 | matrix | baseline attempt |
 | --- | --- | --- |
 | A | UAV `1,2,4,8,16,32,64,128`; process `1` | YAMLの`matrix.attempts` |
-| B | UAV `32,64,128`; process `1,2,4,6,8,12,15` | YAMLの`matrix.attempts` |
-| B Temporal | UAV `128`; process endpoint `2,15` | 各`1` |
+| B | UAV `32,64,128`; process `1,2,4,6,8,12,15` | `1..3`; trigger時`4..5` |
+| B Temporal | UAV `128`; process `15` | `1` |
 | C | total UAV `64,128,256`; host process `6+12` | `1..3`; trigger時`4..5` |
 | C Temporal | total UAV `256`; host process `6+12` | `1` |
 

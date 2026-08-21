@@ -26,12 +26,12 @@ class ResultLayoutTest(unittest.TestCase):
                 "exp-results/wsl2/single-host-temporal-validation",
             ),
             ("experiment-c", "cli-01"): (
-                "work/recipes/drone-fleet-multi-host-attempt-extension-smoke/results/multi-host-scaling-preflight/hosts/cli-01",
-                "work/recipes/drone-fleet-multi-host-attempt-extension-smoke/results/multi-host-scaling-preflight/hosts/cli-01",
+                "work/recipes/drone-fleet-multi-host-scaling/results/multi-host-scaling/hosts/cli-01",
+                "work/recipes/drone-fleet-multi-host-scaling/results/multi-host-scaling/hosts/cli-01",
             ),
             ("experiment-c-temporal", "cli-01"): (
-                "work/recipes/drone-fleet-multi-host-temporal-smoke/results/multi-host-temporal-validation/hosts/cli-01",
-                "work/recipes/drone-fleet-multi-host-temporal-smoke/results/multi-host-temporal-validation/hosts/cli-01",
+                "work/recipes/drone-fleet-multi-host-temporal-validation/results/multi-host-temporal-validation/hosts/cli-01",
+                "work/recipes/drone-fleet-multi-host-temporal-validation/results/multi-host-temporal-validation/hosts/cli-01",
             ),
         }
         for identity, paths in expected.items():

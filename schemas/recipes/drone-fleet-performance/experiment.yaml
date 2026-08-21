@@ -33,7 +33,7 @@ sections:
       triggers_optional_fields: []
       relative_spread_required_fields: [metric, greater_than]
       relative_spread_optional_fields: []
-      spread_metrics: [rtf]
+      spread_metrics: [rtf, average_step_wall_clock_sec]
   runtime:
     required_fields: [mode, visualization, show_runner_real_time_sync]
     optional_fields: [conductor]

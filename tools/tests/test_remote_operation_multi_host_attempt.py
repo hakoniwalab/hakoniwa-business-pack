@@ -144,7 +144,7 @@ class MultiHostScalingAttemptTest(unittest.TestCase):
         self.assertEqual(baseline_attempts, 3)
         self.assertEqual(
             resolved.output_root.name,
-            "drone-fleet-multi-host-attempt-extension-smoke",
+            "drone-fleet-multi-host-scaling",
         )
 
     def test_extension_decision_uses_paired_baseline_rtf_spread(self) -> None:

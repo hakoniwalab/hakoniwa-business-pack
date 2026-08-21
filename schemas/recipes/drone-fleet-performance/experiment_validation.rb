@@ -104,10 +104,10 @@ module ExperimentValidation
     end
 
     matrix = data["matrix"]
-    validate_matrix(errors, matrix, label) if matrix.is_a?(Hash)
+    validate_matrix(errors, matrix, schema, label) if matrix.is_a?(Hash)
   end
 
-  def validate_matrix(errors, matrix, label)
+  def validate_matrix(errors, matrix, schema, label)
     if matrix.key?("workloads") && (matrix.key?("drone_count") || matrix.key?("process_count"))
       errors << "#{label}.matrix.workloads cannot be combined with top-level drone_count or process_count"
     end
@@ -125,7 +125,7 @@ module ExperimentValidation
         errors << "#{label}.matrix.conductor_real_sleep_msec must be a non-empty non-negative integer list"
       end
     end
-    validate_attempts(errors, matrix["attempts"], label) if matrix.key?("attempts")
+    validate_attempts(errors, matrix["attempts"], schema, label) if matrix.key?("attempts")
     return unless matrix.key?("workloads")
 
     workloads = matrix["workloads"]
@@ -158,7 +158,7 @@ module ExperimentValidation
     end
   end
 
-  def validate_attempts(errors, attempts, label)
+  def validate_attempts(errors, attempts, schema, label)
     prefix = "#{label}.matrix.attempts"
     return if integer_at_least?(attempts, 1)
 
@@ -194,7 +194,7 @@ module ExperimentValidation
     unless expected_start && consecutive_attempts?(extension_attempts, expected_start)
       errors << "#{prefix}.extension.attempts must continue immediately after baseline"
     end
-    validate_attempt_triggers(errors, extension["triggers"], prefix)
+    validate_attempt_triggers(errors, extension["triggers"], schema, prefix)
   end
 
   def consecutive_attempts?(values, first)
@@ -203,7 +203,7 @@ module ExperimentValidation
       values == (first...(first + values.length)).to_a
   end
 
-  def validate_attempt_triggers(errors, triggers, prefix)
+  def validate_attempt_triggers(errors, triggers, schema, prefix)
     trigger_prefix = "#{prefix}.extension.triggers"
     unless triggers.is_a?(Hash)
       errors << "#{trigger_prefix} must be a mapping"
@@ -229,8 +229,12 @@ module ExperimentValidation
     %w[metric greater_than].each do |field|
       errors << "#{trigger_prefix}.relative_spread missing #{field}" unless spread.key?(field)
     end
-    unless spread["metric"] == "rtf"
-      errors << "#{trigger_prefix}.relative_spread.metric must be rtf"
+    spread_metrics = Array(schema.dig("sections", "matrix", "attempts", "spread_metrics"))
+    unless spread_metrics.include?(spread["metric"])
+      errors << (
+        "#{trigger_prefix}.relative_spread.metric must be one of: " \
+        "#{spread_metrics.join(', ')}"
+      )
     end
     threshold = spread["greater_than"]
     unless threshold.is_a?(Numeric) && threshold.positive?

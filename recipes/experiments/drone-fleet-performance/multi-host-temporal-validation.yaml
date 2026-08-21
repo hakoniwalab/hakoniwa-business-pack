@@ -86,7 +86,7 @@ measurement:
   series: multi-host-temporal-validation
   configuration_id: auto
   attempt: 1
-  protocol_status: preflight
+  protocol_status: official
   sampling_interval_sec: 0.05
   temporal_sampling_interval_usec: 20000
   preflight_duration_sec: 1.0

@@ -251,7 +251,7 @@ the profile. The profile contract is
 The server writes the paired report to:
 
 ```text
-work/recipes/drone-fleet-multi-host-temporal-smoke/
+work/recipes/drone-fleet-multi-host-temporal-validation/
 └── results/multi-host-temporal-validation/summary/
     ├── multi-host-temporal-sleep-001ms-uav-256.json
     └── multi-host-temporal-sleep-001ms-uav-256.csv
@@ -287,7 +287,7 @@ the extracted result's `host_id`, `configuration_id`, `attempt`, and
 verified ZIP is removed after extraction; transfer and control JSONL logs are
 retained under the remote-operation runtime directory.
 
-## Headless scaling preflight
+## Headless official scaling
 
 `multi-host-scaling.yaml` is the ICRA-oriented, headless scaling Recipe. Its
 matrix varies only the total UAV count (`64`, `128`, `256`). Its attempt policy
@@ -319,8 +319,7 @@ configs/remote-operation/multi-host-scaling-attempts.yaml
 
 It selects `drone_counts: all`, which resolves to the Experiment-owned
 `[64, 128, 256]` matrix, and uses the dedicated
-`drone-fleet-multi-host-attempt-extension-smoke` workspace, preserving the
-earlier automation-preflight results. The Experiment remains the
+`drone-fleet-multi-host-scaling` canonical workspace. The Experiment remains the
 authority for baseline attempts 1 through 3 and extension attempts 4 and 5;
 the remote-operation profile selects
 `attempt_set: baseline_with_conditional_extension` and does not duplicate
@@ -350,7 +349,7 @@ the server writes its existing paired JSON/CSV summary. After the final
 condition it also writes the combined matrix reports:
 
 ```text
-results/multi-host-scaling-preflight/summary/
+results/multi-host-scaling/summary/
 ├── multi-host-scaling-sleep-001ms-uav-064.{json,csv}
 ├── multi-host-scaling-sleep-001ms-uav-128.{json,csv}
 ├── multi-host-scaling-sleep-001ms-uav-256.{json,csv}
@@ -363,11 +362,8 @@ respectively. This differs from the legacy connectivity baseline, which used
 4 processes on `srv-01` and 12 on `cli-01`.
 
 The Conductor `real_sleep_msec` value is deliberately a scalar Recipe setting,
-not a matrix axis. Before the final scaling run, edit that one value manually
-through `10`, `5`, `2`, `1`, and `0`, and run only the 256-UAV condition. This
-keeps exploratory tuning distinct from the final experiment. If RTF and both
-hosts' CPU usage are acceptable at `0`, leave it fixed at `0` and execute the
-full UAV-count matrix.
+not a matrix axis. The completed 10/1/0 ms sanity pilot selected 1 ms, so the
+official scaling matrix keeps it fixed at `1` for every workload.
 
 Inspect and configure a condition with the scaling operator:
 

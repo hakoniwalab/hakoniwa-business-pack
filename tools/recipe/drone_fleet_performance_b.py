@@ -183,6 +183,46 @@ def _positive_int(value: Any, label: str) -> int:
     return value
 
 
+def load_attempt_count(matrix: dict[str, Any]) -> int:
+    policy = matrix.get("attempts")
+    if not isinstance(policy, dict):
+        raise MatrixError("matrix.attempts must declare baseline and extension")
+    if set(policy) != {"baseline", "extension"}:
+        raise MatrixError("matrix.attempts fields must be baseline and extension")
+    baseline = policy.get("baseline")
+    extension = policy.get("extension")
+    if baseline != list(range(1, INITIAL_MEASURED_RUN_COUNT + 1)):
+        raise MatrixError("matrix.attempts.baseline must be [1, 2, 3]")
+    if not isinstance(extension, dict) or set(extension) != {"attempts", "triggers"}:
+        raise MatrixError(
+            "matrix.attempts.extension fields must be attempts and triggers"
+        )
+    if extension.get("attempts") != list(
+        range(INITIAL_MEASURED_RUN_COUNT + 1, ESCALATED_MEASURED_RUN_COUNT + 1)
+    ):
+        raise MatrixError("matrix.attempts.extension.attempts must be [4, 5]")
+    triggers = extension.get("triggers")
+    if not isinstance(triggers, dict) or set(triggers) != {
+        "any_failure",
+        "relative_spread",
+    }:
+        raise MatrixError(
+            "matrix.attempts.extension.triggers must declare failure and spread"
+        )
+    if triggers.get("any_failure") is not True:
+        raise MatrixError("matrix attempt extension must trigger on any failure")
+    spread = triggers.get("relative_spread")
+    if not isinstance(spread, dict) or spread != {
+        "metric": "average_step_wall_clock_sec",
+        "greater_than": SPREAD_THRESHOLD,
+    }:
+        raise MatrixError(
+            "matrix attempt extension spread must use "
+            "average_step_wall_clock_sec > 0.05"
+        )
+    return len(baseline)
+
+
 def load_matrix(path: Path) -> tuple[operator.Experiment, list[Workload], int]:
     raw = operator.load_simple_yaml(path)
     matrix = raw.get("matrix")
@@ -226,7 +266,7 @@ def load_matrix(path: Path) -> tuple[operator.Experiment, list[Workload], int]:
         for drone_count, process_counts in workload_grid.items()
         for process_count in process_counts
     ]
-    attempts = _positive_int(matrix.get("attempts"), "matrix.attempts")
+    attempts = load_attempt_count(matrix)
     base = operator.resolve_experiment(path)
     if max(workload.process_count for workload in workloads) > MAX_SIMULATOR_PROCESSES:
         raise MatrixError(
@@ -318,7 +358,13 @@ def reusable_result(path: Path, base: operator.Experiment | None = None) -> bool
         payload = common.load_result(path)
     except common.MatrixError:
         return False
-    if payload.get("status") != "success" or not common.preflight_passed(payload):
+    # A workload failure after a valid machine preflight is a measured outcome.
+    # Preserve it so the protocol can trigger attempts 4/5 instead of silently
+    # replacing the failed attempt with a more convenient result.
+    if (
+        payload.get("status") not in {"success", "invalid"}
+        or not common.preflight_passed(payload)
+    ):
         return False
     if base is None or base.measurement is None:
         return True
@@ -902,6 +948,33 @@ def extend_matrix(
     )
 
 
+def run_with_automatic_extension(
+    base: operator.Experiment,
+    workloads: list[Workload],
+    attempts: int,
+    *,
+    resume: bool,
+    rerun_invalid: bool,
+    restart_series: bool,
+) -> int:
+    baseline_rc = run_matrix(
+        base,
+        workloads,
+        attempts,
+        resume=resume,
+        rerun_invalid=rerun_invalid,
+        restart_series=restart_series,
+    )
+    print("\n=== Experiment B: automatic extension decision ===", flush=True)
+    extension_rc = extend_matrix(
+        base,
+        workloads,
+        attempts,
+        rerun_invalid=rerun_invalid,
+    )
+    return 1 if baseline_rc != 0 or extension_rc != 0 else 0
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         description="Experiment B multi-process Drone Fleet matrix runner"
@@ -923,7 +996,15 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument(
         "--rerun-invalid",
         action="store_true",
-        help="archive invalid/failed attempts and measure those identities again",
+        help=(
+            "archive structurally invalid or failed-preflight attempts and "
+            "measure those identities again"
+        ),
+    )
+    result.add_argument(
+        "--baseline-only",
+        action="store_true",
+        help="run attempts 1..3 without the automatic attempts 4/5 decision",
     )
     return result
 
@@ -945,7 +1026,16 @@ def main(argv: list[str] | None = None) -> int:
             )
         if args.command in {"status", "stop"}:
             return run_operator(args.command, args.experiment.resolve())
-        return run_matrix(
+        if args.baseline_only:
+            return run_matrix(
+                base,
+                workloads,
+                attempts,
+                resume=args.resume,
+                rerun_invalid=args.rerun_invalid,
+                restart_series=args.restart_series,
+            )
+        return run_with_automatic_extension(
             base,
             workloads,
             attempts,

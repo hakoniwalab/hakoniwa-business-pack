@@ -47,14 +47,14 @@ experiments:
     destination: "{collection}/{participant}/{series}"
   experiment-c:
     experiment: recipes/experiments/drone-fleet-performance/multi-host-scaling.yaml
-    workspace: "{workspaces}/drone-fleet-multi-host-attempt-extension-smoke"
-    series: multi-host-scaling-preflight
+    workspace: "{workspaces}/drone-fleet-multi-host-scaling"
+    series: multi-host-scaling
     producers: ["srv-01", "cli-01"]
     source: "{workspace}/results/{series}/hosts/{participant}"
     destination: "{workspace}/results/{series}/hosts/{participant}"
   experiment-c-temporal:
     experiment: recipes/experiments/drone-fleet-performance/multi-host-temporal-validation.yaml
-    workspace: "{workspaces}/drone-fleet-multi-host-temporal-smoke"
+    workspace: "{workspaces}/drone-fleet-multi-host-temporal-validation"
     series: multi-host-temporal-validation
     producers: ["srv-01", "cli-01"]
     source: "{workspace}/results/{series}/hosts/{participant}"
@@ -85,9 +85,9 @@ analysis:
     formats: ["html", "svg", "png"]
   experiment-c-multi-host-scaling:
     inputs:
-      performance: "{workspaces}/drone-fleet-multi-host-attempt-extension-smoke/results/multi-host-scaling-preflight"
-      temporal: "{workspaces}/drone-fleet-multi-host-temporal-smoke/results/multi-host-temporal-validation"
-    output_directory: "{workspaces}/drone-fleet-multi-host-attempt-extension-smoke/results/multi-host-scaling-preflight/summary/plots"
+      performance: "{workspaces}/drone-fleet-multi-host-scaling/results/multi-host-scaling"
+      temporal: "{workspaces}/drone-fleet-multi-host-temporal-validation/results/multi-host-temporal-validation"
+    output_directory: "{workspaces}/drone-fleet-multi-host-scaling/results/multi-host-scaling/summary/plots"
     output_stem: experiment-c-multi-host-scaling
     formats: ["html", "svg", "png"]
 

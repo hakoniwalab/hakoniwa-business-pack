@@ -16,7 +16,15 @@ matrix:
     uav_128:
       drone_count: 128
       process_count: [1, 2, 4, 6, 8, 12, 15]
-  attempts: 3
+  attempts:
+    baseline: [1, 2, 3]
+    extension:
+      attempts: [4, 5]
+      triggers:
+        any_failure: true
+        relative_spread:
+          metric: average_step_wall_clock_sec
+          greater_than: 0.05
 runtime:
   mode: native
   visualization: false
@@ -42,7 +50,7 @@ measurement:
   series: multi-process-scaling
   configuration_id: auto
   attempt: 1
-  protocol_status: preflight
+  protocol_status: official
   sampling_interval_sec: 0.05
   preflight_duration_sec: 1.0
   preflight_settle_timeout_sec: 60.0

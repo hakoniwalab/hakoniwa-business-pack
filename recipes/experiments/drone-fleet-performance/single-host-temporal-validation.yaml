@@ -5,6 +5,9 @@ scale:
   drone_count: 128
   drones_per_process: auto
   process_count: 15
+matrix:
+  process_count: [15]
+  attempts: 1
 runtime:
   mode: native
   visualization: false
@@ -30,7 +33,7 @@ measurement:
   series: single-host-temporal-validation
   configuration_id: auto
   attempt: 1
-  protocol_status: preflight
+  protocol_status: official
   sampling_interval_sec: 0.05
   temporal_sampling_interval_usec: 20000
   preflight_duration_sec: 1.0

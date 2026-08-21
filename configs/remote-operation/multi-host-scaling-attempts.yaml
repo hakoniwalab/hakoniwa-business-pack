@@ -9,7 +9,7 @@ selection:
   attempt_set: baseline_with_conditional_extension
 
 workspace:
-  output_root: work/recipes/drone-fleet-multi-host-attempt-extension-smoke
+  output_root: work/recipes/drone-fleet-multi-host-scaling
 
 lifecycle:
   clean_before_run: true

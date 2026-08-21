@@ -74,6 +74,17 @@ class DroneFleetPerformanceBTest(unittest.TestCase):
         )
         self.assertEqual(len(workloads), 21)
         self.assertEqual(attempts, 3)
+        raw = matrix.operator.load_simple_yaml(EXPERIMENT)
+        self.assertEqual(
+            raw["matrix"]["attempts"]["extension"]["triggers"],
+            {
+                "any_failure": True,
+                "relative_spread": {
+                    "metric": "average_step_wall_clock_sec",
+                    "greater_than": 0.05,
+                },
+            },
+        )
         assert base.measurement is not None
         self.assertEqual(base.measurement.conductor_implementation, "embedded")
         self.assertEqual(base.measurement.conductor_delta_time_usec, 1_000)
@@ -334,6 +345,38 @@ class DroneFleetPerformanceBTest(unittest.TestCase):
             {matrix.Workload(64, 6): [4, 5]},
         )
         self.assertTrue(run_matrix.call_args.kwargs["resume"])
+
+    def test_run_automatically_follows_baseline_with_extension_decision(self) -> None:
+        base, workloads, attempts = matrix.load_matrix(EXPERIMENT)
+        with mock.patch.object(matrix, "run_matrix", return_value=0) as run_matrix, mock.patch.object(
+            matrix, "extend_matrix", return_value=0
+        ) as extend_matrix:
+            rc = matrix.run_with_automatic_extension(
+                base,
+                workloads,
+                attempts,
+                resume=False,
+                rerun_invalid=False,
+                restart_series=False,
+            )
+        self.assertEqual(rc, 0)
+        self.assertEqual(run_matrix.call_count, 1)
+        extend_matrix.assert_called_once_with(
+            base,
+            workloads,
+            attempts,
+            rerun_invalid=False,
+        )
+
+    def test_failed_measurement_with_valid_preflight_is_preserved_for_extension(self) -> None:
+        base, _workloads, _attempts = matrix.load_matrix(EXPERIMENT)
+        with tempfile.TemporaryDirectory() as temporary:
+            result = Path(temporary) / "result.json"
+            payload = result_payload(1, 1, 0.001)
+            payload["status"] = "invalid"
+            payload["validation"] = {"passed": False}
+            result.write_text(json.dumps(payload), encoding="utf-8")
+            self.assertTrue(matrix.reusable_result(result, base))
 
 
 if __name__ == "__main__":

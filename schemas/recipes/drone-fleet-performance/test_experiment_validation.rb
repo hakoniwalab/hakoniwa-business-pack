@@ -180,7 +180,7 @@ class ExperimentValidationTest < Minitest::Test
     )
     value.dig("matrix", "attempts", "extension", "triggers", "relative_spread")["metric"] = "cpu"
 
-    assert validate(value).any? { |error| error.include?("metric must be rtf") }
+    assert validate(value).any? { |error| error.include?("metric must be one of") }
   end
 
   def test_rejects_incomplete_allocation_order

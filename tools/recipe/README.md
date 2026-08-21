@@ -143,9 +143,10 @@ python3.12 tools/recipe/drone_fleet_performance_b.py run --resume
 ```
 
 Experiment Bのマシン負荷preflightは、プロセス数そのものの負荷を外部負荷と
-誤認しないよう、各条件のDrone Serviceを起動する前に実施します。不合格または
-failedのattemptは`--resume`だけでは再利用しません。該当attemptを`rejected/`へ
-退避して再測定し、成功済み条件から続ける場合は次を使用します。
+誤認しないよう、各条件のDrone Serviceを起動する前に実施します。壊れたresultまたは
+preflight不合格のattemptを`rejected/`へ退避して再測定し、記録済み条件から続ける
+場合は次を使用します。preflight通過後のworkload failureは測定結果として保持され、
+extensionのtriggerになります。
 
 ```bash
 python3.12 tools/recipe/drone_fleet_performance_b.py run \
@@ -162,9 +163,10 @@ python3.12 tools/recipe/drone_fleet_performance_b.py run \
 `selection_status: additional_runs_required`とします。測定契約を変更して全条件を
 取り直す場合は、既存系列を削除せず退避する`--restart-series`を使用します。
 
-3試行の集計後、追加対象だけattempt 4・5を実行するには`extend`を使用します。
-`extend`は初期3試行を変更せず、`escalation_required: true`のプロセス数だけを
-追加測定して5試行で再集計します。
+通常の`run`は3試行の集計後、追加対象だけattempt 4・5を自動実行します。
+`extend`は`--baseline-only`で初期3試行だけを取得した場合や、中断したextensionの
+再判定に使用します。初期3試行を変更せず、`escalation_required: true`の
+configurationだけを追加測定して5試行で再集計します。
 
 ```bash
 python3.12 tools/recipe/drone_fleet_performance_b.py extend
