@@ -36,9 +36,22 @@ EXPERIMENT = (
     / "drone-fleet-performance"
     / "single-process-scaling.yaml"
 )
+RECIPE_MANIFEST = (
+    Path(__file__).resolve().parents[2]
+    / "recipes"
+    / "examples"
+    / "drone-fleet-single-process-scaling.yaml"
+)
 
 
 class DroneFleetPerformanceTest(unittest.TestCase):
+    def test_recipe_declares_drone_native_runtime_contract(self) -> None:
+        manifest = RECIPE_MANIFEST.read_text(encoding="utf-8")
+        self.assertIn("native_runtime_requirements:\n  schema_version: 1", manifest)
+        self.assertIn("    hakoniwa-drone-core:\n      profile: public-v4.0.0", manifest)
+        self.assertIn('      required_roles: ["drone_service"]', manifest)
+        self.assertIn('      optional_roles: ["visual_state_publisher"]', manifest)
+
     def test_preflight_contract_resolves_scalable_headless_processes(self) -> None:
         experiment = recipe.resolve_experiment(EXPERIMENT)
         self.assertGreaterEqual(experiment.drone_count, 1)
