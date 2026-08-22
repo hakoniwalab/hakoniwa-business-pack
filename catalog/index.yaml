@@ -193,8 +193,9 @@ components:
   - integration
   maturity: active
   distribution: oss
-  summary: Environment modeling toolkit for creating, visualizing, refining, and querying
-    environmental factors such as wind, temperature, pressure, GPS strength, and boundaries.
+  summary: Environment modeling toolkit for runtime environmental factors and PLATEAU-derived
+    MuJoCo/GLB City Worlds containing terrain, roads, available road markings, and
+    buildings.
   recipe_roles:
   - environment_model
   - data_model

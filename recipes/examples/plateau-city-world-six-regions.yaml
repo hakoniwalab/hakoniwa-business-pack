@@ -1,0 +1,309 @@
+id: plateau-city-world-six-regions
+title: PLATEAU Six-region MJCF and GLB City World Smoke
+recipe_version: 0.1
+
+goal:
+  user_request: 同一の軽量な変換条件で国内6地域のPLATEAUデータからMJCFとGLBを生成し、都市ごとのデータ差とフォールバックを確認したい
+  description: >
+    Apply one hakoniwa-envsim City World conversion contract to six fixed
+    200-meter selections. Generate MJCF and GLB assets, preserve source and
+    artifact receipts, and summarize effective LOD, fallback, unavailable
+    features, and known limitations. This Recipe does not load MuJoCo or run a
+    physics simulation.
+
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - hakoniwa-envsim already generates aligned MJCF and GLB City World artifacts from bldg, tran, dem, and optional frn data.
+    - Every region changes only the configured center; extent and conversion policy are shared.
+    - Missing CityFurniture is an explicit non-blocking Dataset Validator result rather than inferred geometry.
+    - Region outputs and receipts are isolated, so a partial matrix can be resumed safely.
+
+validation:
+  status: verified
+  summary: >
+    On 2026-08-23, the common 200-meter pipeline generated isolated MJCF and
+    GLB City World artifacts for all six fixed regions on macOS. Dataset
+    Validator results exposed the actual regional differences: Numazu included
+    LOD3 road markings, Shibuya used LOD3/LOD2 road surfaces without markings,
+    and Sapporo, Kanazawa, Hiroshima, and Naha used the explicit LOD1 road
+    fallback without inferred markings. Physics execution and bridge geometry
+    remain outside this validation scope.
+  steps:
+    - id: numazu_reference
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-envsim
+          path: tools/hako.py
+          revision: d7a257606ca88b65a5109d88bd6045a5c9a9b8da
+      notes:
+        - Numazu produced terrain, road, road-marking, building, MJCF, GLB, provenance, and Dataset Validator artifacts.
+    - id: six_region_catalog_preflight
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-business-pack
+          path: recipes/examples/plateau-city-world-six-regions.yaml
+          revision: local-working-tree
+      notes:
+        - The fixed centers resolved to current PLATEAU catalog entries on 2026-08-23.
+        - Catalog metadata is not equivalent to successful asset conversion.
+    - id: six_region_asset_generation
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-business-pack
+          path: tools/recipe/plateau_city_world_six_regions.py
+          revision: main
+      notes:
+        - All six profiles produced city-world.xml, city-world.glb, provenance receipts, Dataset Validator output, and result.json.
+        - The generated Capability Matrix completed 6/6 profiles.
+        - Physics loading and bridge geometry were not evaluated.
+
+constraints:
+  - exactly-six-fixed-regions
+  - shared-200-meter-selection
+  - flat-glb-material-mode
+  - mjcf-and-glb-generation-only
+  - physics-simulation-not-evaluated
+  - bridge-generation-not-evaluated
+  - missing-lod3-road-markings-are-omitted-not-inferred
+  - generated-data-remains-under-work
+  - source-url-size-and-sha256-provenance-required
+
+target_environment:
+  required_for: asset-generation
+  status: specified
+  os: macOS | Linux | Windows
+  os_version: current-supported-host
+  architecture: host-native
+  execution_mode: native
+  runtimes:
+    - name: Python
+      required: true
+      version: "3.10+"
+      path: recipe-managed-venv
+
+execution_environment:
+  required_for: asset-generation
+  status: specified
+  os: host-native
+  os_version: current-supported-host
+  architecture: host-native
+  execution_mode: native
+  gui:
+    required: false
+    status: disabled
+  shared_memory:
+    required: false
+    access: not-used
+
+foundation_contract:
+  mode: not_required
+  reason: This Recipe generates files with component-owned Python tools and does not start Hakoniwa Core or MuJoCo.
+
+recipe_local_requirements_schema_version: 1
+recipe_local_requirements:
+  hakoniwa-envsim:
+    root:
+      default_path: ../hakoniwa-envsim
+      override_env: HAKONIWA_ENVSIM_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/hakoniwa-envsim.git
+      revision: main
+    required_artifacts:
+      - path: tools/hako.py
+        kind: file
+      - path: src/city_pipeline/city_dataset_validator.py
+        kind: file
+      - path: src/city_pipeline/city_world_composer.py
+        kind: file
+
+components:
+  - id: hakoniwa-envsim
+    roles: [asset_generator, environment_model]
+    purpose: Acquire PLATEAU source data and generate one independently validated MJCF/GLB City World per region.
+
+connections: []
+
+data_flow:
+  - Six fixed region profiles -> six generated hakoniwa-envsim manifests
+  - PLATEAU catalog and source files -> bldg, tran, dem, and optional frn component conversion
+  - Component outputs -> aligned city-world.xml and city-world.glb per region
+  - Component receipts -> per-region Dataset Validator report
+  - Six per-region results -> JSON, CSV, and Markdown Capability Matrix
+
+time_model:
+  mode: none
+  notes:
+    - This is deterministic asset generation and does not execute simulation time.
+
+artifact_sets:
+  physics_artifacts:
+    status: verified
+    artifacts:
+      - work/recipes/plateau-city-world-six-regions/cities/*/artifacts/world/city-world.xml
+    notes:
+      - MJCF generation is evaluated; MuJoCo loading, collision behavior, and physics simulation are explicitly outside this Recipe.
+  visualization_artifacts:
+    status: verified
+    artifacts:
+      - work/recipes/plateau-city-world-six-regions/cities/*/artifacts/world/city-world.glb
+  provenance_artifacts:
+    status: verified
+    artifacts:
+      - work/recipes/plateau-city-world-six-regions/cities/*/artifacts/download-manifest.json
+      - work/recipes/plateau-city-world-six-regions/cities/*/artifacts/build-receipt.json
+  validation_artifacts:
+    status: verified
+    artifacts:
+      - work/recipes/plateau-city-world-six-regions/cities/*/validation/result.json
+      - work/recipes/plateau-city-world-six-regions/summary/capability-matrix.json
+      - work/recipes/plateau-city-world-six-regions/summary/capability-matrix.csv
+      - work/recipes/plateau-city-world-six-regions/summary/capability-matrix.md
+
+artifacts:
+  - id: six_region_capability_matrix_json
+    kind: file
+    path: work/recipes/plateau-city-world-six-regions/summary/capability-matrix.json
+  - id: six_region_capability_matrix_csv
+    kind: file
+    path: work/recipes/plateau-city-world-six-regions/summary/capability-matrix.csv
+  - id: six_region_capability_matrix_markdown
+    kind: file
+    path: work/recipes/plateau-city-world-six-regions/summary/capability-matrix.md
+
+missing_pieces:
+  - Execute all six regions from a clean checkout and promote only the reproduced artifact sets.
+  - Bridge CityGML conversion remains future work; the Hiroshima profile preserves a bridge-centered reference area without claiming bridge support.
+  - Physics simulation, MJCF load, collision validity, and drone flight belong to a separate downstream Recipe.
+
+plateau_city_world_matrix:
+  schema_version: 1
+  source:
+    api_base_url: https://api.plateauview.mlit.go.jp
+    feature_types:
+      bldg: true
+      tran: true
+      dem: true
+      frn: true
+    year: latest
+  selection:
+    half_extent_m:
+      north_south: 100
+      east_west: 100
+  geometry:
+    base_epsilon_m: 0.2
+    waste_threshold: 0.1
+    wall_thickness_m: 0.1
+  mjcf:
+    collision: all
+    floor: false
+  glb:
+    enabled: true
+    lod_policy: highest_available
+    texture_mode: flat
+  city_world:
+    enabled: true
+    terrain_spacing_m: 2
+    marking_vertical_offset_m: 0.055
+  regions:
+    - id: tokyo-shibuya
+      name: 東京・渋谷
+      center:
+        latitude: 35.6595
+        longitude: 139.7005
+      focus: high-density-urban-reference
+      known_limitations: []
+    - id: shizuoka-numazu
+      name: 静岡・沼津
+      center:
+        latitude: 35.0988
+        longitude: 138.8587
+      focus: verified-road-and-marking-reference
+      known_limitations: []
+    - id: hokkaido-sapporo
+      name: 北海道・札幌
+      center:
+        latitude: 43.0618
+        longitude: 141.3545
+      focus: northern-city-and-lod-fallback
+      known_limitations: []
+    - id: ishikawa-kanazawa
+      name: 石川・金沢
+      center:
+        latitude: 36.5613
+        longitude: 136.6562
+      focus: mid-sized-city-and-building-footprints
+      known_limitations: []
+    - id: hiroshima-aioi-bridge
+      name: 広島・相生橋周辺
+      center:
+        latitude: 34.3965
+        longitude: 132.4536
+      focus: future-bridge-reference-area
+      known_limitations:
+        - Bridge geometry is not generated or evaluated by the current pipeline.
+        - Elevated road geometry may be incomplete until bridge support is added.
+    - id: okinawa-naha
+      name: 沖縄・那覇
+      center:
+        latitude: 26.2154
+        longitude: 127.687
+      focus: southern-city-and-lod-fallback
+      known_limitations: []
+
+demo:
+  prerequisites:
+    - id: materialize_envsim
+      command: python tools/recipe.py configure --recipe recipes/examples/plateau-city-world-six-regions.yaml
+      expected: Clone or reuse hakoniwa-envsim and verify its component-owned City World tools.
+  steps:
+    - id: inspect_matrix
+      command: python tools/recipe/plateau_city_world_six_regions.py plan
+      expected: List all six fixed regions, their centers, scope, status, and known limitations without network access.
+    - id: configure_matrix
+      command: python tools/recipe/plateau_city_world_six_regions.py configure
+      expected: Create the managed Recipe Python environment and one Envsim manifest per region.
+    - id: inspect_dependencies
+      command: python tools/recipe/plateau_city_world_six_regions.py doctor
+      expected: Validate every generated manifest and all component-owned conversion prerequisites.
+    - id: build_one
+      command: python tools/recipe/plateau_city_world_six_regions.py build --region shizuoka-numazu
+      expected: Generate and validate one region's MJCF and GLB without executing physics.
+    - id: build_all
+      command: python tools/recipe/plateau_city_world_six_regions.py build-all
+      expected: Generate every pending region sequentially, reuse matching completed results, and write the Capability Matrix.
+    - id: resume_offline
+      command: python tools/recipe/plateau_city_world_six_regions.py build-all --offline
+      expected: Resume from cached catalog responses and previously downloaded CityGML without network access.
+    - id: summarize
+      command: python tools/recipe/plateau_city_world_six_regions.py summarize
+      expected: Regenerate JSON, CSV, and Markdown summaries from existing per-region results.
+  cleanup:
+    expected_behavior:
+      - No background process is started.
+      - Downloads and generated assets remain isolated under each region directory.
+    verification_checks:
+      - Confirm each completed region has city-world.xml, city-world.glb, receipts, Dataset Validator output, and result.json.
+      - Confirm the summary explicitly states that physics simulation was not evaluated.
+      - Confirm Hiroshima retains the bridge unsupported limitation even when MJCF and GLB generation succeeds.
+    cautions:
+      - A 200-meter selection limits output geometry, but PLATEAU source downloads use dataset mesh granularity and can be substantially larger.
+      - latest data can change; resolved years, URLs, sizes, and SHA-256 values are preserved in each download manifest.
+
+expected_result: >
+  Six fixed 200-meter PLATEAU selections produce isolated MJCF and GLB City
+  World assets wherever the declared source contract is available. The matrix
+  reports effective LOD, fallback, missing road markings, artifact sizes, and
+  known limitations without claiming MuJoCo loading or physics behavior.
+
+source_catalogs:
+  - component_id: hakoniwa-envsim
+
+source_artifacts:
+  - repository: hakoniwalab/hakoniwa-envsim
+    path: tools/hako.py
+    revision: d7a257606ca88b65a5109d88bd6045a5c9a9b8da
+    description: Component-owned PLATEAU acquisition, City World conversion, and Dataset Validator lifecycle.

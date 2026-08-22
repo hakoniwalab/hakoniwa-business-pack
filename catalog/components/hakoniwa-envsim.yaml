@@ -11,7 +11,7 @@ distribution:
     - Public OSS Hakoniwa component.
 verification:
   verified_at: 2026-08-23
-  source_revision: ec02aa3764bbde40244d754423726eeccce23b87
+  source_revision: d7a257606ca88b65a5109d88bd6045a5c9a9b8da
   source_ref: main
 summary: Environment modeling toolkit for runtime environmental factors and PLATEAU-derived MuJoCo/GLB City Worlds containing terrain, roads, available road markings, and buildings.
 category:
@@ -77,20 +77,20 @@ capabilities:
         path: docs/plateau-citygml-to-mujoco.md
         revision: ec02aa3764bbde40244d754423726eeccce23b87
   - name: PLATEAU City World composition
-    description: Generates DEM terrain, semantic road surfaces, source-derived LOD3 road markings, and buildings independently under one world-frame contract, then composes aligned MJCF and GLB outputs.
+    description: Generates DEM terrain, highest-available LOD3/LOD2/LOD1 road surfaces, source-derived LOD3 road markings when available, and buildings independently under one world-frame contract, then composes aligned MJCF and GLB outputs.
     evidence:
       - repository: hakoniwalab/hakoniwa-envsim
         path: src/city_pipeline/city_world_composer.py
-        revision: 11e47f2349fe869b948fe8b9cbecc77a19f99929
+        revision: d7a257606ca88b65a5109d88bd6045a5c9a9b8da
       - repository: hakoniwalab/hakoniwa-envsim
         path: src/city_pipeline/world_frame.py
-        revision: 11e47f2349fe869b948fe8b9cbecc77a19f99929
+        revision: d7a257606ca88b65a5109d88bd6045a5c9a9b8da
   - name: PLATEAU dataset capability validation
-    description: Reports selected building and road LODs, fallback counts, unavailable LOD3 road markings, and the resulting collision/visualization capabilities as text and machine-readable JSON.
+    description: Reports selected building and road LODs, ordered LOD3-to-LOD1 fallback counts, unavailable optional CityFurniture and LOD3 road markings, and the resulting collision/visualization capabilities as text and machine-readable JSON.
     evidence:
       - repository: hakoniwalab/hakoniwa-envsim
         path: src/city_pipeline/city_dataset_validator.py
-        revision: 11e47f2349fe869b948fe8b9cbecc77a19f99929
+        revision: d7a257606ca88b65a5109d88bd6045a5c9a9b8da
   - name: Hakoniwa environment runtime asset
     description: Registers HakoEnv, reads each drone pos PDU, resolves environment values by position, and writes the drone disturb PDU.
     evidence:
@@ -103,7 +103,7 @@ capabilities:
 
 limitations:
   - Not a robot physics simulator.
-  - The City World path consumes EPSG:6697 bldg/tran/dem/frn data. Buildings prefer LOD2 and fall back to LOD1; road surfaces prefer LOD3 and fall back to LOD2; unavailable LOD3 road markings are omitted and reported rather than inferred.
+  - The City World path consumes EPSG:6697 bldg/tran/dem data plus optional frn data. Buildings prefer LOD2 and fall back to LOD1; road surfaces prefer LOD3, then LOD2, then LOD1; unavailable CityFurniture or LOD3 road markings are omitted and reported rather than inferred.
   - PLATEAU Distribution Service is an external trial API; offline tests validate local conversion, not API availability.
   - HakoEnv currently writes a complete Disturbance message and may overwrite custom slots owned by another producer; shared-writer arbitration remains a known gap.
   - Creator schema and implementation inconsistencies outside the PLATEAU path remain to be resolved.
@@ -240,7 +240,7 @@ data_contracts:
     source:
       - repository: hakoniwalab/hakoniwa-envsim
         path: src/city_pipeline/city_dataset_validator.py
-        revision: 11e47f2349fe869b948fe8b9cbecc77a19f99929
+        revision: d7a257606ca88b65a5109d88bd6045a5c9a9b8da
   - name: Disturbance custom-slot ownership
     description: Envsim currently owns GPS strength in d_user_custom slot 0, while other producers such as rotor-fault control may own later slots; full-message writes require arbitration or preservation.
     source:
