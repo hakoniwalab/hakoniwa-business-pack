@@ -1,0 +1,136 @@
+id: envsim-plateau-citygml-to-mujoco-pipeline
+title: Envsim owns a query-centered PLATEAU CityGML to MuJoCo wall pipeline
+status: promoted
+
+knowledge_type:
+  - capability
+  - interface_contract
+  - validation_rule
+
+summary: >
+  hakoniwa-envsim can resolve PLATEAU building CityGML from a latitude,
+  longitude, and metric half extents, convert official EPSG:6697 coordinates
+  into a query-centered local ENU frame, and generate MuJoCo wall MJCF while
+  recording source URLs, resolved dataset years, actual sizes, and SHA-256.
+
+observation:
+  context: >
+    Extending the existing local CityGML conversion scripts into a
+    component-owned hako.py workflow backed by the official PLATEAU
+    Distribution Service API.
+  details:
+    - The official range API returns matching city datasets and individual bldg CityGML URLs.
+    - The inspected official Shibuya CityGML declares EPSG:6697 and stores positions as latitude, longitude, height.
+    - API fileSize metadata differed from the downloaded object size, so it is informational rather than an integrity check.
+    - The downloaded object SHA-256 and actual byte count are recorded in download-manifest.json.
+    - A real 200m by 200m Shibuya query produced 88 LOD1 buildings and 474 MuJoCo geoms.
+    - Adjacent municipality datasets can publish the same mesh and building IDs; identical geometry is deduplicated and conflicting geometry fails closed.
+    - The Map Viewer Shibuya origin is 35.6625,139.70625 and must not be replaced by Drone Core simulation.location longitude 139.69375.
+    - A pinned historical rebuild reproduced all 4266 building geoms in the Drone Core Shibuya XML with zero numeric error.
+
+sources:
+  repositories:
+    - repository: local/hakoniwa-envsim
+      path: tools/hako.py
+      revision: 97801f11bbe3678b6ba248ba2d78901efd9adf61
+    - repository: local/hakoniwa-envsim
+      path: tools/plateau_citygml.py
+      revision: 97801f11bbe3678b6ba248ba2d78901efd9adf61
+    - repository: local/hakoniwa-envsim
+      path: docs/plateau-citygml-to-mujoco.md
+      revision: 97801f11bbe3678b6ba248ba2d78901efd9adf61
+    - repository: local/hakoniwa-envsim
+      path: src/city_pipeline/gml_lod1_extract.py
+      revision: 97801f11bbe3678b6ba248ba2d78901efd9adf61
+  runtime_evidence:
+    - description: >
+        Official API query centered at 35.681236,139.706763 with 100m
+        north/south and east/west half extents downloaded one Shibuya 2025
+        bldg mesh, extracted 88 buildings, and generated 474 MJCF geoms.
+    - description: >
+        A one-kilometer query at the Map Viewer Shibuya origin selected three
+        2025 CityGML objects, deduplicated 101 overlapping building records,
+        and generated 596 geoms from 114 unique buildings.
+    - description: >
+        The pinned historical 600m selection rebuilt 801 buildings and matched
+        all 4266 Drone Core reference geoms with maximum numeric error 0.0.
+  expert_input:
+    - source: user
+      statement: >
+        Given latitude, longitude, and a range, download the matching CityGML
+        and feed it into the current tools to generate MuJoCo wall data.
+
+confidence: high
+
+contradictions:
+  - target: catalog/components/hakoniwa-envsim.yaml
+    existing_claim: Exact CLI entrypoints and MuJoCo conversion capabilities were unknown.
+    new_evidence: A component-owned hako.py and offline/online pipeline now define and verify those contracts.
+
+validation:
+  status: verified
+  required: []
+  notes:
+    - Unit tests cover bbox construction and catalog selection.
+    - Offline smoke covers CityGML through MJCF without relying on network availability.
+    - Online E2E was verified against the official PLATEAU API and a real CityGML object.
+    - Business Pack regression separates the current one-kilometer API build from the immutable historical Drone Core comparison.
+
+tracking:
+  implementation_status: resolved
+  issues:
+    - repository: hakoniwalab/hakoniwa-envsim
+      number: 4
+      relation: fix
+      status: closed
+    - repository: hakoniwalab/hakoniwa-business-pack
+      number: 145
+      relation: validation
+      status: closed
+
+promotion_targets:
+  catalog:
+    - hakoniwa-envsim
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: true
+  recipes:
+    - plateau-citygml-mujoco-walls
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-envsim
+      kind: doctor
+      path: tools/hako.py
+      mode: detect-and-suggest-remediation
+      notes:
+        - Doctor validates the manifest and local conversion prerequisites without using the network.
+    - repository: hakoniwalab/hakoniwa-envsim
+      kind: test
+      path: tests/test_plateau_citygml.py
+      mode: detect-only
+      notes:
+        - Offline tests and smoke prevent API availability from masking local regressions.
+
+promotion_rationale:
+  - The capability belongs in the component Catalog because it is a reusable data-preparation role.
+  - Source provenance and coordinate-frame checks are machine-verifiable and belong in component-owned tooling.
+
+resolution:
+  status: documented
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-envsim
+      issue: 4
+      pull_request: null
+      revision: 97801f11bbe3678b6ba248ba2d78901efd9adf61
+    - repository: hakoniwalab/hakoniwa-business-pack
+      issue: 145
+      pull_request: null
+      revision: 244ba2da3e085dddc77d96e0203deb4edafa8beb
+  verified: true
+  promoted_to:
+    - catalog/components/hakoniwa-envsim.yaml
+    - recipes/examples/plateau-citygml-mujoco-walls.yaml
+  executable_guardrails:
+    - hakoniwalab/hakoniwa-envsim/tools/hako.py
+    - hakoniwalab/hakoniwa-envsim/tests/test_plateau_citygml.py
+  notes:
+    - Catalog promotion and implementation were completed in the same maintenance task.
