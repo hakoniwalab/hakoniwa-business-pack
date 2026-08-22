@@ -17,19 +17,21 @@ feasibility:
   rationale:
     - hakoniwa-envsim already generates aligned MJCF and GLB City World artifacts from bldg, tran, dem, and optional frn data.
     - Every region changes only the configured center; extent and conversion policy are shared.
-    - Missing CityFurniture is an explicit non-blocking Dataset Validator result rather than inferred geometry.
+    - Missing CityFurniture or usable LOD3 bridge surfaces are explicit non-blocking Dataset Validator results rather than inferred geometry.
     - Region outputs and receipts are isolated, so a partial matrix can be resumed safely.
 
 validation:
-  status: verified
+  status: partially_verified
   summary: >
     On 2026-08-23, the common 200-meter pipeline generated isolated MJCF and
     GLB City World artifacts for all six fixed regions on macOS. Dataset
     Validator results exposed the actual regional differences: Numazu included
     LOD3 road markings, Shibuya used LOD3/LOD2 road surfaces without markings,
     and Sapporo, Kanazawa, Hiroshima, and Naha used the explicit LOD1 road
-    fallback without inferred markings. Physics execution and bridge geometry
-    remain outside this validation scope.
+    fallback without inferred markings. The Hiroshima profile uses an actual
+    PLATEAU LOD3 bridge dataset. Its visual GLB and independent bridge-surface
+    MJCF were generated, and the composed world loaded with MuJoCo 3.9.0.
+    Full physics simulation remains outside this validation scope.
   steps:
     - id: numazu_reference
       status: verified
@@ -55,9 +57,21 @@ validation:
           path: tools/recipe/plateau_city_world_six_regions.py
           revision: main
       notes:
-        - All six profiles produced city-world.xml, city-world.glb, provenance receipts, Dataset Validator output, and result.json.
-        - The generated Capability Matrix completed 6/6 profiles.
-        - Physics loading and bridge geometry were not evaluated.
+        - The original six profiles produced city-world.xml, city-world.glb, provenance receipts, Dataset Validator output, and result.json.
+        - Five unchanged regional centers retain that evidence; the Hiroshima center was subsequently moved to an actual LOD3 bridge dataset.
+        - Full physics execution was not evaluated for the original six-region pass.
+    - id: hiroshima_lod3_bridge_assets
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-business-pack
+          path: work/recipes/plateau-city-world-six-regions/cities/hiroshima-lod3-bridge/validation/result.json
+          revision: local-working-tree
+      notes:
+        - The 200-meter profile produced one source-altitude-preserving LOD3 bridge GLB and integrated it into city-world.glb.
+        - The same source produced 939 independent thin convex triangular-prism collision meshes from walkable OuterFloorSurface triangles.
+        - The composed terrain, building, and bridge MJCF loaded successfully with MuJoCo 3.9.0 (1164 geoms, 939 meshes).
+        - A native MuJoCo acceptance fixture confirmed bridge-top contact and zero under-bridge contact at the same XY location.
+        - 346515 polygons and 352267 triangles were generated; 77 non-triangulatable source polygons were omitted and recorded.
 
 constraints:
   - exactly-six-fixed-regions
@@ -65,7 +79,8 @@ constraints:
   - flat-glb-material-mode
   - mjcf-and-glb-generation-only
   - physics-simulation-not-evaluated
-  - bridge-generation-not-evaluated
+  - bridge-physics-uses-lod3-outer-floor-surfaces-only
+  - bridge-collision-prisms-not-yet-optimized
   - missing-lod3-road-markings-are-omitted-not-inferred
   - generated-data-remains-under-work
   - source-url-size-and-sha256-provenance-required
@@ -119,6 +134,10 @@ recipe_local_requirements:
         kind: file
       - path: src/city_pipeline/city_world_composer.py
         kind: file
+      - path: src/city_pipeline/bridge2glb.py
+        kind: file
+      - path: src/city_pipeline/bridge2mjcf.py
+        kind: file
 
 components:
   - id: hakoniwa-envsim
@@ -129,8 +148,8 @@ connections: []
 
 data_flow:
   - Six fixed region profiles -> six generated hakoniwa-envsim manifests
-  - PLATEAU catalog and source files -> bldg, tran, dem, and optional frn component conversion
-  - Component outputs -> aligned city-world.xml and city-world.glb per region
+  - PLATEAU catalog and source files -> bldg, tran, dem, optional frn, and optional LOD3 brid component conversion
+  - Component outputs -> aligned terrain, building, optional bridge physics, and city-world.xml/city-world.glb per region
   - Component receipts -> per-region Dataset Validator report
   - Six per-region results -> JSON, CSV, and Markdown Capability Matrix
 
@@ -147,7 +166,7 @@ artifact_sets:
     notes:
       - MJCF generation is evaluated; MuJoCo loading, collision behavior, and physics simulation are explicitly outside this Recipe.
   visualization_artifacts:
-    status: verified
+    status: partially_verified
     artifacts:
       - work/recipes/plateau-city-world-six-regions/cities/*/artifacts/world/city-world.glb
   provenance_artifacts:
@@ -175,9 +194,9 @@ artifacts:
     path: work/recipes/plateau-city-world-six-regions/summary/capability-matrix.md
 
 missing_pieces:
-  - Execute all six regions from a clean checkout and promote only the reproduced artifact sets.
-  - Bridge CityGML conversion remains future work; the Hiroshima profile preserves a bridge-centered reference area without claiming bridge support.
-  - Physics simulation, MJCF load, collision validity, and drone flight belong to a separate downstream Recipe.
+  - Re-run the moved Hiroshima LOD3 bridge profile and then the complete six-region matrix.
+  - Convex bridge collision pieces are a correctness baseline; safe piece merging is future optimization work.
+  - Full physics simulation and drone flight belong to a separate downstream Recipe.
 
 plateau_city_world_matrix:
   schema_version: 1
@@ -188,6 +207,7 @@ plateau_city_world_matrix:
       tran: true
       dem: true
       frn: true
+      brid: false
     year: latest
   selection:
     half_extent_m:
@@ -197,6 +217,7 @@ plateau_city_world_matrix:
     base_epsilon_m: 0.2
     waste_threshold: 0.1
     wall_thickness_m: 0.1
+    roof_collision_thickness_m: 0.02
   mjcf:
     collision: all
     floor: false
@@ -208,6 +229,8 @@ plateau_city_world_matrix:
     enabled: true
     terrain_spacing_m: 2
     marking_vertical_offset_m: 0.055
+    bridge_collision_thickness_m: 0.02
+    bridge_max_surface_slope_deg: 60
   regions:
     - id: tokyo-shibuya
       name: 東京・渋谷
@@ -237,15 +260,17 @@ plateau_city_world_matrix:
         longitude: 136.6562
       focus: mid-sized-city-and-building-footprints
       known_limitations: []
-    - id: hiroshima-aioi-bridge
-      name: 広島・相生橋周辺
+    - id: hiroshima-lod3-bridge
+      name: 広島・LOD3橋梁周辺
       center:
-        latitude: 34.3965
-        longitude: 132.4536
-      focus: future-bridge-reference-area
+        latitude: 34.39870318724743
+        longitude: 132.47669631395575
+      feature_types:
+        brid: true
+      focus: lod3-bridge-visual-and-physics-reference
       known_limitations:
-        - Bridge geometry is not generated or evaluated by the current pipeline.
-        - Elevated road geometry may be incomplete until bridge support is added.
+        - Bridge collision uses unoptimized independent triangular-prism meshes.
+        - Bridge inspection geometry and inferred rail collision are outside scope.
     - id: okinawa-naha
       name: 沖縄・那覇
       center:
@@ -288,7 +313,7 @@ demo:
     verification_checks:
       - Confirm each completed region has city-world.xml, city-world.glb, receipts, Dataset Validator output, and result.json.
       - Confirm the summary explicitly states that physics simulation was not evaluated.
-      - Confirm Hiroshima retains the bridge unsupported limitation even when MJCF and GLB generation succeeds.
+      - Confirm Hiroshima reports both bridge visualization and bridge collision capabilities.
     cautions:
       - A 200-meter selection limits output geometry, but PLATEAU source downloads use dataset mesh granularity and can be substantially larger.
       - latest data can change; resolved years, URLs, sizes, and SHA-256 values are preserved in each download manifest.

@@ -188,6 +188,7 @@ plateau_citygml:
     # Use boundary walls when more than 10% of the OBB would be empty space.
     waste_threshold: 0.1
     wall_thickness_m: 0.1
+    roof_collision_thickness_m: 0.02
   mjcf:
     model_name: plateau_numazu_city_world_200m
     collision: all

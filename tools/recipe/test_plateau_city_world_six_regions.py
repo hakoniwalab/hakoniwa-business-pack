@@ -28,7 +28,7 @@ class PlateauCityWorldSixRegionsTest(unittest.TestCase):
                 "shizuoka-numazu",
                 "hokkaido-sapporo",
                 "ishikawa-kanazawa",
-                "hiroshima-aioi-bridge",
+                "hiroshima-lod3-bridge",
                 "okinawa-naha",
             ],
         )
@@ -37,11 +37,15 @@ class PlateauCityWorldSixRegionsTest(unittest.TestCase):
             {"north_south": 100, "east_west": 100},
         )
 
-    def test_hiroshima_preserves_future_bridge_scope_without_claiming_support(self):
+    def test_hiroshima_enables_lod3_bridge_visualization_and_collision_source(self):
         _contract, regions = matrix.load_matrix()
-        hiroshima = next(region for region in regions if region.id == "hiroshima-aioi-bridge")
-        self.assertEqual((hiroshima.latitude, hiroshima.longitude), (34.3965, 132.4536))
-        self.assertTrue(any("not generated" in value for value in hiroshima.known_limitations))
+        hiroshima = next(region for region in regions if region.id == "hiroshima-lod3-bridge")
+        self.assertEqual(
+            (hiroshima.latitude, hiroshima.longitude),
+            (34.39870318724743, 132.47669631395575),
+        )
+        self.assertEqual(dict(hiroshima.feature_type_overrides), {"brid": True})
+        self.assertFalse(any("not generated" in value for value in hiroshima.known_limitations))
 
     def test_manifest_changes_only_region_specific_identity_and_center(self):
         contract, regions = matrix.load_matrix()
@@ -56,8 +60,16 @@ class PlateauCityWorldSixRegionsTest(unittest.TestCase):
         self.assertIn("north_south: 100", text)
         self.assertIn("east_west: 100", text)
         self.assertIn("frn: true", text)
+        self.assertIn("brid: false", text)
         self.assertIn("texture_mode: flat", text)
+        self.assertIn("roof_collision_thickness_m: 0.02", text)
+        self.assertIn("bridge_collision_thickness_m: 0.02", text)
+        self.assertIn("bridge_max_surface_slope_deg: 60", text)
         self.assertIn("name: plateau-tokyo-shibuya-city-world-smoke", text)
+
+        hiroshima = next(region for region in regions if region.id == "hiroshima-lod3-bridge")
+        bridge_text = matrix.manifest_text(contract, hiroshima, paths)
+        self.assertIn("brid: true", bridge_text)
 
     def test_reusable_result_requires_matching_profile_and_artifact_hashes(self):
         contract, regions = matrix.load_matrix()

@@ -34,6 +34,7 @@ class Region:
     longitude: float
     focus: str
     known_limitations: tuple[str, ...]
+    feature_type_overrides: tuple[tuple[str, bool], ...]
 
 
 @dataclass(frozen=True)
@@ -147,6 +148,16 @@ def load_matrix(path: Path | None = None) -> tuple[dict[str, Any], list[Region]]
             isinstance(value, str) and value for value in limitations
         ):
             raise MatrixError(f"region {region_id} known_limitations must be strings")
+        overrides = item.get("feature_types", {})
+        if not isinstance(overrides, dict):
+            raise MatrixError(f"region {region_id} feature_types must be a mapping")
+        unknown_features = sorted(set(overrides) - set(raw["source"]["feature_types"]))
+        if unknown_features:
+            raise MatrixError(
+                f"region {region_id} has unknown feature types: {', '.join(unknown_features)}"
+            )
+        if not all(isinstance(value, bool) for value in overrides.values()):
+            raise MatrixError(f"region {region_id} feature_types values must be boolean")
         regions.append(Region(
             id=region_id,
             name=str(item.get("name", region_id)),
@@ -154,6 +165,7 @@ def load_matrix(path: Path | None = None) -> tuple[dict[str, Any], list[Region]]
             longitude=float(longitude),
             focus=str(item.get("focus", "generic-city-world-smoke")),
             known_limitations=tuple(limitations),
+            feature_type_overrides=tuple(sorted(overrides.items())),
         ))
     return raw, regions
 
@@ -200,7 +212,7 @@ def manifest_text(matrix: dict[str, Any], region: Region, paths: RegionPaths) ->
     mjcf = matrix["mjcf"]
     glb = matrix["glb"]
     city_world = matrix["city_world"]
-    feature_types = source["feature_types"]
+    feature_types = {**source["feature_types"], **dict(region.feature_type_overrides)}
     return f"""version: 1
 component: hakoniwa-envsim
 
@@ -215,6 +227,7 @@ source:
     tran: {str(bool(feature_types['tran'])).lower()}
     dem: {str(bool(feature_types['dem'])).lower()}
     frn: {str(bool(feature_types['frn'])).lower()}
+    brid: {str(bool(feature_types['brid'])).lower()}
   year: {source['year']}
 
 selection:
@@ -229,6 +242,7 @@ geometry:
   base_epsilon_m: {geometry['base_epsilon_m']}
   waste_threshold: {geometry['waste_threshold']}
   wall_thickness_m: {geometry['wall_thickness_m']}
+  roof_collision_thickness_m: {geometry['roof_collision_thickness_m']}
 
 mjcf:
   model_name: {output_name(region)}
@@ -244,6 +258,8 @@ city_world:
   enabled: {str(bool(city_world['enabled'])).lower()}
   terrain_spacing_m: {city_world['terrain_spacing_m']}
   marking_vertical_offset_m: {city_world['marking_vertical_offset_m']}
+  bridge_collision_thickness_m: {city_world['bridge_collision_thickness_m']}
+  bridge_max_surface_slope_deg: {city_world['bridge_max_surface_slope_deg']}
 
 output:
   build_dir: {paths.build}
@@ -269,6 +285,7 @@ def profile_identity(matrix: dict[str, Any], region: Region) -> str:
             "longitude": region.longitude,
             "focus": region.focus,
             "known_limitations": region.known_limitations,
+            "feature_type_overrides": region.feature_type_overrides,
         },
         "source": matrix["source"],
         "selection": matrix["selection"],
@@ -299,6 +316,10 @@ def write_region_manifest(matrix: dict[str, Any], region: Region) -> Path:
             "center": {"latitude": region.latitude, "longitude": region.longitude},
             "focus": region.focus,
             "known_limitations": list(region.known_limitations),
+            "feature_types": {
+                **matrix["source"]["feature_types"],
+                **dict(region.feature_type_overrides),
+            },
         },
         "scope": {
             "mjcf_generation": "required",
@@ -493,7 +514,7 @@ def summary_row(region: Region, result: dict[str, Any] | None) -> dict[str, Any]
     if result is None:
         return {
             "region_id": region.id, "region_name": region.name, "status": "pending",
-            "buildings": "-", "roads": "-", "road_markings": "-",
+            "buildings": "-", "roads": "-", "road_markings": "-", "bridges": "-",
             "mjcf_bytes": "", "glb_bytes": "", "physics_simulation": "not_evaluated",
             "known_limitations": "; ".join(region.known_limitations),
         }
@@ -505,6 +526,7 @@ def summary_row(region: Region, result: dict[str, Any] | None) -> dict[str, Any]
         "buildings": _component_text(components["buildings"]),
         "roads": _component_text(components["road_surfaces"]),
         "road_markings": _component_text(components["road_markings"]),
+        "bridges": _component_text(components.get("bridges", {"status": "not_available"})),
         "mjcf_bytes": result["artifacts"]["mjcf"]["bytes"],
         "glb_bytes": result["artifacts"]["glb"]["bytes"],
         "physics_simulation": result["scope"]["physics_simulation"],
@@ -553,13 +575,13 @@ def summarize(matrix: dict[str, Any], regions: list[Region]) -> int:
         "",
         "> Scope: MJCF and GLB generation only. Physics simulation is not evaluated.",
         "",
-        "| Region | Status | Buildings | Roads | Road markings | MJCF bytes | GLB bytes | Known limitations |",
-        "|---|---|---|---|---|---:|---:|---|",
+        "| Region | Status | Buildings | Roads | Road markings | Bridges | MJCF bytes | GLB bytes | Known limitations |",
+        "|---|---|---|---|---|---|---:|---:|---|",
     ]
     for row in rows:
         markdown.append(
             f"| {row['region_name']} (`{row['region_id']}`) | {row['status']} | "
-            f"{row['buildings']} | {row['roads']} | {row['road_markings']} | "
+            f"{row['buildings']} | {row['roads']} | {row['road_markings']} | {row['bridges']} | "
             f"{row['mjcf_bytes']} | {row['glb_bytes']} | {row['known_limitations']} |"
         )
     markdown_path.write_text("\n".join(markdown) + "\n", encoding="utf-8")
