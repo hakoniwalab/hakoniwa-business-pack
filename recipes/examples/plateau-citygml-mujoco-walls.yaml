@@ -56,13 +56,13 @@ validation:
       evidence:
         - repository: hakoniwalab/hakoniwa-envsim
           path: tools/hako.py
-          revision: cb908db523615998ba6fc99697283a87b1693c80
+          revision: ec02aa3764bbde40244d754423726eeccce23b87
       notes:
-        - The 2025 API response selected three CityGML mesh files across Shibuya and Minato wards.
-        - The one-kilometer selection preserved 58 concave footprints among 114 unique buildings and produced 114 MuJoCo building geoms at the default waste threshold on 2026-08-23.
-        - The API returned one overlapping municipality mesh; 101 byte-equivalent building records were deduplicated by authoritative CityGML ID.
-        - Direct GLB generation used textured LOD2 geometry for 7 buildings and LOD1 solid fallback for 107 buildings, producing 3572 triangles in 25 meshes.
-        - Only the 24 textures referenced by selected LOD2 surfaces were downloaded and embedded; the resulting GLB was approximately 1.45 MB.
+        - The 2025 API response selected five CityGML files covering all three intersecting third-level meshes across Shibuya and Minato wards.
+        - The one-kilometer selection produced 1863 MuJoCo building geoms at the default compact OBB threshold; 40 building footprints have centroids within the center +/-100m square.
+        - The overlapping municipality data contained 1850 byte-equivalent building records, which were deduplicated by authoritative CityGML ID.
+        - Direct GLB generation used textured LOD2 geometry for 653 buildings and LOD1 solid fallback for 1210 buildings, producing 171365 triangles in 2333 meshes.
+        - Only the 2332 textures referenced by selected LOD2 surfaces were downloaded and embedded; the resulting GLB was approximately 176 MB.
 
 constraints:
   - external-plateau-api-used-only-by-explicit-build
@@ -158,6 +158,10 @@ plateau_citygml:
     half_extent_m:
       north_south: 500
       east_west: 500
+  acceptance:
+    minimum_buildings: 1000
+    center_half_extent_m: 100
+    minimum_center_buildings: 10
   geometry:
     base_epsilon_m: 0.2
     # Empty fraction inside the building OBB. 1.0 keeps the minimum-data OBB representation.
@@ -299,6 +303,7 @@ demo:
     verification_checks:
       - Confirm the current build receipt and download manifest exist.
       - Confirm the GLB receipt matches the generated file SHA-256, geographic origin, axis contract, and nonzero triangle count.
+      - Confirm at least 1000 buildings are selected and at least 10 building centroids lie within the center +/-100m square.
       - Confirm shibuya-regression.json reports MATCHED.
     cautions:
       - PLATEAU latest data can change; do not compare current dataset IDs directly with the pinned historical reference.

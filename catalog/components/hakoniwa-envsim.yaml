@@ -11,7 +11,7 @@ distribution:
     - Public OSS Hakoniwa component.
 verification:
   verified_at: 2026-08-23
-  source_revision: cb908db523615998ba6fc99697283a87b1693c80
+  source_revision: ec02aa3764bbde40244d754423726eeccce23b87
   source_ref: main
 summary: Environment modeling toolkit for creating, visualizing, refining, and querying environmental factors such as wind, temperature, pressure, GPS strength, and boundaries.
 category:
@@ -66,16 +66,16 @@ capabilities:
         revision: 2f25a181d061db231b0b09d19e0fad7f8643baf1
       - repository: hakoniwalab/hakoniwa-envsim
         path: docs/plateau-citygml-to-mujoco.md
-        revision: cb908db523615998ba6fc99697283a87b1693c80
+        revision: ec02aa3764bbde40244d754423726eeccce23b87
   - name: Direct PLATEAU range-to-GLB conversion
     description: Uses the same query-centered building selection as the MuJoCo path, prefers CityGML LOD2 surfaces and Appearance textures, falls back to LOD1 solids per building, and emits a self-contained GLB without a Unity conversion step.
     evidence:
       - repository: hakoniwalab/hakoniwa-envsim
         path: src/city_pipeline/citygml2glb.py
-        revision: cb908db523615998ba6fc99697283a87b1693c80
+        revision: ec02aa3764bbde40244d754423726eeccce23b87
       - repository: hakoniwalab/hakoniwa-envsim
         path: docs/plateau-citygml-to-mujoco.md
-        revision: cb908db523615998ba6fc99697283a87b1693c80
+        revision: ec02aa3764bbde40244d754423726eeccce23b87
   - name: Hakoniwa environment runtime asset
     description: Registers HakoEnv, reads each drone pos PDU, resolves environment values by position, and writes the drone disturb PDU.
     evidence:

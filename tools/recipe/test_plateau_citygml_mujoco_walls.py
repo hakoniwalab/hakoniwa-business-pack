@@ -19,6 +19,34 @@ SPEC.loader.exec_module(recipe)
 
 
 class PlateauCityGmlMujocoWallsTest(unittest.TestCase):
+    def test_selection_coverage_rejects_an_empty_center(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            selection = Path(temporary) / "selection.json"
+            selection.write_text(json.dumps({"polygons": [
+                {"vertices": [[490, 490], [495, 490], [495, 495]]},
+                {"vertices": [[-490, -490], [-495, -490], [-495, -495]]},
+            ]}), encoding="utf-8")
+            with self.assertRaisesRegex(recipe.RecipeError, "does not cover"):
+                recipe.validate_selection_coverage(selection, {
+                    "minimum_buildings": 2,
+                    "center_half_extent_m": 100,
+                    "minimum_center_buildings": 1,
+                })
+
+    def test_selection_coverage_accepts_dense_centered_data(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            selection = Path(temporary) / "selection.json"
+            selection.write_text(json.dumps({"polygons": [
+                {"vertices": [[-5, -5], [5, -5], [5, 5]]},
+                {"vertices": [[490, 490], [495, 490], [495, 495]]},
+            ]}), encoding="utf-8")
+            result = recipe.validate_selection_coverage(selection, {
+                "minimum_buildings": 2,
+                "center_half_extent_m": 100,
+                "minimum_center_buildings": 1,
+            })
+            self.assertEqual(result, {"buildings": 2, "center_buildings": 1})
+
     def test_glb_contract_checks_hash_origin_axes_and_geometry(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

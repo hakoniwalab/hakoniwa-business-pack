@@ -184,6 +184,32 @@ def validate_glb_contract(glb_path: Path, receipt_path: Path, origin: dict[str, 
     return receipt
 
 
+def validate_selection_coverage(selection_path: Path, contract: dict[str, Any]) -> dict[str, int]:
+    selection = json.loads(_required(selection_path, "PLATEAU LOD1 selection").read_text(encoding="utf-8"))
+    polygons = selection.get("polygons", [])
+    minimum_buildings = int(contract["minimum_buildings"])
+    radius = float(contract["center_half_extent_m"])
+    minimum_center_buildings = int(contract["minimum_center_buildings"])
+    center_count = 0
+    for polygon in polygons:
+        vertices = polygon.get("vertices", [])
+        if not vertices:
+            continue
+        east = sum(float(point[0]) for point in vertices) / len(vertices)
+        north = sum(float(point[1]) for point in vertices) / len(vertices)
+        center_count += abs(east) <= radius and abs(north) <= radius
+    if len(polygons) < minimum_buildings:
+        raise RecipeError(
+            f"PLATEAU selection is unexpectedly sparse: {len(polygons)} < {minimum_buildings} buildings"
+        )
+    if center_count < minimum_center_buildings:
+        raise RecipeError(
+            "PLATEAU selection does not cover the geographic center: "
+            f"{center_count} < {minimum_center_buildings} buildings within +/-{radius}m"
+        )
+    return {"buildings": len(polygons), "center_buildings": center_count}
+
+
 def configure() -> int:
     data = _load_recipe()["plateau_citygml"]
     origin = read_map_origin(map_viewer_root())
@@ -258,11 +284,20 @@ def build(offline: bool = False) -> int:
     )
     if completed.returncode:
         return completed.returncode
+    recipe_config = _load_recipe()["plateau_citygml"]
     origin = read_map_origin(map_viewer_root())
+    coverage = validate_selection_coverage(
+        recipe_paths.build / "plateau-shibuya-1km-lod1.json",
+        recipe_config["acceptance"],
+    )
     validate_glb_contract(
         recipe_paths.build / "plateau-shibuya-1km.glb",
         recipe_paths.build / "plateau-shibuya-1km-glb-receipt.json",
         origin,
+    )
+    print(
+        "OK: PLATEAU selection coverage: "
+        f"{coverage['buildings']} buildings, {coverage['center_buildings']} near center"
     )
     for source_name, output_name in (
         ("plateau-shibuya-1km.xml", "plateau-shibuya-1km.xml"),

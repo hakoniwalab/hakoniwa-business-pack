@@ -29,6 +29,7 @@ observation:
     - The downloaded object SHA-256 and actual byte count are recorded in download-manifest.json.
     - The default waste threshold 1.0 emits one compact OBB per building; lowering it selectively emits the original exterior and interior boundary edges as wall boxes.
     - Adjacent municipality datasets can publish the same mesh and building IDs; identical geometry is deduplicated and conflicting geometry fails closed.
+    - The API r: rectangle response omitted an intermediate third-level mesh in the verified Shibuya range; Envsim therefore enumerates every intersecting third-level mesh and queries them explicitly with m:.
     - The Map Viewer Shibuya origin is 35.6625,139.70625 and must not be replaced by Drone Core simulation.location longitude 139.69375.
     - A pinned historical rebuild reproduced all 4266 building geoms in the Drone Core Shibuya XML with zero numeric error.
     - Direct GLB output uses Three.js-native X=East, Y=Up, Z=-North coordinates aligned with the same origin and altitude offset as the MuJoCo asset.
@@ -38,29 +39,30 @@ sources:
   repositories:
     - repository: local/hakoniwa-envsim
       path: tools/hako.py
-      revision: cb908db523615998ba6fc99697283a87b1693c80
+      revision: ec02aa3764bbde40244d754423726eeccce23b87
     - repository: local/hakoniwa-envsim
       path: tools/plateau_citygml.py
       revision: 2f25a181d061db231b0b09d19e0fad7f8643baf1
     - repository: local/hakoniwa-envsim
       path: docs/plateau-citygml-to-mujoco.md
-      revision: cb908db523615998ba6fc99697283a87b1693c80
+      revision: ec02aa3764bbde40244d754423726eeccce23b87
     - repository: local/hakoniwa-envsim
       path: src/city_pipeline/gml_lod1_extract.py
-      revision: cb908db523615998ba6fc99697283a87b1693c80
+      revision: ec02aa3764bbde40244d754423726eeccce23b87
     - repository: local/hakoniwa-envsim
       path: src/city_pipeline/citygml2glb.py
-      revision: cb908db523615998ba6fc99697283a87b1693c80
+      revision: ec02aa3764bbde40244d754423726eeccce23b87
   runtime_evidence:
     - description: >
-        A one-kilometer query at the Map Viewer Shibuya origin selected three
-        2025 CityGML objects, deduplicated 101 overlapping building records,
-        preserved 58 concave footprints among 114 unique buildings, and
-        generated 114 geoms with the default compact OBB policy.
+        A one-kilometer query at the Map Viewer Shibuya origin enumerated all
+        three intersecting third-level meshes, selected five 2025 CityGML
+        objects, deduplicated 1850 overlapping building records, and generated
+        1863 geoms with the default compact OBB policy. Forty building
+        centroids lie within the center +/-100m square.
     - description: >
-        The same one-kilometer selection generated a 1.45 MB GLB with 3572
-        triangles in 25 meshes: 7 buildings used LOD2, 107 used LOD1 fallback,
-        and 24 selected textures were embedded.
+        The same one-kilometer selection generated a 176 MB GLB with 171365
+        triangles in 2333 meshes: 653 buildings used LOD2, 1210 used LOD1
+        fallback, and 2332 selected textures were embedded.
     - description: >
         The pinned historical 600m selection rebuilt 801 buildings and matched
         all 4266 Drone Core reference geoms with maximum numeric error 0.0.
@@ -100,7 +102,7 @@ tracking:
     - repository: hakoniwalab/hakoniwa-envsim
       number: 7
       relation: fix
-      status: closed
+      status: open
     - repository: hakoniwalab/hakoniwa-business-pack
       number: 145
       relation: validation
@@ -108,7 +110,7 @@ tracking:
     - repository: hakoniwalab/hakoniwa-business-pack
       number: 146
       relation: validation
-      status: closed
+      status: open
 
 promotion_targets:
   catalog:
