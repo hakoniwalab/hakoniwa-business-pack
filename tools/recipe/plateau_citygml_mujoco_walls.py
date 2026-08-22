@@ -1,0 +1,449 @@
+#!/usr/bin/env python3
+"""Operate the PLATEAU CityGML to MuJoCo wall-asset Recipe."""
+
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import io
+import json
+import math
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tarfile
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+RECIPE_ID = "plateau-citygml-mujoco-walls"
+MAP_ORIGIN_PATTERN = {
+    "latitude": re.compile(r"(?m)^\s*let\s+ORIGIN_LAT\s*=\s*([-+0-9.eE]+)\s*;"),
+    "longitude": re.compile(r"(?m)^\s*let\s+ORIGIN_LON\s*=\s*([-+0-9.eE]+)\s*;"),
+}
+
+
+class RecipeError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class RecipePaths:
+    root: Path
+    config: Path
+    build: Path
+    artifacts: Path
+    validation: Path
+
+
+def root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def recipe_file() -> Path:
+    return root() / "recipes" / "examples" / f"{RECIPE_ID}.yaml"
+
+
+def paths() -> RecipePaths:
+    base = root() / "work" / "recipes" / RECIPE_ID
+    return RecipePaths(base, base / "config", base / "build", base / "artifacts", base / "validation")
+
+
+def _source_root(env_name: str, default_name: str) -> Path:
+    raw = os.environ.get(env_name)
+    candidate = Path(raw).expanduser() if raw else root().parent / default_name
+    return candidate.resolve()
+
+
+def envsim_root() -> Path:
+    return _source_root("HAKONIWA_ENVSIM_ROOT", "hakoniwa-envsim")
+
+
+def map_viewer_root() -> Path:
+    return _source_root("HAKONIWA_MAP_VIEWER_ROOT", "hakoniwa-map-viewer")
+
+
+def drone_core_root() -> Path:
+    return _source_root("HAKONIWA_DRONE_CORE_ROOT", "hakoniwa-drone-core")
+
+
+def _required(path: Path, label: str) -> Path:
+    if not path.exists():
+        raise RecipeError(f"{label} not found: {path}")
+    return path
+
+
+def _load_recipe() -> dict[str, Any]:
+    exporter = root() / "recipes" / "tools" / "export_recipe_json.rb"
+    completed = subprocess.run(
+        ["ruby", str(exporter), str(recipe_file())], capture_output=True, text=True, check=False
+    )
+    if completed.returncode:
+        raise RecipeError(completed.stderr.strip() or "failed to load Recipe YAML")
+    data = json.loads(completed.stdout)
+    if data.get("id") != RECIPE_ID or not isinstance(data.get("plateau_citygml"), dict):
+        raise RecipeError("Recipe PLATEAU configuration is missing")
+    return data
+
+
+def read_map_origin(map_root: Path) -> dict[str, float]:
+    ui = _required(map_root / "src" / "client" / "src" / "ui.js", "Map Viewer UI")
+    source = ui.read_text(encoding="utf-8")
+    result: dict[str, float] = {}
+    for key, pattern in MAP_ORIGIN_PATTERN.items():
+        match = pattern.search(source)
+        if match is None:
+            raise RecipeError(f"Map Viewer {key} origin assignment was not found: {ui}")
+        result[key] = float(match.group(1))
+    return result
+
+
+def read_drone_simulation_location(drone_root: Path) -> dict[str, float]:
+    path = _required(
+        drone_root / "config" / "drone" / "mujoco-shibuya-api-1" / "drone_config_0.json",
+        "Drone Core Shibuya config",
+    )
+    data = json.loads(path.read_text(encoding="utf-8"))
+    location = data["simulation"]["location"]
+    return {key: float(location[key]) for key in ("latitude", "longitude", "altitude")}
+
+
+def _manifest_text(config: dict[str, Any], origin: dict[str, float], recipe_paths: RecipePaths) -> str:
+    source = config["source"]
+    extent = config["selection"]["half_extent_m"]
+    geometry = config["geometry"]
+    mjcf = config["mjcf"]
+    return f"""version: 1
+component: hakoniwa-envsim
+
+pipeline:
+  type: plateau-citygml-to-mjcf
+
+source:
+  api_base_url: {source['api_base_url']}
+  feature_type: {source['feature_type']}
+  year: {source['year']}
+
+selection:
+  center:
+    latitude: {origin['latitude']}
+    longitude: {origin['longitude']}
+  half_extent_m:
+    north_south: {extent['north_south']}
+    east_west: {extent['east_west']}
+
+geometry:
+  base_epsilon_m: {geometry['base_epsilon_m']}
+  waste_threshold: {geometry['waste_threshold']}
+  wall_thickness_m: {geometry['wall_thickness_m']}
+
+mjcf:
+  model_name: {mjcf['model_name']}
+  collision: {mjcf['collision']}
+  floor: {str(bool(mjcf['floor'])).lower()}
+
+output:
+  build_dir: {recipe_paths.build}
+  install_dir: {recipe_paths.artifacts / 'install'}
+  name: plateau-shibuya-1km
+"""
+
+
+def configure() -> int:
+    data = _load_recipe()["plateau_citygml"]
+    origin = read_map_origin(map_viewer_root())
+    recipe_paths = paths()
+    for directory in (recipe_paths.config, recipe_paths.build, recipe_paths.artifacts, recipe_paths.validation):
+        directory.mkdir(parents=True, exist_ok=True)
+    manifest = recipe_paths.config / "hakoniwa-envsim-build.yaml"
+    manifest.write_text(_manifest_text(data, origin, recipe_paths), encoding="utf-8")
+    location = read_drone_simulation_location(drone_core_root())
+    contract = {
+        "schema_version": 1,
+        "recipe_id": RECIPE_ID,
+        "map_viewer_origin": origin,
+        "map_viewer_source": str(map_viewer_root() / "src/client/src/ui.js"),
+        "drone_simulation_location": location,
+        "same_horizontal_origin": (
+            origin["latitude"] == location["latitude"]
+            and origin["longitude"] == location["longitude"]
+        ),
+        "manifest": str(manifest),
+        "selection_half_extent_m": data["selection"]["half_extent_m"],
+    }
+    (recipe_paths.config / "coordinate-contract.json").write_text(
+        json.dumps(contract, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    completed = subprocess.run(
+        [sys.executable, str(envsim_root() / "tools" / "hako.py"), "configure", "--config", str(manifest)],
+        cwd=envsim_root(), check=False,
+    )
+    if completed.returncode:
+        return completed.returncode
+    print(f"OK: Recipe Envsim manifest: {manifest}")
+    print(f"OK: Map Viewer origin: {origin['latitude']}, {origin['longitude']}")
+    print(
+        "INFO: Drone simulation.location is intentionally separate: "
+        f"{location['latitude']}, {location['longitude']}"
+    )
+    return 0
+
+
+def doctor() -> int:
+    recipe_paths = paths()
+    manifest = recipe_paths.config / "hakoniwa-envsim-build.yaml"
+    if not manifest.is_file() and configure() != 0:
+        return 1
+    origin = read_map_origin(map_viewer_root())
+    location = read_drone_simulation_location(drone_core_root())
+    if math.isclose(origin["longitude"], location["longitude"], abs_tol=1e-10):
+        raise RecipeError("Map Viewer origin unexpectedly equals Drone simulation.location")
+    completed = subprocess.run(
+        [sys.executable, str(envsim_root() / "tools" / "hako.py"), "doctor", "--config", str(manifest)],
+        cwd=envsim_root(), check=False,
+    )
+    if completed.returncode:
+        return completed.returncode
+    print("OK: Map Viewer is the authoritative PLATEAU origin")
+    print("OK: Drone simulation.location was not used as the PLATEAU center")
+    return 0
+
+
+def build(offline: bool = False) -> int:
+    if configure() != 0 or doctor() != 0:
+        return 1
+    recipe_paths = paths()
+    manifest = recipe_paths.config / "hakoniwa-envsim-build.yaml"
+    command = [sys.executable, str(envsim_root() / "tools" / "hako.py"), "build", "--config", str(manifest)]
+    if offline:
+        command.append("--offline")
+    completed = subprocess.run(
+        command,
+        cwd=envsim_root(), check=False,
+    )
+    if completed.returncode:
+        return completed.returncode
+    for source_name, output_name in (
+        ("plateau-shibuya-1km.xml", "plateau-shibuya-1km.xml"),
+        ("download-manifest.json", "download-manifest.json"),
+        ("build-receipt.json", "build-receipt.json"),
+    ):
+        shutil.copy2(_required(recipe_paths.build / source_name, source_name), recipe_paths.artifacts / output_name)
+    print(f"OK: Recipe artifacts: {recipe_paths.artifacts}")
+    return 0
+
+
+def _git_blob(repository: Path, revision: str, path: str) -> bytes:
+    completed = subprocess.run(
+        ["git", "show", f"{revision}:{path}"], cwd=repository, capture_output=True, check=False
+    )
+    if completed.returncode:
+        raise RecipeError(
+            f"Git object is unavailable: {repository} {revision}:{path}; "
+            "use a full clone or fetch the required revision"
+        )
+    return completed.stdout
+
+
+def _extract_archive(data: bytes, destination: Path) -> None:
+    destination.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
+        for member in archive.getmembers():
+            member_path = Path(member.name)
+            if member_path.is_absolute() or ".." in member_path.parts:
+                raise RecipeError(f"unsafe path in historical archive: {member.name}")
+            if not member.isfile():
+                continue
+            source = archive.extractfile(member)
+            if source is None:
+                raise RecipeError(f"failed to read historical archive member: {member.name}")
+            target = destination / member_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with source, target.open("wb") as output:
+                shutil.copyfileobj(source, output)
+
+
+def _run(command: list[str], cwd: Path) -> None:
+    print("+", subprocess.list2cmdline(command))
+    subprocess.run(command, cwd=cwd, check=True)
+
+
+def _materialize_legacy_pipeline(
+    repository: Path,
+    revision: str,
+    configured_paths: dict[str, str],
+    destination: Path,
+) -> dict[str, Path]:
+    """Materialize the immutable historical converter for regression only."""
+    destination.mkdir(parents=True, exist_ok=True)
+    scripts: dict[str, Path] = {}
+    for role, source_path in configured_paths.items():
+        target = destination / f"{role}.py"
+        target.write_bytes(_git_blob(repository, revision, source_path))
+        scripts[role] = target
+    return scripts
+
+
+def _building_geoms(xml_path: Path) -> dict[str, dict[str, str]]:
+    root_element = ET.parse(xml_path).getroot()
+    output: dict[str, dict[str, str]] = {}
+    for geom in root_element.findall(".//geom"):
+        name = geom.get("name", "")
+        if not name.startswith("geom_bldg_"):
+            continue
+        key = name.removeprefix("geom_")
+        output[key] = {
+            attribute: geom.get(attribute, "")
+            for attribute in ("type", "size", "pos", "euler", "rgba", "contype", "conaffinity")
+        }
+    return output
+
+
+def compare_building_geoms(actual_xml: Path, expected_xml: Path, tolerance: float) -> dict[str, Any]:
+    actual = _building_geoms(actual_xml)
+    expected = _building_geoms(expected_xml)
+    missing = sorted(set(expected) - set(actual))
+    extra = sorted(set(actual) - set(expected))
+    mismatches: list[dict[str, Any]] = []
+    max_numeric_error = 0.0
+    for name in sorted(set(actual) & set(expected)):
+        for attribute in ("type", "rgba", "contype", "conaffinity"):
+            if actual[name][attribute] != expected[name][attribute]:
+                mismatches.append({"geom": name, "attribute": attribute, "expected": expected[name][attribute], "actual": actual[name][attribute]})
+        for attribute in ("size", "pos", "euler"):
+            left = [float(value) for value in actual[name][attribute].split()]
+            right = [float(value) for value in expected[name][attribute].split()]
+            if len(left) != len(right):
+                mismatches.append({"geom": name, "attribute": attribute, "expected": expected[name][attribute], "actual": actual[name][attribute]})
+                continue
+            error = max((abs(a - b) for a, b in zip(left, right)), default=0.0)
+            max_numeric_error = max(max_numeric_error, error)
+            if error > tolerance:
+                mismatches.append({"geom": name, "attribute": attribute, "max_error": error, "expected": expected[name][attribute], "actual": actual[name][attribute]})
+        if len(mismatches) >= 100:
+            break
+    return {
+        "status": "MATCHED" if not missing and not extra and not mismatches else "MISMATCHED",
+        "actual_geom_count": len(actual),
+        "expected_geom_count": len(expected),
+        "missing_count": len(missing),
+        "extra_count": len(extra),
+        "mismatch_count": len(mismatches),
+        "max_numeric_error": max_numeric_error,
+        "tolerance": tolerance,
+        "missing_sample": missing[:20],
+        "extra_sample": extra[:20],
+        "mismatch_sample": mismatches[:20],
+    }
+
+
+def regression() -> int:
+    missing_packages = [
+        module for module in ("numpy", "pyproj", "shapely")
+        if importlib.util.find_spec(module) is None
+    ]
+    if missing_packages:
+        raise RecipeError(
+            "historical regression requires deterministic projection and convex-hull "
+            f"dependencies ({', '.join(missing_packages)} missing); run: "
+            "python -m pip install -r recipes/requirements/plateau-citygml-mujoco-walls.txt"
+        )
+    recipe = _load_recipe()["plateau_citygml"]
+    config = recipe["regression"]
+    origin = read_map_origin(map_viewer_root())
+    recipe_paths = paths()
+    regression_root = recipe_paths.build / "regression"
+    source_root = regression_root / "source"
+    regression_root.mkdir(parents=True, exist_ok=True)
+    archive = _git_blob(envsim_root(), config["source_archive_revision"], config["source_archive_path"])
+    if source_root.exists():
+        shutil.rmtree(source_root)
+    _extract_archive(archive, source_root)
+    extent = config["half_extent_m"]
+    (source_root / "query_meta.json").write_text(json.dumps({
+        "center_lat": origin["latitude"], "center_lon": origin["longitude"],
+        "ns_m": extent["north_south"], "ew_m": extent["east_west"],
+    }, indent=2) + "\n", encoding="utf-8")
+
+    legacy_pipeline = _materialize_legacy_pipeline(
+        envsim_root(),
+        config["final_contract_revision"],
+        config["legacy_pipeline"],
+        regression_root / "legacy-pipeline",
+    )
+    lod1 = regression_root / "shibuya-reference-lod1.json"
+    walls = regression_root / "shibuya-reference-walls.json"
+    generated = regression_root / "shibuya-reference.xml"
+    _run([sys.executable, str(legacy_pipeline["lod1_extract"]), "--in", str(source_root), "--out", str(lod1), "--to-epsg", "6677", "--src-epsg", "4326"], regression_root)
+    _run([sys.executable, str(legacy_pipeline["wall_convert"]), "--in", str(lod1), "--out", str(walls), "--waste-threshold", "1.0", "--wall-thickness", "0.1"], regression_root)
+    _run([sys.executable, str(legacy_pipeline["mjcf_convert"]), "--inp", str(walls), "--out", str(generated)], regression_root)
+
+    reference = _required(drone_core_root() / config["reference_drone_xml"], "Drone Core Shibuya reference XML")
+    result = compare_building_geoms(generated, reference, float(config["numeric_tolerance"]))
+    result.update({
+        "schema_version": 1,
+        "recipe_id": RECIPE_ID,
+        "map_viewer_origin": origin,
+        "historical_selection_half_extent_m": extent,
+        "historical_source": {
+            "repository": str(envsim_root()),
+            "revision": config["source_archive_revision"],
+            "path": config["source_archive_path"],
+        },
+        "legacy_pipeline": {
+            "owner": "hakoniwa-business-pack",
+            "source_revision": config["final_contract_revision"],
+            "scripts": config["legacy_pipeline"],
+        },
+        "reference_xml": str(reference),
+        "generated_xml": str(generated),
+    })
+    expected_count = int(config["expected_building_geoms"])
+    if result["expected_geom_count"] != expected_count:
+        result["status"] = "MISMATCHED"
+        result["reference_contract_error"] = f"expected {expected_count} reference geoms"
+    recipe_paths.validation.mkdir(parents=True, exist_ok=True)
+    report = recipe_paths.validation / "shibuya-regression.json"
+    report.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"Regression report: {report}")
+    print(json.dumps({key: result[key] for key in ("status", "actual_geom_count", "expected_geom_count", "mismatch_count", "max_numeric_error", "tolerance")}, indent=2))
+    return 0 if result["status"] == "MATCHED" else 1
+
+
+def smoke() -> int:
+    completed = subprocess.run(
+        [sys.executable, str(envsim_root() / "tools" / "hako.py"), "smoke"],
+        cwd=envsim_root(), check=False,
+    )
+    return completed.returncode
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Operate the PLATEAU CityGML MuJoCo wall Recipe")
+    parser.add_argument("command", choices=("configure", "doctor", "build", "regression", "smoke"))
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="reuse previously downloaded CityGML (valid only with build)",
+    )
+    args = parser.parse_args()
+    if args.offline and args.command != "build":
+        parser.error("--offline is valid only with build")
+    try:
+        return {
+            "configure": configure,
+            "doctor": doctor,
+            "build": lambda: build(offline=args.offline),
+            "regression": regression,
+            "smoke": smoke,
+        }[args.command]()
+    except (RecipeError, OSError, ValueError, KeyError, json.JSONDecodeError, ET.ParseError, subprocess.CalledProcessError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

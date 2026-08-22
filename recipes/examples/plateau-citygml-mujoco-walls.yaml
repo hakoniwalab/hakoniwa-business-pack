@@ -1,0 +1,306 @@
+id: plateau-citygml-mujoco-walls
+title: PLATEAU CityGML to MuJoCo Wall Asset
+recipe_version: 0.1
+
+goal:
+  user_request: 緯度・経度と範囲からPLATEAU CityGMLを取得し、MuJoCoで利用できる建物壁MJCFを生成したい
+  description: >
+    Materialize hakoniwa-envsim, derive the Shibuya geographic origin from the
+    Hakoniwa Map Viewer contract, download current PLATEAU building CityGML for
+    a one-kilometer square, and publish a query-centered MuJoCo wall asset with
+    source provenance. A separate pinned regression rebuilds the historical
+    600-meter Shibuya selection and compares every building geom with the
+    integrated Hakoniwa Drone Core reference world.
+
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - hakoniwa-envsim owns the manifest-driven PLATEAU API and CityGML-to-MJCF lifecycle.
+    - Hakoniwa Map Viewer owns the verified PLATEAU local-coordinate origin.
+    - The historical Envsim source archive and final intermediate geometry remain addressable by immutable Git revisions.
+    - Hakoniwa Drone Core owns the integrated Shibuya MuJoCo reference world.
+
+validation:
+  status: verified
+  summary: >
+    On macOS, the current PLATEAU API path generated a one-kilometer Shibuya
+    asset from 2025 data, and the pinned historical path reproduced every one
+    of the 4266 building geoms in the Drone Core reference with zero numeric
+    error. Cross-platform Recipe execution remains pending.
+  steps:
+    - id: map_origin_contract
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-map-viewer
+          path: src/client/src/ui.js
+          revision: main
+      notes:
+        - Use 35.6625, 139.70625; do not use Drone Core simulation.location longitude 139.69375.
+    - id: legacy_reference_contract
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-envsim
+          path: plateau-work/gml/shibuya_2km_obb.json
+          revision: b95c54f7f39961ff86be99a078fc40e27db6971b
+        - repository: toppers/hakoniwa-drone-core
+          path: config/drone/mujoco-shibuya-api-1/drone.xml
+          revision: 5fcf18d2998f8024c1094324e2960352af499f00
+      notes:
+        - The final historical extraction used 300m half extents, so its actual comparison area is 600m by 600m despite the old shibuya_2km working name.
+        - All 4266 historical wall records are present in the Drone Core integrated XML.
+        - The Business Pack-owned adapter materialized the pinned historical converter and matched all 4266 reference geoms with maximum numeric error 0.0 on macOS.
+    - id: current_one_kilometer_build
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-envsim
+          path: tools/hako.py
+          revision: 97801f11bbe3678b6ba248ba2d78901efd9adf61
+      notes:
+        - The 2025 API response selected three CityGML mesh files across Shibuya and Minato wards.
+        - The one-kilometer selection produced 114 unique buildings and 596 MuJoCo building geoms on 2026-08-23.
+        - The API returned one overlapping municipality mesh; 101 byte-equivalent building records were deduplicated by authoritative CityGML ID.
+
+constraints:
+  - external-plateau-api-used-only-by-explicit-build
+  - map-viewer-origin-is-authoritative
+  - drone-simulation-location-is-not-the-city-origin
+  - current-build-and-pinned-regression-are-separate
+  - generated-data-remains-under-work
+  - source-url-size-and-sha256-provenance-required
+
+target_environment:
+  required_for: asset-generation
+  status: specified
+  os: macOS | Linux | Windows
+  os_version: current-supported-host
+  architecture: host-native
+  execution_mode: native
+  runtimes:
+    - name: Python
+      required: true
+      version: "3.10+"
+      path: host
+
+execution_environment:
+  required_for: asset-generation
+  status: specified
+  os: macOS | Linux | Windows
+  os_version: current-supported-host
+  architecture: host-native
+  execution_mode: native
+  gui:
+    required: false
+    status: disabled
+  shared_memory:
+    required: false
+    access: not-used
+
+foundation_contract:
+  mode: not_required
+  reason: This Recipe generates files with component-owned Python tools and does not start Hakoniwa Core.
+
+recipe_local_requirements_schema_version: 1
+recipe_local_requirements:
+  hakoniwa-envsim:
+    root:
+      default_path: ../hakoniwa-envsim
+      override_env: HAKONIWA_ENVSIM_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/hakoniwa-envsim.git
+      revision: main
+    required_artifacts:
+      - path: tools/hako.py
+        kind: file
+      - path: src/city_pipeline/gml_lod1_extract.py
+        kind: file
+  hakoniwa-map-viewer:
+    root:
+      default_path: ../hakoniwa-map-viewer
+      override_env: HAKONIWA_MAP_VIEWER_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/hakoniwa-map-viewer.git
+      revision: main
+    required_artifacts:
+      - path: src/client/src/ui.js
+        kind: file
+  hakoniwa-drone-core:
+    root:
+      default_path: ../hakoniwa-drone-core
+      override_env: HAKONIWA_DRONE_CORE_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/toppers/hakoniwa-drone-core.git
+      revision: main
+    required_artifacts:
+      - path: config/drone/mujoco-shibuya-api-1/drone.xml
+        kind: file
+      - path: config/drone/mujoco-shibuya-api-1/drone_config_0.json
+        kind: file
+
+plateau_citygml:
+  source:
+    api_base_url: https://api.plateauview.mlit.go.jp
+    feature_type: bldg
+    year: latest
+  selection:
+    center_contract: hakoniwa-map-viewer-default-origin
+    half_extent_m:
+      north_south: 500
+      east_west: 500
+  geometry:
+    base_epsilon_m: 0.2
+    waste_threshold: 1.0
+    wall_thickness_m: 0.1
+  mjcf:
+    model_name: plateau_shibuya_1km
+    collision: all
+    floor: false
+  regression:
+    source_archive_revision: f01b7fc35f94ccf0cab2e94b3803e99beddfe019
+    source_archive_path: plateau-work/gml/shibuya_2km.tar.gz
+    final_contract_revision: b95c54f7f39961ff86be99a078fc40e27db6971b
+    final_contract_path: plateau-work/gml/shibuya_2km_obb.json
+    legacy_pipeline:
+      lod1_extract: plateau-work/gml/gml_lod1_extract.py
+      wall_convert: plateau-work/gml/gml2obb.py
+      mjcf_convert: plateau-work/gml/obb2mjcf.py
+    half_extent_m:
+      north_south: 300
+      east_west: 300
+    reference_drone_xml: config/drone/mujoco-shibuya-api-1/drone.xml
+    expected_building_geoms: 4266
+    numeric_tolerance: 0.00001
+
+components:
+  - id: hakoniwa-envsim
+    roles: [asset_generator, environment_model]
+    purpose: Resolve PLATEAU source data and convert building LOD1 geometry into MuJoCo walls.
+  - id: hakoniwa-map-viewer
+    roles: [visualizer, visualization_asset_source]
+    purpose: Own the geographic origin contract shared with the Shibuya local city model.
+  - id: hakoniwa-drone-core
+    roles: [physics_runtime]
+    purpose: Supply the integrated historical Shibuya MuJoCo world used only as regression evidence.
+
+connections:
+  - from: hakoniwa-map-viewer
+    to: hakoniwa-envsim
+    interface: geographic-origin
+    data: [latitude, longitude]
+    contract:
+      status: verified
+      requires: [preserve 35.6625 and 139.70625]
+  - from: hakoniwa-envsim
+    to: hakoniwa-drone-core
+    interface: MuJoCo MJCF building geoms
+    data: [box position, half-size, yaw, height, collision mask]
+    contract:
+      status: verified
+      requires: [all historical geom_bldg records match within the declared tolerance]
+
+data_flow:
+  - Recipe selection -> generated Envsim manifest -> PLATEAU API -> CityGML -> LOD1 polygons -> wall boxes -> standalone MJCF artifact
+  - Pinned historical CityGML -> pinned legacy conversion adapter -> building geom comparison -> Drone Core integrated Shibuya XML
+
+time_model:
+  mode: none
+  notes:
+    - This is an offline data-generation Recipe and does not execute simulation time.
+
+artifact_sets:
+  physics_artifacts:
+    status: partially_verified
+    artifacts:
+      - work/recipes/plateau-citygml-mujoco-walls/artifacts/plateau-shibuya-1km.xml
+  provenance_artifacts:
+    status: partially_verified
+    artifacts:
+      - work/recipes/plateau-citygml-mujoco-walls/artifacts/download-manifest.json
+      - work/recipes/plateau-citygml-mujoco-walls/artifacts/build-receipt.json
+  validation_artifacts:
+    status: partially_verified
+    artifacts:
+      - work/recipes/plateau-citygml-mujoco-walls/validation/shibuya-regression.json
+
+artifacts:
+  - id: plateau_shibuya_1km_mjcf
+    kind: file
+    path: work/recipes/plateau-citygml-mujoco-walls/artifacts/plateau-shibuya-1km.xml
+  - id: plateau_download_manifest
+    kind: file
+    path: work/recipes/plateau-citygml-mujoco-walls/artifacts/download-manifest.json
+  - id: plateau_build_receipt
+    kind: file
+    path: work/recipes/plateau-citygml-mujoco-walls/artifacts/build-receipt.json
+  - id: shibuya_reference_regression
+    kind: file
+    path: work/recipes/plateau-citygml-mujoco-walls/validation/shibuya-regression.json
+
+missing_pieces:
+  - Verify the current one-kilometer build and the pinned historical regression on macOS, Linux, and Windows.
+  - Promote artifact-set status to verified only after the Recipe evidence is reproduced from a clean checkout.
+
+demo:
+  prerequisites:
+    - id: install_python_dependencies
+      command: python -m pip install -r recipes/requirements/plateau-citygml-mujoco-walls.txt
+      expected: Install the current Envsim and pinned historical regression dependencies.
+  steps:
+    - id: materialize_sources
+      command: python tools/recipe.py configure --recipe recipes/examples/plateau-citygml-mujoco-walls.yaml
+      expected: Clone or reuse Envsim, Map Viewer, and Drone Core sources and validate their required artifacts.
+    - id: generate_manifest
+      command: python tools/recipe/plateau_citygml_mujoco_walls.py configure
+      expected: Derive the Map Viewer origin and write the Recipe-local Envsim build manifest.
+    - id: inspect
+      command: python tools/recipe/plateau_citygml_mujoco_walls.py doctor
+      expected: Confirm the origin contract, reject Drone simulation.location as the city origin, and validate Envsim readiness.
+    - id: build_current
+      command: python tools/recipe/plateau_citygml_mujoco_walls.py build
+      expected: Download current PLATEAU data for one square kilometer and publish the standalone wall MJCF plus provenance.
+    - id: rebuild_offline
+      command: python tools/recipe/plateau_citygml_mujoco_walls.py build --offline
+      expected: Rebuild from previously acquired CityGML without accessing the external API.
+    - id: regression
+      command: python tools/recipe/plateau_citygml_mujoco_walls.py regression
+      expected: Rebuild the pinned historical 600m Shibuya selection and match every integrated Drone Core building geom.
+  cleanup:
+    expected_behavior:
+      - No background process is started.
+      - Downloaded and generated data remain under work/recipes/plateau-citygml-mujoco-walls.
+    verification_checks:
+      - Confirm the current build receipt and download manifest exist.
+      - Confirm shibuya-regression.json reports MATCHED.
+    cautions:
+      - PLATEAU latest data can change; do not compare current dataset IDs directly with the pinned historical reference.
+
+expected_result: >
+  A standalone one-kilometer Shibuya MuJoCo building-wall asset is generated
+  from current PLATEAU data, while a separate immutable historical regression
+  proves that the conversion contract reproduces the 4266 building geoms
+  integrated into Hakoniwa Drone Core.
+
+source_catalogs:
+  - component_id: hakoniwa-envsim
+  - component_id: hakoniwa-map-viewer
+  - component_id: hakoniwa-drone-core
+
+source_artifacts:
+  - repository: hakoniwalab/hakoniwa-map-viewer
+    path: src/client/src/ui.js
+    revision: main
+    description: Authoritative Shibuya PLATEAU geographic origin.
+  - repository: hakoniwalab/hakoniwa-envsim
+    path: plateau-work/gml/shibuya_2km.tar.gz
+    revision: f01b7fc35f94ccf0cab2e94b3803e99beddfe019
+    description: Historical CityGML source archive retained in Git history for the regression only.
+  - repository: toppers/hakoniwa-drone-core
+    path: config/drone/mujoco-shibuya-api-1/drone.xml
+    revision: 5fcf18d2998f8024c1094324e2960352af499f00
+    description: Integrated historical Shibuya MuJoCo reference world.

@@ -199,10 +199,13 @@ components:
   - environment_model
   - data_model
   - visualizer
+  - asset_generator
+  - integration_boundary
   connects_to:
-  - hakoniwa-mujoco-robots
   - hakoniwa-core-pro
   - hakoniwa-pdu-registry
+  - hakoniwa-drone-pro
+  - hakoniwa-mujoco-robots
   tags:
   - hakoniwa
   - environment
@@ -211,6 +214,10 @@ components:
   - temperature
   - fastsearch
   - json-schema
+  - plateau
+  - citygml
+  - mujoco
+  - mjcf
   catalog_path: components/hakoniwa-envsim.yaml
 - id: hakoniwa-godot
   name: Hakoniwa Godot

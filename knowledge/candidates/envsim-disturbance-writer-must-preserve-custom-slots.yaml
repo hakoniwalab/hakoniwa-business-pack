@@ -1,0 +1,83 @@
+id: envsim-disturbance-writer-must-preserve-custom-slots
+title: Envsim Disturbance writes must preserve fields owned by other producers
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - interface_contract
+  - validation_rule
+
+summary: >
+  The Disturbance PDU is a shared aggregate contract. Envsim currently creates
+  a new message and writes GPS strength into d_user_custom slot 0, while the
+  rotor-fault example uses slot 1. A full-message write can erase fields owned
+  by another producer unless a single writer or read-modify-write ownership
+  rule is enforced.
+
+observation:
+  context: >
+    Inspecting hakoniwa-envsim runtime integration before adding the separate
+    PLATEAU conversion workflow.
+  details:
+    - HakoEnv reads each drone pos PDU and writes a complete disturb PDU.
+    - DroneIO.make_disturbance constructs a new Disturbance and only populates environment-owned values plus d_user_custom slot 0 for GPS strength.
+    - The Drone PRO rotor-fault example preserves the existing Disturbance and updates d_user_custom slot 1.
+    - Concurrent full-message writers can therefore overwrite one another even though they use different custom slots.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-envsim
+      path: src/hakoniwa_envsim/asset/drone_io.py
+      revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
+    - repository: local/hakoniwa-drone-pro
+      path: examples/rotor-fault-control/tools/rotor_fault.py
+      revision: local-main-2026-08-23
+  runtime_evidence: []
+  expert_input:
+    - source: user
+      statement: Rotor fault data and environment disturbance share the Disturbance contract, so this distinction must be handled carefully.
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: partially_verified
+  required:
+    - Define and test the authoritative single-writer or merge ownership contract for Disturbance.
+    - Add an integration test proving GPS/environment updates preserve rotor-fault slot 1.
+  notes:
+    - This is intentionally not folded into the PLATEAU data-conversion task.
+
+tracking:
+  implementation_status: open
+  issues: []
+
+promotion_targets:
+  catalog:
+    - hakoniwa-envsim
+    - hakoniwa-drone-pro
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: true
+  recipes: []
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-envsim
+      kind: test
+      path: tests
+      mode: detect-only
+      notes:
+        - Add after the shared-writer policy is agreed.
+
+promotion_rationale:
+  - The slot meanings and writer ownership are cross-component interface knowledge.
+  - Promotion should wait until the merge or ownership policy is implemented and verified.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Kept as a follow-up because the current task is PLATEAU conversion rather than runtime Disturbance arbitration.
