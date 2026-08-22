@@ -55,11 +55,11 @@ validation:
       evidence:
         - repository: hakoniwalab/hakoniwa-envsim
           path: tools/hako.py
-          revision: 97801f11bbe3678b6ba248ba2d78901efd9adf61
+          revision: 2f25a181d061db231b0b09d19e0fad7f8643baf1
       notes:
         - The 2025 API response selected three CityGML mesh files across Shibuya and Minato wards.
-        - The one-kilometer selection produced 114 unique buildings and 596 MuJoCo building geoms on 2026-08-23.
-        - The API returned one overlapping municipality mesh; 101 byte-equivalent building records were deduplicated by authoritative CityGML ID.
+        - The one-kilometer selection preserved 58 concave footprints among 113 unique buildings and produced 113 MuJoCo building geoms at the default waste threshold on 2026-08-23.
+        - The API returned one overlapping municipality mesh; 100 byte-equivalent building records were deduplicated by authoritative CityGML ID.
 
 constraints:
   - external-plateau-api-used-only-by-explicit-build
@@ -155,6 +155,7 @@ plateau_citygml:
       east_west: 500
   geometry:
     base_epsilon_m: 0.2
+    # Empty fraction inside the building OBB. 1.0 keeps the minimum-data OBB representation.
     waste_threshold: 1.0
     wall_thickness_m: 0.1
   mjcf:

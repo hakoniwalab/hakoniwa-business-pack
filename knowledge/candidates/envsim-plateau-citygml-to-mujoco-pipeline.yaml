@@ -11,7 +11,9 @@ summary: >
   hakoniwa-envsim can resolve PLATEAU building CityGML from a latitude,
   longitude, and metric half extents, convert official EPSG:6697 coordinates
   into a query-centered local ENU frame, and generate MuJoCo wall MJCF while
-  recording source URLs, resolved dataset years, actual sizes, and SHA-256.
+  preserving original LOD1 footprints and recording source URLs, resolved
+  dataset years, actual sizes, and SHA-256. A 0-to-1 OBB empty-area threshold
+  controls the tradeoff between compact OBBs and detailed boundary walls.
 
 observation:
   context: >
@@ -23,7 +25,7 @@ observation:
     - The inspected official Shibuya CityGML declares EPSG:6697 and stores positions as latitude, longitude, height.
     - API fileSize metadata differed from the downloaded object size, so it is informational rather than an integrity check.
     - The downloaded object SHA-256 and actual byte count are recorded in download-manifest.json.
-    - A real 200m by 200m Shibuya query produced 88 LOD1 buildings and 474 MuJoCo geoms.
+    - The default waste threshold 1.0 emits one compact OBB per building; lowering it selectively emits the original exterior and interior boundary edges as wall boxes.
     - Adjacent municipality datasets can publish the same mesh and building IDs; identical geometry is deduplicated and conflicting geometry fails closed.
     - The Map Viewer Shibuya origin is 35.6625,139.70625 and must not be replaced by Drone Core simulation.location longitude 139.69375.
     - A pinned historical rebuild reproduced all 4266 building geoms in the Drone Core Shibuya XML with zero numeric error.
@@ -32,25 +34,22 @@ sources:
   repositories:
     - repository: local/hakoniwa-envsim
       path: tools/hako.py
-      revision: 97801f11bbe3678b6ba248ba2d78901efd9adf61
+      revision: 2f25a181d061db231b0b09d19e0fad7f8643baf1
     - repository: local/hakoniwa-envsim
       path: tools/plateau_citygml.py
-      revision: 97801f11bbe3678b6ba248ba2d78901efd9adf61
+      revision: 2f25a181d061db231b0b09d19e0fad7f8643baf1
     - repository: local/hakoniwa-envsim
       path: docs/plateau-citygml-to-mujoco.md
-      revision: 97801f11bbe3678b6ba248ba2d78901efd9adf61
+      revision: 2f25a181d061db231b0b09d19e0fad7f8643baf1
     - repository: local/hakoniwa-envsim
       path: src/city_pipeline/gml_lod1_extract.py
-      revision: 97801f11bbe3678b6ba248ba2d78901efd9adf61
+      revision: 2f25a181d061db231b0b09d19e0fad7f8643baf1
   runtime_evidence:
     - description: >
-        Official API query centered at 35.681236,139.706763 with 100m
-        north/south and east/west half extents downloaded one Shibuya 2025
-        bldg mesh, extracted 88 buildings, and generated 474 MJCF geoms.
-    - description: >
         A one-kilometer query at the Map Viewer Shibuya origin selected three
-        2025 CityGML objects, deduplicated 101 overlapping building records,
-        and generated 596 geoms from 114 unique buildings.
+        2025 CityGML objects, deduplicated 100 overlapping building records,
+        preserved 58 concave footprints among 113 unique buildings, and
+        generated 113 geoms with the default compact OBB policy.
     - description: >
         The pinned historical 600m selection rebuilt 801 buildings and matched
         all 4266 Drone Core reference geoms with maximum numeric error 0.0.
@@ -81,6 +80,10 @@ tracking:
   issues:
     - repository: hakoniwalab/hakoniwa-envsim
       number: 4
+      relation: fix
+      status: closed
+    - repository: hakoniwalab/hakoniwa-envsim
+      number: 6
       relation: fix
       status: closed
     - repository: hakoniwalab/hakoniwa-business-pack
@@ -121,6 +124,10 @@ resolution:
       issue: 4
       pull_request: null
       revision: 97801f11bbe3678b6ba248ba2d78901efd9adf61
+    - repository: hakoniwalab/hakoniwa-envsim
+      issue: 6
+      pull_request: null
+      revision: 2f25a181d061db231b0b09d19e0fad7f8643baf1
     - repository: hakoniwalab/hakoniwa-business-pack
       issue: 145
       pull_request: null
