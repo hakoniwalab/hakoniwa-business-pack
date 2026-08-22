@@ -13,7 +13,7 @@ verification:
   verified_at: 2026-08-23
   source_revision: ec02aa3764bbde40244d754423726eeccce23b87
   source_ref: main
-summary: Environment modeling toolkit for creating, visualizing, refining, and querying environmental factors such as wind, temperature, pressure, GPS strength, and boundaries.
+summary: Environment modeling toolkit for runtime environmental factors and PLATEAU-derived MuJoCo/GLB City Worlds containing terrain, roads, available road markings, and buildings.
 category:
   primary: physics-environment
   secondary:
@@ -76,6 +76,21 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-envsim
         path: docs/plateau-citygml-to-mujoco.md
         revision: ec02aa3764bbde40244d754423726eeccce23b87
+  - name: PLATEAU City World composition
+    description: Generates DEM terrain, semantic road surfaces, source-derived LOD3 road markings, and buildings independently under one world-frame contract, then composes aligned MJCF and GLB outputs.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: src/city_pipeline/city_world_composer.py
+        revision: 11e47f2349fe869b948fe8b9cbecc77a19f99929
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: src/city_pipeline/world_frame.py
+        revision: 11e47f2349fe869b948fe8b9cbecc77a19f99929
+  - name: PLATEAU dataset capability validation
+    description: Reports selected building and road LODs, fallback counts, unavailable LOD3 road markings, and the resulting collision/visualization capabilities as text and machine-readable JSON.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: src/city_pipeline/city_dataset_validator.py
+        revision: 11e47f2349fe869b948fe8b9cbecc77a19f99929
   - name: Hakoniwa environment runtime asset
     description: Registers HakoEnv, reads each drone pos PDU, resolves environment values by position, and writes the drone disturb PDU.
     evidence:
@@ -88,7 +103,7 @@ capabilities:
 
 limitations:
   - Not a robot physics simulator.
-  - The verified PLATEAU path consumes building geometry from EPSG:6697; MJCF uses LOD1, while GLB prefers LOD2 and falls back to LOD1. Other feature types and CRS contracts are outside the verified path.
+  - The City World path consumes EPSG:6697 bldg/tran/dem/frn data. Buildings prefer LOD2 and fall back to LOD1; road surfaces prefer LOD3 and fall back to LOD2; unavailable LOD3 road markings are omitted and reported rather than inferred.
   - PLATEAU Distribution Service is an external trial API; offline tests validate local conversion, not API availability.
   - HakoEnv currently writes a complete Disturbance message and may overwrite custom slots owned by another producer; shared-writer arbitration remains a known gap.
   - Creator schema and implementation inconsistencies outside the PLATEAU path remain to be resolved.
@@ -103,7 +118,7 @@ interfaces:
       description: Split execution model JSON for simulation-efficient lookup.
     - name: PLATEAU geographic selection
       kind: config
-      description: Latitude, longitude, north/south and east/west half extents, dataset-year policy, and a 0-to-1 OBB empty-area threshold in hakoniwa-build.yaml.
+      description: Latitude, longitude, north/south and east/west half extents, bldg/tran/dem/frn selection, dataset-year policy, and a 0-to-1 OBB empty-area threshold in hakoniwa-build.yaml.
     - name: PLATEAU GLB policy
       kind: config
       description: GLB enablement, highest-available LOD policy, and embedded-if-available or flat texture mode in hakoniwa-build.yaml.
@@ -122,14 +137,17 @@ interfaces:
       description: Query-centered MJCF with one OBB per building by default, or original exterior/interior boundary wall boxes selected by the empty-area threshold.
     - name: PLATEAU display model
       kind: file
-      description: Self-contained GLB using X=East, Y=Up, Z=-North, with selected LOD2 textures embedded and LOD1 fallback solids.
+      description: Self-contained City World GLB using X=East, Y=Up, Z=-North, with terrain, semantic roads, available source-derived road markings, and buildings.
+    - name: PLATEAU Dataset Validator report
+      kind: file
+      description: JSON report of component availability, LOD selection and fallback, omitted features, and usable collision/visualization capabilities.
     - name: Drone disturbance
       kind: pdu
       description: Per-drone disturb PDU written by HakoEnv.
   protocols:
     - name: PLATEAU Distribution Service REST API
       role: client
-      notes: Used only by an explicit hako.py build to search and download bldg CityGML.
+      notes: Used only by an explicit hako.py build to search and download configured bldg/tran/dem/frn CityGML.
     - name: Hakoniwa PDU
       role: pubsub
       notes: HakoEnv reads pos and writes disturb for each configured drone.
@@ -217,6 +235,12 @@ data_contracts:
       - repository: hakoniwalab/hakoniwa-envsim
         path: src/city_pipeline/obb2mjcf.py
         revision: 2f25a181d061db231b0b09d19e0fad7f8643baf1
+  - name: City World dataset capability report
+    description: Machine-readable contract exposing LOD fallback and missing-feature consequences to Recipe doctor and future Visualizer surfaces.
+    source:
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: src/city_pipeline/city_dataset_validator.py
+        revision: 11e47f2349fe869b948fe8b9cbecc77a19f99929
   - name: Disturbance custom-slot ownership
     description: Envsim currently owns GPS strength in d_user_custom slot 0, while other producers such as rotor-fault control may own later slots; full-message writes require arbitration or preservation.
     source:
@@ -232,7 +256,7 @@ recipe_roles:
   - role: visualizer
     description: Provides pre-simulation environment inspection views.
   - role: asset_generator
-    description: Materializes PLATEAU building data as MuJoCo wall MJCF for a geographic selection.
+    description: Materializes PLATEAU terrain, roads, available road markings, and buildings as aligned MuJoCo/GLB City World assets.
   - role: integration_boundary
     description: Resolves environment values at drone positions and publishes Disturbance PDU data.
 
@@ -241,7 +265,7 @@ typical_usecases:
   - Visualize environment conditions before running a simulation.
   - Query environmental values by position at runtime.
   - Build realistic Sim2Real validation scenarios.
-  - Generate a MuJoCo building collision world for a latitude/longitude-centered area.
+  - Generate and inspect a MuJoCo/GLB City World for a latitude/longitude-centered area.
 
 anti_usecases:
   - Robot body conversion.

@@ -132,6 +132,67 @@ class PlateauCityGmlMujocoWallsTest(unittest.TestCase):
                 {"latitude": 35.6625, "longitude": 139.70625},
             )
 
+    def test_current_city_world_origin_is_recipe_configured(self):
+        config = {
+            "selection": {"center": {"latitude": 35.0988, "longitude": 138.8587}}
+        }
+        self.assertEqual(
+            recipe.configured_origin(config),
+            {"latitude": 35.0988, "longitude": 138.8587},
+        )
+
+    def test_manifest_enables_all_city_world_feature_types(self):
+        config = {
+            "source": {
+                "api_base_url": "https://api.example.test",
+                "feature_type": "bldg",
+                "feature_types": {"bldg": True, "tran": True, "dem": True, "frn": True},
+                "year": "latest",
+            },
+            "selection": {"half_extent_m": {"north_south": 100, "east_west": 100}},
+            "geometry": {"base_epsilon_m": 0.2, "waste_threshold": 0.1, "wall_thickness_m": 0.1},
+            "mjcf": {"model_name": "city", "collision": "all", "floor": False},
+            "glb": {"enabled": True, "lod_policy": "highest_available", "texture_mode": "flat"},
+            "city_world": {"enabled": True, "terrain_spacing_m": 2, "marking_vertical_offset_m": 0.055},
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            paths = recipe.RecipePaths(base, base / "config", base / "build", base / "artifacts", base / "validation")
+            text = recipe._manifest_text(
+                config, {"latitude": 35.0988, "longitude": 138.8587}, paths
+            )
+        self.assertIn("tran: true", text)
+        self.assertIn("dem: true", text)
+        self.assertIn("frn: true", text)
+        self.assertIn("city_world:\n  enabled: true", text)
+
+    def test_city_world_contract_accepts_missing_markings_as_reported_capability(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            world = root / "world"
+            world.mkdir()
+            frame = root / "world-frame.json"
+            frame.write_text(json.dumps({
+                "origin": {"latitude": 35.0988, "longitude": 138.8587}
+            }), encoding="utf-8")
+            mjcf = world / "city-world.xml"
+            glb = world / "city-world.glb"
+            mjcf.write_text("<mujoco/>", encoding="utf-8")
+            glb.write_bytes(b"glTF")
+            (world / "city-world-receipt.json").write_text(json.dumps({
+                "world_frame": str(frame),
+                "mjcf": {"path": str(mjcf), "sha256": hashlib.sha256(mjcf.read_bytes()).hexdigest()},
+                "glb": {"path": str(glb), "sha256": hashlib.sha256(glb.read_bytes()).hexdigest()},
+            }), encoding="utf-8")
+            (world / "dataset-validation.json").write_text(json.dumps({
+                "status": "ready",
+                "components": {"road_markings": {"status": "not_available"}},
+            }), encoding="utf-8")
+            result = recipe.validate_city_world_contract(
+                world, {"latitude": 35.0988, "longitude": 138.8587}
+            )
+        self.assertEqual(result["components"]["road_markings"]["status"], "not_available")
+
     def test_building_geom_comparison_ignores_non_building_drone_geoms(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

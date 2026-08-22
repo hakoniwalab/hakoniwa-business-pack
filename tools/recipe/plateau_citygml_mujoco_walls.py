@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Operate the PLATEAU CityGML to MuJoCo wall-asset Recipe."""
+"""Operate the PLATEAU CityGML to MuJoCo/GLB City World Recipe."""
 
 from __future__ import annotations
 
@@ -124,12 +124,19 @@ def read_drone_simulation_location(drone_root: Path) -> dict[str, float]:
     return {key: float(location[key]) for key in ("latitude", "longitude", "altitude")}
 
 
+def configured_origin(config: dict[str, Any]) -> dict[str, float]:
+    center = config["selection"]["center"]
+    return {"latitude": float(center["latitude"]), "longitude": float(center["longitude"])}
+
+
 def _manifest_text(config: dict[str, Any], origin: dict[str, float], recipe_paths: RecipePaths) -> str:
     source = config["source"]
     extent = config["selection"]["half_extent_m"]
     geometry = config["geometry"]
     mjcf = config["mjcf"]
     glb = config["glb"]
+    city_world = config["city_world"]
+    feature_types = source["feature_types"]
     return f"""version: 1
 component: hakoniwa-envsim
 
@@ -139,6 +146,11 @@ pipeline:
 source:
   api_base_url: {source['api_base_url']}
   feature_type: {source['feature_type']}
+  feature_types:
+    bldg: {str(bool(feature_types['bldg'])).lower()}
+    tran: {str(bool(feature_types['tran'])).lower()}
+    dem: {str(bool(feature_types['dem'])).lower()}
+    frn: {str(bool(feature_types['frn'])).lower()}
   year: {source['year']}
 
 selection:
@@ -164,10 +176,15 @@ glb:
   lod_policy: {glb['lod_policy']}
   texture_mode: {glb['texture_mode']}
 
+city_world:
+  enabled: {str(bool(city_world['enabled'])).lower()}
+  terrain_spacing_m: {city_world['terrain_spacing_m']}
+  marking_vertical_offset_m: {city_world['marking_vertical_offset_m']}
+
 output:
   build_dir: {recipe_paths.build}
   install_dir: {recipe_paths.artifacts / 'install'}
-  name: plateau-shibuya-1km
+  name: plateau-numazu-city-world-200m
 """
 
 
@@ -194,6 +211,27 @@ def validate_glb_contract(glb_path: Path, receipt_path: Path, origin: dict[str, 
     if int(receipt.get("triangles", 0)) <= 0:
         raise RecipeError("generated GLB contains no triangles")
     return receipt
+
+
+def validate_city_world_contract(world_dir: Path, origin: dict[str, float]) -> dict[str, Any]:
+    receipt_path = _required(world_dir / "city-world-receipt.json", "City World receipt")
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    frame_path = _required(Path(receipt["world_frame"]), "City World frame")
+    frame = json.loads(frame_path.read_text(encoding="utf-8"))
+    for key in ("latitude", "longitude"):
+        if not math.isclose(
+            float(frame["origin"].get(key, math.nan)), origin[key], abs_tol=1e-10
+        ):
+            raise RecipeError(f"City World origin mismatch: {key}")
+    for section in ("mjcf", "glb"):
+        artifact = _required(Path(receipt[section]["path"]), f"City World {section}")
+        if receipt[section].get("sha256") != _sha256(artifact):
+            raise RecipeError(f"City World {section} SHA-256 mismatch")
+    validation_path = _required(world_dir / "dataset-validation.json", "dataset validation")
+    validation = json.loads(validation_path.read_text(encoding="utf-8"))
+    if validation.get("status") != "ready":
+        raise RecipeError("City World dataset validation is not ready")
+    return validation
 
 
 def validate_selection_coverage(selection_path: Path, contract: dict[str, Any]) -> dict[str, int]:
@@ -251,25 +289,23 @@ def install_python_requirements() -> Path:
 def configure() -> int:
     python = install_python_requirements()
     data = _load_recipe()["plateau_citygml"]
-    origin = read_map_origin(map_viewer_root())
+    origin = configured_origin(data)
     recipe_paths = paths()
     for directory in (recipe_paths.config, recipe_paths.build, recipe_paths.artifacts, recipe_paths.validation):
         directory.mkdir(parents=True, exist_ok=True)
     manifest = recipe_paths.config / "hakoniwa-envsim-build.yaml"
     manifest.write_text(_manifest_text(data, origin, recipe_paths), encoding="utf-8")
-    location = read_drone_simulation_location(drone_core_root())
     contract = {
         "schema_version": 1,
         "recipe_id": RECIPE_ID,
-        "map_viewer_origin": origin,
-        "map_viewer_source": str(map_viewer_root() / "src/client/src/ui.js"),
-        "drone_simulation_location": location,
-        "same_horizontal_origin": (
-            origin["latitude"] == location["latitude"]
-            and origin["longitude"] == location["longitude"]
-        ),
+        "configured_origin": origin,
+        "center_contract": data["selection"]["center_contract"],
         "manifest": str(manifest),
         "selection_half_extent_m": data["selection"]["half_extent_m"],
+        "coordinate_systems": {
+            "mjcf": "X=North,Y=-East,Z=Up",
+            "glb": "X=East,Y=Up,Z=-North",
+        },
     }
     (recipe_paths.config / "coordinate-contract.json").write_text(
         json.dumps(contract, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
@@ -281,11 +317,7 @@ def configure() -> int:
     if completed.returncode:
         return completed.returncode
     print(f"OK: Recipe Envsim manifest: {manifest}")
-    print(f"OK: Map Viewer origin: {origin['latitude']}, {origin['longitude']}")
-    print(
-        "INFO: Drone simulation.location is intentionally separate: "
-        f"{location['latitude']}, {location['longitude']}"
-    )
+    print(f"OK: configured City World origin: {origin['latitude']}, {origin['longitude']}")
     return 0
 
 
@@ -294,18 +326,36 @@ def doctor() -> int:
     manifest = recipe_paths.config / "hakoniwa-envsim-build.yaml"
     if (not manifest.is_file() or not recipe_python().is_file()) and configure() != 0:
         return 1
-    origin = read_map_origin(map_viewer_root())
-    location = read_drone_simulation_location(drone_core_root())
-    if math.isclose(origin["longitude"], location["longitude"], abs_tol=1e-10):
-        raise RecipeError("Map Viewer origin unexpectedly equals Drone simulation.location")
+    recipe_config = _load_recipe()["plateau_citygml"]
+    origin = configured_origin(recipe_config)
     completed = subprocess.run(
         [str(recipe_python()), str(envsim_root() / "tools" / "hako.py"), "doctor", "--config", str(manifest)],
         cwd=envsim_root(), check=False,
     )
     if completed.returncode:
         return completed.returncode
-    print("OK: Map Viewer is the authoritative PLATEAU origin")
-    print("OK: Drone simulation.location was not used as the PLATEAU center")
+    print(f"OK: Recipe-configured PLATEAU origin: {origin['latitude']}, {origin['longitude']}")
+    validation_candidates = (
+        recipe_paths.artifacts / "city-world" / "dataset-validation.json",
+        recipe_paths.build / "world" / "dataset-validation.json",
+    )
+    existing_validation = next(
+        (candidate for candidate in validation_candidates if candidate.is_file()), None
+    )
+    if existing_validation is None:
+        print("OK: Dataset Validator will report LOD fallback and unavailable features after build")
+    else:
+        print(f"Dataset Validator: {existing_validation}")
+        displayed = subprocess.run(
+            [
+                str(recipe_python()),
+                str(envsim_root() / "src" / "city_pipeline" / "city_dataset_validator.py"),
+                "--input", str(existing_validation),
+            ],
+            cwd=envsim_root(), check=False,
+        )
+        if displayed.returncode:
+            return displayed.returncode
     return 0
 
 
@@ -324,28 +374,28 @@ def build(offline: bool = False) -> int:
     if completed.returncode:
         return completed.returncode
     recipe_config = _load_recipe()["plateau_citygml"]
-    origin = read_map_origin(map_viewer_root())
+    origin = configured_origin(recipe_config)
     coverage = validate_selection_coverage(
-        recipe_paths.build / "plateau-shibuya-1km-lod1.json",
+        recipe_paths.build / "plateau-numazu-city-world-200m-lod1.json",
         recipe_config["acceptance"],
     )
-    validate_glb_contract(
-        recipe_paths.build / "plateau-shibuya-1km.glb",
-        recipe_paths.build / "plateau-shibuya-1km-glb-receipt.json",
-        origin,
-    )
+    dataset_validation = validate_city_world_contract(recipe_paths.build / "world", origin)
     print(
         "OK: PLATEAU selection coverage: "
         f"{coverage['buildings']} buildings, {coverage['center_buildings']} near center"
     )
-    for source_name, output_name in (
-        ("plateau-shibuya-1km.xml", "plateau-shibuya-1km.xml"),
-        ("plateau-shibuya-1km.glb", "plateau-shibuya-1km.glb"),
-        ("plateau-shibuya-1km-glb-receipt.json", "plateau-shibuya-1km-glb-receipt.json"),
-        ("download-manifest.json", "download-manifest.json"),
-        ("build-receipt.json", "build-receipt.json"),
-    ):
-        shutil.copy2(_required(recipe_paths.build / source_name, source_name), recipe_paths.artifacts / output_name)
+    city_world_artifacts = recipe_paths.artifacts / "city-world"
+    if city_world_artifacts.exists():
+        shutil.rmtree(city_world_artifacts)
+    shutil.copytree(_required(recipe_paths.build / "world", "City World output"), city_world_artifacts)
+    components_artifacts = recipe_paths.artifacts / "components"
+    if components_artifacts.exists():
+        shutil.rmtree(components_artifacts)
+    shutil.copytree(_required(recipe_paths.build / "components", "City World components"), components_artifacts)
+    for name in ("download-manifest.json", "build-receipt.json"):
+        shutil.copy2(_required(recipe_paths.build / name, name), recipe_paths.artifacts / name)
+    marking_status = dataset_validation["components"]["road_markings"]["status"]
+    print(f"OK: Dataset Validator road markings: {marking_status}")
     print(f"OK: Recipe artifacts: {recipe_paths.artifacts}")
     return 0
 
