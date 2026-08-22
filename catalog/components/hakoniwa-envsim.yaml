@@ -11,7 +11,7 @@ distribution:
     - Public OSS Hakoniwa component.
 verification:
   verified_at: 2026-08-23
-  source_revision: 2f25a181d061db231b0b09d19e0fad7f8643baf1
+  source_revision: cb908db523615998ba6fc99697283a87b1693c80
   source_ref: main
 summary: Environment modeling toolkit for creating, visualizing, refining, and querying environmental factors such as wind, temperature, pressure, GPS strength, and boundaries.
 category:
@@ -66,7 +66,16 @@ capabilities:
         revision: 2f25a181d061db231b0b09d19e0fad7f8643baf1
       - repository: hakoniwalab/hakoniwa-envsim
         path: docs/plateau-citygml-to-mujoco.md
-        revision: 2f25a181d061db231b0b09d19e0fad7f8643baf1
+        revision: cb908db523615998ba6fc99697283a87b1693c80
+  - name: Direct PLATEAU range-to-GLB conversion
+    description: Uses the same query-centered building selection as the MuJoCo path, prefers CityGML LOD2 surfaces and Appearance textures, falls back to LOD1 solids per building, and emits a self-contained GLB without a Unity conversion step.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: src/city_pipeline/citygml2glb.py
+        revision: cb908db523615998ba6fc99697283a87b1693c80
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: docs/plateau-citygml-to-mujoco.md
+        revision: cb908db523615998ba6fc99697283a87b1693c80
   - name: Hakoniwa environment runtime asset
     description: Registers HakoEnv, reads each drone pos PDU, resolves environment values by position, and writes the drone disturb PDU.
     evidence:
@@ -79,7 +88,7 @@ capabilities:
 
 limitations:
   - Not a robot physics simulator.
-  - The PLATEAU converter currently consumes building LOD1 geometry from EPSG:6697; other feature types and CRS contracts are outside the verified path.
+  - The verified PLATEAU path consumes building geometry from EPSG:6697; MJCF uses LOD1, while GLB prefers LOD2 and falls back to LOD1. Other feature types and CRS contracts are outside the verified path.
   - PLATEAU Distribution Service is an external trial API; offline tests validate local conversion, not API availability.
   - HakoEnv currently writes a complete Disturbance message and may overwrite custom slots owned by another producer; shared-writer arbitration remains a known gap.
   - Creator schema and implementation inconsistencies outside the PLATEAU path remain to be resolved.
@@ -95,6 +104,9 @@ interfaces:
     - name: PLATEAU geographic selection
       kind: config
       description: Latitude, longitude, north/south and east/west half extents, dataset-year policy, and a 0-to-1 OBB empty-area threshold in hakoniwa-build.yaml.
+    - name: PLATEAU GLB policy
+      kind: config
+      description: GLB enablement, highest-available LOD policy, and embedded-if-available or flat texture mode in hakoniwa-build.yaml.
     - name: Drone position
       kind: pdu
       description: Per-drone pos PDU read by the HakoEnv runtime asset.
@@ -108,6 +120,9 @@ interfaces:
     - name: PLATEAU MuJoCo wall model
       kind: file
       description: Query-centered MJCF with one OBB per building by default, or original exterior/interior boundary wall boxes selected by the empty-area threshold.
+    - name: PLATEAU display model
+      kind: file
+      description: Self-contained GLB using X=East, Y=Up, Z=-North, with selected LOD2 textures embedded and LOD1 fallback solids.
     - name: Drone disturbance
       kind: pdu
       description: Per-drone disturb PDU written by HakoEnv.

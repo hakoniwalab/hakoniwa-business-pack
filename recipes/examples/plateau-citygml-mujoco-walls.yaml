@@ -1,14 +1,15 @@
 id: plateau-citygml-mujoco-walls
-title: PLATEAU CityGML to MuJoCo Wall Asset
+title: PLATEAU CityGML to MuJoCo and GLB City Assets
 recipe_version: 0.1
 
 goal:
-  user_request: 緯度・経度と範囲からPLATEAU CityGMLを取得し、MuJoCoで利用できる建物壁MJCFを生成したい
+  user_request: 緯度・経度と範囲からPLATEAU CityGMLを取得し、MuJoCo用MJCFと表示用GLBを直接生成したい
   description: >
     Materialize hakoniwa-envsim, derive the Shibuya geographic origin from the
     Hakoniwa Map Viewer contract, download current PLATEAU building CityGML for
-    a one-kilometer square, and publish a query-centered MuJoCo wall asset with
-    source provenance. A separate pinned regression rebuilds the historical
+    a one-kilometer square, and publish aligned query-centered MuJoCo wall and
+    Three.js GLB assets with source provenance. The GLB path prefers textured
+    LOD2 surfaces and falls back to LOD1 solids per building. A separate pinned regression rebuilds the historical
     600-meter Shibuya selection and compares every building geom with the
     integrated Hakoniwa Drone Core reference world.
 
@@ -16,7 +17,7 @@ feasibility:
   status: feasible
   confidence: high
   rationale:
-    - hakoniwa-envsim owns the manifest-driven PLATEAU API and CityGML-to-MJCF lifecycle.
+    - hakoniwa-envsim owns the manifest-driven PLATEAU API and CityGML-to-MJCF/GLB lifecycle.
     - Hakoniwa Map Viewer owns the verified PLATEAU local-coordinate origin.
     - The historical Envsim source archive and final intermediate geometry remain addressable by immutable Git revisions.
     - Hakoniwa Drone Core owns the integrated Shibuya MuJoCo reference world.
@@ -55,11 +56,13 @@ validation:
       evidence:
         - repository: hakoniwalab/hakoniwa-envsim
           path: tools/hako.py
-          revision: 2f25a181d061db231b0b09d19e0fad7f8643baf1
+          revision: cb908db523615998ba6fc99697283a87b1693c80
       notes:
         - The 2025 API response selected three CityGML mesh files across Shibuya and Minato wards.
-        - The one-kilometer selection preserved 58 concave footprints among 113 unique buildings and produced 113 MuJoCo building geoms at the default waste threshold on 2026-08-23.
-        - The API returned one overlapping municipality mesh; 100 byte-equivalent building records were deduplicated by authoritative CityGML ID.
+        - The one-kilometer selection preserved 58 concave footprints among 114 unique buildings and produced 114 MuJoCo building geoms at the default waste threshold on 2026-08-23.
+        - The API returned one overlapping municipality mesh; 101 byte-equivalent building records were deduplicated by authoritative CityGML ID.
+        - Direct GLB generation used textured LOD2 geometry for 7 buildings and LOD1 solid fallback for 107 buildings, producing 3572 triangles in 25 meshes.
+        - Only the 24 textures referenced by selected LOD2 surfaces were downloaded and embedded; the resulting GLB was approximately 1.45 MB.
 
 constraints:
   - external-plateau-api-used-only-by-explicit-build
@@ -116,6 +119,8 @@ recipe_local_requirements:
         kind: file
       - path: src/city_pipeline/gml_lod1_extract.py
         kind: file
+      - path: src/city_pipeline/citygml2glb.py
+        kind: file
   hakoniwa-map-viewer:
     root:
       default_path: ../hakoniwa-map-viewer
@@ -162,6 +167,10 @@ plateau_citygml:
     model_name: plateau_shibuya_1km
     collision: all
     floor: false
+  glb:
+    enabled: true
+    lod_policy: highest_available
+    texture_mode: embedded-if-available
   regression:
     source_archive_revision: f01b7fc35f94ccf0cab2e94b3803e99beddfe019
     source_archive_path: plateau-work/gml/shibuya_2km.tar.gz
@@ -181,7 +190,7 @@ plateau_citygml:
 components:
   - id: hakoniwa-envsim
     roles: [asset_generator, environment_model]
-    purpose: Resolve PLATEAU source data and convert building LOD1 geometry into MuJoCo walls.
+    purpose: Resolve PLATEAU source data and convert buildings into aligned MuJoCo walls and an embedded-texture GLB.
   - id: hakoniwa-map-viewer
     roles: [visualizer, visualization_asset_source]
     purpose: Own the geographic origin contract shared with the Shibuya local city model.
@@ -207,6 +216,7 @@ connections:
 
 data_flow:
   - Recipe selection -> generated Envsim manifest -> PLATEAU API -> CityGML -> LOD1 polygons -> wall boxes -> standalone MJCF artifact
+  - The same selected buildings -> LOD2 surfaces and Appearance textures when available -> LOD1 solid fallback otherwise -> standalone embedded GLB artifact
   - Pinned historical CityGML -> pinned legacy conversion adapter -> building geom comparison -> Drone Core integrated Shibuya XML
 
 time_model:
@@ -219,11 +229,16 @@ artifact_sets:
     status: partially_verified
     artifacts:
       - work/recipes/plateau-citygml-mujoco-walls/artifacts/plateau-shibuya-1km.xml
+  visualization_artifacts:
+    status: partially_verified
+    artifacts:
+      - work/recipes/plateau-citygml-mujoco-walls/artifacts/plateau-shibuya-1km.glb
   provenance_artifacts:
     status: partially_verified
     artifacts:
       - work/recipes/plateau-citygml-mujoco-walls/artifacts/download-manifest.json
       - work/recipes/plateau-citygml-mujoco-walls/artifacts/build-receipt.json
+      - work/recipes/plateau-citygml-mujoco-walls/artifacts/plateau-shibuya-1km-glb-receipt.json
   validation_artifacts:
     status: partially_verified
     artifacts:
@@ -233,6 +248,12 @@ artifacts:
   - id: plateau_shibuya_1km_mjcf
     kind: file
     path: work/recipes/plateau-citygml-mujoco-walls/artifacts/plateau-shibuya-1km.xml
+  - id: plateau_shibuya_1km_glb
+    kind: file
+    path: work/recipes/plateau-citygml-mujoco-walls/artifacts/plateau-shibuya-1km.glb
+  - id: plateau_shibuya_1km_glb_receipt
+    kind: file
+    path: work/recipes/plateau-citygml-mujoco-walls/artifacts/plateau-shibuya-1km-glb-receipt.json
   - id: plateau_download_manifest
     kind: file
     path: work/recipes/plateau-citygml-mujoco-walls/artifacts/download-manifest.json
@@ -264,7 +285,7 @@ demo:
       expected: Confirm the origin contract, reject Drone simulation.location as the city origin, and validate Envsim readiness.
     - id: build_current
       command: python tools/recipe/plateau_citygml_mujoco_walls.py build
-      expected: Download current PLATEAU data for one square kilometer and publish the standalone wall MJCF plus provenance.
+      expected: Download current PLATEAU data and selected textures for one square kilometer, then publish aligned standalone MJCF and GLB assets plus provenance.
     - id: rebuild_offline
       command: python tools/recipe/plateau_citygml_mujoco_walls.py build --offline
       expected: Rebuild from previously acquired CityGML without accessing the external API.
@@ -277,13 +298,14 @@ demo:
       - Downloaded and generated data remain under work/recipes/plateau-citygml-mujoco-walls.
     verification_checks:
       - Confirm the current build receipt and download manifest exist.
+      - Confirm the GLB receipt matches the generated file SHA-256, geographic origin, axis contract, and nonzero triangle count.
       - Confirm shibuya-regression.json reports MATCHED.
     cautions:
       - PLATEAU latest data can change; do not compare current dataset IDs directly with the pinned historical reference.
 
 expected_result: >
-  A standalone one-kilometer Shibuya MuJoCo building-wall asset is generated
-  from current PLATEAU data, while a separate immutable historical regression
+  Aligned standalone one-kilometer Shibuya MuJoCo building-wall and Three.js
+  GLB assets are generated directly from current PLATEAU data, while a separate immutable historical regression
   proves that the conversion contract reproduces the 4266 building geoms
   integrated into Hakoniwa Drone Core.
 

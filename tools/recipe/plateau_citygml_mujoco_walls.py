@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import io
 import json
@@ -116,11 +117,12 @@ def _manifest_text(config: dict[str, Any], origin: dict[str, float], recipe_path
     extent = config["selection"]["half_extent_m"]
     geometry = config["geometry"]
     mjcf = config["mjcf"]
+    glb = config["glb"]
     return f"""version: 1
 component: hakoniwa-envsim
 
 pipeline:
-  type: plateau-citygml-to-mjcf
+  type: plateau-citygml-to-assets
 
 source:
   api_base_url: {source['api_base_url']}
@@ -145,11 +147,41 @@ mjcf:
   collision: {mjcf['collision']}
   floor: {str(bool(mjcf['floor'])).lower()}
 
+glb:
+  enabled: {str(bool(glb['enabled'])).lower()}
+  lod_policy: {glb['lod_policy']}
+  texture_mode: {glb['texture_mode']}
+
 output:
   build_dir: {recipe_paths.build}
   install_dir: {recipe_paths.artifacts / 'install'}
   name: plateau-shibuya-1km
 """
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def validate_glb_contract(glb_path: Path, receipt_path: Path, origin: dict[str, float]) -> dict[str, Any]:
+    glb = _required(glb_path, "generated PLATEAU GLB")
+    receipt = json.loads(_required(receipt_path, "PLATEAU GLB receipt").read_text(encoding="utf-8"))
+    coordinate = receipt.get("coordinate_system", {})
+    receipt_origin = coordinate.get("origin", {})
+    if coordinate.get("glb") != "X=East,Y=Up,Z=-North":
+        raise RecipeError("generated GLB has an unexpected display-coordinate contract")
+    for key in ("latitude", "longitude"):
+        if not math.isclose(float(receipt_origin.get(key, math.nan)), origin[key], abs_tol=1e-10):
+            raise RecipeError(f"generated GLB origin mismatch: {key}")
+    if int(receipt.get("bytes", -1)) != glb.stat().st_size or receipt.get("sha256") != _sha256(glb):
+        raise RecipeError("generated GLB bytes or SHA-256 do not match its receipt")
+    if int(receipt.get("triangles", 0)) <= 0:
+        raise RecipeError("generated GLB contains no triangles")
+    return receipt
 
 
 def configure() -> int:
@@ -226,8 +258,16 @@ def build(offline: bool = False) -> int:
     )
     if completed.returncode:
         return completed.returncode
+    origin = read_map_origin(map_viewer_root())
+    validate_glb_contract(
+        recipe_paths.build / "plateau-shibuya-1km.glb",
+        recipe_paths.build / "plateau-shibuya-1km-glb-receipt.json",
+        origin,
+    )
     for source_name, output_name in (
         ("plateau-shibuya-1km.xml", "plateau-shibuya-1km.xml"),
+        ("plateau-shibuya-1km.glb", "plateau-shibuya-1km.glb"),
+        ("plateau-shibuya-1km-glb-receipt.json", "plateau-shibuya-1km-glb-receipt.json"),
         ("download-manifest.json", "download-manifest.json"),
         ("build-receipt.json", "build-receipt.json"),
     ):

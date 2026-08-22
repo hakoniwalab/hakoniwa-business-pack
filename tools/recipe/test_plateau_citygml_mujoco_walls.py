@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
+import json
 import sys
 import tempfile
 import unittest
@@ -17,6 +19,46 @@ SPEC.loader.exec_module(recipe)
 
 
 class PlateauCityGmlMujocoWallsTest(unittest.TestCase):
+    def test_glb_contract_checks_hash_origin_axes_and_geometry(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            glb = root / "city.glb"
+            glb.write_bytes(b"glTF-test")
+            receipt = root / "city-glb-receipt.json"
+            receipt.write_text(json.dumps({
+                "bytes": glb.stat().st_size,
+                "sha256": hashlib.sha256(glb.read_bytes()).hexdigest(),
+                "triangles": 2,
+                "coordinate_system": {
+                    "glb": "X=East,Y=Up,Z=-North",
+                    "origin": {"latitude": 35.6625, "longitude": 139.70625},
+                },
+            }), encoding="utf-8")
+            result = recipe.validate_glb_contract(
+                glb, receipt, {"latitude": 35.6625, "longitude": 139.70625}
+            )
+            self.assertEqual(result["triangles"], 2)
+
+    def test_glb_contract_rejects_wrong_origin(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            glb = root / "city.glb"
+            glb.write_bytes(b"glTF-test")
+            receipt = root / "city-glb-receipt.json"
+            receipt.write_text(json.dumps({
+                "bytes": glb.stat().st_size,
+                "sha256": hashlib.sha256(glb.read_bytes()).hexdigest(),
+                "triangles": 2,
+                "coordinate_system": {
+                    "glb": "X=East,Y=Up,Z=-North",
+                    "origin": {"latitude": 35.0, "longitude": 139.70625},
+                },
+            }), encoding="utf-8")
+            with self.assertRaisesRegex(recipe.RecipeError, "origin mismatch"):
+                recipe.validate_glb_contract(
+                    glb, receipt, {"latitude": 35.6625, "longitude": 139.70625}
+                )
+
     def test_reads_map_viewer_origin_instead_of_drone_location(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

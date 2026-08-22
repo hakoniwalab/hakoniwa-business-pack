@@ -1,5 +1,5 @@
 id: envsim-plateau-citygml-to-mujoco-pipeline
-title: Envsim owns a query-centered PLATEAU CityGML to MuJoCo wall pipeline
+title: Envsim owns query-centered PLATEAU CityGML to MuJoCo and GLB pipelines
 status: promoted
 
 knowledge_type:
@@ -12,8 +12,10 @@ summary: >
   longitude, and metric half extents, convert official EPSG:6697 coordinates
   into a query-centered local ENU frame, and generate MuJoCo wall MJCF while
   preserving original LOD1 footprints and recording source URLs, resolved
-  dataset years, actual sizes, and SHA-256. A 0-to-1 OBB empty-area threshold
-  controls the tradeoff between compact OBBs and detailed boundary walls.
+  dataset years, actual sizes, and SHA-256. The same building selection also
+  generates a self-contained GLB directly from CityGML, preferring textured
+  LOD2 surfaces and falling back to LOD1 solids. A 0-to-1 OBB empty-area
+  threshold controls the MuJoCo tradeoff between compact OBBs and detailed boundary walls.
 
 observation:
   context: >
@@ -29,27 +31,36 @@ observation:
     - Adjacent municipality datasets can publish the same mesh and building IDs; identical geometry is deduplicated and conflicting geometry fails closed.
     - The Map Viewer Shibuya origin is 35.6625,139.70625 and must not be replaced by Drone Core simulation.location longitude 139.69375.
     - A pinned historical rebuild reproduced all 4266 building geoms in the Drone Core Shibuya XML with zero numeric error.
+    - Direct GLB output uses Three.js-native X=East, Y=Up, Z=-North coordinates aligned with the same origin and altitude offset as the MuJoCo asset.
+    - Texture acquisition is selective: only images referenced by selected LOD2 surfaces are downloaded, hashed, and embedded in the GLB.
 
 sources:
   repositories:
     - repository: local/hakoniwa-envsim
       path: tools/hako.py
-      revision: 2f25a181d061db231b0b09d19e0fad7f8643baf1
+      revision: cb908db523615998ba6fc99697283a87b1693c80
     - repository: local/hakoniwa-envsim
       path: tools/plateau_citygml.py
       revision: 2f25a181d061db231b0b09d19e0fad7f8643baf1
     - repository: local/hakoniwa-envsim
       path: docs/plateau-citygml-to-mujoco.md
-      revision: 2f25a181d061db231b0b09d19e0fad7f8643baf1
+      revision: cb908db523615998ba6fc99697283a87b1693c80
     - repository: local/hakoniwa-envsim
       path: src/city_pipeline/gml_lod1_extract.py
-      revision: 2f25a181d061db231b0b09d19e0fad7f8643baf1
+      revision: cb908db523615998ba6fc99697283a87b1693c80
+    - repository: local/hakoniwa-envsim
+      path: src/city_pipeline/citygml2glb.py
+      revision: cb908db523615998ba6fc99697283a87b1693c80
   runtime_evidence:
     - description: >
         A one-kilometer query at the Map Viewer Shibuya origin selected three
-        2025 CityGML objects, deduplicated 100 overlapping building records,
-        preserved 58 concave footprints among 113 unique buildings, and
-        generated 113 geoms with the default compact OBB policy.
+        2025 CityGML objects, deduplicated 101 overlapping building records,
+        preserved 58 concave footprints among 114 unique buildings, and
+        generated 114 geoms with the default compact OBB policy.
+    - description: >
+        The same one-kilometer selection generated a 1.45 MB GLB with 3572
+        triangles in 25 meshes: 7 buildings used LOD2, 107 used LOD1 fallback,
+        and 24 selected textures were embedded.
     - description: >
         The pinned historical 600m selection rebuilt 801 buildings and matched
         all 4266 Drone Core reference geoms with maximum numeric error 0.0.
@@ -86,10 +97,18 @@ tracking:
       number: 6
       relation: fix
       status: closed
+    - repository: hakoniwalab/hakoniwa-envsim
+      number: 7
+      relation: fix
+      status: open
     - repository: hakoniwalab/hakoniwa-business-pack
       number: 145
       relation: validation
       status: closed
+    - repository: hakoniwalab/hakoniwa-business-pack
+      number: 146
+      relation: validation
+      status: open
 
 promotion_targets:
   catalog:
