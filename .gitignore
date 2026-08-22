@@ -221,5 +221,8 @@ __marimo__/
 # Hakoniwa Business Pack local Foundation and Recipe workspaces
 /work/
 
+# Collected performance datasets and generated paper artifacts are private/local
+/exp-results/
+
 # Machine-local Recipe selection and transient component state
 /.hako/

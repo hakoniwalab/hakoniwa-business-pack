@@ -102,7 +102,7 @@ def load_layout(path: Path = DEFAULT_LAYOUT) -> dict[str, Any]:
             f"layout.participants.{participant_id}",
             {"scope", "platform", "execution_environment"},
         )
-        if participant["scope"] not in {"machine", "host"}:
+        if participant["scope"] not in {"machine", "host", "series"}:
             raise ResultLayoutError(f"invalid participant scope: {participant_id}")
 
     experiments = root["experiments"]

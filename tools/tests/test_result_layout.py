@@ -33,6 +33,14 @@ class ResultLayoutTest(unittest.TestCase):
                 "work/recipes/drone-fleet-multi-host-temporal-validation/results/multi-host-temporal-validation/hosts/cli-01",
                 "work/recipes/drone-fleet-multi-host-temporal-validation/results/multi-host-temporal-validation/hosts/cli-01",
             ),
+            ("experiment-c-archive", "multi-host-collector"): (
+                "work/recipes/drone-fleet-multi-host-scaling/results/multi-host-scaling",
+                "exp-results/multi-host/multi-host-scaling",
+            ),
+            ("experiment-c-temporal-archive", "multi-host-collector"): (
+                "work/recipes/drone-fleet-multi-host-temporal-validation/results/multi-host-temporal-validation",
+                "exp-results/multi-host/multi-host-temporal-validation",
+            ),
         }
         for identity, paths in expected.items():
             resolved = result_layout.resolve_experiment_paths(self.layout, *identity)
@@ -67,6 +75,10 @@ class ResultLayoutTest(unittest.TestCase):
         self.assertEqual(
             self.layout["transfer_groups"]["experiment-c"]["experiments"],
             ["experiment-c", "experiment-c-temporal"],
+        )
+        self.assertEqual(
+            self.layout["transfer_groups"]["experiment-c-archive"]["experiments"],
+            ["experiment-c-archive", "experiment-c-temporal-archive"],
         )
 
     def test_unknown_or_wrong_producer_is_rejected(self) -> None:

@@ -24,9 +24,9 @@
         "additionalProperties": false,
         "required": ["scope", "platform", "execution_environment"],
         "properties": {
-          "scope": {"enum": ["machine", "host"]},
-          "platform": {"enum": ["macos", "linux", "windows"]},
-          "execution_environment": {"enum": ["native", "wsl2"]}
+          "scope": {"enum": ["machine", "host", "series"]},
+          "platform": {"enum": ["macos", "linux", "windows", "heterogeneous"]},
+          "execution_environment": {"enum": ["native", "wsl2", "distributed"]}
         }
       }
     },
@@ -108,7 +108,7 @@
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": {"enum": ["csv", "html", "json", "png", "svg"]}
+          "items": {"enum": ["csv", "html", "json", "md", "png", "svg"]}
         }
       }
     }

@@ -22,6 +22,10 @@ participants:
     scope: host
     platform: linux
     execution_environment: wsl2
+  multi-host-collector:
+    scope: series
+    platform: heterogeneous
+    execution_environment: distributed
 
 experiments:
   experiment-a:
@@ -59,6 +63,20 @@ experiments:
     producers: ["srv-01", "cli-01"]
     source: "{workspace}/results/{series}/hosts/{participant}"
     destination: "{workspace}/results/{series}/hosts/{participant}"
+  experiment-c-archive:
+    experiment: recipes/experiments/drone-fleet-performance/multi-host-scaling.yaml
+    workspace: "{workspaces}/drone-fleet-multi-host-scaling"
+    series: multi-host-scaling
+    producers: ["multi-host-collector"]
+    source: "{workspace}/results/{series}"
+    destination: "{collection}/multi-host/{series}"
+  experiment-c-temporal-archive:
+    experiment: recipes/experiments/drone-fleet-performance/multi-host-temporal-validation.yaml
+    workspace: "{workspaces}/drone-fleet-multi-host-temporal-validation"
+    series: multi-host-temporal-validation
+    producers: ["multi-host-collector"]
+    source: "{workspace}/results/{series}"
+    destination: "{collection}/multi-host/{series}"
 
 transfer_groups:
   experiment-a:
@@ -67,6 +85,8 @@ transfer_groups:
     experiments: ["experiment-b", "experiment-b-temporal"]
   experiment-c:
     experiments: ["experiment-c", "experiment-c-temporal"]
+  experiment-c-archive:
+    experiments: ["experiment-c-archive", "experiment-c-temporal-archive"]
 
 analysis:
   experiment-a-host-comparison:
@@ -85,10 +105,23 @@ analysis:
     formats: ["html", "svg", "png"]
   experiment-c-multi-host-scaling:
     inputs:
-      performance: "{workspaces}/drone-fleet-multi-host-scaling/results/multi-host-scaling"
-      temporal: "{workspaces}/drone-fleet-multi-host-temporal-validation/results/multi-host-temporal-validation"
-    output_directory: "{workspaces}/drone-fleet-multi-host-scaling/results/multi-host-scaling/summary/plots"
+      performance: "{collection}/multi-host/multi-host-scaling"
+      temporal: "{collection}/multi-host/multi-host-temporal-validation"
+    output_directory: "{collection}/multi-host/plots"
     output_stem: experiment-c-multi-host-scaling
     formats: ["html", "svg", "png"]
+  paper-results:
+    inputs:
+      experiment_a_mac: "{collection}/mac/single-process-scaling"
+      experiment_a_wsl2: "{collection}/wsl2/single-process-scaling"
+      experiment_b_mac: "{collection}/mac/multi-process-scaling"
+      experiment_b_wsl2: "{collection}/wsl2/multi-process-scaling"
+      experiment_c: "{collection}/multi-host/multi-host-scaling"
+      temporal_b_mac: "{collection}/mac/single-host-temporal-validation"
+      temporal_b_wsl2: "{collection}/wsl2/single-host-temporal-validation"
+      temporal_c: "{collection}/multi-host/multi-host-temporal-validation"
+    output_directory: "{collection}/paper"
+    output_stem: drone-fleet-performance-results
+    formats: ["md", "json", "svg"]
 
-semantics: ["Paths are repository-relative and use forward slashes on every platform.", "Experiment A and B producers write the same local path independently; collection adds the machine dimension.", "Experiment C results already contain the host dimension; cli-01 is transferred into the matching server-side host path.", "Performance and Temporal Validation use separate series and are never aggregated as one performance dataset.", "This file is the path authority for result transfer and cross-machine analysis tools.", "Changing a measurement output root requires updating the corresponding experiment and analysis entries together."]
+semantics: ["Paths are repository-relative and use forward slashes on every platform.", "Experiment A and B producers write the same local path independently; collection adds the machine dimension.", "Experiment C results already contain the host dimension; cli-01 is transferred into the matching server-side host path before the complete series is archived.", "The multi-host collector archives both host trees and the server-generated summary as one immutable series dataset.", "Performance and Temporal Validation use separate series and are never aggregated as one performance dataset.", "This file is the path authority for result transfer and cross-machine analysis tools.", "Changing a measurement output root requires updating the corresponding experiment and analysis entries together."]

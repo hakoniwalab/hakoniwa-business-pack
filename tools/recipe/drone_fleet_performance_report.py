@@ -161,7 +161,10 @@ def _panel(
     y_label: str,
     log_scale: bool,
     reference: float | None = None,
+    reference_label: str | None = None,
     error_bars: bool = True,
+    y_min: float | None = None,
+    y_max: float | None = None,
 ) -> list[str]:
     left = x + 74
     top = y + 42
@@ -180,8 +183,8 @@ def _panel(
     if log_scale:
         if min(values) <= 0:
             raise ReportError(f"log panel {metric} contains a non-positive value")
-        low = 10 ** math.floor(math.log10(min(values)))
-        high = 10 ** math.ceil(math.log10(max(values)))
+        low = y_min if y_min is not None else 10 ** math.floor(math.log10(min(values)))
+        high = y_max if y_max is not None else 10 ** math.ceil(math.log10(max(values)))
         if math.isclose(low, high):
             high = low * 10
         transform_y = lambda value: top + plot_height * (
@@ -189,7 +192,7 @@ def _panel(
         ) / (math.log10(high) - math.log10(low))
         ticks = [10.0**power for power in range(math.floor(math.log10(low)), math.ceil(math.log10(high)) + 1)]
     else:
-        low = 0.0
+        low = y_min if y_min is not None else 0.0
         maximum = max(values)
         raw_step = maximum * 1.1 / 4 if maximum > 0 else 0.25
         magnitude = 10 ** math.floor(math.log10(raw_step))
@@ -205,7 +208,7 @@ def _panel(
         else:
             nice_fraction = 10
         step = nice_fraction * magnitude
-        high = step * max(4, math.ceil(maximum / step))
+        high = y_max if y_max is not None else step * max(4, math.ceil(maximum / step))
         transform_y = lambda value: top + plot_height * (high - value) / (high - low)
         ticks = [step * index for index in range(round(high / step) + 1)]
     x_positions = {
@@ -221,7 +224,8 @@ def _panel(
     if reference is not None and low <= reference <= high:
         ref_y = transform_y(reference)
         parts.append(f'<line x1="{left:.1f}" y1="{ref_y:.1f}" x2="{left + plot_width:.1f}" y2="{ref_y:.1f}" class="reference"/>')
-        parts.append(_svg_text(left + plot_width - 4, ref_y - 7, f"{metric.upper()} = {reference:g}", "reference-label", "end"))
+        label = reference_label or f"{metric.upper()} = {reference:g}"
+        parts.append(_svg_text(left + plot_width - 4, ref_y - 7, label, "reference-label", "end"))
     parts.append(f'<line x1="{left:.1f}" y1="{top:.1f}" x2="{left:.1f}" y2="{top + plot_height:.1f}" class="axis"/>')
     parts.append(f'<line x1="{left:.1f}" y1="{top + plot_height:.1f}" x2="{left + plot_width:.1f}" y2="{top + plot_height:.1f}" class="axis"/>')
     for value in x_values:

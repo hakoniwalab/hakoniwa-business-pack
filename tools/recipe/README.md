@@ -14,6 +14,9 @@ Experiment A/B/Cの取得、構築、実行、result収集、グラフ生成、�
 A/Bのcross-machine比較とCのmulti-host reportは
 `drone_fleet_performance_report.py`で生成します。入力・出力パスは
 `configs/result-layouts/drone-fleet-performance.yaml`から解決されます。
+収集済みA/B/Cを論文向けの`T_step`図、主要表、Markdownへ一括変換するときは
+`drone_fleet_performance_paper.py`を使用します。Markdown構成の正本は
+`templates/drone-fleet-performance-paper.md`です。
 
 ブラウザ表示用のDrone Fleetデモとは分離し、可視化なし、実時間同期なしで
 測定します。単一条件の確認では、Business Pack workspaceへ入ってから次を

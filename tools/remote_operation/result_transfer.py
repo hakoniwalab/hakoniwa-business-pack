@@ -35,6 +35,10 @@ SUMMARY_NAMES = {
     "experiment-b": "experiment-b.json",
     "experiment-b-temporal": "temporal-b.json",
 }
+SUMMARY_GLOBS = {
+    "experiment-c-archive": "multi-host-scaling-sleep-*-matrix.json",
+    "experiment-c-temporal-archive": "multi-host-temporal-sleep-*-uav-*.json",
+}
 
 
 class ResultTransferError(RuntimeError):
@@ -87,13 +91,25 @@ def _validate_result_identities(
     producer: str,
     participant_scope: str,
 ) -> int:
-    results = sorted(source.glob("*/attempt-*/result.json"))
+    if participant_scope == "series":
+        results = sorted(source.glob("hosts/*/*/attempt-*/result.json"))
+    else:
+        results = sorted(source.glob("*/attempt-*/result.json"))
     if not results:
         raise ResultTransferError(f"result source contains no attempt result.json: {source}")
+    run_hosts: dict[tuple[str, int], set[str]] = {}
     for path in results:
         relative = path.relative_to(source)
-        configuration_id = relative.parts[-3]
-        attempt_name = relative.parts[-2]
+        if participant_scope == "series":
+            if len(relative.parts) != 5 or relative.parts[0] != "hosts":
+                raise ResultTransferError(f"invalid multi-host result path: {path}")
+            host_id = relative.parts[1]
+            configuration_id = relative.parts[2]
+            attempt_name = relative.parts[3]
+        else:
+            host_id = producer
+            configuration_id = relative.parts[-3]
+            attempt_name = relative.parts[-2]
         try:
             attempt = int(attempt_name.removeprefix("attempt-"))
         except ValueError as exc:
@@ -107,14 +123,32 @@ def _validate_result_identities(
             "configuration_id": configuration_id,
             "attempt": attempt,
         }
-        if participant_scope == "host":
-            expected["host_id"] = producer
+        if participant_scope in {"host", "series"}:
+            expected["host_id"] = host_id
         for field, value in expected.items():
             if metadata.get(field) != value:
                 raise ResultTransferError(
                     f"result {field} mismatch in {path}: "
                     f"{metadata.get(field)!r} != {value!r}"
                 )
+        if participant_scope == "series":
+            run_hosts.setdefault((configuration_id, attempt), set()).add(host_id)
+    if participant_scope == "series":
+        all_hosts = set().union(*run_hosts.values())
+        if len(all_hosts) < 2:
+            raise ResultTransferError(
+                f"multi-host result series contains fewer than two hosts: {source}"
+            )
+        incomplete = [
+            f"{configuration}/attempt-{attempt:02d}"
+            for (configuration, attempt), hosts in run_hosts.items()
+            if hosts != all_hosts
+        ]
+        if incomplete:
+            raise ResultTransferError(
+                "multi-host result series has unpaired host results: "
+                + ", ".join(incomplete)
+            )
     return len(results)
 
 
@@ -132,6 +166,16 @@ def _validate_source(
         payload = _json(summary)
         if payload.get("complete") is not True:
             raise ResultTransferError(f"result summary is incomplete: {summary}")
+    summary_glob = SUMMARY_GLOBS.get(experiment_id)
+    if summary_glob is not None:
+        summaries = sorted((source / "summary").glob(summary_glob))
+        if len(summaries) != 1:
+            raise ResultTransferError(
+                f"result series must contain exactly one {summary_glob} summary: {source}"
+            )
+        payload = _json(summaries[0])
+        if payload.get("complete") is not True:
+            raise ResultTransferError(f"result summary is incomplete: {summaries[0]}")
     return _validate_result_identities(
         source,
         series=series,

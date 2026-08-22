@@ -227,6 +227,60 @@ class ResultTransferTest(unittest.TestCase):
             "hakoniwa-performance-result-transfer-group",
         )
 
+    def test_series_scope_requires_paired_hosts_and_complete_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "multi-host-scaling"
+            for host_id in ("srv-01", "cli-01"):
+                attempt = source / "hosts" / host_id / "uav-064" / "attempt-01"
+                attempt.mkdir(parents=True)
+                (attempt / "result.json").write_text(
+                    json.dumps(
+                        {
+                            "status": "success",
+                            "metadata": {
+                                "series": "multi-host-scaling",
+                                "configuration_id": "uav-064",
+                                "attempt": 1,
+                                "host_id": host_id,
+                            },
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+            summary = source / "summary"
+            summary.mkdir()
+            (summary / "multi-host-scaling-sleep-001ms-matrix.json").write_text(
+                '{"complete":true}\n', encoding="utf-8"
+            )
+            self.assertEqual(
+                result_transfer._validate_source(
+                    source,
+                    experiment_id="experiment-c-archive",
+                    series="multi-host-scaling",
+                    producer="multi-host-collector",
+                    participant_scope="series",
+                ),
+                2,
+            )
+            (
+                source
+                / "hosts"
+                / "cli-01"
+                / "uav-064"
+                / "attempt-01"
+                / "result.json"
+            ).unlink()
+            with self.assertRaisesRegex(
+                result_transfer.ResultTransferError, "fewer than two hosts"
+            ):
+                result_transfer._validate_source(
+                    source,
+                    experiment_id="experiment-c-archive",
+                    series="multi-host-scaling",
+                    producer="multi-host-collector",
+                    participant_scope="series",
+                )
+
     def group_fixture(self, root: Path, *, temporal: bool = True):
         layout_path, _layout, performance, source, destination = self.fixture(root)
         temporal_source = root / "work" / "results" / "single-host-temporal-validation"

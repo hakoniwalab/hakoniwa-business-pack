@@ -356,6 +356,45 @@ results/multi-host-scaling/summary/
 └── multi-host-scaling-sleep-001ms-matrix.{json,csv}
 ```
 
+### Final result collection
+
+The `work/recipes/.../results` directories are execution workspaces, not the
+final archive. After Experiment A, B, C, and their temporal validations have
+finished, run the repository-owned collector once on `srv-01` (Mac):
+
+```bash
+python3 tools/workspace.py run -- \
+  python3 tools/recipe/drone_fleet_performance_collect.py collect
+```
+
+The collector performs three distinct operations:
+
+1. publishes the local Mac A/B results into `exp-results/mac`;
+2. verifies the WSL2 A/B results that were previously transferred into
+   `exp-results/wsl2`;
+3. publishes both C host trees and the server-generated summaries into the
+   following series archives:
+
+```text
+exp-results/multi-host/
+├── multi-host-scaling/
+│   ├── hosts/srv-01/
+│   ├── hosts/cli-01/
+│   └── summary/
+└── multi-host-temporal-validation/
+    ├── hosts/srv-01/
+    ├── hosts/cli-01/
+    └── summary/
+```
+
+Successful finalization writes `exp-results/collection-manifest.json`. The
+manifest records all eight canonical datasets, their result/file counts, and a
+SHA-256 tree identity. Collection is fail-closed: incomplete summaries,
+unpaired C host attempts, invalid result identities, and differing existing
+destinations are rejected. Re-running the command is safe; byte-identical
+destinations are reported as `SKIPPED_EXISTING_IDENTICAL` and are not
+overwritten.
+
 Equal allocation resolves each condition across `srv-01` and
 `cli-01`; their Experiment B-derived process policy is 6 and 12 processes
 respectively. This differs from the legacy connectivity baseline, which used

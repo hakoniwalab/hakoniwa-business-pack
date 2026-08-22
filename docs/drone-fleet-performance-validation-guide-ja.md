@@ -511,11 +511,13 @@ configs/result-layouts/drone-fleet-performance.yaml
 | A | `mac`, `wsl2` | `exp-results/<machine>/single-process-scaling` |
 | B | `mac`, `wsl2` | `exp-results/<machine>/multi-process-scaling` |
 | B Temporal | `mac`, `wsl2` | `exp-results/<machine>/single-host-temporal-validation` |
-| C | `srv-01`, `cli-01` | server workspace内の`<series>/hosts/<host-id>` |
-| C Temporal | `srv-01`, `cli-01` | server workspace内のtemporal `<series>/hosts/<host-id>` |
+| C | `srv-01`, `cli-01` | `exp-results/multi-host/multi-host-scaling` |
+| C Temporal | `srv-01`, `cli-01` | `exp-results/multi-host/multi-host-temporal-validation` |
 
 A/Bは各machineが同じlocal pathを持つため、収集時にmachine dimensionを追加する。
 Cはraw result自身がhost dimensionを持つため、その構造を維持する。
+実行中はserver workspaceをcanonicalな作業場所とし、測定完了後に両hostとsummaryを
+series単位で`exp-results/multi-host/`へ収集する。
 
 ### 8.1 AVAILABLE: 共通result transfer tool
 
@@ -610,6 +612,27 @@ receiverはarchive全体のhash検証だけでは成功を返さない。manifes
 Experiment/layout hash、result内のseries/configuration/attempt/host identityを検証し、
 canonical destinationへのgroup publishが完了してから`VERIFIED`を返す。sourceが存在するが
 summary不完全、identity不一致、hash不一致の場合はSKIPせずgroup全体を失敗させる。
+
+### 8.2 AVAILABLE: 全実験の一括collect
+
+全測定後は次の1コマンドをMac側で実行する。
+
+```bash
+python3 tools/workspace.py run -- \
+  python3 tools/recipe/drone_fleet_performance_collect.py collect
+```
+
+このコマンドは次を一括実行する。
+
+1. MacのExperiment A/B/Temporal Bを`exp-results/mac/`へpublishする。
+2. 転送済みのWSL2 Experiment A/B/Temporal Bを検証する。
+3. Experiment C/Temporal Cの両host raw resultとserver生成summaryを
+   `exp-results/multi-host/`へpublishする。
+4. 全8 datasetのresult identity、summary complete、file hashを検証する。
+5. `exp-results/collection-manifest.json`へ最終保存manifestを出力する。
+
+既存destinationが全file同一ならSKIPし、1ファイルでも異なれば上書きせず失敗する。
+したがって、再実行可能だが測定データを暗黙に置換しない。
 
 ## 9. グラフ生成
 
@@ -749,9 +772,57 @@ manifestには次を含める。
 出力directory、stem、formatもresult layoutの`analysis`が正本である。現在のC出力は次になる。
 
 ```text
-work/recipes/drone-fleet-multi-host-scaling/results/
-multi-host-scaling/summary/plots/experiment-c-multi-host-scaling.{html,svg,png}
+exp-results/multi-host/plots/
+experiment-c-multi-host-scaling.{html,svg,png}
 ```
+
+### 9.3 論文用Markdown・図・表の一括生成
+
+監査用のExperiment別HTMLとは別に、収集済みofficial datasetから論文へ転記する
+数値、Figure 3〜5、主要表を一括生成できる。
+
+```bash
+python3 tools/workspace.py run -- \
+  python3 tools/recipe/drone_fleet_performance_paper.py --png
+```
+
+入力は`configs/result-layouts/drone-fleet-performance.yaml`から解決し、A/B/Cと
+Temporal Validationのsummaryが未配置または未完の場合はfail-closedとする。出力は
+次に生成される。
+
+```text
+exp-results/paper/
+├── drone-fleet-performance-results.md
+├── drone-fleet-performance-results-values.json
+├── drone-fleet-performance-results-manifest.json
+└── figures/
+    ├── figure-3-single-process.{svg,png}
+    ├── figure-4-multi-process.{svg,png}
+    └── figure-5-multi-host.{svg,png}
+```
+
+`--png`を省略した場合もMarkdownとSVGは生成する。Markdownの構成はGit管理された
+`tools/recipe/templates/drone-fleet-performance-paper.md`を正本とし、生成済みMarkdownを
+直接編集しない。論文固有の文章を変更するときはテンプレートを修正し、再生成する。
+
+論文用Figureは次の契約を持つ。
+
+- Figure 3: AのUAV数と`T_step`、Mac/WSL2比較、線形軸、`T_step = 1 ms`境界
+- Figure 4: Bのprocess数と`T_step`、host別2 panel・線形軸、32/64/128 UAV、medianとmin/max
+- Figure 5: Cのtotal UAVと`T_step`、線形軸、Mac 6 processes・WSL2 12 processesの対応half-workload参照
+- Cの参照線はBとCのcoordination profile差を含むため、strict speedup baselineとは扱わない
+- B resource表: 各host/workloadのp=1から観測最良processへのCPU平均・memory GiBの変化
+- C resource表: total UAVごとのMac/WSL2別CPU平均・memory GiBのmedian
+- CPUはwhole-machine値として同一host内の変化だけを解釈し、host間の正規化性能値とは扱わない
+- memoryは搭載量の違いを避けるためpercentageではなくGiBを主表示する
+- Temporal Validationは同値を並べる図にせず、Markdown表として出力する
+
+`drone-fleet-performance-results-values.json`はMarkdownへ丸める前の派生値を保存する。
+manifestにはtemplate、layout、入力summary、出力fileのSHA-256と集計規則を記録する。
+resource表が参照した各attemptの`result.json`もmanifest inputへ含める。生成Markdownの
+`Table field definitions`は各列の定義、集計単位、比較可能範囲を説明する。
+Figure 3〜5の番号は現行論文骨子との対応であり、論文構成変更時はtemplateと本節を
+同時に更新する。
 
 ## 10. 測定条件とYAMLの対応
 

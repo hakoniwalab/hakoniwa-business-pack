@@ -31,7 +31,7 @@
       "required": ["experiment_id", "participant_scope", "series", "source", "destination", "experiment", "files"],
       "properties": {
         "experiment_id": {"$ref": "#/$defs/experimentId"},
-        "participant_scope": {"enum": ["machine", "host"]},
+        "participant_scope": {"enum": ["machine", "host", "series"]},
         "series": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
         "source": {"$ref": "#/$defs/relativePath"},
         "destination": {"$ref": "#/$defs/relativePath"},
@@ -57,7 +57,7 @@
         "kind": {"const": "hakoniwa-performance-result-transfer"},
         "experiment_id": {"$ref": "#/$defs/experimentId"},
         "producer_id": {"$ref": "#/$defs/producerId"},
-        "participant_scope": {"enum": ["machine", "host"]},
+        "participant_scope": {"enum": ["machine", "host", "series"]},
         "series": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
         "source": {"$ref": "#/$defs/relativePath"},
         "destination": {"$ref": "#/$defs/relativePath"},
