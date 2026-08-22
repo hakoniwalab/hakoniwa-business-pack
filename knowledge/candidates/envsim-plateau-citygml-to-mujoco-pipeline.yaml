@@ -102,7 +102,7 @@ tracking:
     - repository: hakoniwalab/hakoniwa-envsim
       number: 7
       relation: fix
-      status: open
+      status: closed
     - repository: hakoniwalab/hakoniwa-business-pack
       number: 145
       relation: validation
@@ -110,7 +110,7 @@ tracking:
     - repository: hakoniwalab/hakoniwa-business-pack
       number: 146
       relation: validation
-      status: open
+      status: closed
 
 promotion_targets:
   catalog:
@@ -152,7 +152,7 @@ resolution:
     - repository: hakoniwalab/hakoniwa-envsim
       issue: 7
       pull_request: null
-      revision: cb908db523615998ba6fc99697283a87b1693c80
+      revision: ec02aa3764bbde40244d754423726eeccce23b87
     - repository: hakoniwalab/hakoniwa-business-pack
       issue: 145
       pull_request: null
@@ -160,7 +160,7 @@ resolution:
     - repository: hakoniwalab/hakoniwa-business-pack
       issue: 146
       pull_request: null
-      revision: "2550931"
+      revision: eea127170cf35694397c49ce077940f9bc2841ed
   verified: true
   promoted_to:
     - catalog/components/hakoniwa-envsim.yaml
