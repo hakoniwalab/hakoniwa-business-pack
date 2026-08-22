@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib.util
 import io
 import json
 import math
@@ -46,6 +45,19 @@ def root() -> Path:
 
 def recipe_file() -> Path:
     return root() / "recipes" / "examples" / f"{RECIPE_ID}.yaml"
+
+
+def python_requirements_file() -> Path:
+    return root() / "recipes" / "requirements" / f"{RECIPE_ID}.txt"
+
+
+def python_environment() -> Path:
+    return paths().root / "python"
+
+
+def recipe_python() -> Path:
+    relative = Path("Scripts/python.exe") if os.name == "nt" else Path("bin/python")
+    return python_environment() / relative
 
 
 def paths() -> RecipePaths:
@@ -210,7 +222,34 @@ def validate_selection_coverage(selection_path: Path, contract: dict[str, Any]) 
     return {"buildings": len(polygons), "center_buildings": center_count}
 
 
+def install_python_requirements() -> Path:
+    requirements = _required(python_requirements_file(), "Recipe Python requirements")
+    python = recipe_python()
+    if not python.is_file():
+        environment = python_environment()
+        environment.parent.mkdir(parents=True, exist_ok=True)
+        command = [sys.executable, "-m", "venv", str(environment)]
+        print(">", subprocess.list2cmdline(command), flush=True)
+        completed = subprocess.run(command, cwd=root(), check=False)
+        if completed.returncode:
+            raise RecipeError(
+                "Recipe Python environment creation failed: "
+                f"interpreter={sys.executable}, exit={completed.returncode}"
+            )
+    command = [str(python), "-m", "pip", "install", "-r", str(requirements)]
+    print(">", subprocess.list2cmdline(command), flush=True)
+    completed = subprocess.run(command, cwd=root(), check=False)
+    if completed.returncode:
+        raise RecipeError(
+            "Recipe Python dependency installation failed: "
+            f"interpreter={python}, exit={completed.returncode}"
+        )
+    print(f"OK: Recipe Python: {python}")
+    return python
+
+
 def configure() -> int:
+    python = install_python_requirements()
     data = _load_recipe()["plateau_citygml"]
     origin = read_map_origin(map_viewer_root())
     recipe_paths = paths()
@@ -236,7 +275,7 @@ def configure() -> int:
         json.dumps(contract, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     completed = subprocess.run(
-        [sys.executable, str(envsim_root() / "tools" / "hako.py"), "configure", "--config", str(manifest)],
+        [str(python), str(envsim_root() / "tools" / "hako.py"), "configure", "--config", str(manifest)],
         cwd=envsim_root(), check=False,
     )
     if completed.returncode:
@@ -253,14 +292,14 @@ def configure() -> int:
 def doctor() -> int:
     recipe_paths = paths()
     manifest = recipe_paths.config / "hakoniwa-envsim-build.yaml"
-    if not manifest.is_file() and configure() != 0:
+    if (not manifest.is_file() or not recipe_python().is_file()) and configure() != 0:
         return 1
     origin = read_map_origin(map_viewer_root())
     location = read_drone_simulation_location(drone_core_root())
     if math.isclose(origin["longitude"], location["longitude"], abs_tol=1e-10):
         raise RecipeError("Map Viewer origin unexpectedly equals Drone simulation.location")
     completed = subprocess.run(
-        [sys.executable, str(envsim_root() / "tools" / "hako.py"), "doctor", "--config", str(manifest)],
+        [str(recipe_python()), str(envsim_root() / "tools" / "hako.py"), "doctor", "--config", str(manifest)],
         cwd=envsim_root(), check=False,
     )
     if completed.returncode:
@@ -275,7 +314,7 @@ def build(offline: bool = False) -> int:
         return 1
     recipe_paths = paths()
     manifest = recipe_paths.config / "hakoniwa-envsim-build.yaml"
-    command = [sys.executable, str(envsim_root() / "tools" / "hako.py"), "build", "--config", str(manifest)]
+    command = [str(recipe_python()), str(envsim_root() / "tools" / "hako.py"), "build", "--config", str(manifest)]
     if offline:
         command.append("--offline")
     completed = subprocess.run(
@@ -416,16 +455,7 @@ def compare_building_geoms(actual_xml: Path, expected_xml: Path, tolerance: floa
 
 
 def regression() -> int:
-    missing_packages = [
-        module for module in ("numpy", "pyproj", "shapely")
-        if importlib.util.find_spec(module) is None
-    ]
-    if missing_packages:
-        raise RecipeError(
-            "historical regression requires deterministic projection and convex-hull "
-            f"dependencies ({', '.join(missing_packages)} missing); run: "
-            "python -m pip install -r recipes/requirements/plateau-citygml-mujoco-walls.txt"
-        )
+    python = install_python_requirements()
     recipe = _load_recipe()["plateau_citygml"]
     config = recipe["regression"]
     origin = read_map_origin(map_viewer_root())
@@ -452,9 +482,9 @@ def regression() -> int:
     lod1 = regression_root / "shibuya-reference-lod1.json"
     walls = regression_root / "shibuya-reference-walls.json"
     generated = regression_root / "shibuya-reference.xml"
-    _run([sys.executable, str(legacy_pipeline["lod1_extract"]), "--in", str(source_root), "--out", str(lod1), "--to-epsg", "6677", "--src-epsg", "4326"], regression_root)
-    _run([sys.executable, str(legacy_pipeline["wall_convert"]), "--in", str(lod1), "--out", str(walls), "--waste-threshold", "1.0", "--wall-thickness", "0.1"], regression_root)
-    _run([sys.executable, str(legacy_pipeline["mjcf_convert"]), "--inp", str(walls), "--out", str(generated)], regression_root)
+    _run([str(python), str(legacy_pipeline["lod1_extract"]), "--in", str(source_root), "--out", str(lod1), "--to-epsg", "6677", "--src-epsg", "4326"], regression_root)
+    _run([str(python), str(legacy_pipeline["wall_convert"]), "--in", str(lod1), "--out", str(walls), "--waste-threshold", "1.0", "--wall-thickness", "0.1"], regression_root)
+    _run([str(python), str(legacy_pipeline["mjcf_convert"]), "--inp", str(walls), "--out", str(generated)], regression_root)
 
     reference = _required(drone_core_root() / config["reference_drone_xml"], "Drone Core Shibuya reference XML")
     result = compare_building_geoms(generated, reference, float(config["numeric_tolerance"]))
@@ -489,8 +519,9 @@ def regression() -> int:
 
 
 def smoke() -> int:
+    python = install_python_requirements()
     completed = subprocess.run(
-        [sys.executable, str(envsim_root() / "tools" / "hako.py"), "smoke"],
+        [str(python), str(envsim_root() / "tools" / "hako.py"), "smoke"],
         cwd=envsim_root(), check=False,
     )
     return completed.returncode

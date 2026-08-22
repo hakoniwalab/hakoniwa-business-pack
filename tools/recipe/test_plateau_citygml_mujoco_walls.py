@@ -19,6 +19,37 @@ SPEC.loader.exec_module(recipe)
 
 
 class PlateauCityGmlMujocoWallsTest(unittest.TestCase):
+    def test_configure_creates_recipe_venv_and_installs_requirements(self):
+        completed = mock.Mock(returncode=0)
+        managed_python = Path("/recipe/python/bin/python")
+        with (
+            mock.patch.object(recipe, "python_requirements_file", return_value=Path(__file__)),
+            mock.patch.object(recipe, "recipe_python", return_value=managed_python),
+            mock.patch.object(recipe, "python_environment", return_value=Path("/recipe/python")),
+            mock.patch.object(Path, "is_file", return_value=False),
+            mock.patch.object(Path, "mkdir"),
+            mock.patch.object(recipe.subprocess, "run", return_value=completed) as run,
+        ):
+            result = recipe.install_python_requirements()
+        self.assertEqual(result, managed_python)
+        self.assertEqual(
+            [call.args[0] for call in run.call_args_list],
+            [
+                [sys.executable, "-m", "venv", "/recipe/python"],
+                [str(managed_python), "-m", "pip", "install", "-r", str(Path(__file__))],
+            ],
+        )
+
+    def test_python_requirement_install_failure_is_actionable(self):
+        completed = mock.Mock(returncode=7)
+        with (
+            mock.patch.object(recipe, "python_requirements_file", return_value=Path(__file__)),
+            mock.patch.object(recipe, "recipe_python", return_value=Path(__file__)),
+            mock.patch.object(recipe.subprocess, "run", return_value=completed),
+            self.assertRaisesRegex(recipe.RecipeError, "dependency installation failed"),
+        ):
+            recipe.install_python_requirements()
+
     def test_selection_coverage_rejects_an_empty_center(self):
         with tempfile.TemporaryDirectory() as temporary:
             selection = Path(temporary) / "selection.json"

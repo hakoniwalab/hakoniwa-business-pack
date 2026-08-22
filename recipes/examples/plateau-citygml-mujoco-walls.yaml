@@ -59,7 +59,7 @@ validation:
           revision: ec02aa3764bbde40244d754423726eeccce23b87
       notes:
         - The 2025 API response selected five CityGML files covering all three intersecting third-level meshes across Shibuya and Minato wards.
-        - The one-kilometer selection produced 1863 MuJoCo building geoms at the default compact OBB threshold; 40 building footprints have centroids within the center +/-100m square.
+        - The one-kilometer selection contained 1863 buildings and produced 8783 MuJoCo geoms at waste_threshold 0.1; 40 building footprints have centroids within the center +/-100m square.
         - The overlapping municipality data contained 1850 byte-equivalent building records, which were deduplicated by authoritative CityGML ID.
         - Direct GLB generation used textured LOD2 geometry for 653 buildings and LOD1 solid fallback for 1210 buildings, producing 171365 triangles in 2333 meshes.
         - Only the 2332 textures referenced by selected LOD2 surfaces were downloaded and embedded; the resulting GLB was approximately 176 MB.
@@ -164,8 +164,8 @@ plateau_citygml:
     minimum_center_buildings: 10
   geometry:
     base_epsilon_m: 0.2
-    # Empty fraction inside the building OBB. 1.0 keeps the minimum-data OBB representation.
-    waste_threshold: 1.0
+    # Use boundary walls when more than 10% of the OBB would be empty space.
+    waste_threshold: 0.1
     wall_thickness_m: 0.1
   mjcf:
     model_name: plateau_shibuya_1km
@@ -273,17 +273,13 @@ missing_pieces:
   - Promote artifact-set status to verified only after the Recipe evidence is reproduced from a clean checkout.
 
 demo:
-  prerequisites:
-    - id: install_python_dependencies
-      command: python -m pip install -r recipes/requirements/plateau-citygml-mujoco-walls.txt
-      expected: Install the current Envsim and pinned historical regression dependencies.
   steps:
     - id: materialize_sources
       command: python tools/recipe.py configure --recipe recipes/examples/plateau-citygml-mujoco-walls.yaml
       expected: Clone or reuse Envsim, Map Viewer, and Drone Core sources and validate their required artifacts.
     - id: generate_manifest
       command: python tools/recipe/plateau_citygml_mujoco_walls.py configure
-      expected: Derive the Map Viewer origin and write the Recipe-local Envsim build manifest.
+      expected: Create the managed Recipe Python environment, install its declared dependencies, derive the Map Viewer origin, and write the Recipe-local Envsim build manifest.
     - id: inspect
       command: python tools/recipe/plateau_citygml_mujoco_walls.py doctor
       expected: Confirm the origin contract, reject Drone simulation.location as the city origin, and validate Envsim readiness.
