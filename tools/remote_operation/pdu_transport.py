@@ -77,6 +77,68 @@ def write_tcp_endpoint_config(
     return endpoint_path
 
 
+def write_websocket_endpoint_config(
+    directory: Path,
+    *,
+    role: str,
+    address: str,
+    port: int,
+) -> Path:
+    """Write a Core-free WebSocket Endpoint configuration.
+
+    A browser normally connects to the ``server`` role.  The generated wire
+    contract is v2, matching ``hakoniwa-pdu-javascript``.
+    """
+
+    if role not in {"server", "client"}:
+        raise TransportError("role must be server or client")
+    if not isinstance(address, str) or not address:
+        raise TransportError("address must be a non-empty string")
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        raise TransportError("port must be an integer from 1 through 65535")
+
+    directory.mkdir(parents=True, exist_ok=True)
+    endpoint_path = directory / "endpoint.json"
+    cache_path = directory / "cache.json"
+    comm_path = directory / "comm.json"
+    endpoint = {
+        "name": f"remote_operation_websocket_{role}",
+        "cache": cache_path.name,
+        "comm": comm_path.name,
+    }
+    cache = {
+        "type": "buffer",
+        "name": "remote_operation_websocket_queue",
+        "store": {"mode": "queue", "depth": 32},
+    }
+    comm: dict[str, Any] = {
+        "protocol": "websocket",
+        "name": f"remote_operation_websocket_{role}",
+        "direction": "inout",
+        "role": role,
+        "comm_raw_version": "v2",
+        "options": {
+            "connect_timeout_ms": 5000,
+            "read_timeout_ms": 0,
+            "write_timeout_ms": 5000,
+            "ping_interval_sec": 30,
+            "handshake_timeout_ms": 5000,
+        },
+    }
+    if role == "server":
+        comm["local"] = {"address": address, "port": port}
+    else:
+        comm["remote"] = {"address": address, "port": port}
+
+    for path, value in (
+        (endpoint_path, endpoint),
+        (cache_path, cache),
+        (comm_path, comm),
+    ):
+        path.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
+    return endpoint_path
+
+
 class PduJsonTransport:
     """Bidirectional JSON message transport over a Python PDU Endpoint."""
 

@@ -74,6 +74,14 @@ This package owns:
 - PDU Endpoint TCP configuration and byte transport;
 - durable JSON Lines communication logs.
 
+Domain protocols may reuse these transports without extending the performance
+experiment state machine. City World inspection and generation does so under
+`tools/remote_operation/city_world/`, with machine-readable contracts under
+`schemas/remote-operation/city-world/`. A browser can carry the same UTF-8 JSON
+bytes through `hakoniwa-pdu-javascript` and its WebSocket transport, while the
+Python worker injects the City World codec into `PduJsonTransport`. See
+`docs/city-world-generation-protocol-ja.md`.
+
 A consuming Recipe owns:
 
 - the fixed mapping from protocol commands to local operations;
@@ -381,6 +389,38 @@ Do not add an operation that evaluates a received command line, executable
 path, environment mapping, or arbitrary argument list. If a new operation is
 needed, add an enumerated protocol value, schema validation, state-transition
 tests, and a locally defined implementation.
+
+## City World browser job
+
+The City World vertical slice reuses this transport with a domain-specific
+codec. `hakoniwa-pdu-javascript` connects directly to a Core-free Python
+WebSocket Endpoint and sends `INSPECT_SELECTION`; the Worker returns
+`INSPECTING` followed by the normalized PLATEAU catalog result.
+
+- Protocol: `docs/city-world-generation-protocol-ja.md`
+- Schemas: `schemas/remote-operation/city-world/`
+- Worker: `tools/remote_operation/city_world/worker.py`
+- Browser smoke: `tools/remote_operation/city_world/web/`
+
+The browser first diagnoses a bounded PLATEAU selection without downloading
+the CityGML bodies. Only an available, unchanged inspection enables
+`Generate`; the Worker then rechecks coverage, runs the fixed Envsim profile
+under its own job directory, and returns a validated ZIP identity. Generated
+GLB/MJCF files are never carried in the control PDU.
+
+The generated-result selector is newest-first. It shows the server-relative
+job path, fetches the ZIP only after an explicit `Download ZIP` action, and
+loads the selected GLB in the on-page Three.js Viewer. The restricted static
+server exposes only validated generated ZIP/GLB assets, never arbitrary
+Workspace paths. See the protocol document for the job layout and run
+commands.
+
+The Viewer can show the Visual World, overlay its generated MJCF colliders, or
+show those colliders alone. The server generates a debug GLB from box, inline
+mesh, and terrain hfield geoms; the original MJCF remains the collision
+authority.
+
+This slice does not accept shell commands or arbitrary paths.
 
 ## Troubleshooting
 

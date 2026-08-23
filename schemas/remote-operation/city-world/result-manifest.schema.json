@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hakoniwa.dev/schemas/remote-operation/city-world/result-manifest.schema.json",
+  "title": "Hakoniwa City World result manifest",
+  "description": "The immutable identity and fixed logical entries of a generated City World ZIP artifact.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "job_id",
+    "request_sha256",
+    "inspection_sha256",
+    "artifact_name",
+    "media_type",
+    "size_bytes",
+    "sha256",
+    "entries"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "job_id": {"$ref": "#/$defs/identifier"},
+    "request_sha256": {"$ref": "#/$defs/sha256"},
+    "inspection_sha256": {"$ref": "#/$defs/sha256"},
+    "artifact_name": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.zip$"
+    },
+    "media_type": {"const": "application/zip"},
+    "size_bytes": {"type": "integer", "minimum": 1},
+    "sha256": {"$ref": "#/$defs/sha256"},
+    "entries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["visual_world", "physics_world", "dataset_validation", "world_receipt"],
+      "properties": {
+        "visual_world": {"const": "visual/city-world.glb"},
+        "physics_world": {"const": "physics/city-world.xml"},
+        "dataset_validation": {"const": "validation/dataset-validation.json"},
+        "world_receipt": {"const": "receipt/city-world-receipt.json"}
+      }
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

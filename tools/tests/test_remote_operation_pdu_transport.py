@@ -96,6 +96,23 @@ class RemoteOperationPduTransportTest(unittest.TestCase):
         self.assertNotIn("local", client_comm)
         self.assertNotIn("hakoniwa_core", json.dumps(server_endpoint) + json.dumps(server_comm))
 
+    def test_generated_websocket_server_matches_javascript_wire_v2(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            endpoint = pdu_transport.write_websocket_endpoint_config(
+                Path(temporary), role="server", address="0.0.0.0", port=54210,
+            )
+            endpoint_data = json.loads(endpoint.read_text(encoding="utf-8"))
+            comm = json.loads((endpoint.parent / "comm.json").read_text(encoding="utf-8"))
+            cache = json.loads((endpoint.parent / "cache.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(endpoint_data["comm"], "comm.json")
+        self.assertEqual(comm["protocol"], "websocket")
+        self.assertEqual(comm["role"], "server")
+        self.assertEqual(comm["direction"], "inout")
+        self.assertEqual(comm["comm_raw_version"], "v2")
+        self.assertEqual(comm["local"], {"address": "0.0.0.0", "port": 54210})
+        self.assertEqual(cache["store"], {"mode": "queue", "depth": 32})
+
     def test_transport_sends_and_receives_validated_json_bytes(self) -> None:
         fake = FakeEndpoint("unused", "unused")
         transport = pdu_transport.PduJsonTransport(

@@ -31,6 +31,10 @@ Examples:
 - `schemas/remote-operation/run-profile.schema.json` governs the shared,
   repository-managed invocation profile consumed by both experiment hosts,
   including its named baseline/extension attempt selection.
+- `schemas/remote-operation/city-world/` governs bounded PLATEAU selection
+  inspection, City World generation jobs, and their immutable result identity.
+  It deliberately excludes commands, executable paths, environments, and
+  caller-selected output paths.
 - `schemas/result-layouts/drone-fleet-performance.schema.json` governs the
   shared Experiment A/B/C result source, collection, and analysis paths.
 - `schemas/recipes/drone-fleet-performance/experiment.yaml` is the contract for

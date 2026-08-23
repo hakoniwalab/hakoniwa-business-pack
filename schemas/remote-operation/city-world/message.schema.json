@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hakoniwa.dev/schemas/remote-operation/city-world/message.schema.json",
+  "title": "Hakoniwa City World remote job message",
+  "description": "A bounded City World inspection and generation control message. Shell commands, executable paths, environment variables, and output paths are intentionally absent.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "protocol",
+    "kind",
+    "type",
+    "job_id",
+    "sequence",
+    "source_host",
+    "request_sha256"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "protocol": {"const": "hakoniwa.city-world-job"},
+    "kind": {"enum": ["command", "status"]},
+    "type": {
+      "enum": [
+        "INSPECT_SELECTION",
+        "GENERATE",
+        "CANCEL",
+        "INSPECTING",
+        "SELECTION_AVAILABLE",
+        "SELECTION_UNAVAILABLE",
+        "ACCEPTED",
+        "DOWNLOADING",
+        "GENERATING",
+        "VALIDATING",
+        "READY",
+        "CANCELED",
+        "FAILED"
+      ]
+    },
+    "job_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "sequence": {"type": "integer", "minimum": 1},
+    "source_host": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 63,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "request_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "inspection_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "request": {"$ref": "request.schema.json"},
+    "inspection": {"$ref": "inspection.schema.json"},
+    "result": {"$ref": "result-manifest.schema.json"},
+    "progress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["percent", "message"],
+      "properties": {
+        "percent": {"type": "integer", "minimum": 0, "maximum": 100},
+        "message": {"type": "string", "minLength": 1, "maxLength": 256}
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phase", "code", "message"],
+      "properties": {
+        "phase": {"type": "string", "pattern": "^[a-z][a-z0-9_-]*$", "maxLength": 64},
+        "code": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$", "maxLength": 64},
+        "message": {"type": "string", "minLength": 1, "maxLength": 2048}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"kind": {"const": "command"}}, "required": ["kind"]},
+      "then": {"properties": {"type": {"enum": ["INSPECT_SELECTION", "GENERATE", "CANCEL"]}}}
+    },
+    {
+      "if": {"properties": {"kind": {"const": "status"}}, "required": ["kind"]},
+      "then": {
+        "properties": {
+          "type": {
+            "enum": [
+              "INSPECTING",
+              "SELECTION_AVAILABLE",
+              "SELECTION_UNAVAILABLE",
+              "ACCEPTED",
+              "DOWNLOADING",
+              "GENERATING",
+              "VALIDATING",
+              "READY",
+              "CANCELED",
+              "FAILED"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"type": {"const": "INSPECT_SELECTION"}}, "required": ["type"]},
+      "then": {"required": ["request"]}
+    },
+    {
+      "if": {"properties": {"type": {"const": "GENERATE"}}, "required": ["type"]},
+      "then": {"required": ["request", "inspection_sha256"]}
+    },
+    {
+      "if": {
+        "properties": {"type": {"enum": ["SELECTION_AVAILABLE", "SELECTION_UNAVAILABLE"]}},
+        "required": ["type"]
+      },
+      "then": {"required": ["inspection"]}
+    },
+    {
+      "if": {"properties": {"type": {"const": "READY"}}, "required": ["type"]},
+      "then": {"required": ["inspection_sha256", "result"]}
+    },
+    {
+      "if": {"properties": {"type": {"const": "FAILED"}}, "required": ["type"]},
+      "then": {"required": ["error"]}
+    },
+    {
+      "if": {
+        "properties": {"type": {"enum": ["INSPECT_SELECTION", "GENERATE"]}},
+        "required": ["type"]
+      },
+      "else": {"not": {"required": ["request"]}}
+    },
+    {
+      "if": {
+        "properties": {"type": {"enum": ["SELECTION_AVAILABLE", "SELECTION_UNAVAILABLE"]}},
+        "required": ["type"]
+      },
+      "else": {"not": {"required": ["inspection"]}}
+    },
+    {
+      "if": {"properties": {"type": {"const": "READY"}}, "required": ["type"]},
+      "else": {"not": {"required": ["result"]}}
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {"enum": ["ACCEPTED", "DOWNLOADING", "GENERATING", "VALIDATING"]}
+        },
+        "required": ["type"]
+      },
+      "else": {"not": {"required": ["progress"]}}
+    },
+    {
+      "if": {"properties": {"type": {"const": "FAILED"}}, "required": ["type"]},
+      "else": {"not": {"required": ["error"]}}
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "enum": ["GENERATE", "ACCEPTED", "DOWNLOADING", "GENERATING", "VALIDATING", "READY"]
+          }
+        },
+        "required": ["type"]
+      },
+      "else": {"not": {"required": ["inspection_sha256"]}}
+    }
+  ]
+}
