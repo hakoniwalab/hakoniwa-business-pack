@@ -195,6 +195,28 @@ class CityWorldInspectionTest(unittest.TestCase):
         ])
         self.assertEqual(emitted, statuses)
 
+    def test_default_download_limit_accepts_dense_city_catalog_estimate(self) -> None:
+        inspected = inspection.inspect_request(
+            request(), plateau_client=FakePlateauClient,
+            fetched_at=lambda: datetime(2026, 8, 23, tzinfo=timezone.utc),
+        )
+        inspected["estimated_download_bytes"] = 3 * 1024 * 1024 * 1024
+        command_value = generate_command(inspected)
+        generated = []
+
+        def fake_generator(command_arg, _inspection_arg, _progress):
+            generated.append(command_arg["job_id"])
+            return result_manifest(command_arg)
+
+        statuses = worker.handle_generate_command(
+            command_value,
+            inspection=inspected,
+            inspector=lambda _request: inspected,
+            generator=fake_generator,
+        )
+        self.assertEqual(statuses[-1]["type"], "READY")
+        self.assertEqual(generated, ["numazu-smoke-001"])
+
     def test_worker_rejects_generate_without_prior_inspection(self) -> None:
         inspected = inspection.inspect_request(
             request(), plateau_client=FakePlateauClient,

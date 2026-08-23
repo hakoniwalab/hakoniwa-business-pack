@@ -224,6 +224,11 @@ python3 tools/workspace.py run -- \
   --port 54210
 ```
 
+Workerは、PLATEAU catalogの推定取得量がデフォルトの8 GiBを超えるGenerateを
+開始前に拒否する。運用環境のディスク容量やネットワーク条件に合わせて、
+`--max-download-gib <GiB>`でこの安全上限を明示的に変更できる。選択範囲自体は
+request schemaの上限（各方向のhalf extent 1000 m）でも制限される。
+
 Terminal 2（限定static server）:
 
 ```bash

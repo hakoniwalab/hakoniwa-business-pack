@@ -22,6 +22,7 @@ from .protocol import (
 
 PDU_ROBOT = "hako_city_world_job"
 PDU_CHANNEL_ID = 1
+DEFAULT_MAX_DOWNLOAD_BYTES = 8 * 1024 * 1024 * 1024
 
 
 def _status(command: dict[str, Any], message_type: str, sequence: int, **payload: Any) -> dict[str, Any]:
@@ -78,7 +79,7 @@ def handle_generate_command(
         dict[str, Any],
     ],
     emit: Callable[[dict[str, Any]], None] | None = None,
-    max_download_bytes: int = 2 * 1024 * 1024 * 1024,
+    max_download_bytes: int = DEFAULT_MAX_DOWNLOAD_BYTES,
 ) -> list[dict[str, Any]]:
     if command["kind"] != "command" or command["type"] != "GENERATE":
         raise ValueError("generation Worker accepts only GENERATE")
@@ -136,7 +137,12 @@ def handle_generate_command(
     return statuses
 
 
-def run_worker(endpoint_config: Path, *, once: bool = False) -> int:
+def run_worker(
+    endpoint_config: Path,
+    *,
+    once: bool = False,
+    max_download_bytes: int = DEFAULT_MAX_DOWNLOAD_BYTES,
+) -> int:
     inspector = PlateauSelectionInspector()
     generator = CityWorldGenerator(endpoint_config.parent)
     inspections: dict[str, dict[str, Any]] = {}
@@ -167,6 +173,7 @@ def run_worker(endpoint_config: Path, *, once: bool = False) -> int:
                     inspector=inspector,
                     generator=generator,
                     emit=send_generation_status,
+                    max_download_bytes=max_download_bytes,
                 )
                 # Generation statuses were emitted live while the command ran.
                 statuses = []
@@ -200,14 +207,24 @@ def main() -> int:
         "--once", action="store_true",
         help="stop normally after one command (automation only)",
     )
+    parser.add_argument(
+        "--max-download-gib", type=float, default=8.0,
+        help="reject generation when the catalog estimate exceeds this many GiB (default: 8)",
+    )
     args = parser.parse_args()
+    if args.max_download_gib <= 0:
+        parser.error("--max-download-gib must be greater than zero")
     endpoint_config = write_websocket_endpoint_config(
         args.runtime_dir,
         role="server",
         address=args.listen_address,
         port=args.port,
     )
-    return run_worker(endpoint_config, once=args.once)
+    return run_worker(
+        endpoint_config,
+        once=args.once,
+        max_download_bytes=int(args.max_download_gib * 1024 * 1024 * 1024),
+    )
 
 
 if __name__ == "__main__":

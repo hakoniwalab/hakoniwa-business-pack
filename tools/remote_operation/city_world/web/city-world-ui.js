@@ -632,7 +632,7 @@ async function generateWorld() {
       }
       if (status.type === 'FAILED') {
         elements.generation.className = 'generation failed';
-        elements.generation.textContent = 'Generateに失敗しました。詳細は通信ログを確認してください。';
+        elements.generation.textContent = `Generate失敗 — ${status.error.message}`;
         break;
       }
     }
