@@ -131,6 +131,25 @@ export class CityWorldPduClient {
     return message;
   }
 
+  async cancel({ jobId, requestSha256 }) {
+    const message = {
+      schema_version: 1,
+      protocol: 'hakoniwa.city-world-job',
+      kind: 'command',
+      type: 'CANCEL',
+      job_id: safeJobId(jobId),
+      sequence: ++this.sequence,
+      source_host: 'city-world-browser',
+      request_sha256: requestSha256,
+    };
+    const bytes = new TextEncoder().encode(canonicalize(message));
+    if (bytes.byteLength > MAX_WIRE_BYTES) throw new Error('City World message is too large');
+    if (!await this.manager.flush_pdu_raw_data(ROBOT, PDU, bytes.buffer)) {
+      throw new Error('failed to send CANCEL');
+    }
+    return message;
+  }
+
   async nextStatus(timeoutMsec = 60000) {
     const deadline = Date.now() + timeoutMsec;
     while (Date.now() < deadline) {

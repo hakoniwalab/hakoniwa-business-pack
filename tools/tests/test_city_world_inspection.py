@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -163,6 +165,32 @@ class CityWorldInspectionTest(unittest.TestCase):
             self.assertEqual((previous / "new.txt").read_text(encoding="utf-8"), "new")
             self.assertEqual(cache.read_text(encoding="utf-8"), "cached")
 
+    def test_job_replacement_restores_previous_result_on_cancel(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            runtime = Path(raw_root)
+            job_id = "shizuoka-22203-lat35.103-lon138.860"
+            previous = runtime / "jobs" / job_id
+            previous.mkdir(parents=True)
+            (previous / "result.txt").write_text("previous", encoding="utf-8")
+
+            with self.assertRaises(generation.CityWorldGenerationCanceled):
+                with generation._replace_job_directory(runtime, job_id) as current:
+                    (current / "partial.txt").write_text("partial", encoding="utf-8")
+                    raise generation.CityWorldGenerationCanceled("canceled")
+
+            self.assertEqual(
+                (previous / "result.txt").read_text(encoding="utf-8"), "previous",
+            )
+            self.assertFalse((previous / "partial.txt").exists())
+
+    def test_job_owned_process_can_be_terminated(self) -> None:
+        process = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            start_new_session=True,
+        )
+        generation._terminate_process(process, grace_sec=1.0)
+        self.assertIsNotNone(process.poll())
+
     def test_generation_forwards_structured_texture_progress(self) -> None:
         observed = []
         generation._forward_build_progress(
@@ -211,12 +239,44 @@ class CityWorldInspectionTest(unittest.TestCase):
             ["52385618", "52385628"],
         )
         self.assertEqual(result["capabilities"]["bridge"]["dataset_status"], "not_available")
-        self.assertEqual(
+        self.assertCountEqual(
             FakePlateauClient.allow_not_found_requests,
             [("bldg", True), ("dem", True), ("tran", True), ("frn", True), ("brid", True)],
         )
         self.assertEqual(result["catalog_snapshot"]["fetched_at"], "2026-08-23T00:00:00Z")
         protocol.validate_inspection(result)
+
+    def test_second_mesh_bridge_catalog_is_filtered_to_selected_third_meshes(self) -> None:
+        files = [
+            {"code": "52385618", "url": "https://assets.example/in.gml"},
+            {"code": "52385619", "url": "https://assets.example/out.gml"},
+            {"code": "52385628_brid", "url": "https://assets.example/in-2.gml"},
+        ]
+        selected = inspection._files_in_query_meshes(
+            files, {"52385618", "52385628"},
+        )
+        self.assertEqual(
+            [item["url"] for item in selected],
+            ["https://assets.example/in.gml", "https://assets.example/in-2.gml"],
+        )
+
+    def test_invalid_inspection_result_returns_failed_without_crashing_worker(self) -> None:
+        invalid = inspection.inspect_request(
+            request(), plateau_client=FakePlateauClient,
+            fetched_at=lambda: datetime(2026, 8, 23, tzinfo=timezone.utc),
+        )
+        invalid["municipalities"] = [
+            {
+                "city_code": f"{index + 10000:05d}", "city": f"city-{index}",
+                "year": 2026, "spec": "4.1",
+            }
+            for index in range(9)
+        ]
+        statuses = worker.handle_inspection_command(
+            command(), inspector=lambda _request: invalid,
+        )
+        self.assertEqual([item["type"] for item in statuses], ["INSPECTING", "FAILED"])
+        self.assertEqual(statuses[-1]["error"]["code"], "INSPECTION_FAILED")
 
     def test_worker_emits_inspecting_then_available(self) -> None:
         inspected = inspection.inspect_request(
@@ -277,6 +337,27 @@ class CityWorldInspectionTest(unittest.TestCase):
         self.assertEqual(statuses[3]["progress"]["total"], 50)
         self.assertEqual(statuses[3]["progress"]["phase"], "texture_download")
         self.assertEqual(emitted, statuses)
+
+    def test_worker_reports_canceled_instead_of_failed(self) -> None:
+        inspected = inspection.inspect_request(
+            request(), plateau_client=FakePlateauClient,
+            fetched_at=lambda: datetime(2026, 8, 23, tzinfo=timezone.utc),
+        )
+        command_value = generate_command(inspected)
+        cancel_event = threading.Event()
+
+        def canceled_generator(_command, _inspection, _progress, event):
+            self.assertIs(event, cancel_event)
+            raise generation.CityWorldGenerationCanceled("canceled")
+
+        statuses = worker.handle_generate_command(
+            command_value,
+            inspection=inspected,
+            inspector=lambda _request: inspected,
+            generator=canceled_generator,
+            cancel_event=cancel_event,
+        )
+        self.assertEqual([item["type"] for item in statuses], ["ACCEPTED", "CANCELED"])
 
     def test_default_download_limit_accepts_dense_city_catalog_estimate(self) -> None:
         inspected = inspection.inspect_request(
@@ -361,11 +442,59 @@ class CityWorldInspectionTest(unittest.TestCase):
             level_one = request()
             level_one["options"]["building_physics_level"] = 1
             manifest = generation._manifest_text(
-                level_one, root / "jobs" / "job-2", root / "cache" / "plateau-citygml",
+                level_one,
+                root / "jobs" / "job-2",
+                root / "cache" / "plateau-citygml",
+                6,
+                4,
+                5,
             )
             self.assertIn("building_physics_level: 1", manifest)
+            self.assertIn("parallel_workers: 6", manifest)
+            self.assertIn("dem_parallel_workers: 4", manifest)
+            self.assertIn("terrain_spacing_m: 5", manifest)
             self.assertIn("lod_policy: highest_available", manifest)
             self.assertIn("texture_mode: embedded-if-available", manifest)
+
+    def test_auto_terrain_spacing_preserves_small_areas_and_bounds_large_areas(self) -> None:
+        small = request()
+        small["selection"]["half_extent_m"] = {
+            "north_south": 100, "east_west": 100,
+        }
+        medium = request()
+        medium["selection"]["half_extent_m"] = {
+            "north_south": 500, "east_west": 500,
+        }
+        large = request()
+        large["selection"]["half_extent_m"] = {
+            "north_south": 1000, "east_west": 1000,
+        }
+        self.assertEqual(generation.resolve_terrain_spacing(small, "auto"), 2)
+        self.assertEqual(generation.resolve_terrain_spacing(medium, "auto"), 5)
+        self.assertEqual(generation.resolve_terrain_spacing(large, "auto"), 10)
+        for candidate in (small, medium, large):
+            spacing = generation.resolve_terrain_spacing(candidate, "auto")
+            self.assertLessEqual(
+                generation.terrain_sample_count(candidate, spacing),
+                generation.AUTO_TERRAIN_SAMPLE_BUDGET,
+            )
+
+    def test_generator_parallel_settings_are_guarded(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            generation.CityWorldGenerator(
+                root, parallel_workers=16, dem_parallel_workers=4,
+                terrain_spacing_m="auto",
+            )
+            for invalid in (0, 17, True):
+                with self.assertRaisesRegex(ValueError, "parallel_workers"):
+                    generation.CityWorldGenerator(root, parallel_workers=invalid)
+            for invalid in (0, 5, True):
+                with self.assertRaisesRegex(ValueError, "dem_parallel_workers"):
+                    generation.CityWorldGenerator(root, dem_parallel_workers=invalid)
+            for invalid in ("1", "20", "invalid"):
+                with self.assertRaisesRegex(ValueError, "terrain_spacing_m"):
+                    generation.CityWorldGenerator(root, terrain_spacing_m=invalid)
 
     def test_web_server_lists_and_resolves_only_generated_glb_and_zip(self) -> None:
         with tempfile.TemporaryDirectory() as raw_root:
@@ -478,10 +607,14 @@ class CityWorldInspectionTest(unittest.TestCase):
         self.assertIn('id="artifact-select"', html)
         self.assertIn('id="cache-info"', html)
         self.assertIn('id="view3d"', html)
+        self.assertIn('id="cancel"', html)
         self.assertIn('id="delete-artifact"', html)
+        self.assertIn("サーバー上のjobディレクトリ", script)
+        self.assertIn("共有CityGMLキャッシュは削除しません", script)
         self.assertIn('id="viewer-visual"', html)
         self.assertIn('id="viewer-collider"', html)
         self.assertIn("changeViewerLayer", script)
+        self.assertIn("cancelGeneration", script)
         self.assertIn("0x28a86b", script)
         self.assertIn("three/addons/loaders/GLTFLoader.js", script)
         self.assertIn("city-world-colliders.glb", script)

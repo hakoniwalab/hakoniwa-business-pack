@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import queue
 import re
 import socket
+import threading
 from pathlib import Path
 from typing import Any, Callable
 
-from ..pdu_transport import PduJsonTransport, write_websocket_endpoint_config
+from ..pdu_transport import PduJsonTransport, TransportError, write_websocket_endpoint_config
 from .inspection import PlateauSelectionInspector, inspect_request
-from .generation import CityWorldGenerator
+from .generation import CityWorldGenerationCanceled, CityWorldGenerator
 from .protocol import (
     PROTOCOL_NAME,
     SCHEMA_VERSION,
@@ -47,7 +49,9 @@ def handle_inspection_command(
 ) -> list[dict[str, Any]]:
     if command["kind"] != "command" or command["type"] != "INSPECT_SELECTION":
         raise ValueError("inspection Worker accepts only INSPECT_SELECTION")
-    inspecting = _status(command, "INSPECTING", command["sequence"] + 1)
+    inspecting = decode_message(encode_message(
+        _status(command, "INSPECTING", command["sequence"] + 1)
+    ))
     try:
         inspection = inspector(command["request"])
         message_type = (
@@ -58,15 +62,15 @@ def handle_inspection_command(
         completed = _status(
             command, message_type, command["sequence"] + 2, inspection=inspection,
         )
+        completed = decode_message(encode_message(completed))
     except Exception as exc:
-        completed = _status(
+        completed = decode_message(encode_message(_status(
             command,
             "FAILED",
             command["sequence"] + 2,
             error={"phase": "inspection", "code": "INSPECTION_FAILED", "message": str(exc)},
-        )
-    # Validate the exact wire representation before returning it to a transport.
-    return [decode_message(encode_message(value)) for value in (inspecting, completed)]
+        )))
+    return [inspecting, completed]
 
 
 def handle_generate_command(
@@ -80,6 +84,7 @@ def handle_generate_command(
     ],
     emit: Callable[[dict[str, Any]], None] | None = None,
     max_download_bytes: int = DEFAULT_MAX_DOWNLOAD_BYTES,
+    cancel_event: threading.Event | None = None,
 ) -> list[dict[str, Any]]:
     if command["kind"] != "command" or command["type"] != "GENERATE":
         raise ValueError("generation Worker accepts only GENERATE")
@@ -113,7 +118,11 @@ def handle_generate_command(
             inspection_sha256=inspection_hash,
             progress={"percent": 0, "message": "Generateを受け付けました"},
         )
+        if cancel_event is not None and cancel_event.is_set():
+            raise CityWorldGenerationCanceled("City World generation was canceled")
         current = inspector(command["request"])
+        if cancel_event is not None and cancel_event.is_set():
+            raise CityWorldGenerationCanceled("City World generation was canceled")
         if current["status"] != "available":
             raise ValueError("PLATEAU coverage changed; inspect the selection again")
         if current["estimated_download_bytes"] > max_download_bytes:
@@ -130,12 +139,13 @@ def handle_generate_command(
                 detail.update({"current": current, "total": total})
             publish(kind, inspection_sha256=inspection_hash, progress=detail)
 
-        result = generator(
-            command,
-            inspection,
-            report_progress,
-        )
+        if cancel_event is None:
+            result = generator(command, inspection, report_progress)
+        else:
+            result = generator(command, inspection, report_progress, cancel_event)
         publish("READY", inspection_sha256=inspection_hash, result=result)
+    except CityWorldGenerationCanceled:
+        publish("CANCELED")
     except Exception as exc:
         publish(
             "FAILED",
@@ -149,10 +159,18 @@ def run_worker(
     *,
     once: bool = False,
     max_download_bytes: int = DEFAULT_MAX_DOWNLOAD_BYTES,
+    parallel_workers: int = 4,
+    dem_parallel_workers: int = 2,
+    terrain_spacing_m: str = "2",
     ready_file: Path | None = None,
 ) -> int:
     inspector = PlateauSelectionInspector()
-    generator = CityWorldGenerator(endpoint_config.parent)
+    generator = CityWorldGenerator(
+        endpoint_config.parent,
+        parallel_workers=parallel_workers,
+        dem_parallel_workers=dem_parallel_workers,
+        terrain_spacing_m=terrain_spacing_m,
+    )
     inspections_by_request: dict[str, dict[str, Any]] = {}
     transport = PduJsonTransport(
         endpoint_config,
@@ -166,28 +184,101 @@ def run_worker(
             ready_file.parent.mkdir(parents=True, exist_ok=True)
             ready_file.write_text("ready\n", encoding="utf-8")
         print(f"City World Worker listening: {endpoint_config}")
+        active: dict[str, Any] | None = None
         while True:
-            command = transport.receive(3600.0)
-            if command["type"] == "INSPECT_SELECTION":
-                statuses = handle_inspection_command(command, inspector=inspector)
-                terminal = statuses[-1]
-                if terminal["type"] == "SELECTION_AVAILABLE":
-                    inspections_by_request[command["request_sha256"]] = terminal["inspection"]
-            elif command["type"] == "GENERATE":
-                def send_generation_status(status: dict[str, Any]) -> None:
+            if active is not None:
+                status_queue: queue.Queue[dict[str, Any]] = active["statuses"]
+                while True:
+                    try:
+                        status = status_queue.get_nowait()
+                    except queue.Empty:
+                        break
                     print(f"[PDU][SEND] {status['type']} job_id={status['job_id']}")
                     transport.send(status)
+                    if status["type"] in {"READY", "FAILED", "CANCELED"}:
+                        active["terminal_sent"] = True
+                if active.get("terminal_sent") and not active["thread"].is_alive():
+                    active["thread"].join()
+                    active = None
+                    if once:
+                        print("[OK] --once generation completed; stopping City World Worker")
+                        return 0
+            try:
+                command = transport.receive(0.1 if active is not None else 3600.0)
+            except TransportError as exc:
+                if active is not None and str(exc).startswith("no remote-operation message"):
+                    continue
+                raise
+            if command["type"] == "INSPECT_SELECTION":
+                if active is not None:
+                    statuses = [_status(
+                        command, "FAILED", command["sequence"] + 1,
+                        error={
+                            "phase": "command", "code": "WORKER_BUSY",
+                            "message": "a City World generation is already running",
+                        },
+                    )]
+                else:
+                    statuses = handle_inspection_command(command, inspector=inspector)
+                    terminal = statuses[-1]
+                    if terminal["type"] == "SELECTION_AVAILABLE":
+                        inspections_by_request[command["request_sha256"]] = terminal["inspection"]
+            elif command["type"] == "GENERATE":
+                if active is not None:
+                    statuses = [_status(
+                        command, "FAILED", command["sequence"] + 1,
+                        error={
+                            "phase": "command", "code": "WORKER_BUSY",
+                            "message": "a City World generation is already running",
+                        },
+                    )]
+                else:
+                    generation_command = command
+                    cancel_event = threading.Event()
+                    status_queue = queue.Queue()
 
-                statuses = handle_generate_command(
-                    command,
-                    inspection=inspections_by_request.get(command["request_sha256"]),
-                    inspector=inspector,
-                    generator=generator,
-                    emit=send_generation_status,
-                    max_download_bytes=max_download_bytes,
-                )
-                # Generation statuses were emitted live while the command ran.
-                statuses = []
+                    def generate_in_background() -> None:
+                        handle_generate_command(
+                            generation_command,
+                            inspection=inspections_by_request.get(
+                                generation_command["request_sha256"]
+                            ),
+                            inspector=inspector,
+                            generator=generator,
+                            emit=status_queue.put,
+                            max_download_bytes=max_download_bytes,
+                            cancel_event=cancel_event,
+                        )
+
+                    thread = threading.Thread(
+                        target=generate_in_background,
+                        name=f"city-world-generation-{generation_command['job_id']}",
+                        daemon=False,
+                    )
+                    active = {
+                        "command": generation_command, "cancel": cancel_event,
+                        "statuses": status_queue, "thread": thread,
+                        "terminal_sent": False,
+                    }
+                    thread.start()
+                    statuses = []
+            elif command["type"] == "CANCEL":
+                if (
+                    active is not None
+                    and command["job_id"] == active["command"]["job_id"]
+                    and command["request_sha256"] == active["command"]["request_sha256"]
+                ):
+                    active["cancel"].set()
+                    print(f"[PDU][RECEIVE] CANCEL job_id={command['job_id']}")
+                    statuses = []
+                else:
+                    statuses = [_status(
+                        command, "FAILED", command["sequence"] + 1,
+                        error={
+                            "phase": "command", "code": "CANCEL_REJECTED",
+                            "message": "the requested City World job is not running",
+                        },
+                    )]
             else:
                 statuses = [_status(
                     command,
@@ -201,7 +292,7 @@ def run_worker(
             for status in statuses:
                 print(f"[PDU][SEND] {status['type']} job_id={status['job_id']}")
                 transport.send(status)
-            if once:
+            if once and active is None:
                 print("[OK] --once command completed; stopping City World Worker")
                 return 0
 
@@ -222,10 +313,26 @@ def main() -> int:
         "--max-download-gib", type=float, default=8.0,
         help="reject generation when the catalog estimate exceeds this many GiB (default: 8)",
     )
+    parser.add_argument(
+        "--parallel-workers", type=int, default=4,
+        help="worker limit for Envsim source and component generation (1-16; default: 4)",
+    )
+    parser.add_argument(
+        "--dem-parallel-workers", type=int, default=2,
+        help="DEM source extraction process limit (1-4; default: 2)",
+    )
+    parser.add_argument(
+        "--terrain-spacing-m", choices=("2", "5", "10", "auto"), default="2",
+        help="terrain grid spacing or automatic sample-budget selection (default: 2)",
+    )
     parser.add_argument("--ready-file", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.max_download_gib <= 0:
         parser.error("--max-download-gib must be greater than zero")
+    if not 1 <= args.parallel_workers <= 16:
+        parser.error("--parallel-workers must be in [1, 16]")
+    if not 1 <= args.dem_parallel_workers <= 4:
+        parser.error("--dem-parallel-workers must be in [1, 4]")
     endpoint_config = write_websocket_endpoint_config(
         args.runtime_dir,
         role="server",
@@ -236,6 +343,9 @@ def main() -> int:
         endpoint_config,
         once=args.once,
         max_download_bytes=int(args.max_download_gib * 1024 * 1024 * 1024),
+        parallel_workers=args.parallel_workers,
+        dem_parallel_workers=args.dem_parallel_workers,
+        terrain_spacing_m=args.terrain_spacing_m,
         ready_file=args.ready_file,
     )
 

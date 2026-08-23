@@ -150,6 +150,12 @@ class CityWorldJobProtocolTest(unittest.TestCase):
         with self.assertRaisesRegex(protocol.CityWorldProtocolError, "missing fields"):
             protocol.validate_message(value)
 
+    def test_cancel_uses_running_job_identity_without_request_body(self) -> None:
+        value = message("CANCEL", "command")
+        protocol.validate_message(value)
+        canceled = message("CANCELED", "status")
+        protocol.validate_message(canceled)
+
     def test_ready_result_uses_fixed_artifact_layout(self) -> None:
         inspected = inspection()
         inspection_hash = protocol.canonical_sha256(inspected)

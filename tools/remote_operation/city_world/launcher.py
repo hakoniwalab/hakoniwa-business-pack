@@ -59,6 +59,9 @@ def write_launcher_config(
     worker_port: int,
     web_port: int,
     max_download_gib: float,
+    parallel_workers: int,
+    dem_parallel_workers: int,
+    terrain_spacing_m: str,
 ) -> Path:
     paths = launcher_paths(launcher_runtime)
     paths["logs"].mkdir(parents=True, exist_ok=True)
@@ -86,6 +89,9 @@ def write_launcher_config(
                     "--port", str(worker_port),
                     "--runtime-dir", str(service_runtime),
                     "--max-download-gib", str(max_download_gib),
+                    "--parallel-workers", str(parallel_workers),
+                    "--dem-parallel-workers", str(dem_parallel_workers),
+                    "--terrain-spacing-m", terrain_spacing_m,
                     "--ready-file", str(worker_ready),
                 ],
                 "stdout": str(paths["logs"] / "worker.out"),
@@ -157,6 +163,9 @@ def start(args: argparse.Namespace) -> int:
         worker_port=args.worker_port,
         web_port=args.web_port,
         max_download_gib=args.max_download_gib,
+        parallel_workers=args.parallel_workers,
+        dem_parallel_workers=args.dem_parallel_workers,
+        terrain_spacing_m=args.terrain_spacing_m,
     )
     completed = subprocess.run(
         _launcher_command(
@@ -181,6 +190,9 @@ def start(args: argparse.Namespace) -> int:
             print(f"Web UI : {url}")
             print(f"Session: {paths['session']}")
             print(f"Logs   : {paths['logs']}")
+            print(f"Parallel workers: {args.parallel_workers}")
+            print(f"DEM parallel workers: {args.dem_parallel_workers}")
+            print(f"Terrain spacing: {args.terrain_spacing_m} m")
             if args.open_browser:
                 webbrowser.open(url)
             return 0
@@ -218,6 +230,18 @@ def main(argv: list[str] | None = None) -> int:
         "--launcher-runtime-dir", type=Path, default=DEFAULT_LAUNCHER_RUNTIME
     )
     parser.add_argument("--max-download-gib", type=float, default=8.0)
+    parser.add_argument(
+        "--parallel-workers", type=int, default=4,
+        help="Envsim source/component worker limit (1-16; default: 4)",
+    )
+    parser.add_argument(
+        "--dem-parallel-workers", type=int, default=2,
+        help="DEM source extraction process limit (1-4; default: 2)",
+    )
+    parser.add_argument(
+        "--terrain-spacing-m", choices=("2", "5", "10", "auto"), default="2",
+        help="terrain grid spacing or automatic sample-budget selection (default: 2)",
+    )
     parser.add_argument("--ready-timeout-sec", type=float, default=15.0)
     parser.add_argument("--open-browser", action="store_true")
     args = parser.parse_args(argv)
@@ -227,6 +251,10 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("Worker and Web ports must differ")
     if args.max_download_gib <= 0 or args.ready_timeout_sec <= 0:
         parser.error("download limit and readiness timeout must be positive")
+    if not 1 <= args.parallel_workers <= 16:
+        parser.error("--parallel-workers must be in [1, 16]")
+    if not 1 <= args.dem_parallel_workers <= 4:
+        parser.error("--dem-parallel-workers must be in [1, 4]")
     try:
         return start(args) if args.command == "start" else control(
             args.command, args.launcher_runtime_dir

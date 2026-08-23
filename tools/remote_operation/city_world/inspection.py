@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import hashlib
 import importlib.util
 import json
@@ -84,6 +85,16 @@ def _capability(name: str, files: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _files_in_query_meshes(
+    files: list[dict[str, Any]], query_mesh_codes: set[str],
+) -> list[dict[str, Any]]:
+    """Remove second-mesh catalog spillover using each file's third-mesh code."""
+    return [
+        item for item in files
+        if str(item.get("code", ""))[:8] in query_mesh_codes
+    ]
+
+
 def inspect_request(
     request: dict[str, Any],
     *,
@@ -109,11 +120,12 @@ def inspect_request(
             "code": code,
             "bbox": {"west": west, "south": south, "east": east, "north": north},
         })
+    query_mesh_codes = {item["code"] for item in query_meshes}
 
     national = dataset_catalog or client.request_dataset_catalog(API_BASE_URL)
-    payloads: dict[str, dict[str, Any]] = {}
-    selected: dict[str, list[dict[str, Any]]] = {}
-    for component, (feature_type, min_lod) in FEATURES.items():
+    def inspect_feature(
+        feature_type: str, min_lod: int,
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         mesh_level = 2 if feature_type == "brid" else 3
         url = client.search_url(API_BASE_URL, feature_type, bbox, mesh_level=mesh_level)
         payload = client.request_catalog(
@@ -122,10 +134,30 @@ def inspect_request(
             # feature.  It is a valid capability result, not a Worker failure.
             allow_not_found=True,
         )
-        payloads[feature_type] = payload
-        selected[component] = client.select_files(
+        files = client.select_files(
             payload, feature_type, request["year"], allow_empty=True, min_lod=min_lod,
         )
+        if feature_type == "brid":
+            files = _files_in_query_meshes(files, query_mesh_codes)
+        return payload, files
+
+    # The five feature catalogs are independent HTTP requests.  Keep a small,
+    # fixed upper bound so a larger bbox does not multiply their latency while
+    # avoiding unbounded pressure on the public API.
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=len(FEATURES), thread_name_prefix="plateau-capability",
+    ) as executor:
+        futures = {
+            component: executor.submit(inspect_feature, feature_type, min_lod)
+            for component, (feature_type, min_lod) in FEATURES.items()
+        }
+        payloads: dict[str, dict[str, Any]] = {}
+        selected: dict[str, list[dict[str, Any]]] = {}
+        # Read futures in contract order to keep deterministic output maps.
+        for component, (feature_type, _) in FEATURES.items():
+            payload, files = futures[component].result()
+            payloads[feature_type] = payload
+            selected[component] = files
 
     all_files: dict[str, dict[str, Any]] = {}
     for files in selected.values():

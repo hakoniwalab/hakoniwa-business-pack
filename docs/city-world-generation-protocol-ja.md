@@ -167,6 +167,17 @@ SELECTION_AVAILABLE
 `progress`は`phase`と、件数で進捗を表せる場合の`current / total`を保持する。
 CityGMLソース取得と建物テクスチャ取得では、ブラウザへ現在件数と総数を表示する。
 
+生成中はブラウザの`生成をキャンセル`から、実行中jobと同じ`job_id`および
+`request_sha256`を持つ`CANCEL`を送信できる。WorkerのPDU送受信はメインスレッドだけが
+所有し、生成処理は1本のバックグラウンドスレッドで実行する。したがって生成中も
+`CANCEL`を受信できる一方、同時に複数のGenerateは実行しない。
+
+キャンセル時は、Workerが当該job用に起動したEnvsimプロセスグループだけへ終了要求を
+送り、短い猶予後も残る場合だけ強制停止する。job固有の途中生成物は破棄し、同じjobに
+直前の正常成果物があれば復元する。共有CityGML/texture cacheはjobのトランザクション外に
+あるため保持する。終了後は`FAILED`ではなく`CANCELED`を返す。実行中でないjob、または
+identityが一致しない`CANCEL`は`CANCEL_REJECTED`として拒否する。
+
 ## 8. Identity and idempotency
 
 - ブラウザ生成の`job_id`は`都道府県slug-自治体コード-lat小数3桁-lon小数3桁`とする。
@@ -237,7 +248,12 @@ Map Viewer連携は、`READY`後に生成済みGLBとscene configを読み直す
 
 ブラウザから公式PLATEAU APIを使う範囲診断とCity World生成を実通信で確認できる。
 Capability診断ではCityGML本体をダウンロードせず、`plateau-datasets`とbbox別catalog
-だけを読む。`Generate`を明示実行した場合にだけ、WorkerがCityGMLとRecipe依存を取得する。
+だけを読む。Building、Terrain、Road、Road markings、Bridgeのbbox別catalogは、公開APIへの
+負荷を固定上限に抑えた5並列で取得し、広域選択時に通信待ちを直列加算しない。
+BridgeはAPI検索だけ2次メッシュを使うが、返却された各ファイルの3次メッシュコードを
+選択範囲の3次メッシュ集合で再フィルタする。これにより、同じ2次メッシュ内にある
+選択範囲外の橋梁LODや自治体をCapabilityへ混入させない。
+`Generate`を明示実行した場合にだけ、WorkerがCityGMLとRecipe依存を取得する。
 
 Terminal 1（PDU Worker）:
 
@@ -263,7 +279,11 @@ python3 -m tools.remote_operation.city_world.web_smoke --port 8008
 
 ```bash
 python3 tools/workspace.py run -- \
-  python3 -m tools.remote_operation.city_world.launcher start --open-browser
+  python3 -m tools.remote_operation.city_world.launcher start \
+  --parallel-workers 4 \
+  --dem-parallel-workers 2 \
+  --terrain-spacing-m 2 \
+  --open-browser
 ```
 
 このLauncherは既存Hakoniwa Launcherの`activate-only`モードを利用する。WorkerとWebを
@@ -282,6 +302,78 @@ python3 tools/workspace.py run -- \
 `work/remote-operation/city-world-launcher/`に置く。CityGML cacheと生成jobは従来どおり
 `work/remote-operation/city-world-worker/`に置き、Launcherを停止しても削除しない。
 `--open-browser`を省略した場合はブラウザを自動起動せず、表示されたURLを人間が開く。
+
+### 13.1 並列worker数と地形解像度の設定
+
+ブラウザ版では、並列数をPythonソースへ直接記述せず、Launcher起動時の
+`--parallel-workers <1..16>`と`--dem-parallel-workers <1..4>`で指定する。
+既定値はそれぞれ`4`と`2`である。DEMは1 processごとにCityGMLを読み、抽出結果を保持するため、
+メモリ暴走を防ぐ目的で上限を4に固定する。これらの値はLauncherからWorkerへ渡され、各jobの
+次のファイルへ記録される。
+
+```text
+work/remote-operation/city-world-worker/jobs/<job_id>/hakoniwa-envsim-build.yaml
+```
+
+生成時には、上記YAMLの`city_world.parallel_workers`と
+`city_world.dem_parallel_workers`としてEnvsimへ渡る。`job.json`の
+`generation_policy`にも同じ値を残す。値を変更する場合は、
+稼働中のLauncherを停止してから新しい値で起動し直す。
+
+```bash
+python3 tools/workspace.py run -- \
+  python3 -m tools.remote_operation.city_world.launcher stop
+
+python3 tools/workspace.py run -- \
+  python3 -m tools.remote_operation.city_world.launcher start \
+  --parallel-workers 6 \
+  --dem-parallel-workers 4 \
+  --terrain-spacing-m auto \
+  --open-browser
+```
+
+`parallel_workers`が上限として使われる工程は、PLATEAU sourceの取得と、出力先が独立した建物Visual、
+建物Physics、道路、路面標示、橋梁componentの生成である。ComposerとDataset Validatorは
+依存componentの完了後に直列実行する。`dem_parallel_workers`はDEM source抽出だけに使われ、
+実際のprocess数はこの値と対象DEM source数の小さい方になる。
+
+値は次の順序で決める。
+
+1. まず既定値`4`で、CPU使用率、メモリ使用量、処理時間を確認する。
+2. source取得または独立component生成が律速し、CPUとメモリに余裕がある場合は`6`、次に`8`を試す。
+3. CPU使用率の飽和、メモリ圧迫、swap、ディスクI/O待ちが増えた場合は一段階戻す。
+4. `8`を超える値は、同じ入力範囲で実測して短縮を確認できた場合だけ使用する。
+
+DEMは既定値`2`から開始し、複数DEM sourceの抽出が律速し、CPUとメモリに余裕がある場合だけ
+`4`を試す。ラスタライズと小欠損補間はこの値では並列化されないため、DEM source抽出完了後の
+待ち時間には効果がない。
+
+並列に実行できるcomponent数とsource数以上のworkerは待機するため、値を増やせば必ず速くなる
+わけではない。再現性のある比較では、同じ選択範囲、Physics Level、cache状態で所要時間を比較する。
+
+EnvsimをブラウザWorker経由ではなく直接実行する場合は、実行対象の
+`hakoniwa-build.yaml`または`hakoniwa-envsim-build.yaml`に同じ設定を書く。
+
+```yaml
+city_world:
+  parallel_workers: 6
+  dem_parallel_workers: 4
+```
+
+`--terrain-spacing-m`は`2`、`5`、`10`、`auto`から選ぶ。既定値`2`は従来動作を維持する。
+`auto`は選択範囲から各候補のhfield sample数を推定し、120,000 sample以下になる最も細かい
+間隔を選ぶ。目安は次のとおりである。
+
+| 正方形の範囲 | `auto`の選択 |
+|---|---:|
+| 200 m四方 | 2 m |
+| 1 km四方 | 5 m |
+| 2 km四方 | 10 m |
+
+選択結果はjob固有YAMLの`city_world.terrain_spacing_m`へ数値として書き込み、`job.json`には
+requested値、effective値、推定sample数、autoのsample上限を記録する。したがって、同じjobを
+後から検証しても、自動選択された実効解像度を確認できる。Envsimを直接実行する場合、`auto`は
+Business Pack Workerの方針なので、YAMLには決定後の数値を書く。
 
 ブラウザで`http://127.0.0.1:8008/`を開き、次の順に実行する。
 
@@ -304,7 +396,7 @@ ACCEPTED
 DOWNLOADING
 GENERATING
 VALIDATING
-READY | FAILED
+READY | FAILED | CANCELED
 ```
 
 生成中は、PLATEAUソース、建物形状、DEM source抽出、DEM小欠損補間、建物Physics、建物Visual、建物テクスチャ、
@@ -376,7 +468,8 @@ LOD2建物テクスチャもsource identity配下の共有cacheへ保存し、�
 同じ欄に生成時のBuilding Physics Levelと、Physics Worldの総Collider geom数、
 terrain/buildings/bridges等のcomponent別内訳、P0〜P3別の建物geom数を表示する。
 `Download ZIP`を押した場合だけZIP本体を取得し、一覧表示や3D表示の時点ではZIPを転送しない。
-`生成結果を削除`は確認後に選択jobだけを削除し、job外の共有CityGML cacheは保持する。
+`生成結果を削除`は、確認後にサーバー上の選択jobディレクトリを丸ごと削除する。
+ZIP、GLB、MJCF、中間生成物も削除対象となるが、job外の共有CityGML cacheは保持する。
 
 `3D Viewer`を押すと、選択した`viewer/city-world.glb`をThree.jsで地図の下へ表示する。
 3D表示は`Visual`と`Collider`のcheck boxで切り替え、両方OFFは禁止する。両方ONで重ね合わせ、

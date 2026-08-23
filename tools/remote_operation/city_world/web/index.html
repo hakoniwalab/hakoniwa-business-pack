@@ -34,9 +34,11 @@
     label { display: grid; gap: 4px; font-size: .78rem; color: #536371; }
     input, .grid select { width: 100%; border: 1px solid #b9c5ce; border-radius: 5px; padding: 7px; font: inherit; color: #17222d; background: #fff; }
     .hint { color: #697a88; font-size: .75rem; line-height: 1.45; }
-    #inspect, #generate, #download, #view3d, #delete-artifact { width: 100%; margin-top: 12px; padding: 11px; font-weight: 700; }
+    #inspect, #generate, #cancel, #download, #view3d, #delete-artifact { width: 100%; margin-top: 12px; padding: 11px; font-weight: 700; }
     #generate { background: #18864b; }
     #generate:hover { background: #126d3c; }
+    #cancel { background: #a96b18; }
+    #cancel:hover { background: #895511; }
     #selection-summary, #mesh-summary { margin-top: 9px; font: .78rem ui-monospace, monospace; color: #526271; }
     #overall { padding: 10px; border-radius: 7px; background: #f2f5f7; font-weight: 650; overflow-wrap: anywhere; }
     #overall.available { background: #e8f7ef; color: #17613a; }
@@ -45,6 +47,7 @@
     .generation.running { padding: 9px; background: #eaf3fb; color: #185b8d; }
     .generation.ready { padding: 9px; background: #e8f7ef; color: #17613a; font-weight: 700; }
     .generation.failed { padding: 9px; background: #fff0ee; color: #9b2c24; }
+    .generation.canceled { padding: 9px; background: #fff6df; color: #775113; font-weight: 700; }
     .artifact-controls { margin-top: 10px; padding: 10px; border: 1px solid #d8e0e6; border-radius: 7px; background: #f7f9fa; }
     .artifact-controls select { width: 100%; margin-top: 4px; padding: 7px; border: 1px solid #b9c5ce; border-radius: 5px; background: #fff; }
     .viewer-layers { display: flex; gap: 16px; margin: 10px 0 0; padding: 8px 10px; border: 1px solid #d8e0e6; border-radius: 5px; }
@@ -120,6 +123,7 @@
       <div id="municipality" class="municipality"></div>
       <div id="capabilities" class="capabilities"></div>
       <button id="generate" type="button" disabled>3. City Worldを生成</button>
+      <button id="cancel" type="button" disabled>生成をキャンセル</button>
       <div id="generation" class="generation"></div>
 
       <div class="artifact-controls">

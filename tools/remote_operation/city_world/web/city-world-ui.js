@@ -1,7 +1,7 @@
 import { CityWorldPduClient } from './city-world-client.js';
 
 const elements = Object.fromEntries([
-  'latitude', 'longitude', 'northSouth', 'eastWest', 'physics-level', 'inspect', 'generate', 'connect',
+  'latitude', 'longitude', 'northSouth', 'eastWest', 'physics-level', 'inspect', 'generate', 'cancel', 'connect',
   'connection', 'connection-text', 'selection-summary', 'mesh-summary', 'overall',
   'municipality', 'capabilities', 'generation', 'artifact-select', 'artifact-path', 'artifact-detail', 'cache-info',
   'download', 'view3d', 'delete-artifact', 'viewer-visual', 'viewer-collider',
@@ -63,6 +63,8 @@ const client = new CityWorldPduClient();
 let connected = false;
 let inspecting = false;
 let generating = false;
+let canceling = false;
+let activeGenerationCommand = null;
 let lastAvailable = null;
 let generatedJobs = [];
 let viewerRuntime = null;
@@ -438,7 +440,11 @@ function closeViewerForJob(jobId) {
 async function deleteSelectedArtifact() {
   const job = selectedGeneratedJob();
   if (job === null) return;
-  if (!window.confirm(`生成結果 ${job.job_id} を削除しますか？\n共有CityGMLキャッシュは残ります。`)) return;
+  if (!window.confirm(
+    `生成結果 ${job.job_id} を削除しますか？\n` +
+    'サーバー上のjobディレクトリ（ZIP・GLB・MJCF・中間生成物）を削除します。\n' +
+    '共有CityGMLキャッシュは削除しません。',
+  )) return;
   elements['delete-artifact'].disabled = true;
   try {
     const response = await fetch(`/generated/${encodeURIComponent(job.job_id)}`, {
@@ -448,7 +454,8 @@ async function deleteSelectedArtifact() {
     closeViewerForJob(job.job_id);
     writeLog(await response.json());
     elements.generation.className = 'generation ready';
-    elements.generation.textContent = `生成結果を削除しました — ${job.job_id}（共有キャッシュは保持）`;
+    elements.generation.textContent =
+      `サーバー上のjobを削除しました — ${job.job_id}（共有CityGMLキャッシュは保持）`;
     await refreshGeneratedJobs();
   } catch (error) {
     elements.generation.className = 'generation failed';
@@ -705,6 +712,8 @@ async function generateWorld() {
   const target = lastAvailable;
   try {
     const command = await client.generate(target);
+    activeGenerationCommand = command;
+    elements.cancel.disabled = false;
     writeLog(command);
     while (true) {
       const status = await client.nextStatus(30 * 60 * 1000);
@@ -720,6 +729,11 @@ async function generateWorld() {
         await refreshGeneratedJobs(command.job_id);
         break;
       }
+      if (status.type === 'CANCELED') {
+        elements.generation.className = 'generation canceled';
+        elements.generation.textContent = 'Generateをキャンセルしました。途中生成物は破棄されました。';
+        break;
+      }
       if (status.type === 'FAILED') {
         elements.generation.className = 'generation failed';
         elements.generation.textContent = `Generate失敗 — ${status.error.message}`;
@@ -733,14 +747,42 @@ async function generateWorld() {
     writeLog({ type: 'CLIENT_ERROR', phase: 'generation', error: String(error) });
   } finally {
     generating = false;
+    canceling = false;
+    activeGenerationCommand = null;
+    elements.cancel.disabled = true;
+    elements.cancel.textContent = '生成をキャンセル';
     elements.generate.textContent = '3. City Worldを生成';
     refreshSelection();
+  }
+}
+
+async function cancelGeneration() {
+  if (!generating || canceling || activeGenerationCommand === null) return;
+  canceling = true;
+  elements.cancel.disabled = true;
+  elements.cancel.textContent = 'キャンセル中…';
+  elements.generation.className = 'generation running';
+  elements.generation.textContent = '安全な停止点で生成処理を終了しています…';
+  try {
+    const command = await client.cancel({
+      jobId: activeGenerationCommand.job_id,
+      requestSha256: activeGenerationCommand.request_sha256,
+    });
+    writeLog(command);
+  } catch (error) {
+    canceling = false;
+    elements.cancel.disabled = false;
+    elements.cancel.textContent = '生成をキャンセル';
+    elements.generation.className = 'generation failed';
+    elements.generation.textContent = 'キャンセル要求の送信に失敗しました。生成処理は継続しています。';
+    writeLog({ type: 'CLIENT_ERROR', phase: 'cancel', error: String(error) });
   }
 }
 
 elements.connect.addEventListener('click', connect);
 elements.inspect.addEventListener('click', inspectSelection);
 elements.generate.addEventListener('click', generateWorld);
+elements.cancel.addEventListener('click', cancelGeneration);
 elements['artifact-select'].addEventListener('change', () => {
   updateArtifactSelection({ restoreSelection: true });
 });

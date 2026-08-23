@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import queue
+import signal
 import shutil
 import subprocess
 import threading
+import time
 import zipfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -21,7 +24,70 @@ class CityWorldGenerationError(RuntimeError):
     pass
 
 
+class CityWorldGenerationCanceled(RuntimeError):
+    """Raised after a requested generation has been stopped safely."""
+
+
 Progress = Callable[..., None]
+TERRAIN_SPACING_CHOICES_M = (2.0, 5.0, 10.0)
+AUTO_TERRAIN_SAMPLE_BUDGET = 120_000
+
+
+def _check_canceled(cancel_event: threading.Event | None) -> None:
+    if cancel_event is not None and cancel_event.is_set():
+        raise CityWorldGenerationCanceled("City World generation was canceled")
+
+
+def _terminate_process(process: subprocess.Popen[str], grace_sec: float = 5.0) -> None:
+    """Stop the job-owned process tree without touching unrelated processes."""
+    if process.poll() is not None:
+        return
+    if os.name == "posix":
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+    else:
+        process.terminate()
+    try:
+        process.wait(timeout=grace_sec)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    if os.name == "posix":
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            return
+    else:
+        process.kill()
+    process.wait(timeout=grace_sec)
+
+
+def terrain_sample_count(request: dict[str, Any], spacing_m: float) -> int:
+    extent = request["selection"]["half_extent_m"]
+    columns = max(
+        1, math.ceil((2.0 * float(extent["north_south"])) / spacing_m - 1e-12)
+    ) + 1
+    rows = max(
+        1, math.ceil((2.0 * float(extent["east_west"])) / spacing_m - 1e-12)
+    ) + 1
+    return rows * columns
+
+
+def resolve_terrain_spacing(request: dict[str, Any], policy: str | float) -> float:
+    if policy == "auto":
+        for spacing_m in TERRAIN_SPACING_CHOICES_M:
+            if terrain_sample_count(request, spacing_m) <= AUTO_TERRAIN_SAMPLE_BUDGET:
+                return spacing_m
+        return TERRAIN_SPACING_CHOICES_M[-1]
+    try:
+        spacing_m = float(policy)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("terrain_spacing_m must be one of auto, 2, 5, 10") from exc
+    if spacing_m not in TERRAIN_SPACING_CHOICES_M:
+        raise ValueError("terrain_spacing_m must be one of auto, 2, 5, 10")
+    return spacing_m
 
 
 @contextmanager
@@ -167,7 +233,14 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _manifest_text(request: dict[str, Any], job_root: Path, cache_dir: Path) -> str:
+def _manifest_text(
+    request: dict[str, Any],
+    job_root: Path,
+    cache_dir: Path,
+    parallel_workers: int = 4,
+    dem_parallel_workers: int = 2,
+    terrain_spacing_m: float = 2.0,
+) -> str:
     center = request["selection"]["center"]
     extent = request["selection"]["half_extent_m"]
     build_dir = (job_root / "build").resolve()
@@ -218,8 +291,9 @@ glb:
 
 city_world:
   enabled: true
-  parallel_workers: 4
-  terrain_spacing_m: 2
+  parallel_workers: {parallel_workers}
+  dem_parallel_workers: {dem_parallel_workers}
+  terrain_spacing_m: {terrain_spacing_m:g}
   marking_vertical_offset_m: 0.055
   bridge_collision_thickness_m: 0.02
   bridge_max_surface_slope_deg: 60
@@ -313,8 +387,36 @@ def package_world(
 class CityWorldGenerator:
     """Generate one job using fixed Business Pack policy and Envsim's public CLI."""
 
-    def __init__(self, runtime_root: Path) -> None:
+    def __init__(
+        self,
+        runtime_root: Path,
+        *,
+        parallel_workers: int = 4,
+        dem_parallel_workers: int = 2,
+        terrain_spacing_m: str | float = 2.0,
+    ) -> None:
+        if (
+            isinstance(parallel_workers, bool)
+            or not isinstance(parallel_workers, int)
+            or not 1 <= parallel_workers <= 16
+        ):
+            raise ValueError("parallel_workers must be an integer in [1, 16]")
+        if (
+            isinstance(dem_parallel_workers, bool)
+            or not isinstance(dem_parallel_workers, int)
+            or not 1 <= dem_parallel_workers <= 4
+        ):
+            raise ValueError("dem_parallel_workers must be an integer in [1, 4]")
+        if terrain_spacing_m != "auto":
+            resolve_terrain_spacing({
+                "selection": {"half_extent_m": {
+                    "north_south": 1, "east_west": 1,
+                }}
+            }, terrain_spacing_m)
         self.runtime_root = runtime_root.resolve()
+        self.parallel_workers = parallel_workers
+        self.dem_parallel_workers = dem_parallel_workers
+        self.terrain_spacing_policy = terrain_spacing_m
         self._python: Path | None = None
 
     def _generation_python(self) -> Path:
@@ -333,7 +435,9 @@ class CityWorldGenerator:
         command: dict[str, Any],
         inspection: dict[str, Any],
         progress: Progress,
+        cancel_event: threading.Event | None = None,
     ) -> dict[str, Any]:
+        _check_canceled(cancel_event)
         if inspection["status"] != "available":
             raise CityWorldGenerationError("generation requires an available inspection")
         if inspection["request_sha256"] != command["request_sha256"]:
@@ -343,7 +447,9 @@ class CityWorldGenerator:
             raise CityWorldGenerationError("inspection identity does not match GENERATE")
 
         with _replace_job_directory(self.runtime_root, command["job_id"]) as job_root:
-            return self._generate(command, inspection, inspection_hash, progress, job_root)
+            return self._generate(
+                command, inspection, inspection_hash, progress, job_root, cancel_event,
+            )
 
     def _generate(
         self,
@@ -352,12 +458,23 @@ class CityWorldGenerator:
         inspection_hash: str,
         progress: Progress,
         job_root: Path,
+        cancel_event: threading.Event | None,
     ) -> dict[str, Any]:
+        _check_canceled(cancel_event)
+        effective_terrain_spacing_m = resolve_terrain_spacing(
+            command["request"], self.terrain_spacing_policy,
+        )
+        estimated_terrain_samples = terrain_sample_count(
+            command["request"], effective_terrain_spacing_m,
+        )
         manifest = job_root / "hakoniwa-envsim-build.yaml"
         manifest.write_text(_manifest_text(
             command["request"],
             job_root,
             self.runtime_root / "cache" / "plateau-citygml",
+            self.parallel_workers,
+            self.dem_parallel_workers,
+            effective_terrain_spacing_m,
         ), encoding="utf-8")
         (job_root / "job.json").write_text(json.dumps({
             "schema_version": 1,
@@ -366,6 +483,19 @@ class CityWorldGenerator:
             "request_sha256": command["request_sha256"],
             "inspection": inspection,
             "inspection_sha256": inspection_hash,
+            "generation_policy": {
+                "parallel_workers": self.parallel_workers,
+                "dem_parallel_workers": self.dem_parallel_workers,
+                "terrain_spacing_m": {
+                    "requested": self.terrain_spacing_policy,
+                    "effective": effective_terrain_spacing_m,
+                    "estimated_samples": estimated_terrain_samples,
+                    "auto_sample_budget": (
+                        AUTO_TERRAIN_SAMPLE_BUDGET
+                        if self.terrain_spacing_policy == "auto" else None
+                    ),
+                },
+            },
         }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
         envsim = _envsim_root()
@@ -373,6 +503,7 @@ class CityWorldGenerator:
         if not hako.is_file():
             raise CityWorldGenerationError(f"hakoniwa-envsim CLI not found: {hako}")
         python = self._generation_python()
+        _check_canceled(cancel_event)
         log_path = job_root / "generation.log"
         progress(
             "DOWNLOADING", 10,
@@ -395,6 +526,7 @@ class CityWorldGenerator:
                 text=True,
                 bufsize=1,
                 env=environment,
+                start_new_session=(os.name == "posix"),
             )
             assert process.stdout is not None
             output_queue: queue.Queue[str | None] = queue.Queue()
@@ -409,15 +541,22 @@ class CityWorldGenerator:
                 target=read_output, name="city-world-build-output", daemon=True,
             )
             reader.start()
+            last_heartbeat = time.monotonic()
+            canceled = False
             while True:
+                if cancel_event is not None and cancel_event.is_set() and not canceled:
+                    canceled = True
+                    _terminate_process(process)
                 try:
-                    line = output_queue.get(timeout=15.0)
+                    line = output_queue.get(timeout=0.25)
                 except queue.Empty:
-                    progress(
-                        str(progress_state["kind"]), int(progress_state["percent"]),
-                        f"{progress_state['message']}（処理継続中）",
-                        phase=str(progress_state["phase"]), heartbeat=True,
-                    )
+                    if time.monotonic() - last_heartbeat >= 15.0:
+                        progress(
+                            str(progress_state["kind"]), int(progress_state["percent"]),
+                            f"{progress_state['message']}（処理継続中）",
+                            phase=str(progress_state["phase"]),
+                        )
+                        last_heartbeat = time.monotonic()
                     continue
                 if line is None:
                     break
@@ -428,6 +567,8 @@ class CityWorldGenerator:
                 )
             reader.join()
             returncode = process.wait()
+        if canceled:
+            raise CityWorldGenerationCanceled("City World generation was canceled")
         if returncode:
             tail = log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-12:]
             raise CityWorldGenerationError(
@@ -439,11 +580,12 @@ class CityWorldGenerator:
             phase="world_generated",
         )
         viewer = job_root / "viewer"
+        _check_canceled(cancel_event)
         viewer.mkdir(parents=True, exist_ok=True)
         shutil.copy2(job_root / "build" / "world" / "city-world.glb", viewer / "city-world.glb")
         collider_converter = envsim / "src" / "city_pipeline" / "mjcf_colliders2glb.py"
         with log_path.open("a", encoding="utf-8") as log:
-            collider_completed = subprocess.run(
+            collider_process = subprocess.Popen(
                 [
                     str(python), str(collider_converter),
                     "--in", str(job_root / "build" / "world" / "city-world.xml"),
@@ -454,15 +596,23 @@ class CityWorldGenerator:
                 stdout=log,
                 stderr=subprocess.STDOUT,
                 text=True,
-                check=False,
+                start_new_session=(os.name == "posix"),
             )
-        if collider_completed.returncode:
+            while collider_process.poll() is None:
+                if cancel_event is not None and cancel_event.wait(0.2):
+                    _terminate_process(collider_process)
+                    raise CityWorldGenerationCanceled("City World generation was canceled")
+                if cancel_event is None:
+                    time.sleep(0.2)
+            collider_returncode = collider_process.returncode
+        if collider_returncode:
             tail = log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-12:]
             raise CityWorldGenerationError(
                 "collider debug GLB generation failed with "
-                f"rc={collider_completed.returncode}: " + " | ".join(tail)
+                f"rc={collider_returncode}: " + " | ".join(tail)
             )
 
+        _check_canceled(cancel_event)
         progress(
             "VALIDATING", 94, "生成物、Collider表示、Receiptを検証しています",
             phase="packaging",
@@ -476,4 +626,5 @@ class CityWorldGenerator:
                 "options", {}
             ).get("building_physics_level", 3),
         )
+        _check_canceled(cancel_event)
         return result
