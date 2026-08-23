@@ -222,6 +222,30 @@ class CityWorldInspectionTest(unittest.TestCase):
         self.assertEqual(observed[2][0][1], 52)
         self.assertEqual(observed[2][1]["phase"], "terrain_gap_fill")
 
+    def test_generation_forwards_large_build_subphases(self) -> None:
+        observed = []
+        publish = lambda *args, **kwargs: observed.append((args, kwargs))
+        for event in (
+            '{"phase":"geometry_extract_files","current":2,"total":4}',
+            '{"phase":"building_physics_surfaces","current":3,"total":5}',
+            '{"phase":"building_glb_textures","current":100,"total":200}',
+            '{"phase":"building_glb_batches","current":50,"total":100}',
+            '{"phase":"building_glb_export"}',
+        ):
+            generation._forward_build_progress(
+                "[HAKO_PROGRESS] " + event, publish,
+            )
+        self.assertEqual(
+            [item[1]["phase"] for item in observed],
+            [
+                "geometry_extract_files", "building_physics_surfaces",
+                "building_glb_textures", "building_glb_batches",
+                "building_glb_export",
+            ],
+        )
+        self.assertIn("2/4", observed[0][0][2])
+        self.assertIn("3/5", observed[1][0][2])
+
     def test_catalog_inspection_reports_optional_bridge_without_downloading(self) -> None:
         FakePlateauClient.allow_not_found_requests = []
         result = inspection.inspect_request(

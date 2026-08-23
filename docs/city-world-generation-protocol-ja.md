@@ -332,9 +332,10 @@ python3 tools/workspace.py run -- \
   --open-browser
 ```
 
-`parallel_workers`が上限として使われる工程は、PLATEAU sourceの取得と、出力先が独立した建物Visual、
+`parallel_workers`が上限として使われる工程は、PLATEAU source・LOD2 textureの取得、建物GML抽出と、出力先が独立した建物Visual、
 建物Physics、道路、路面標示、橋梁componentの生成である。ComposerとDataset Validatorは
-依存componentの完了後に直列実行する。`dem_parallel_workers`はDEM source抽出だけに使われ、
+依存componentの完了後に直列実行する。建物GML抽出は巨大XMLをprocessごとに保持するため、
+`parallel_workers`が5以上でも最大4processへ制限する。`dem_parallel_workers`はDEM source抽出だけに使われ、
 実際のprocess数はこの値と対象DEM source数の小さい方になる。
 
 値は次の順序で決める。

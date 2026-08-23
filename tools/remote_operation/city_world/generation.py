@@ -209,6 +209,56 @@ def _forward_build_progress(
             phase="texture_download", current=current, total=total,
         )
         return
+    if phase == "geometry_extract_files":
+        current, total = int(event.get("current", 0)), int(event.get("total", 0))
+        emit(
+            "GENERATING", 35,
+            f"建物GMLを並列抽出しています（{current}/{total}）",
+            phase=phase, current=current, total=total,
+        )
+        return
+    if phase == "building_glb_batches":
+        current, total = int(event.get("current", 0)), int(event.get("total", 0))
+        emit(
+            "GENERATING", 72,
+            f"建物GLBのmaterial/meshを構築しています（{current}/{total}）",
+            phase=phase, current=current, total=total,
+        )
+        return
+    if phase == "building_glb_textures":
+        current, total = int(event.get("current", 0)), int(event.get("total", 0))
+        emit(
+            "GENERATING", 72,
+            f"建物GLB用テクスチャを並列デコードしています（{current}/{total}）",
+            phase=phase, current=current, total=total,
+        )
+        return
+    if phase == "building_glb_export":
+        emit(
+            "GENERATING", 72, "建物GLBバイナリを書き出しています",
+            phase=phase,
+        )
+        return
+    if phase == "building_physics_surfaces":
+        current, total = int(event.get("current", 0)), int(event.get("total", 0))
+        emit(
+            "GENERATING", 52,
+            f"LOD2建物面をColliderへ変換しています（GML {current}/{total}）",
+            phase=phase, current=current, total=total,
+        )
+        return
+    if phase == "building_physics_assemble":
+        emit(
+            "GENERATING", 52, "建物ColliderのMJCF要素を構築しています",
+            phase=phase,
+        )
+        return
+    if phase == "building_physics_write":
+        emit(
+            "GENERATING", 52, "建物PhysicsのMJCFを書き出しています",
+            phase=phase,
+        )
+        return
     if phase in _BUILD_PHASES:
         percent, message = _BUILD_PHASES[phase]
         emit("GENERATING", percent, message, phase=phase)
@@ -339,7 +389,13 @@ def package_world(
     artifact = artifact_dir / _artifact_name(job_id)
     with zipfile.ZipFile(artifact, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for entry, source in sources.items():
-            archive.write(source, entry)
+            archive.write(
+                source, entry,
+                compress_type=(
+                    zipfile.ZIP_STORED if source.suffix == ".glb"
+                    else zipfile.ZIP_DEFLATED
+                ),
+            )
 
     world_receipt = json.loads(sources["receipt/city-world-receipt.json"].read_text(encoding="utf-8"))
     collider_counts = world_receipt.get("components", {}).get("mjcf_geom_counts", {})
@@ -583,6 +639,10 @@ class CityWorldGenerator:
         _check_canceled(cancel_event)
         viewer.mkdir(parents=True, exist_ok=True)
         shutil.copy2(job_root / "build" / "world" / "city-world.glb", viewer / "city-world.glb")
+        progress(
+            "VALIDATING", 90, "Collider表示用GLBを生成しています",
+            phase="collider_visualization",
+        )
         collider_converter = envsim / "src" / "city_pipeline" / "mjcf_colliders2glb.py"
         with log_path.open("a", encoding="utf-8") as log:
             collider_process = subprocess.Popen(
@@ -598,12 +658,20 @@ class CityWorldGenerator:
                 text=True,
                 start_new_session=(os.name == "posix"),
             )
+            last_collider_heartbeat = time.monotonic()
             while collider_process.poll() is None:
                 if cancel_event is not None and cancel_event.wait(0.2):
                     _terminate_process(collider_process)
                     raise CityWorldGenerationCanceled("City World generation was canceled")
                 if cancel_event is None:
                     time.sleep(0.2)
+                if time.monotonic() - last_collider_heartbeat >= 15.0:
+                    progress(
+                        "VALIDATING", 90,
+                        "Collider表示用GLBを生成しています（処理継続中）",
+                        phase="collider_visualization",
+                    )
+                    last_collider_heartbeat = time.monotonic()
             collider_returncode = collider_process.returncode
         if collider_returncode:
             tail = log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-12:]
@@ -614,7 +682,7 @@ class CityWorldGenerator:
 
         _check_canceled(cancel_event)
         progress(
-            "VALIDATING", 94, "生成物、Collider表示、Receiptを検証しています",
+            "VALIDATING", 94, "生成物とReceiptを検証しZIPを作成しています",
             phase="packaging",
         )
         result = package_world(
