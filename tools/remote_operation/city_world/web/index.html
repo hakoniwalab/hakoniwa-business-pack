@@ -32,7 +32,7 @@
     #connect { margin-left: auto; padding: 5px 9px; font-size: .78rem; }
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
     label { display: grid; gap: 4px; font-size: .78rem; color: #536371; }
-    input { width: 100%; border: 1px solid #b9c5ce; border-radius: 5px; padding: 7px; font: inherit; color: #17222d; }
+    input, .grid select { width: 100%; border: 1px solid #b9c5ce; border-radius: 5px; padding: 7px; font: inherit; color: #17222d; background: #fff; }
     .hint { color: #697a88; font-size: .75rem; line-height: 1.45; }
     #inspect, #generate, #download, #view3d, #delete-artifact { width: 100%; margin-top: 12px; padding: 11px; font-weight: 700; }
     #generate { background: #18864b; }
@@ -52,6 +52,7 @@
     .viewer-layers label { display: flex; align-items: center; gap: 6px; font-size: .82rem; }
     .viewer-layers input { width: auto; }
     #artifact-path { margin-top: 7px; color: #526271; font: .72rem ui-monospace, monospace; overflow-wrap: anywhere; }
+    #artifact-detail { margin-top: 7px; color: #33495b; font: .75rem ui-monospace, monospace; overflow-wrap: anywhere; white-space: pre-wrap; line-height: 1.45; }
     #cache-info { margin-top: 7px; color: #526271; font: .72rem ui-monospace, monospace; overflow-wrap: anywhere; }
     .artifact-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     #view3d { background: #6c42a1; }
@@ -97,6 +98,14 @@
         <label>Longitude<input id="longitude" type="number" step="0.000001" value="138.8587"></label>
         <label>N/S half extent [m]<input id="northSouth" type="number" min="10" max="1000" step="10" value="100"></label>
         <label>E/W half extent [m]<input id="eastWest" type="number" min="10" max="1000" step="10" value="100"></label>
+        <label>Building Physics Level
+          <select id="physics-level">
+            <option value="0">0 — P0のみ（最軽量）</option>
+            <option value="1">1 — P1 → P0</option>
+            <option value="2">2 — P2 → P1 → P0</option>
+            <option value="3" selected>3 — P3 → P2 → P1 → P0</option>
+          </select>
+        </label>
       </div>
       <p class="hint">地図のクリック、中心マーカーまたは青い区画のドラッグで位置を変更できます。四隅のハンドルで範囲を変更できます。100m + 100mは一辺200mの範囲です。</p>
       <div id="selection-summary"></div>
@@ -113,6 +122,7 @@
       <div class="artifact-controls">
         <label>生成結果<select id="artifact-select" disabled><option>生成結果はありません</option></select></label>
         <div id="artifact-path">—</div>
+        <div id="artifact-detail">Physics Level: — / Collider: —</div>
         <div id="cache-info">共有キャッシュ: —</div>
         <fieldset class="viewer-layers">
           <legend>3D表示</legend>

@@ -74,7 +74,10 @@ export class CityWorldPduClient {
     return this.manager.is_service_enabled();
   }
 
-  async inspect({ jobId, latitude, longitude, halfExtentNorthSouth, halfExtentEastWest }) {
+  async inspect({
+    jobId, latitude, longitude, halfExtentNorthSouth, halfExtentEastWest,
+    buildingPhysicsLevel,
+  }) {
     const request = {
       schema_version: 1,
       selection: {
@@ -86,6 +89,7 @@ export class CityWorldPduClient {
       },
       profile: 'visual-physics-v1',
       year: 'latest',
+      options: { building_physics_level: Number(buildingPhysicsLevel) },
     };
     const message = {
       schema_version: 1,

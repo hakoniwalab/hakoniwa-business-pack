@@ -72,6 +72,7 @@ def request() -> dict:
         },
         "profile": "visual-physics-v1",
         "year": "latest",
+        "options": {"building_physics_level": 3},
     }
 
 
@@ -267,11 +268,24 @@ class CityWorldInspectionTest(unittest.TestCase):
                 "city-world-receipt.json": b"{}\n",
             }.items():
                 (world / name).write_bytes(value)
+            physics = job_root / "build" / "components" / "buildings"
+            physics.mkdir(parents=True)
+            (physics / "building-physics-application.json").write_text(json.dumps({
+                "collider_geom_counts": {
+                    "total": 0,
+                    "by_class": {"P0": 0, "P1": 0, "P2": 0, "P3": 0},
+                }
+            }), encoding="utf-8")
             result = generation.package_world(
                 job_root=job_root, job_id="numazu-smoke-001",
                 request_sha256="a" * 64, inspection_sha256="b" * 64,
+                building_physics_level=3,
             )
             self.assertEqual(result["entries"]["visual_world"], "visual/city-world.glb")
+            self.assertEqual(
+                result["colliders"]["by_physics_class"],
+                {"P0": 0, "P1": 0, "P2": 0, "P3": 0},
+            )
             import zipfile
             with zipfile.ZipFile(job_root / "artifacts" / result["artifact_name"]) as archive:
                 self.assertEqual(set(archive.namelist()), set(result["entries"].values()))
@@ -284,6 +298,15 @@ class CityWorldInspectionTest(unittest.TestCase):
             )
             self.assertIn(f"cache_dir: {(root / 'cache' / 'plateau-citygml').resolve()}", manifest)
             self.assertIn(f"build_dir: {(root / 'jobs' / 'job-1' / 'build').resolve()}", manifest)
+            self.assertIn("building_physics_level: 3", manifest)
+            self.assertIn("texture_mode: embedded-if-available", manifest)
+            level_one = request()
+            level_one["options"]["building_physics_level"] = 1
+            manifest = generation._manifest_text(
+                level_one, root / "jobs" / "job-2", root / "cache" / "plateau-citygml",
+            )
+            self.assertIn("building_physics_level: 1", manifest)
+            self.assertIn("lod_policy: highest_available", manifest)
             self.assertIn("texture_mode: embedded-if-available", manifest)
 
     def test_web_server_lists_and_resolves_only_generated_glb_and_zip(self) -> None:
@@ -299,9 +322,18 @@ class CityWorldInspectionTest(unittest.TestCase):
                 "city-world-receipt.json": b"{}\n",
             }.items():
                 (world / name).write_bytes(value)
+            physics = job_root / "build" / "components" / "buildings"
+            physics.mkdir(parents=True)
+            (physics / "building-physics-application.json").write_text(json.dumps({
+                "collider_geom_counts": {
+                    "total": 0,
+                    "by_class": {"P0": 0, "P1": 0, "P2": 0, "P3": 0},
+                }
+            }), encoding="utf-8")
             result = generation.package_world(
                 job_root=job_root, job_id="numazu-smoke-001",
                 request_sha256="a" * 64, inspection_sha256="b" * 64,
+                building_physics_level=3,
             )
             viewer = job_root / "viewer"
             viewer.mkdir()
@@ -314,6 +346,8 @@ class CityWorldInspectionTest(unittest.TestCase):
             jobs = web_smoke.list_generated_jobs(runtime)
             self.assertEqual([item["job_id"] for item in jobs], ["numazu-smoke-001"])
             self.assertTrue(jobs[0]["collider_available"])
+            self.assertEqual(jobs[0]["building_physics_level"], 3)
+            self.assertEqual(jobs[0]["colliders"]["total"], 0)
             self.assertEqual(
                 jobs[0]["selection"]["center"],
                 request()["selection"]["center"],

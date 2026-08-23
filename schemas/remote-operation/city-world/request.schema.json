@@ -34,6 +34,14 @@
       }
     },
     "profile": {"const": "visual-physics-v1"},
-    "year": {"const": "latest"}
+    "year": {"const": "latest"},
+    "options": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["building_physics_level"],
+      "properties": {
+        "building_physics_level": {"type": "integer", "minimum": 0, "maximum": 3, "default": 3}
+      }
+    }
   }
 }

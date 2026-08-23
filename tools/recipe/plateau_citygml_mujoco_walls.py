@@ -170,6 +170,7 @@ mjcf:
   model_name: {mjcf['model_name']}
   collision: {mjcf['collision']}
   floor: {str(bool(mjcf['floor'])).lower()}
+  building_physics_level: {mjcf.get('building_physics_level', 3)}
 
 glb:
   enabled: {str(bool(glb['enabled'])).lower()}

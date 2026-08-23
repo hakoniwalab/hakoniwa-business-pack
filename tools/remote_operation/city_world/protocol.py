@@ -128,7 +128,7 @@ def _hash(value: Any, label: str) -> str:
 
 def validate_request(value: Any) -> dict[str, Any]:
     request = _object(
-        value, "request", {"schema_version", "selection", "profile", "year"}
+        value, "request", {"schema_version", "selection", "profile", "year"}, {"options"}
     )
     if request["schema_version"] != SCHEMA_VERSION:
         raise CityWorldProtocolError("request.schema_version must be 1")
@@ -136,6 +136,12 @@ def validate_request(value: Any) -> dict[str, Any]:
         raise CityWorldProtocolError("request.profile must be visual-physics-v1")
     if request["year"] != "latest":
         raise CityWorldProtocolError("request.year must be latest")
+    if "options" in request:
+        options = _object(request["options"], "request.options", {"building_physics_level"})
+        _integer(
+            options["building_physics_level"],
+            "request.options.building_physics_level", 0, 3,
+        )
     selection = _object(request["selection"], "request.selection", {"center", "half_extent_m"})
     center = _object(
         selection["center"], "request.selection.center", {"latitude", "longitude"}
@@ -269,12 +275,38 @@ def validate_result(value: Any) -> dict[str, Any]:
             "schema_version", "job_id", "request_sha256", "inspection_sha256",
             "artifact_name", "media_type", "size_bytes", "sha256", "entries",
         },
+        {"building_physics_level", "colliders"},
     )
     if result["schema_version"] != SCHEMA_VERSION:
         raise CityWorldProtocolError("result.schema_version must be 1")
     _string(result["job_id"], "result.job_id", 128, _IDENTIFIER_RE)
     _hash(result["request_sha256"], "result.request_sha256")
     _hash(result["inspection_sha256"], "result.inspection_sha256")
+    if "building_physics_level" in result:
+        _integer(
+            result["building_physics_level"], "result.building_physics_level", 0, 3
+        )
+    if "colliders" in result:
+        colliders = _object(
+            result["colliders"], "result.colliders",
+            {"total", "by_component", "by_physics_class"}
+        )
+        total = _integer(colliders["total"], "result.colliders.total", 0)
+        by_component = colliders["by_component"]
+        if not isinstance(by_component, dict):
+            raise CityWorldProtocolError("result.colliders.by_component must be an object")
+        component_total = 0
+        for name, count in by_component.items():
+            _string(name, "result collider component name", 64, _PHASE_RE)
+            component_total += _integer(count, f"result.colliders.by_component.{name}", 0)
+        if total != component_total:
+            raise CityWorldProtocolError("result.colliders.total must equal the component sum")
+        by_class = _object(
+            colliders["by_physics_class"], "result.colliders.by_physics_class",
+            {"P0", "P1", "P2", "P3"},
+        )
+        for class_id in ("P0", "P1", "P2", "P3"):
+            _integer(by_class[class_id], f"result.colliders.by_physics_class.{class_id}", 0)
     name = _string(result["artifact_name"], "result.artifact_name", 128)
     if _ARTIFACT_RE.fullmatch(name) is None:
         raise CityWorldProtocolError("result.artifact_name must be a safe .zip basename")

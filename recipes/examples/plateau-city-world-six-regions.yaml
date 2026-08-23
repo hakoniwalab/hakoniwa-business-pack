@@ -138,6 +138,8 @@ recipe_local_requirements:
         kind: file
       - path: src/city_pipeline/bridge2mjcf.py
         kind: file
+      - path: src/city_pipeline/building_physics_classifier.py
+        kind: file
 
 components:
   - id: hakoniwa-envsim
@@ -151,6 +153,7 @@ data_flow:
   - PLATEAU catalog and source files -> bldg, tran, dem, optional frn, and optional LOD3 brid component conversion
   - Component outputs -> aligned terrain, building, optional bridge physics, and city-world.xml/city-world.glb per region
   - Component receipts -> per-region Dataset Validator report
+  - Building LOD1/LOD2 semantics -> classification-only P0/P1/P2/P3 Physics strategy diagnosis
   - Six per-region results -> JSON, CSV, and Markdown Capability Matrix
 
 time_model:
@@ -174,6 +177,8 @@ artifact_sets:
     artifacts:
       - work/recipes/plateau-city-world-six-regions/cities/*/artifacts/download-manifest.json
       - work/recipes/plateau-city-world-six-regions/cities/*/artifacts/build-receipt.json
+      - work/recipes/plateau-city-world-six-regions/cities/*/artifacts/components/buildings/building-physics-classification.json
+      - work/recipes/plateau-city-world-six-regions/cities/*/artifacts/components/buildings/building-physics-application.json
   validation_artifacts:
     status: verified
     artifacts:
@@ -197,6 +202,7 @@ missing_pieces:
   - Re-run the moved Hiroshima LOD3 bridge profile and then the complete six-region matrix.
   - Convex bridge collision pieces are a correctness baseline; safe piece merging is future optimization work.
   - Full physics simulation and drone flight belong to a separate downstream Recipe.
+  - P0-P3 building Physics classification is diagnostic; class-specific colliders are introduced and validated separately.
 
 plateau_city_world_matrix:
   schema_version: 1
@@ -221,6 +227,7 @@ plateau_city_world_matrix:
   mjcf:
     collision: all
     floor: false
+    building_physics_level: 3
   glb:
     enabled: true
     lod_policy: highest_available

@@ -79,7 +79,7 @@ schemas/remote-operation/city-world/
   result-manifest.schema.json
 ```
 
-- `request`: ユーザーが選べる中心位置、東西・南北half extent、固定profile。
+- `request`: ユーザーが選べる中心位置、東西・南北half extent、Building Physics Level、固定profile。
 - `inspection`: PLATEAU API応答を正規化した選択範囲診断。
 - `message`: command/status envelopeとtype別payload。
 - `result-manifest`: ZIPのidentityと固定された論理entry。
@@ -96,6 +96,22 @@ east_west   = 500m
 
 v1は各half extentを10m以上1000m以下に制限する。緯度経度からPLATEAU API用
 bboxへの変換はWorker側で行い、`west < east`かつ`south < north`を保証する。
+
+## 5.1 Building Physics Level
+
+ブラウザは生成要求ごとに`options.building_physics_level`を0〜3から選択する。既定値は3である。
+Workerはこの値をjob固有の`hakoniwa-envsim-build.yaml`に
+`mjcf.building_physics_level`として固定する。
+
+| Level | 建物Colliderの判定順序 | Visual / Texture |
+|---|---|---|
+| 0 | P0 | 最高LOD＋texture |
+| 1 | P1 → P0 | 最高LOD＋texture |
+| 2 | P2 → P1 → P0 | 最高LOD＋texture |
+| 3 | P3 → P2 → P1 → P0 | 最高LOD＋texture |
+
+Levelは建物ごとのP0〜P3再判定と建物collisionだけを変更する。地形、道路、橋、Visual、
+textureは変更しない。選択値はrequest hash、job記録、result manifest、生成結果画面へ残す。
 
 ## 6. PLATEAU coverage inspection
 
@@ -319,6 +335,8 @@ LOD2建物テクスチャもsource identity配下の共有cacheへ保存し、�
 新しい順に表示する。選択すると生成時の中心・half extentを入力欄へ戻し、その範囲を
 オレンジの破線で地図へ重ねる。選択中のjobについて、Workspaceからの相対パスを画面へ表示し、
 共有cacheの相対パス、object数、総容量も別に表示する。
+同じ欄に生成時のBuilding Physics Levelと、Physics Worldの総Collider geom数、
+terrain/buildings/bridges等のcomponent別内訳、P0〜P3別の建物geom数を表示する。
 `Download ZIP`を押した場合だけZIP本体を取得し、一覧表示や3D表示の時点ではZIPを転送しない。
 `生成結果を削除`は確認後に選択jobだけを削除し、job外の共有CityGML cacheは保持する。
 

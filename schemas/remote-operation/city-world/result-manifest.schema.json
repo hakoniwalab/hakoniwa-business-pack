@@ -21,6 +21,30 @@
     "job_id": {"$ref": "#/$defs/identifier"},
     "request_sha256": {"$ref": "#/$defs/sha256"},
     "inspection_sha256": {"$ref": "#/$defs/sha256"},
+    "building_physics_level": {"type": "integer", "minimum": 0, "maximum": 3},
+    "colliders": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "by_component", "by_physics_class"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "by_component": {
+          "type": "object",
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        },
+        "by_physics_class": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["P0", "P1", "P2", "P3"],
+          "properties": {
+            "P0": {"type": "integer", "minimum": 0},
+            "P1": {"type": "integer", "minimum": 0},
+            "P2": {"type": "integer", "minimum": 0},
+            "P3": {"type": "integer", "minimum": 0}
+          }
+        }
+      }
+    },
     "artifact_name": {
       "type": "string",
       "minLength": 5,

@@ -1,9 +1,9 @@
 import { CityWorldPduClient } from './city-world-client.js';
 
 const elements = Object.fromEntries([
-  'latitude', 'longitude', 'northSouth', 'eastWest', 'inspect', 'generate', 'connect',
+  'latitude', 'longitude', 'northSouth', 'eastWest', 'physics-level', 'inspect', 'generate', 'connect',
   'connection', 'connection-text', 'selection-summary', 'mesh-summary', 'overall',
-  'municipality', 'capabilities', 'generation', 'artifact-select', 'artifact-path', 'cache-info',
+  'municipality', 'capabilities', 'generation', 'artifact-select', 'artifact-path', 'artifact-detail', 'cache-info',
   'download', 'view3d', 'delete-artifact', 'viewer-visual', 'viewer-collider',
   'viewer-panel', 'viewer-status', 'viewer-canvas', 'log',
 ].map((id) => [id, document.getElementById(id)]));
@@ -167,7 +167,7 @@ map.on('click', (event) => {
   setCenter(event.latlng);
 });
 marker.on('drag', (event) => setCenter(event.target.getLatLng()));
-for (const id of ['latitude', 'longitude', 'northSouth', 'eastWest']) {
+for (const id of ['latitude', 'longitude', 'northSouth', 'eastWest', 'physics-level']) {
   elements[id].addEventListener('input', () => {
     invalidateInspection();
     refreshSelection();
@@ -254,6 +254,9 @@ function applyGeneratedSelection(job) {
   elements.longitude.value = Number(center.longitude).toFixed(6);
   elements.northSouth.value = Number(extent.north_south).toFixed(1);
   elements.eastWest.value = Number(extent.east_west).toFixed(1);
+  if (Number.isInteger(job.building_physics_level)) {
+    elements['physics-level'].value = String(job.building_physics_level);
+  }
   invalidateInspection();
   refreshSelection();
   const bounds = selectionBounds();
@@ -277,6 +280,22 @@ function updateArtifactSelection({ restoreSelection = false } = {}) {
   elements['artifact-path'].textContent = job === null
     ? '—'
     : `${job.server_relative_path}/`;
+  const componentCounts = job?.colliders?.by_component ?? {};
+  const componentText = Object.entries(componentCounts)
+    .map(([name, count]) => `${name}=${count}`)
+    .join(', ');
+  const classCounts = job?.colliders?.by_physics_class ?? {};
+  const classText = ['P0', 'P1', 'P2', 'P3']
+    .map((name) => `${name}=${classCounts[name] ?? 0}`)
+    .join(', ');
+  elements['artifact-detail'].textContent = job === null
+    ? 'Physics Level: — / Collider: —'
+    : [
+      `Physics Level: ${job.building_physics_level ?? '旧形式'}`,
+      `Collider total: ${job.colliders?.total ?? '不明'} geoms`,
+      componentText ? `Components: ${componentText}` : null,
+      job.colliders?.by_physics_class ? `Building allocation: ${classText}` : null,
+    ].filter(Boolean).join('\n');
   if (restoreSelection) applyGeneratedSelection(job);
 }
 
@@ -597,6 +616,7 @@ async function inspectSelection() {
       jobId: `selection-${Date.now()}`,
       latitude: numeric('latitude'), longitude: numeric('longitude'),
       halfExtentNorthSouth: numeric('northSouth'), halfExtentEastWest: numeric('eastWest'),
+      buildingPhysicsLevel: numeric('physics-level'),
     });
     writeLog(command);
     while (true) {

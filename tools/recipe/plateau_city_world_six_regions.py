@@ -248,6 +248,7 @@ mjcf:
   model_name: {output_name(region)}
   collision: {mjcf['collision']}
   floor: {str(bool(mjcf['floor'])).lower()}
+  building_physics_level: {mjcf.get('building_physics_level', 3)}
 
 glb:
   enabled: {str(bool(glb['enabled'])).lower()}
@@ -514,16 +515,23 @@ def summary_row(region: Region, result: dict[str, Any] | None) -> dict[str, Any]
     if result is None:
         return {
             "region_id": region.id, "region_name": region.name, "status": "pending",
-            "buildings": "-", "roads": "-", "road_markings": "-", "bridges": "-",
+            "buildings": "-", "building_physics": "-", "roads": "-", "road_markings": "-", "bridges": "-",
             "mjcf_bytes": "", "glb_bytes": "", "physics_simulation": "not_evaluated",
             "known_limitations": "; ".join(region.known_limitations),
         }
     components = result["dataset_validation"]["components"]
+    classification = components["buildings"].get("physics_classification") or {}
+    class_counts = classification.get("counts") or {}
+    building_physics = "/".join(
+        f"{class_id}:{int(class_counts.get(class_id, 0))}"
+        for class_id in ("P0", "P1", "P2", "P3")
+    ) if classification else "not_classified"
     return {
         "region_id": region.id,
         "region_name": region.name,
         "status": result["status"],
         "buildings": _component_text(components["buildings"]),
+        "building_physics": building_physics,
         "roads": _component_text(components["road_surfaces"]),
         "road_markings": _component_text(components["road_markings"]),
         "bridges": _component_text(components.get("bridges", {"status": "not_available"})),

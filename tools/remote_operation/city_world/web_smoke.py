@@ -70,6 +70,8 @@ def list_generated_jobs(worker_runtime_root: Path) -> list[dict]:
                 "sha256": result["sha256"],
                 "server_relative_path": relative,
                 "collider_available": colliders.is_file(),
+                "building_physics_level": result.get("building_physics_level"),
+                "colliders": result.get("colliders"),
                 "selection": selection,
                 "updated_at_msec": int(manifest_path.stat().st_mtime * 1000),
             })

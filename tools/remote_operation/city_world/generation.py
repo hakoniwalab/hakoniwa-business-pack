@@ -103,6 +103,7 @@ def _manifest_text(request: dict[str, Any], job_root: Path, cache_dir: Path) -> 
     extent = request["selection"]["half_extent_m"]
     build_dir = (job_root / "build").resolve()
     install_dir = (job_root / "install").resolve()
+    physics_level = request.get("options", {}).get("building_physics_level", 3)
     return f"""version: 1
 component: hakoniwa-envsim
 
@@ -139,6 +140,7 @@ mjcf:
   model_name: plateau_city_world
   collision: all
   floor: false
+  building_physics_level: {physics_level}
 
 glb:
   enabled: true
@@ -173,6 +175,7 @@ def package_world(
     job_id: str,
     request_sha256: str,
     inspection_sha256: str,
+    building_physics_level: int,
 ) -> dict[str, Any]:
     world = job_root / "build" / "world"
     sources = {
@@ -194,11 +197,31 @@ def package_world(
         for entry, source in sources.items():
             archive.write(source, entry)
 
+    world_receipt = json.loads(sources["receipt/city-world-receipt.json"].read_text(encoding="utf-8"))
+    collider_counts = world_receipt.get("components", {}).get("mjcf_geom_counts", {})
+    physics_receipt_path = (
+        job_root / "build" / "components" / "buildings" /
+        "building-physics-application.json"
+    )
+    physics_receipt = json.loads(physics_receipt_path.read_text(encoding="utf-8"))
+    by_class = physics_receipt.get("collider_geom_counts", {}).get("by_class", {})
     result = {
         "schema_version": SCHEMA_VERSION,
         "job_id": job_id,
         "request_sha256": request_sha256,
         "inspection_sha256": inspection_sha256,
+        "building_physics_level": building_physics_level,
+        "colliders": {
+            "total": int(collider_counts.get("total", 0)),
+            "by_component": {
+                str(key): int(value)
+                for key, value in collider_counts.items() if key != "total"
+            },
+            "by_physics_class": {
+                class_id: int(by_class.get(class_id, 0))
+                for class_id in ("P0", "P1", "P2", "P3")
+            },
+        },
         "artifact_name": artifact.name,
         "media_type": "application/zip",
         "size_bytes": artifact.stat().st_size,
@@ -349,5 +372,8 @@ class CityWorldGenerator:
             job_id=command["job_id"],
             request_sha256=command["request_sha256"],
             inspection_sha256=inspection_hash,
+            building_physics_level=command["request"].get(
+                "options", {}
+            ).get("building_physics_level", 3),
         )
         return result

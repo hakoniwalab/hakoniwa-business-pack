@@ -25,6 +25,7 @@ def request() -> dict:
         },
         "profile": "visual-physics-v1",
         "year": "latest",
+        "options": {"building_physics_level": 3},
     }
 
 
@@ -108,6 +109,10 @@ class CityWorldJobProtocolTest(unittest.TestCase):
         req["shell_command"] = "arbitrary command"
         with self.assertRaisesRegex(protocol.CityWorldProtocolError, "unknown fields"):
             protocol.validate_request(req)
+        req = request()
+        req["options"]["building_physics_level"] = 4
+        with self.assertRaisesRegex(protocol.CityWorldProtocolError, "building_physics_level"):
+            protocol.validate_request(req)
 
     def test_message_rejects_command_path_and_hash_mismatch(self) -> None:
         value = message("INSPECT_SELECTION", "command", request=request())
@@ -153,6 +158,12 @@ class CityWorldJobProtocolTest(unittest.TestCase):
             "job_id": "numazu-station-001",
             "request_sha256": protocol.canonical_sha256(request()),
             "inspection_sha256": inspection_hash,
+            "building_physics_level": 3,
+            "colliders": {
+                "total": 12,
+                "by_component": {"terrain": 1, "buildings": 11},
+                "by_physics_class": {"P0": 3, "P1": 4, "P2": 4, "P3": 0},
+            },
             "artifact_name": "city-world-numazu-station-001.zip",
             "media_type": "application/zip",
             "size_bytes": 1234,
