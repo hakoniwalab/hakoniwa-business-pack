@@ -22,6 +22,7 @@
     "request_sha256": {"$ref": "#/$defs/sha256"},
     "inspection_sha256": {"$ref": "#/$defs/sha256"},
     "building_physics_level": {"type": "integer", "minimum": 0, "maximum": 3},
+    "building_collider_reduction": {"enum": ["safe", "coplanar-union", "convex-decompose"]},
     "colliders": {
       "type": "object",
       "additionalProperties": false,
@@ -41,6 +42,15 @@
             "P1": {"type": "integer", "minimum": 0},
             "P2": {"type": "integer", "minimum": 0},
             "P3": {"type": "integer", "minimum": 0}
+          }
+        },
+        "building_by_geom_type": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["box", "mesh"],
+          "properties": {
+            "box": {"type": "integer", "minimum": 0},
+            "mesh": {"type": "integer", "minimum": 0}
           }
         }
       }

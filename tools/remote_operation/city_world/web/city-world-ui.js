@@ -1,7 +1,7 @@
 import { CityWorldPduClient } from './city-world-client.js';
 
 const elements = Object.fromEntries([
-  'latitude', 'longitude', 'northSouth', 'eastWest', 'physics-level', 'inspect', 'generate', 'cancel', 'connect',
+  'latitude', 'longitude', 'northSouth', 'eastWest', 'physics-level', 'coplanar-union', 'convex-decompose', 'inspect', 'generate', 'cancel', 'connect',
   'connection', 'connection-text', 'selection-summary', 'mesh-summary', 'overall',
   'municipality', 'capabilities', 'generation', 'artifact-select', 'artifact-path', 'artifact-detail', 'cache-info',
   'download', 'view3d', 'delete-artifact', 'viewer-visual', 'viewer-collider',
@@ -215,6 +215,20 @@ for (const id of ['latitude', 'longitude', 'northSouth', 'eastWest', 'physics-le
     map.fitBounds(selectionBounds().pad(0.35), { maxZoom: 19 });
   });
 }
+elements['coplanar-union'].addEventListener('change', () => {
+  if (!elements['coplanar-union'].checked) {
+    elements['convex-decompose'].checked = false;
+  }
+  invalidateInspection();
+  refreshSelection();
+});
+elements['convex-decompose'].addEventListener('change', () => {
+  if (elements['convex-decompose'].checked) {
+    elements['coplanar-union'].checked = true;
+  }
+  invalidateInspection();
+  refreshSelection();
+});
 
 resizeHandles.forEach((handle, index) => {
   let fixedCorner = null;
@@ -309,6 +323,12 @@ function applyGeneratedSelection(job) {
   if (Number.isInteger(job.building_physics_level)) {
     elements['physics-level'].value = String(job.building_physics_level);
   }
+  elements['coplanar-union'].checked = ['coplanar-union', 'convex-decompose'].includes(
+    job.building_collider_reduction,
+  );
+  elements['convex-decompose'].checked = (
+    job.building_collider_reduction === 'convex-decompose'
+  );
   invalidateInspection();
   refreshSelection();
   const bounds = selectionBounds();
@@ -340,13 +360,16 @@ function updateArtifactSelection({ restoreSelection = false } = {}) {
   const classText = ['P0', 'P1', 'P2', 'P3']
     .map((name) => `${name}=${classCounts[name] ?? 0}`)
     .join(', ');
+  const geomTypes = job?.colliders?.building_by_geom_type;
   elements['artifact-detail'].textContent = job === null
     ? 'Physics Level: — / Collider: —'
     : [
       `Physics Level: ${job.building_physics_level ?? '旧形式'}`,
+      `Collider reduction: ${job.building_collider_reduction ?? 'safe'}`,
       `Collider total: ${job.colliders?.total ?? '不明'} geoms`,
       componentText ? `Components: ${componentText}` : null,
       job.colliders?.by_physics_class ? `Building allocation: ${classText}` : null,
+      geomTypes ? `Building geom types: box=${geomTypes.box}, mesh=${geomTypes.mesh}` : null,
     ].filter(Boolean).join('\n');
   if (restoreSelection) applyGeneratedSelection(job);
 }
@@ -678,6 +701,9 @@ async function inspectSelection() {
       latitude: numeric('latitude'), longitude: numeric('longitude'),
       halfExtentNorthSouth: numeric('northSouth'), halfExtentEastWest: numeric('eastWest'),
       buildingPhysicsLevel: numeric('physics-level'),
+      buildingColliderReduction: elements['convex-decompose'].checked
+        ? 'convex-decompose'
+        : elements['coplanar-union'].checked ? 'coplanar-union' : 'safe',
     });
     writeLog(command);
     while (true) {

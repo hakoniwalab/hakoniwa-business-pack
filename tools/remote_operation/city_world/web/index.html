@@ -31,6 +31,8 @@
     button:disabled { opacity: .55; cursor: wait; }
     #connect { margin-left: auto; padding: 5px 9px; font-size: .78rem; }
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+    .grid .checkbox-option { grid-column: 1 / -1; display: flex; align-items: flex-start; gap: 8px; }
+    .grid .checkbox-option input { width: auto; margin-top: 2px; }
     label { display: grid; gap: 4px; font-size: .78rem; color: #536371; }
     input, .grid select { width: 100%; border: 1px solid #b9c5ce; border-radius: 5px; padding: 7px; font: inherit; color: #17222d; background: #fff; }
     .hint { color: #697a88; font-size: .75rem; line-height: 1.45; }
@@ -111,6 +113,14 @@
             <option value="2">2 — P2 → P1 → P0</option>
             <option value="3" selected>3 — P3 → P2 → P1 → P0</option>
           </select>
+        </label>
+        <label class="checkbox-option">
+          <input id="coplanar-union" type="checkbox">
+          <span>同一平面の隣接する凸面も統合する（Collider削減）</span>
+        </label>
+        <label class="checkbox-option">
+          <input id="convex-decompose" type="checkbox">
+          <span>凹polygonの三角Colliderも少数の凸領域へ再構成する（実験的）</span>
         </label>
       </div>
       <p class="hint">地図のクリック、中心マーカーまたは青い区画のドラッグで位置を変更できます。四隅のハンドルで範囲を変更できます。100m + 100mは一辺200mの範囲です。</p>

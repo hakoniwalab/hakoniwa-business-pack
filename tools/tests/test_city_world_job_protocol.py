@@ -25,7 +25,10 @@ def request() -> dict:
         },
         "profile": "visual-physics-v1",
         "year": "latest",
-        "options": {"building_physics_level": 3},
+        "options": {
+            "building_physics_level": 3,
+            "building_collider_reduction": "safe",
+        },
     }
 
 
@@ -113,6 +116,13 @@ class CityWorldJobProtocolTest(unittest.TestCase):
         req["options"]["building_physics_level"] = 4
         with self.assertRaisesRegex(protocol.CityWorldProtocolError, "building_physics_level"):
             protocol.validate_request(req)
+        req = request()
+        req["options"]["building_collider_reduction"] = "convex-hull"
+        with self.assertRaisesRegex(protocol.CityWorldProtocolError, "building_collider_reduction"):
+            protocol.validate_request(req)
+        req = request()
+        req["options"]["building_collider_reduction"] = "convex-decompose"
+        protocol.validate_request(req)
 
     def test_message_rejects_command_path_and_hash_mismatch(self) -> None:
         value = message("INSPECT_SELECTION", "command", request=request())
@@ -165,6 +175,7 @@ class CityWorldJobProtocolTest(unittest.TestCase):
             "request_sha256": protocol.canonical_sha256(request()),
             "inspection_sha256": inspection_hash,
             "building_physics_level": 3,
+            "building_collider_reduction": "safe",
             "colliders": {
                 "total": 12,
                 "by_component": {"terrain": 1, "buildings": 11},

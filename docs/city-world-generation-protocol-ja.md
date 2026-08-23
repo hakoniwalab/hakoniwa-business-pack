@@ -113,6 +113,23 @@ Workerはこの値をjob固有の`hakoniwa-envsim-build.yaml`に
 Levelは建物ごとのP0〜P3再判定と建物collisionだけを変更する。地形、道路、橋、Visual、
 textureは変更しない。選択値はrequest hash、job記録、result manifest、生成結果画面へ残す。
 
+## 5.2 Collider削減オプション
+
+ブラウザには階層的なcheck boxを2個置く。両方OFFは`safe`、隣接凸面だけONは
+`coplanar-union`、両方ONは`convex-decompose`とする。下段をONにすると上段もONになり、
+上段をOFFにすると下段もOFFになる。Workerは選択値を`mjcf.building_collider_reduction`へ
+そのまま固定する。
+
+`coplanar-union`はP1〜P3について、同一建物・同一semantic surface種別・同一向きの
+同一平面にある、すでに凸なsource polygon Colliderを対象とする。`convex-decompose`はさらに
+凹・穴ありsource polygonの三角Colliderを同一source polygon内で再構成する。
+いずれも2形状の和集合が単一の穴なし凸polygonになる組だけ段階的に1 Colliderへ統合する。
+凸包、頂点snap、隙間補間は行わない。条件不成立時は`safe`のColliderを維持する。
+Visual、texture、P0分類、地形、道路、橋は変更しない。実際に使ったモードは
+request hash、job記録、result manifest、Envsim Receipt、生成結果画面へ残す。
+直方体条件を厳密に満たす建物ColliderはMuJoCo box primitiveへ変換し、生成結果には建物の
+`box` / `mesh`内訳も表示する。
+
 ## 6. PLATEAU coverage inspection
 
 診断は三層に分ける。
@@ -466,7 +483,7 @@ LOD2建物テクスチャもsource identity配下の共有cacheへ保存し、�
 新しい順に表示する。選択すると生成時の中心・half extentを入力欄へ戻し、その範囲を
 オレンジの破線で地図へ重ねる。選択中のjobについて、Workspaceからの相対パスを画面へ表示し、
 共有cacheの相対パス、object数、総容量も別に表示する。
-同じ欄に生成時のBuilding Physics Levelと、Physics Worldの総Collider geom数、
+同じ欄に生成時のBuilding Physics Level、Collider削減モード、Physics Worldの総Collider geom数、
 terrain/buildings/bridges等のcomponent別内訳、P0〜P3別の建物geom数を表示する。
 `Download ZIP`を押した場合だけZIP本体を取得し、一覧表示や3D表示の時点ではZIPを転送しない。
 `生成結果を削除`は、確認後にサーバー上の選択jobディレクトリを丸ごと削除する。

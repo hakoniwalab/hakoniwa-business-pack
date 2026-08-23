@@ -137,11 +137,21 @@ def validate_request(value: Any) -> dict[str, Any]:
     if request["year"] != "latest":
         raise CityWorldProtocolError("request.year must be latest")
     if "options" in request:
-        options = _object(request["options"], "request.options", {"building_physics_level"})
+        options = _object(
+            request["options"], "request.options", {"building_physics_level"},
+            {"building_collider_reduction"},
+        )
         _integer(
             options["building_physics_level"],
             "request.options.building_physics_level", 0, 3,
         )
+        if "building_collider_reduction" in options and options[
+            "building_collider_reduction"
+        ] not in {"safe", "coplanar-union", "convex-decompose"}:
+            raise CityWorldProtocolError(
+                "request.options.building_collider_reduction must be safe, "
+                "coplanar-union, or convex-decompose"
+            )
     selection = _object(request["selection"], "request.selection", {"center", "half_extent_m"})
     center = _object(
         selection["center"], "request.selection.center", {"latitude", "longitude"}
@@ -275,7 +285,7 @@ def validate_result(value: Any) -> dict[str, Any]:
             "schema_version", "job_id", "request_sha256", "inspection_sha256",
             "artifact_name", "media_type", "size_bytes", "sha256", "entries",
         },
-        {"building_physics_level", "colliders"},
+        {"building_physics_level", "building_collider_reduction", "colliders"},
     )
     if result["schema_version"] != SCHEMA_VERSION:
         raise CityWorldProtocolError("result.schema_version must be 1")
@@ -286,10 +296,18 @@ def validate_result(value: Any) -> dict[str, Any]:
         _integer(
             result["building_physics_level"], "result.building_physics_level", 0, 3
         )
+    if "building_collider_reduction" in result and result[
+        "building_collider_reduction"
+    ] not in {"safe", "coplanar-union", "convex-decompose"}:
+        raise CityWorldProtocolError(
+            "result.building_collider_reduction must be safe, coplanar-union, "
+            "or convex-decompose"
+        )
     if "colliders" in result:
         colliders = _object(
             result["colliders"], "result.colliders",
-            {"total", "by_component", "by_physics_class"}
+            {"total", "by_component", "by_physics_class"},
+            {"building_by_geom_type"},
         )
         total = _integer(colliders["total"], "result.colliders.total", 0)
         by_component = colliders["by_component"]
@@ -307,6 +325,17 @@ def validate_result(value: Any) -> dict[str, Any]:
         )
         for class_id in ("P0", "P1", "P2", "P3"):
             _integer(by_class[class_id], f"result.colliders.by_physics_class.{class_id}", 0)
+        if "building_by_geom_type" in colliders:
+            by_geom_type = _object(
+                colliders["building_by_geom_type"],
+                "result.colliders.building_by_geom_type",
+                {"box", "mesh"},
+            )
+            for geom_type in ("box", "mesh"):
+                _integer(
+                    by_geom_type[geom_type],
+                    f"result.colliders.building_by_geom_type.{geom_type}", 0,
+                )
     name = _string(result["artifact_name"], "result.artifact_name", 128)
     if _ARTIFACT_RE.fullmatch(name) is None:
         raise CityWorldProtocolError("result.artifact_name must be a safe .zip basename")

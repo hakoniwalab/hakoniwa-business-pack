@@ -436,7 +436,15 @@ class CityWorldInspectionTest(unittest.TestCase):
                 "collider_geom_counts": {
                     "total": 0,
                     "by_class": {"P0": 0, "P1": 0, "P2": 0, "P3": 0},
-                }
+                },
+                "collider_geom_types": {
+                    "by_class": {
+                        "P0": {"box": 2, "mesh": 0},
+                        "P1": {"box": 1, "mesh": 3},
+                        "P2": {"box": 4, "mesh": 5},
+                        "P3": {"box": 6, "mesh": 7},
+                    }
+                },
             }), encoding="utf-8")
             result = generation.package_world(
                 job_root=job_root, job_id="numazu-smoke-001",
@@ -447,6 +455,10 @@ class CityWorldInspectionTest(unittest.TestCase):
             self.assertEqual(
                 result["colliders"]["by_physics_class"],
                 {"P0": 0, "P1": 0, "P2": 0, "P3": 0},
+            )
+            self.assertEqual(
+                result["colliders"]["building_by_geom_type"],
+                {"box": 13, "mesh": 15},
             )
             import zipfile
             with zipfile.ZipFile(job_root / "artifacts" / result["artifact_name"]) as archive:
@@ -461,10 +473,12 @@ class CityWorldInspectionTest(unittest.TestCase):
             self.assertIn(f"cache_dir: {(root / 'cache' / 'plateau-citygml').resolve()}", manifest)
             self.assertIn(f"build_dir: {(root / 'jobs' / 'job-1' / 'build').resolve()}", manifest)
             self.assertIn("building_physics_level: 3", manifest)
+            self.assertIn("building_collider_reduction: safe", manifest)
             self.assertIn("parallel_workers: 4", manifest)
             self.assertIn("texture_mode: embedded-if-available", manifest)
             level_one = request()
             level_one["options"]["building_physics_level"] = 1
+            level_one["options"]["building_collider_reduction"] = "coplanar-union"
             manifest = generation._manifest_text(
                 level_one,
                 root / "jobs" / "job-2",
@@ -474,11 +488,20 @@ class CityWorldInspectionTest(unittest.TestCase):
                 5,
             )
             self.assertIn("building_physics_level: 1", manifest)
+            self.assertIn("building_collider_reduction: coplanar-union", manifest)
             self.assertIn("parallel_workers: 6", manifest)
             self.assertIn("dem_parallel_workers: 4", manifest)
             self.assertIn("terrain_spacing_m: 5", manifest)
             self.assertIn("lod_policy: highest_available", manifest)
             self.assertIn("texture_mode: embedded-if-available", manifest)
+            level_three = request()
+            level_three["options"]["building_collider_reduction"] = "convex-decompose"
+            manifest = generation._manifest_text(
+                level_three,
+                root / "jobs" / "job-3",
+                root / "cache" / "plateau-citygml",
+            )
+            self.assertIn("building_collider_reduction: convex-decompose", manifest)
 
     def test_auto_terrain_spacing_preserves_small_areas_and_bounds_large_areas(self) -> None:
         small = request()

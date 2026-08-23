@@ -296,6 +296,9 @@ def _manifest_text(
     build_dir = (job_root / "build").resolve()
     install_dir = (job_root / "install").resolve()
     physics_level = request.get("options", {}).get("building_physics_level", 3)
+    collider_reduction = request.get("options", {}).get(
+        "building_collider_reduction", "safe"
+    )
     return f"""version: 1
 component: hakoniwa-envsim
 
@@ -333,6 +336,7 @@ mjcf:
   collision: all
   floor: false
   building_physics_level: {physics_level}
+  building_collider_reduction: {collider_reduction}
 
 glb:
   enabled: true
@@ -370,6 +374,7 @@ def package_world(
     request_sha256: str,
     inspection_sha256: str,
     building_physics_level: int,
+    building_collider_reduction: str = "safe",
 ) -> dict[str, Any]:
     world = job_root / "build" / "world"
     sources = {
@@ -405,12 +410,14 @@ def package_world(
     )
     physics_receipt = json.loads(physics_receipt_path.read_text(encoding="utf-8"))
     by_class = physics_receipt.get("collider_geom_counts", {}).get("by_class", {})
+    by_geom_type = physics_receipt.get("collider_geom_types", {}).get("by_class", {})
     result = {
         "schema_version": SCHEMA_VERSION,
         "job_id": job_id,
         "request_sha256": request_sha256,
         "inspection_sha256": inspection_sha256,
         "building_physics_level": building_physics_level,
+        "building_collider_reduction": building_collider_reduction,
         "colliders": {
             "total": int(collider_counts.get("total", 0)),
             "by_component": {
@@ -420,6 +427,13 @@ def package_world(
             "by_physics_class": {
                 class_id: int(by_class.get(class_id, 0))
                 for class_id in ("P0", "P1", "P2", "P3")
+            },
+            "building_by_geom_type": {
+                geom_type: sum(
+                    int(by_geom_type.get(class_id, {}).get(geom_type, 0))
+                    for class_id in ("P0", "P1", "P2", "P3")
+                )
+                for geom_type in ("box", "mesh")
             },
         },
         "artifact_name": artifact.name,
@@ -693,6 +707,9 @@ class CityWorldGenerator:
             building_physics_level=command["request"].get(
                 "options", {}
             ).get("building_physics_level", 3),
+            building_collider_reduction=command["request"].get(
+                "options", {}
+            ).get("building_collider_reduction", "safe"),
         )
         _check_canceled(cancel_event)
         return result

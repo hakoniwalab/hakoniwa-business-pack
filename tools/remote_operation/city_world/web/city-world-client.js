@@ -77,6 +77,7 @@ export class CityWorldPduClient {
   async inspect({
     jobId, latitude, longitude, halfExtentNorthSouth, halfExtentEastWest,
     buildingPhysicsLevel,
+    buildingColliderReduction = 'safe',
   }) {
     const request = {
       schema_version: 1,
@@ -89,7 +90,10 @@ export class CityWorldPduClient {
       },
       profile: 'visual-physics-v1',
       year: 'latest',
-      options: { building_physics_level: Number(buildingPhysicsLevel) },
+      options: {
+        building_physics_level: Number(buildingPhysicsLevel),
+        building_collider_reduction: buildingColliderReduction,
+      },
     };
     const message = {
       schema_version: 1,
