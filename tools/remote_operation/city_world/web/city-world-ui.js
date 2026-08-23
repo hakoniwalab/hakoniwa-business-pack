@@ -12,6 +12,30 @@ const capabilityLabels = {
   building: 'Building', terrain: 'Terrain', road: 'Road',
   road_markings: 'Road markings', bridge: 'Bridge',
 };
+const progressPhaseLabels = {
+  source_download: 'PLATEAUソース',
+  geometry_extract: '建物形状抽出',
+  building_collision: '建物Collider',
+  terrain: '地形',
+  building_mjcf: '建物Physics',
+  building_visual: '建物Visual',
+  texture_download: '建物テクスチャ',
+  building_glb: '建物GLB',
+  roads: '道路Visual',
+  road_markings: 'LOD3路面標示',
+  bridges_visual: '橋梁Visual',
+  bridges_physics: '橋梁Physics',
+  compose: 'City World統合',
+  dataset_validation: 'Capability検証',
+  world_generated: '生成完了確認',
+  packaging: '検証・ZIP作成',
+};
+
+function progressText(progress) {
+  const phase = progressPhaseLabels[progress.phase] ?? progress.phase;
+  const heading = phase ? `${phase} — ` : '';
+  return `${progress.percent}% — ${heading}${progress.message}`;
+}
 const client = new CityWorldPduClient();
 let connected = false;
 let inspecting = false;
@@ -621,7 +645,7 @@ async function generateWorld() {
       writeLog(status);
       if (status.job_id !== command.job_id) continue;
       if (['ACCEPTED', 'DOWNLOADING', 'GENERATING', 'VALIDATING'].includes(status.type)) {
-        elements.generation.textContent = `${status.progress.percent}% — ${status.progress.message}`;
+        elements.generation.textContent = progressText(status.progress);
         continue;
       }
       if (status.type === 'READY') {

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import zipfile
@@ -17,7 +18,65 @@ class CityWorldGenerationError(RuntimeError):
     pass
 
 
-Progress = Callable[[str, int, str], None]
+Progress = Callable[..., None]
+
+
+_BUILD_PHASES = {
+    "geometry_extract": (35, "建物形状を抽出しています"),
+    "building_collision": (42, "建物Colliderを生成しています"),
+    "terrain": (48, "地形を生成しています"),
+    "building_mjcf": (52, "建物Physicsを生成しています"),
+    "building_visual": (56, "建物Visualを生成しています"),
+    "building_glb": (72, "建物GLBを書き出しています"),
+    "roads": (76, "道路と地形のVisualを生成しています"),
+    "road_markings": (79, "LOD3路面標示を生成しています"),
+    "bridges_visual": (81, "橋梁Visualを生成しています"),
+    "bridges_physics": (83, "橋梁Physicsを生成しています"),
+    "compose": (86, "City Worldを統合しています"),
+    "dataset_validation": (88, "Dataset Capabilityを検証しています"),
+}
+
+
+def _forward_build_progress(line: str, progress: Progress) -> None:
+    marker = "[HAKO_PROGRESS] "
+    if not line.startswith(marker):
+        return
+    try:
+        event = json.loads(line[len(marker):])
+    except json.JSONDecodeError:
+        return
+    phase = event.get("phase")
+    if phase == "source_download":
+        current, total = int(event.get("current", 0)), int(event.get("total", 0))
+        feature = str(event.get("feature", "source"))
+        mode = event.get("mode")
+        action = {
+            "cache-reused": "共有キャッシュを再利用しました",
+            "offline-reused": "ローカルデータを再利用しました",
+            "downloaded": "ダウンロードしました",
+            "cache-populated": "ダウンロードして共有キャッシュへ保存しました",
+        }.get(mode, "取得またはキャッシュ再利用を確認しています")
+        progress(
+            "DOWNLOADING", 15,
+            f"PLATEAU {feature}ソース: {action}（{current}/{total}）",
+            phase="source_download", current=current, total=total,
+        )
+        return
+    if phase == "texture_download":
+        current, total = int(event.get("current", 0)), int(event.get("total", 0))
+        percent = 70 if total == 0 else 56 + int(14 * current / total)
+        message = (
+            "選択範囲に建物テクスチャはありません"
+            if total == 0 else f"建物テクスチャを取得・再利用しています（{current}/{total}）"
+        )
+        progress(
+            "GENERATING", percent, message,
+            phase="texture_download", current=current, total=total,
+        )
+        return
+    if phase in _BUILD_PHASES:
+        percent, message = _BUILD_PHASES[phase]
+        progress("GENERATING", percent, message, phase=phase)
 
 
 def _root() -> Path:
@@ -226,23 +285,36 @@ class CityWorldGenerator:
         progress(
             "DOWNLOADING", 10,
             "PLATEAUデータを準備しています（共有キャッシュの検証・再利用を含む）",
+            phase="source_download",
         )
         with log_path.open("w", encoding="utf-8") as log:
-            completed = subprocess.run(
-                [str(python), str(hako), "build", "--config", str(manifest)],
+            environment = dict(os.environ)
+            environment["PYTHONUNBUFFERED"] = "1"
+            process = subprocess.Popen(
+                [str(python), "-u", str(hako), "build", "--config", str(manifest)],
                 cwd=envsim,
-                stdout=log,
+                stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                check=False,
+                bufsize=1,
+                env=environment,
             )
-        if completed.returncode:
+            assert process.stdout is not None
+            for line in process.stdout:
+                log.write(line)
+                log.flush()
+                _forward_build_progress(line.rstrip("\n"), progress)
+            returncode = process.wait()
+        if returncode:
             tail = log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-12:]
             raise CityWorldGenerationError(
-                f"hakoniwa-envsim build failed with rc={completed.returncode}: " + " | ".join(tail)
+                f"hakoniwa-envsim build failed with rc={returncode}: " + " | ".join(tail)
             )
 
-        progress("GENERATING", 80, "Visual WorldとPhysics Worldを生成しました")
+        progress(
+            "GENERATING", 89, "Visual WorldとPhysics Worldを生成しました",
+            phase="world_generated",
+        )
         viewer = job_root / "viewer"
         viewer.mkdir(parents=True, exist_ok=True)
         shutil.copy2(job_root / "build" / "world" / "city-world.glb", viewer / "city-world.glb")
@@ -268,7 +340,10 @@ class CityWorldGenerator:
                 f"rc={collider_completed.returncode}: " + " | ".join(tail)
             )
 
-        progress("VALIDATING", 90, "生成物、Collider表示、Receiptを検証しています")
+        progress(
+            "VALIDATING", 94, "生成物、Collider表示、Receiptを検証しています",
+            phase="packaging",
+        )
         result = package_world(
             job_root=job_root,
             job_id=command["job_id"],

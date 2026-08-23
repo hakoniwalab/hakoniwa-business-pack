@@ -126,6 +126,16 @@ def result_manifest(command_value: dict) -> dict:
 
 
 class CityWorldInspectionTest(unittest.TestCase):
+    def test_generation_forwards_structured_texture_progress(self) -> None:
+        observed = []
+        generation._forward_build_progress(
+            '[HAKO_PROGRESS] {"phase":"texture_download","current":25,"total":100}',
+            lambda *args, **kwargs: observed.append((args, kwargs)),
+        )
+        self.assertEqual(observed, [(('GENERATING', 59, '建物テクスチャを取得・再利用しています（25/100）'), {
+            'phase': 'texture_download', 'current': 25, 'total': 100,
+        })])
+
     def test_catalog_inspection_reports_optional_bridge_without_downloading(self) -> None:
         FakePlateauClient.allow_not_found_requests = []
         result = inspection.inspect_request(
@@ -177,9 +187,20 @@ class CityWorldInspectionTest(unittest.TestCase):
 
         def fake_generator(command_arg, inspection_arg, progress):
             self.assertEqual(inspection_arg, inspected)
-            progress("DOWNLOADING", 10, "download")
-            progress("GENERATING", 80, "generate")
-            progress("VALIDATING", 90, "validate")
+            progress(
+                "DOWNLOADING", 10, "download 1/2",
+                phase="source_download", current=1, total=2,
+            )
+            progress(
+                "DOWNLOADING", 15, "download 2/2",
+                phase="source_download", current=2, total=2,
+            )
+            progress(
+                "GENERATING", 60, "texture 25/50",
+                phase="texture_download", current=25, total=50,
+            )
+            progress("GENERATING", 80, "generate", phase="compose")
+            progress("VALIDATING", 90, "validate", phase="packaging")
             return result_manifest(command_arg)
 
         emitted = []
@@ -191,8 +212,12 @@ class CityWorldInspectionTest(unittest.TestCase):
             emit=emitted.append,
         )
         self.assertEqual([item["type"] for item in statuses], [
-            "ACCEPTED", "DOWNLOADING", "GENERATING", "VALIDATING", "READY",
+            "ACCEPTED", "DOWNLOADING", "DOWNLOADING", "GENERATING", "GENERATING",
+            "VALIDATING", "READY",
         ])
+        self.assertEqual(statuses[3]["progress"]["current"], 25)
+        self.assertEqual(statuses[3]["progress"]["total"], 50)
+        self.assertEqual(statuses[3]["progress"]["phase"], "texture_download")
         self.assertEqual(emitted, statuses)
 
     def test_default_download_limit_accepts_dense_city_catalog_estimate(self) -> None:

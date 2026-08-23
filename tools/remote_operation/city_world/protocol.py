@@ -47,8 +47,8 @@ STATUS_TRANSITIONS = {
     "SELECTION_AVAILABLE": frozenset({"ACCEPTED", "CANCELED", "FAILED"}),
     "SELECTION_UNAVAILABLE": frozenset(),
     "ACCEPTED": frozenset({"DOWNLOADING", "GENERATING", "CANCELED", "FAILED"}),
-    "DOWNLOADING": frozenset({"GENERATING", "CANCELED", "FAILED"}),
-    "GENERATING": frozenset({"VALIDATING", "CANCELED", "FAILED"}),
+    "DOWNLOADING": frozenset({"DOWNLOADING", "GENERATING", "CANCELED", "FAILED"}),
+    "GENERATING": frozenset({"GENERATING", "VALIDATING", "CANCELED", "FAILED"}),
     "VALIDATING": frozenset({"READY", "CANCELED", "FAILED"}),
     "READY": frozenset(),
     "CANCELED": frozenset(),
@@ -381,9 +381,21 @@ def validate_message(value: Any) -> dict[str, Any]:
         if result["inspection_sha256"] != message["inspection_sha256"]:
             raise CityWorldProtocolError("result inspection identity does not match message")
     if "progress" in message:
-        progress = _object(message["progress"], "progress", {"percent", "message"})
+        progress = _object(
+            message["progress"], "progress", {"percent", "message"},
+            {"phase", "current", "total"},
+        )
         _integer(progress["percent"], "progress.percent", 0, 100)
         _string(progress["message"], "progress.message", 256)
+        if "phase" in progress:
+            _string(progress["phase"], "progress.phase", 64, _PHASE_RE)
+        if "current" in progress or "total" in progress:
+            if set(progress) & {"current", "total"} != {"current", "total"}:
+                raise CityWorldProtocolError("progress.current and progress.total must appear together")
+            current = _integer(progress["current"], "progress.current", 0)
+            total = _integer(progress["total"], "progress.total", 0)
+            if current > total:
+                raise CityWorldProtocolError("progress.current must not exceed progress.total")
     if "error" in message:
         _validate_error(message["error"])
     return _plain_json(message, "message")

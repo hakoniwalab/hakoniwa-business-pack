@@ -180,6 +180,24 @@ class CityWorldJobProtocolTest(unittest.TestCase):
             previous = following
         with self.assertRaisesRegex(protocol.CityWorldProtocolError, "invalid City World"):
             protocol.validate_status_transition("INSPECTING", "GENERATING")
+        protocol.validate_status_transition("DOWNLOADING", "DOWNLOADING")
+        protocol.validate_status_transition("GENERATING", "GENERATING")
+
+    def test_progress_supports_phase_and_exact_item_count(self) -> None:
+        value = message(
+            "GENERATING", "status", inspection_sha256=HASH_B,
+            progress={
+                "percent": 63,
+                "phase": "texture_download",
+                "current": 25,
+                "total": 100,
+                "message": "building textures 25/100",
+            },
+        )
+        protocol.validate_message(value)
+        value["progress"]["current"] = 101
+        with self.assertRaisesRegex(protocol.CityWorldProtocolError, "must not exceed"):
+            protocol.validate_message(value)
 
 
 if __name__ == "__main__":

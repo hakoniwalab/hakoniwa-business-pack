@@ -75,7 +75,7 @@ def handle_generate_command(
     inspection: dict[str, Any] | None,
     inspector: Callable[[dict[str, Any]], dict[str, Any]],
     generator: Callable[
-        [dict[str, Any], dict[str, Any], Callable[[str, int, str], None]],
+        [dict[str, Any], dict[str, Any], Callable[..., None]],
         dict[str, Any],
     ],
     emit: Callable[[dict[str, Any]], None] | None = None,
@@ -119,14 +119,21 @@ def handle_generate_command(
         if current["estimated_download_bytes"] > max_download_bytes:
             raise ValueError("current PLATEAU download estimate exceeds the Worker limit")
 
+        def report_progress(
+            kind: str, percent: int, message: str, *, phase: str | None = None,
+            current: int | None = None, total: int | None = None,
+        ) -> None:
+            detail: dict[str, Any] = {"percent": percent, "message": message}
+            if phase is not None:
+                detail["phase"] = phase
+            if current is not None and total is not None:
+                detail.update({"current": current, "total": total})
+            publish(kind, inspection_sha256=inspection_hash, progress=detail)
+
         result = generator(
             command,
             inspection,
-            lambda kind, percent, message: publish(
-                kind,
-                inspection_sha256=inspection_hash,
-                progress={"percent": percent, "message": message},
-            ),
+            report_progress,
         )
         publish("READY", inspection_sha256=inspection_hash, result=result)
     except Exception as exc:

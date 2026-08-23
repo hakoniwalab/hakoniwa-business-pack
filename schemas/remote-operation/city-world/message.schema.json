@@ -60,7 +60,14 @@
       "required": ["percent", "message"],
       "properties": {
         "percent": {"type": "integer", "minimum": 0, "maximum": 100},
-        "message": {"type": "string", "minLength": 1, "maxLength": 256}
+        "message": {"type": "string", "minLength": 1, "maxLength": 256},
+        "phase": {"type": "string", "pattern": "^[a-z][a-z0-9_-]*$", "maxLength": 64},
+        "current": {"type": "integer", "minimum": 0},
+        "total": {"type": "integer", "minimum": 0}
+      },
+      "dependentRequired": {
+        "current": ["total"],
+        "total": ["current"]
       }
     },
     "error": {

@@ -141,13 +141,15 @@ INSPECT_SELECTION
 SELECTION_AVAILABLE
   -> GENERATE
   -> ACCEPTED
-  -> DOWNLOADING (cached sourceなら省略可能)
-  -> GENERATING
+  -> DOWNLOADING (sourceごとの進捗通知を反復可能)
+  -> GENERATING (component/textureごとの進捗通知を反復可能)
   -> VALIDATING
   -> READY | FAILED | CANCELED
 ```
 
 `SELECTION_UNAVAILABLE`、`READY`、`FAILED`、`CANCELED`は終端状態である。
+`progress`は`phase`と、件数で進捗を表せる場合の`current / total`を保持する。
+CityGMLソース取得と建物テクスチャ取得では、ブラウザへ現在件数と総数を表示する。
 
 ## 8. Identity and idempotency
 
@@ -259,6 +261,10 @@ VALIDATING
 READY | FAILED
 ```
 
+生成中は、PLATEAUソース、建物形状、地形、建物Physics、建物Visual、建物テクスチャ、
+道路、LOD3路面標示、橋梁、City World統合、検証・ZIP作成を別phaseとして表示する。
+建物テクスチャは選択範囲で実際に参照される画像を先に確定し、`current / total`を通知する。
+
 画面ではLeafletの地図クリックまたは中心マーカーのドラッグで位置を選ぶ。選択矩形
 そのものをドラッグすると中心を移動でき、四隅のハンドルをドラッグすると東西・南北
 half extentを変更できる。緯度・経度またはhalf extentを入力欄で確定した場合も、
@@ -296,6 +302,8 @@ work/remote-operation/city-world-worker/cache/plateau-citygml/
     <source-identity-hash>/
       <citygml-file>
       <citygml-file>.cache.json
+      textures/
+        <texture-url-sha256>.<ext>
 ```
 
 CityGMLの元ファイルはjobとは別のWorker共有キャッシュへ保存する。source URLとCatalog
@@ -303,6 +311,8 @@ CityGMLの元ファイルはjobとは別のWorker共有キャッシュへ保存�
 実サイズとSHA-256を検証してからjob固有の
 `build/source/`へmaterializeする。同一filesystemではhard linkを使い、利用できない環境だけ
 file copyへフォールバックする。範囲がメッシュ境界を越えた場合は不足objectだけを取得する。
+LOD2建物テクスチャもsource identity配下の共有cacheへ保存し、別jobで同じURLを参照した
+場合は再取得せずにGLBへ埋め込む。
 範囲切り出しとquery-centered local ENU原点は変わるため、変換処理と生成物はjobごとに再作成する。
 
 画面の生成結果プルダウンには、検証済み`result-manifest.json`を持つjobだけを更新時刻の
