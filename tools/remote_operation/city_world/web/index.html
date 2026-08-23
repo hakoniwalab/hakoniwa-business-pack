@@ -72,7 +72,10 @@
     pre { white-space: pre-wrap; word-break: break-word; background: #111922; color: #d8ffd8; padding: 10px; border-radius: 6px; max-height: 230px; overflow: auto; font-size: .7rem; }
     .leaflet-container { background: #dce5e9; }
     .selection-rectangle { cursor: move; }
-    .selection-resize-handle { width: 12px; height: 12px; margin: -7px 0 0 -7px; border: 2px solid #fff; border-radius: 3px; background: #1367a8; box-shadow: 0 1px 4px #17222d99; }
+    .selection-resize-handle { display: grid; place-items: center; background: transparent; }
+    .selection-resize-handle span { display: block; width: 12px; height: 12px; border: 2px solid #fff; border-radius: 3px; background: #1367a8; box-shadow: 0 1px 4px #17222d99; }
+    .selection-resize-handle-nw, .selection-resize-handle-se { cursor: nwse-resize; }
+    .selection-resize-handle-ne, .selection-resize-handle-sw { cursor: nesw-resize; }
     @media (max-width: 760px) {
       #app, #app.viewer-open { grid-template-columns: 1fr; grid-template-rows: auto minmax(440px, 1fr) minmax(360px, 1fr); height: auto; min-height: 100%; }
       #panel { grid-column: 1; grid-row: 1; border-right: 0; border-bottom: 1px solid #cad3db; }

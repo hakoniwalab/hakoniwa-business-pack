@@ -5,8 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import queue
 import shutil
 import subprocess
+import threading
 import zipfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -60,7 +62,7 @@ def _replace_job_directory(runtime_root: Path, job_id: str):
 _BUILD_PHASES = {
     "geometry_extract": (35, "建物形状を抽出しています"),
     "building_collision": (42, "建物Colliderを生成しています"),
-    "terrain": (48, "地形を生成しています"),
+    "terrain": (43, "地形生成を開始しています"),
     "building_mjcf": (52, "建物Physicsを生成しています"),
     "building_visual": (56, "建物Visualを生成しています"),
     "building_glb": (72, "建物GLBを書き出しています"),
@@ -73,7 +75,20 @@ _BUILD_PHASES = {
 }
 
 
-def _forward_build_progress(line: str, progress: Progress) -> None:
+def _forward_build_progress(
+    line: str,
+    progress: Progress,
+    state: dict[str, Any] | None = None,
+) -> None:
+    def emit(kind: str, percent: int, message: str, **detail: Any) -> None:
+        if state is not None:
+            percent = max(percent, int(state.get("percent", 0)))
+            state.update({
+                "kind": kind, "percent": percent, "message": message,
+                "phase": detail.get("phase"),
+            })
+        progress(kind, percent, message, **detail)
+
     marker = "[HAKO_PROGRESS] "
     if not line.startswith(marker):
         return
@@ -92,10 +107,28 @@ def _forward_build_progress(line: str, progress: Progress) -> None:
             "downloaded": "ダウンロードしました",
             "cache-populated": "ダウンロードして共有キャッシュへ保存しました",
         }.get(mode, "取得またはキャッシュ再利用を確認しています")
-        progress(
+        emit(
             "DOWNLOADING", 15,
             f"PLATEAU {feature}ソース: {action}（{current}/{total}）",
             phase="source_download", current=current, total=total,
+        )
+        return
+    if phase == "terrain_extract":
+        current, total = int(event.get("current", 0)), int(event.get("total", 0))
+        percent = 43 if total == 0 else 43 + int(3 * current / total)
+        emit(
+            "GENERATING", percent,
+            f"DEMソースを並列抽出しています（{current}/{total}）",
+            phase=phase, current=current, total=total,
+        )
+        return
+    if phase == "terrain_gap_fill":
+        current, total = int(event.get("current", 0)), int(event.get("total", 0))
+        percent = 47 if total == 0 else 47 + int(current >= total)
+        emit(
+            "GENERATING", percent,
+            f"DEMの小さな欠損を補間しています（{current}/{total}）",
+            phase=phase, current=current, total=total,
         )
         return
     if phase == "texture_download":
@@ -105,14 +138,14 @@ def _forward_build_progress(line: str, progress: Progress) -> None:
             "選択範囲に建物テクスチャはありません"
             if total == 0 else f"建物テクスチャを取得・再利用しています（{current}/{total}）"
         )
-        progress(
+        emit(
             "GENERATING", percent, message,
             phase="texture_download", current=current, total=total,
         )
         return
     if phase in _BUILD_PHASES:
         percent, message = _BUILD_PHASES[phase]
-        progress("GENERATING", percent, message, phase=phase)
+        emit("GENERATING", percent, message, phase=phase)
 
 
 def _root() -> Path:
@@ -185,6 +218,7 @@ glb:
 
 city_world:
   enabled: true
+  parallel_workers: 4
   terrain_spacing_m: 2
   marking_vertical_offset_m: 0.055
   bridge_collision_thickness_m: 0.02
@@ -345,6 +379,11 @@ class CityWorldGenerator:
             "PLATEAUデータを準備しています（共有キャッシュの検証・再利用を含む）",
             phase="source_download",
         )
+        progress_state: dict[str, Any] = {
+            "kind": "DOWNLOADING", "percent": 10,
+            "message": "PLATEAUデータを準備しています（共有キャッシュの検証・再利用を含む）",
+            "phase": "source_download",
+        }
         with log_path.open("w", encoding="utf-8") as log:
             environment = dict(os.environ)
             environment["PYTHONUNBUFFERED"] = "1"
@@ -358,10 +397,36 @@ class CityWorldGenerator:
                 env=environment,
             )
             assert process.stdout is not None
-            for line in process.stdout:
+            output_queue: queue.Queue[str | None] = queue.Queue()
+
+            def read_output() -> None:
+                assert process.stdout is not None
+                for output_line in process.stdout:
+                    output_queue.put(output_line)
+                output_queue.put(None)
+
+            reader = threading.Thread(
+                target=read_output, name="city-world-build-output", daemon=True,
+            )
+            reader.start()
+            while True:
+                try:
+                    line = output_queue.get(timeout=15.0)
+                except queue.Empty:
+                    progress(
+                        str(progress_state["kind"]), int(progress_state["percent"]),
+                        f"{progress_state['message']}（処理継続中）",
+                        phase=str(progress_state["phase"]), heartbeat=True,
+                    )
+                    continue
+                if line is None:
+                    break
                 log.write(line)
                 log.flush()
-                _forward_build_progress(line.rstrip("\n"), progress)
+                _forward_build_progress(
+                    line.rstrip("\n"), progress, progress_state,
+                )
+            reader.join()
             returncode = process.wait()
         if returncode:
             tail = log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-12:]

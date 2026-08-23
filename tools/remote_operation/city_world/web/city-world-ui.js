@@ -17,6 +17,8 @@ const progressPhaseLabels = {
   geometry_extract: '建物形状抽出',
   building_collision: '建物Collider',
   terrain: '地形',
+  terrain_extract: 'DEM抽出',
+  terrain_gap_fill: 'DEM欠損補間',
   building_mjcf: '建物Physics',
   building_visual: '建物Visual',
   texture_download: '建物テクスチャ',
@@ -87,14 +89,19 @@ const generatedRectangle = L.rectangle([[0, 0], [0, 0]], {
   interactive: false,
 }).addTo(map);
 const diagnosticMeshLayer = L.layerGroup().addTo(map);
-const resizeHandleIcon = L.divIcon({
-  className: 'selection-resize-handle', iconSize: [12, 12], iconAnchor: [6, 6],
-});
-const resizeHandles = [0, 1, 2, 3].map(() => L.marker([0, 0], {
-  draggable: true, icon: resizeHandleIcon, keyboard: false, zIndexOffset: 1000,
+const resizeHandleDirections = ['nw', 'ne', 'se', 'sw'];
+const resizeHandles = resizeHandleDirections.map((direction) => L.marker([0, 0], {
+  draggable: true,
+  icon: L.divIcon({
+    className: `selection-resize-handle selection-resize-handle-${direction}`,
+    html: '<span aria-hidden="true"></span>',
+    iconSize: [28, 28], iconAnchor: [14, 14],
+  }),
+  keyboard: false, zIndexOffset: 1000,
 }).addTo(map));
 const oppositeCorner = [2, 3, 0, 1];
 let suppressMapClickUntil = 0;
+let selectionInteraction = null;
 
 function suppressMapClick() {
   // Leaflet may emit a click immediately after a marker/shape drag. Use a
@@ -201,7 +208,15 @@ for (const id of ['latitude', 'longitude', 'northSouth', 'eastWest', 'physics-le
 
 resizeHandles.forEach((handle, index) => {
   let fixedCorner = null;
+  handle.on('mousedown', (event) => {
+    // The resize marker sits over the movable rectangle. Claim pointer-down
+    // before the SVG layer can interpret the same gesture as rectangle move.
+    selectionInteraction = 'resize';
+    L.DomEvent.stopPropagation(event.originalEvent);
+    suppressMapClick();
+  });
   handle.on('dragstart', () => {
+    selectionInteraction = 'resize';
     fixedCorner = boundsCorners(selectionRectangle.getBounds())[oppositeCorner[index]];
     suppressMapClick();
   });
@@ -214,11 +229,16 @@ resizeHandles.forEach((handle, index) => {
   handle.on('dragend', () => {
     suppressMapClick();
     fixedCorner = null;
+    selectionInteraction = null;
     refreshSelection();
   });
 });
 
 selectionRectangle.on('mousedown', (event) => {
+  const target = event.originalEvent?.target;
+  if (selectionInteraction === 'resize'
+      || (target instanceof Element && target.closest('.selection-resize-handle'))) return;
+  selectionInteraction = 'move';
   L.DomEvent.stopPropagation(event.originalEvent);
   suppressMapClick();
   const start = event.latlng;
@@ -242,6 +262,7 @@ selectionRectangle.on('mousedown', (event) => {
     map.off('mouseup', finish);
     document.removeEventListener('mouseup', finish);
     map.dragging.enable();
+    selectionInteraction = null;
   };
   map.on('mousemove', move);
   map.on('mouseup', finish);

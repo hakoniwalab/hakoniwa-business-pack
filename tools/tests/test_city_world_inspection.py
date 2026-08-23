@@ -173,6 +173,27 @@ class CityWorldInspectionTest(unittest.TestCase):
             'phase': 'texture_download', 'current': 25, 'total': 100,
         })])
 
+    def test_generation_forwards_dem_progress_and_never_regresses_percent(self) -> None:
+        observed = []
+        state = {}
+        publish = lambda *args, **kwargs: observed.append((args, kwargs))
+        generation._forward_build_progress(
+            '[HAKO_PROGRESS] {"phase":"terrain_extract","current":1,"total":5}',
+            publish, state,
+        )
+        generation._forward_build_progress(
+            '[HAKO_PROGRESS] {"phase":"building_mjcf"}', publish, state,
+        )
+        generation._forward_build_progress(
+            '[HAKO_PROGRESS] {"phase":"terrain_gap_fill","current":10,"total":100}',
+            publish, state,
+        )
+        self.assertEqual(observed[0][0][1], 43)
+        self.assertEqual(observed[0][1]["phase"], "terrain_extract")
+        self.assertEqual(observed[1][0][1], 52)
+        self.assertEqual(observed[2][0][1], 52)
+        self.assertEqual(observed[2][1]["phase"], "terrain_gap_fill")
+
     def test_catalog_inspection_reports_optional_bridge_without_downloading(self) -> None:
         FakePlateauClient.allow_not_found_requests = []
         result = inspection.inspect_request(
@@ -335,6 +356,7 @@ class CityWorldInspectionTest(unittest.TestCase):
             self.assertIn(f"cache_dir: {(root / 'cache' / 'plateau-citygml').resolve()}", manifest)
             self.assertIn(f"build_dir: {(root / 'jobs' / 'job-1' / 'build').resolve()}", manifest)
             self.assertIn("building_physics_level: 3", manifest)
+            self.assertIn("parallel_workers: 4", manifest)
             self.assertIn("texture_mode: embedded-if-available", manifest)
             level_one = request()
             level_one["options"]["building_physics_level"] = 1
@@ -441,6 +463,8 @@ class CityWorldInspectionTest(unittest.TestCase):
         self.assertIn("selection-resize-handle", html)
         self.assertIn("L.rectangle", script)
         self.assertIn("resizeHandles", script)
+        self.assertIn("iconSize: [28, 28]", script)
+        self.assertIn("selectionInteraction === 'resize'", script)
         self.assertIn("selectionRectangle.on('mousedown'", script)
         self.assertIn("map.fitBounds(selectionBounds().pad(0.35)", script)
         self.assertIn("generatedRectangle", script)

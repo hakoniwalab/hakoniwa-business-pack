@@ -307,9 +307,17 @@ VALIDATING
 READY | FAILED
 ```
 
-生成中は、PLATEAUソース、建物形状、地形、建物Physics、建物Visual、建物テクスチャ、
+生成中は、PLATEAUソース、建物形状、DEM source抽出、DEM小欠損補間、建物Physics、建物Visual、建物テクスチャ、
 道路、LOD3路面標示、橋梁、City World統合、検証・ZIP作成を別phaseとして表示する。
 建物テクスチャは選択範囲で実際に参照される画像を先に確定し、`current / total`を通知する。
+source取得とDEM source抽出は複数workerで処理する。terrainとworld-frame確定後は、出力先が
+独立した建物Visual、建物Physics、道路、路面標示、橋梁componentを並列生成し、Composerと
+Dataset Validatorだけを依存component完了後に直列実行する。並列phaseの通知順にかかわらず、
+画面の進捗率は後退させない。
+
+外部toolが長時間標準出力を出さない場合も、Workerは15秒ごとに現在phaseのheartbeat statusを
+送る。ブラウザのstatus待機期限は「生成全体の制限時間」ではなく、Workerから一定時間まったく
+応答がない通信異常を検出するための期限である。
 
 画面ではLeafletの地図クリックまたは中心マーカーのドラッグで位置を選ぶ。選択矩形
 そのものをドラッグすると中心を移動でき、四隅のハンドルをドラッグすると東西・南北
