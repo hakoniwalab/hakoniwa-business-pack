@@ -22,10 +22,11 @@ class PlateauCityGmlMujocoWallsTest(unittest.TestCase):
     def test_configure_creates_recipe_venv_and_installs_requirements(self):
         completed = mock.Mock(returncode=0)
         managed_python = Path("/recipe/python/bin/python")
+        python_environment = Path("/recipe/python")
         with (
             mock.patch.object(recipe, "python_requirements_file", return_value=Path(__file__)),
             mock.patch.object(recipe, "recipe_python", return_value=managed_python),
-            mock.patch.object(recipe, "python_environment", return_value=Path("/recipe/python")),
+            mock.patch.object(recipe, "python_environment", return_value=python_environment),
             mock.patch.object(Path, "is_file", return_value=False),
             mock.patch.object(Path, "mkdir"),
             mock.patch.object(recipe.subprocess, "run", return_value=completed) as run,
@@ -35,7 +36,7 @@ class PlateauCityGmlMujocoWallsTest(unittest.TestCase):
         self.assertEqual(
             [call.args[0] for call in run.call_args_list],
             [
-                [sys.executable, "-m", "venv", "/recipe/python"],
+                [sys.executable, "-m", "venv", str(python_environment)],
                 [str(managed_python), "-m", "pip", "install", "-r", str(Path(__file__))],
             ],
         )

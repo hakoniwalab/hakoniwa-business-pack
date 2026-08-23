@@ -169,8 +169,14 @@ CityGMLソース取得と建物テクスチャ取得では、ブラウザへ現�
 
 ## 8. Identity and idempotency
 
-- `job_id + request_sha256`が同じ再送は、同一jobの現在状態として扱う。
-- 同じ`job_id`に異なる`request_sha256`を指定した場合は拒否する。
+- ブラウザ生成の`job_id`は`都道府県slug-自治体コード-lat小数3桁-lon小数3桁`とする。
+  例: `shizuoka-22203-lat35.103-lon138.860`。
+- 選択範囲が複数自治体にまたがる場合は、先頭自治体コードの後ろへ`-multi`を付ける。
+- 同じ`job_id`へのGenerateは、job固有のbuild、viewer、ZIP、Receiptを置換する。
+  共有CityGML/texture cacheはjob外に保持し、置換対象に含めない。
+- 置換生成が失敗した場合、Workerは直前の正常なjob成果物を復元する。
+- 座標丸めが同じ地域では、範囲、Physics Level等を変えても同じjobを更新する。
+  異なる座標セルのjobは別結果として保持し、ブラウザから選択・削除できる。
 - `request_sha256`はrequest objectのcanonical JSON SHA-256とする。
 - `inspection_sha256`は正規化済みinspection objectのcanonical JSON SHA-256とする。
 - `GENERATE`はrequestと`inspection_sha256`を必須とする。
@@ -252,6 +258,30 @@ Terminal 2（限定static server）:
 ```bash
 python3 -m tools.remote_operation.city_world.web_smoke --port 8008
 ```
+
+通常利用では、上記2プロセスを別Terminalで起動せず、Coreless City World Launcherを使う。
+
+```bash
+python3 tools/workspace.py run -- \
+  python3 -m tools.remote_operation.city_world.launcher start --open-browser
+```
+
+このLauncherは既存Hakoniwa Launcherの`activate-only`モードを利用する。WorkerとWebを
+どちらも`before_start` assetとして起動し、`hako-cmd start/stop/reset`は呼び出さない。
+状態確認と停止は次のとおり。
+
+```bash
+python3 tools/workspace.py run -- \
+  python3 -m tools.remote_operation.city_world.launcher status
+
+python3 tools/workspace.py run -- \
+  python3 -m tools.remote_operation.city_world.launcher stop
+```
+
+生成されるLauncher設定、session、個別ログは
+`work/remote-operation/city-world-launcher/`に置く。CityGML cacheと生成jobは従来どおり
+`work/remote-operation/city-world-worker/`に置き、Launcherを停止しても削除しない。
+`--open-browser`を省略した場合はブラウザを自動起動せず、表示されたURLを人間が開く。
 
 ブラウザで`http://127.0.0.1:8008/`を開き、次の順に実行する。
 

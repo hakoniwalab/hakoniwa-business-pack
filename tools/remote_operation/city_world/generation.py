@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import zipfile
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable
 
@@ -19,6 +20,41 @@ class CityWorldGenerationError(RuntimeError):
 
 
 Progress = Callable[..., None]
+
+
+@contextmanager
+def _replace_job_directory(runtime_root: Path, job_id: str):
+    """Replace one job, restoring its previous good result after a failure."""
+    jobs_root = (runtime_root / "jobs").resolve()
+    job_root = (jobs_root / job_id).resolve()
+    backup_root = (runtime_root / ".job-backups").resolve()
+    backup = (backup_root / job_id).resolve()
+    if job_root.parent != jobs_root or backup.parent != backup_root:
+        raise CityWorldGenerationError(f"unsafe job_id path: {job_id}")
+
+    jobs_root.mkdir(parents=True, exist_ok=True)
+    backup_root.mkdir(parents=True, exist_ok=True)
+    # A surviving backup indicates that the preceding Worker was interrupted.
+    # Restore the last good job before beginning another replacement.
+    if backup.exists():
+        if job_root.exists():
+            shutil.rmtree(job_root)
+        backup.rename(job_root)
+
+    had_previous = job_root.exists()
+    if had_previous:
+        job_root.rename(backup)
+    job_root.mkdir(parents=True)
+    try:
+        yield job_root
+    except BaseException:
+        shutil.rmtree(job_root, ignore_errors=True)
+        if had_previous and backup.exists():
+            backup.rename(job_root)
+        raise
+    else:
+        if backup.exists():
+            shutil.rmtree(backup)
 
 
 _BUILD_PHASES = {
@@ -272,18 +308,17 @@ class CityWorldGenerator:
         if inspection_hash != command["inspection_sha256"]:
             raise CityWorldGenerationError("inspection identity does not match GENERATE")
 
-        job_root = self.runtime_root / "jobs" / command["job_id"]
-        artifact_manifest = job_root / "artifacts" / "result-manifest.json"
-        if artifact_manifest.is_file():
-            existing = json.loads(artifact_manifest.read_text(encoding="utf-8"))
-            if (
-                existing.get("request_sha256") == command["request_sha256"]
-                and existing.get("inspection_sha256") == inspection_hash
-            ):
-                return validate_result(existing)
-            raise CityWorldGenerationError("job_id is already owned by another request")
+        with _replace_job_directory(self.runtime_root, command["job_id"]) as job_root:
+            return self._generate(command, inspection, inspection_hash, progress, job_root)
 
-        job_root.mkdir(parents=True, exist_ok=True)
+    def _generate(
+        self,
+        command: dict[str, Any],
+        inspection: dict[str, Any],
+        inspection_hash: str,
+        progress: Progress,
+        job_root: Path,
+    ) -> dict[str, Any]:
         manifest = job_root / "hakoniwa-envsim-build.yaml"
         manifest.write_text(_manifest_text(
             command["request"],

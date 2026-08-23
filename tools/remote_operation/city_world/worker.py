@@ -149,10 +149,11 @@ def run_worker(
     *,
     once: bool = False,
     max_download_bytes: int = DEFAULT_MAX_DOWNLOAD_BYTES,
+    ready_file: Path | None = None,
 ) -> int:
     inspector = PlateauSelectionInspector()
     generator = CityWorldGenerator(endpoint_config.parent)
-    inspections: dict[str, dict[str, Any]] = {}
+    inspections_by_request: dict[str, dict[str, Any]] = {}
     transport = PduJsonTransport(
         endpoint_config,
         encoder=encode_message,
@@ -161,6 +162,9 @@ def run_worker(
         pdu_channel_id=PDU_CHANNEL_ID,
     )
     with transport:
+        if ready_file is not None:
+            ready_file.parent.mkdir(parents=True, exist_ok=True)
+            ready_file.write_text("ready\n", encoding="utf-8")
         print(f"City World Worker listening: {endpoint_config}")
         while True:
             command = transport.receive(3600.0)
@@ -168,7 +172,7 @@ def run_worker(
                 statuses = handle_inspection_command(command, inspector=inspector)
                 terminal = statuses[-1]
                 if terminal["type"] == "SELECTION_AVAILABLE":
-                    inspections[command["job_id"]] = terminal["inspection"]
+                    inspections_by_request[command["request_sha256"]] = terminal["inspection"]
             elif command["type"] == "GENERATE":
                 def send_generation_status(status: dict[str, Any]) -> None:
                     print(f"[PDU][SEND] {status['type']} job_id={status['job_id']}")
@@ -176,7 +180,7 @@ def run_worker(
 
                 statuses = handle_generate_command(
                     command,
-                    inspection=inspections.get(command["job_id"]),
+                    inspection=inspections_by_request.get(command["request_sha256"]),
                     inspector=inspector,
                     generator=generator,
                     emit=send_generation_status,
@@ -218,6 +222,7 @@ def main() -> int:
         "--max-download-gib", type=float, default=8.0,
         help="reject generation when the catalog estimate exceeds this many GiB (default: 8)",
     )
+    parser.add_argument("--ready-file", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.max_download_gib <= 0:
         parser.error("--max-download-gib must be greater than zero")
@@ -231,6 +236,7 @@ def main() -> int:
         endpoint_config,
         once=args.once,
         max_download_bytes=int(args.max_download_gib * 1024 * 1024 * 1024),
+        ready_file=args.ready_file,
     )
 
 

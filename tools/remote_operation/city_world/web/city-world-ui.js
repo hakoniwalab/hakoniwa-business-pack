@@ -30,6 +30,27 @@ const progressPhaseLabels = {
   world_generated: '生成完了確認',
   packaging: '検証・ZIP作成',
 };
+const prefectureSlugs = {
+  '01': 'hokkaido', '02': 'aomori', '03': 'iwate', '04': 'miyagi', '05': 'akita',
+  '06': 'yamagata', '07': 'fukushima', '08': 'ibaraki', '09': 'tochigi', '10': 'gunma',
+  '11': 'saitama', '12': 'chiba', '13': 'tokyo', '14': 'kanagawa', '15': 'niigata',
+  '16': 'toyama', '17': 'ishikawa', '18': 'fukui', '19': 'yamanashi', '20': 'nagano',
+  '21': 'gifu', '22': 'shizuoka', '23': 'aichi', '24': 'mie', '25': 'shiga',
+  '26': 'kyoto', '27': 'osaka', '28': 'hyogo', '29': 'nara', '30': 'wakayama',
+  '31': 'tottori', '32': 'shimane', '33': 'okayama', '34': 'hiroshima', '35': 'yamaguchi',
+  '36': 'tokushima', '37': 'kagawa', '38': 'ehime', '39': 'kochi', '40': 'fukuoka',
+  '41': 'saga', '42': 'nagasaki', '43': 'kumamoto', '44': 'oita', '45': 'miyazaki',
+  '46': 'kagoshima', '47': 'okinawa',
+};
+
+function generatedJobId(request, inspected) {
+  const codes = [...new Set(inspected.municipalities.map((item) => item.city_code))].sort();
+  const cityCode = codes[0] ?? '00000';
+  const prefecture = prefectureSlugs[cityCode.slice(0, 2)] ?? `pref${cityCode.slice(0, 2)}`;
+  const center = request.selection.center;
+  const multiple = codes.length > 1 ? '-multi' : '';
+  return `${prefecture}-${cityCode}${multiple}-lat${center.latitude.toFixed(3)}-lon${center.longitude.toFixed(3)}`;
+}
 
 function progressText(progress) {
   const phase = progressPhaseLabels[progress.phase] ?? progress.phase;
@@ -597,7 +618,11 @@ function renderInspection(message, command) {
     elements.capabilities.append(card);
   }
   lastAvailable = inspected.status === 'available'
-    ? { jobId: command.job_id, request: command.request, inspection: inspected }
+    ? {
+      jobId: generatedJobId(command.request, inspected),
+      request: command.request,
+      inspection: inspected,
+    }
     : null;
   elements.generate.disabled = !connected || lastAvailable === null;
 }
@@ -613,7 +638,7 @@ async function inspectSelection() {
   elements.capabilities.replaceChildren();
   try {
     const command = await client.inspect({
-      jobId: `selection-${Date.now()}`,
+      jobId: 'inspection-current',
       latitude: numeric('latitude'), longitude: numeric('longitude'),
       halfExtentNorthSouth: numeric('northSouth'), halfExtentEastWest: numeric('eastWest'),
       buildingPhysicsLevel: numeric('physics-level'),

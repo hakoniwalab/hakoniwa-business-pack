@@ -127,6 +127,42 @@ def result_manifest(command_value: dict) -> dict:
 
 
 class CityWorldInspectionTest(unittest.TestCase):
+    def test_job_replacement_restores_previous_result_on_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            runtime = Path(raw_root)
+            job_id = "shizuoka-22203-lat35.103-lon138.860"
+            previous = runtime / "jobs" / job_id
+            previous.mkdir(parents=True)
+            (previous / "result.txt").write_text("previous", encoding="utf-8")
+
+            with self.assertRaisesRegex(RuntimeError, "generation failed"):
+                with generation._replace_job_directory(runtime, job_id) as current:
+                    self.assertFalse((current / "result.txt").exists())
+                    (current / "result.txt").write_text("partial", encoding="utf-8")
+                    raise RuntimeError("generation failed")
+
+            self.assertEqual(
+                (previous / "result.txt").read_text(encoding="utf-8"), "previous",
+            )
+
+    def test_job_replacement_commits_result_and_keeps_shared_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            runtime = Path(raw_root)
+            job_id = "shizuoka-22203-lat35.103-lon138.860"
+            previous = runtime / "jobs" / job_id
+            previous.mkdir(parents=True)
+            (previous / "old.txt").write_text("old", encoding="utf-8")
+            cache = runtime / "cache" / "plateau-citygml" / "source.gml"
+            cache.parent.mkdir(parents=True)
+            cache.write_text("cached", encoding="utf-8")
+
+            with generation._replace_job_directory(runtime, job_id) as current:
+                (current / "new.txt").write_text("new", encoding="utf-8")
+
+            self.assertFalse((previous / "old.txt").exists())
+            self.assertEqual((previous / "new.txt").read_text(encoding="utf-8"), "new")
+            self.assertEqual(cache.read_text(encoding="utf-8"), "cached")
+
     def test_generation_forwards_structured_texture_progress(self) -> None:
         observed = []
         generation._forward_build_progress(
@@ -428,6 +464,10 @@ class CityWorldInspectionTest(unittest.TestCase):
         self.assertIn("/generated/index.json", script)
         self.assertIn("applyGeneratedSelection", script)
         self.assertIn("deleteSelectedArtifact", script)
+        self.assertIn("generatedJobId", script)
+        self.assertIn("shizuoka", script)
+        self.assertIn("toFixed(3)", script)
+        self.assertIn("jobId: 'inspection-current'", script)
         for component in ("building", "terrain", "road", "road_markings", "bridge"):
             self.assertIn(f"{component}:", script)
 

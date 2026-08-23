@@ -92,7 +92,8 @@ def _required(path: Path, label: str) -> Path:
 def _load_recipe() -> dict[str, Any]:
     exporter = root() / "recipes" / "tools" / "export_recipe_json.rb"
     completed = subprocess.run(
-        ["ruby", str(exporter), str(recipe_file())], capture_output=True, text=True, check=False
+        ["ruby", str(exporter), str(recipe_file())],
+        capture_output=True, text=True, encoding="utf-8", check=False,
     )
     if completed.returncode:
         raise RecipeError(completed.stderr.strip() or "failed to load Recipe YAML")

@@ -263,6 +263,7 @@ def main() -> int:
         "--worker-runtime-dir", type=Path,
         default=Path("work/remote-operation/city-world-worker"),
     )
+    parser.add_argument("--ready-file", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args()
     pdu_js_root = resolve_pdu_javascript_root(args.pdu_javascript_root)
     worker_runtime_root = resolve_worker_runtime_root(args.worker_runtime_dir)
@@ -270,6 +271,9 @@ def main() -> int:
         (args.listen_address, args.port), handler_factory(pdu_js_root, worker_runtime_root),
     )
     print(f"City World smoke UI: http://{args.listen_address}:{args.port}/")
+    if args.ready_file is not None:
+        args.ready_file.parent.mkdir(parents=True, exist_ok=True)
+        args.ready_file.write_text("ready\n", encoding="utf-8")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -94,6 +94,7 @@ def _load_recipe(path: Path | None = None) -> dict[str, Any]:
         ["ruby", str(exporter), str(target)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     if completed.returncode:
