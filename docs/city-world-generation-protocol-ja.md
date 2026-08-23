@@ -237,6 +237,11 @@ python3 -m tools.remote_operation.city_world.web_smoke --port 8008
 
 ブラウザで`http://127.0.0.1:8008/`を開き、次の順に実行する。
 
+Visual GLBは`embedded-if-available`で生成する。選択範囲のLOD2 Appearanceと
+参照画像が利用できる面はテクスチャをGLBへ埋め込み、利用できない面だけを
+フラット表示へフォールバックする。複数都市を軽量に一括検証するRecipeの
+`texture_mode: flat`とは用途を分離している。
+
 1. 地図で範囲を選択する。
 2. `Capabilityを診断`を押す。
 3. `生成候補あり`の場合に有効になる`City Worldを生成`を押す。

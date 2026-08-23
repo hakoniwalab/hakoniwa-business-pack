@@ -84,7 +84,7 @@ mjcf:
 glb:
   enabled: true
   lod_policy: highest_available
-  texture_mode: flat
+  texture_mode: embedded-if-available
 
 city_world:
   enabled: true

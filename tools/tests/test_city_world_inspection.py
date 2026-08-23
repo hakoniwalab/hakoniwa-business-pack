@@ -259,6 +259,7 @@ class CityWorldInspectionTest(unittest.TestCase):
             )
             self.assertIn(f"cache_dir: {(root / 'cache' / 'plateau-citygml').resolve()}", manifest)
             self.assertIn(f"build_dir: {(root / 'jobs' / 'job-1' / 'build').resolve()}", manifest)
+            self.assertIn("texture_mode: embedded-if-available", manifest)
 
     def test_web_server_lists_and_resolves_only_generated_glb_and_zip(self) -> None:
         with tempfile.TemporaryDirectory() as raw_root:
