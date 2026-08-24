@@ -147,10 +147,10 @@ def validate_request(value: Any) -> dict[str, Any]:
         )
         if "building_collider_reduction" in options and options[
             "building_collider_reduction"
-        ] not in {"safe", "coplanar-union", "convex-decompose"}:
+        ] not in {"safe", "coplanar-union", "convex-decompose", "tolerant-planar"}:
             raise CityWorldProtocolError(
                 "request.options.building_collider_reduction must be safe, "
-                "coplanar-union, or convex-decompose"
+                "coplanar-union, convex-decompose, or tolerant-planar"
             )
     selection = _object(request["selection"], "request.selection", {"center", "half_extent_m"})
     center = _object(
@@ -298,10 +298,10 @@ def validate_result(value: Any) -> dict[str, Any]:
         )
     if "building_collider_reduction" in result and result[
         "building_collider_reduction"
-    ] not in {"safe", "coplanar-union", "convex-decompose"}:
+    ] not in {"safe", "coplanar-union", "convex-decompose", "tolerant-planar"}:
         raise CityWorldProtocolError(
             "result.building_collider_reduction must be safe, coplanar-union, "
-            "or convex-decompose"
+            "convex-decompose, or tolerant-planar"
         )
     if "colliders" in result:
         colliders = _object(

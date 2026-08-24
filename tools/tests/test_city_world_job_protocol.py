@@ -123,6 +123,8 @@ class CityWorldJobProtocolTest(unittest.TestCase):
         req = request()
         req["options"]["building_collider_reduction"] = "convex-decompose"
         protocol.validate_request(req)
+        req["options"]["building_collider_reduction"] = "tolerant-planar"
+        protocol.validate_request(req)
 
     def test_message_rejects_command_path_and_hash_mismatch(self) -> None:
         value = message("INSPECT_SELECTION", "command", request=request())
@@ -175,7 +177,7 @@ class CityWorldJobProtocolTest(unittest.TestCase):
             "request_sha256": protocol.canonical_sha256(request()),
             "inspection_sha256": inspection_hash,
             "building_physics_level": 3,
-            "building_collider_reduction": "safe",
+            "building_collider_reduction": "tolerant-planar",
             "colliders": {
                 "total": 12,
                 "by_component": {"terrain": 1, "buildings": 11},

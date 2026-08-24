@@ -247,6 +247,38 @@ def _forward_build_progress(
             phase=phase, current=current, total=total,
         )
         return
+    if phase in {
+        "building_physics_exact_reduction",
+        "building_physics_tolerant_reduction",
+    }:
+        current, total = int(event.get("current", 0)), int(event.get("total", 0))
+        class_id = str(event.get("class_id", "P?"))
+        colliders = int(event.get("colliders", 0))
+        label = "厳密統合" if phase == "building_physics_exact_reduction" else "5cm許容統合"
+        emit(
+            "GENERATING", 52,
+            f"建物Colliderを{label}しています（{class_id} {current}/{total}, {colliders}個）",
+            phase=phase, current=current, total=total,
+        )
+        return
+    if phase == "building_physics_tolerant_groups":
+        current, total = int(event.get("current", 0)), int(event.get("total", 0))
+        class_id = str(event.get("class_id", "P?"))
+        emit(
+            "GENERATING", 52,
+            f"建物Colliderを5cm許容統合しています（{class_id} 建物面群 {current}/{total}）",
+            phase=phase, current=current, total=total,
+        )
+        return
+    if phase == "building_physics_exact_groups":
+        current, total = int(event.get("current", 0)), int(event.get("total", 0))
+        class_id = str(event.get("class_id", "P?"))
+        emit(
+            "GENERATING", 52,
+            f"建物Colliderを厳密統合しています（{class_id} 平面群 {current}/{total}）",
+            phase=phase, current=current, total=total,
+        )
+        return
     if phase == "building_physics_assemble":
         emit(
             "GENERATING", 52, "建物ColliderのMJCF要素を構築しています",

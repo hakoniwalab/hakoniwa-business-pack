@@ -122,6 +122,10 @@
           <input id="convex-decompose" type="checkbox">
           <span>凹polygonの三角Colliderも少数の凸領域へ再構成する（実験的）</span>
         </label>
+        <label class="checkbox-option">
+          <input id="tolerant-planar" type="checkbox">
+          <span>WallSurfaceを派生平面まで最大5cmで統合する（box維持・近似あり）</span>
+        </label>
       </div>
       <p class="hint">地図のクリック、中心マーカーまたは青い区画のドラッグで位置を変更できます。四隅のハンドルで範囲を変更できます。100m + 100mは一辺200mの範囲です。</p>
       <div id="selection-summary"></div>

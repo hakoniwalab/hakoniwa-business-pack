@@ -1,7 +1,7 @@
 import { CityWorldPduClient } from './city-world-client.js';
 
 const elements = Object.fromEntries([
-  'latitude', 'longitude', 'northSouth', 'eastWest', 'physics-level', 'coplanar-union', 'convex-decompose', 'inspect', 'generate', 'cancel', 'connect',
+  'latitude', 'longitude', 'northSouth', 'eastWest', 'physics-level', 'coplanar-union', 'convex-decompose', 'tolerant-planar', 'inspect', 'generate', 'cancel', 'connect',
   'connection', 'connection-text', 'selection-summary', 'mesh-summary', 'overall',
   'municipality', 'capabilities', 'generation', 'artifact-select', 'artifact-path', 'artifact-detail', 'cache-info',
   'download', 'view3d', 'delete-artifact', 'viewer-visual', 'viewer-collider',
@@ -22,6 +22,10 @@ const progressPhaseLabels = {
   terrain_gap_fill: 'DEM欠損補間',
   building_mjcf: '建物Physics',
   building_physics_surfaces: '建物Physics面変換',
+  building_physics_exact_reduction: '建物Collider厳密統合',
+  building_physics_exact_groups: '建物Collider厳密統合',
+  building_physics_tolerant_reduction: '建物Collider 5cm許容統合',
+  building_physics_tolerant_groups: '建物Collider 5cm許容統合',
   building_physics_assemble: '建物Physics構築',
   building_physics_write: '建物Physics書出し',
   building_visual: '建物Visual',
@@ -218,12 +222,23 @@ for (const id of ['latitude', 'longitude', 'northSouth', 'eastWest', 'physics-le
 elements['coplanar-union'].addEventListener('change', () => {
   if (!elements['coplanar-union'].checked) {
     elements['convex-decompose'].checked = false;
+    elements['tolerant-planar'].checked = false;
   }
   invalidateInspection();
   refreshSelection();
 });
 elements['convex-decompose'].addEventListener('change', () => {
   if (elements['convex-decompose'].checked) {
+    elements['coplanar-union'].checked = true;
+  } else {
+    elements['tolerant-planar'].checked = false;
+  }
+  invalidateInspection();
+  refreshSelection();
+});
+elements['tolerant-planar'].addEventListener('change', () => {
+  if (elements['tolerant-planar'].checked) {
+    elements['convex-decompose'].checked = true;
     elements['coplanar-union'].checked = true;
   }
   invalidateInspection();
@@ -323,11 +338,16 @@ function applyGeneratedSelection(job) {
   if (Number.isInteger(job.building_physics_level)) {
     elements['physics-level'].value = String(job.building_physics_level);
   }
-  elements['coplanar-union'].checked = ['coplanar-union', 'convex-decompose'].includes(
+  elements['coplanar-union'].checked = [
+    'coplanar-union', 'convex-decompose', 'tolerant-planar',
+  ].includes(
     job.building_collider_reduction,
   );
   elements['convex-decompose'].checked = (
-    job.building_collider_reduction === 'convex-decompose'
+    ['convex-decompose', 'tolerant-planar'].includes(job.building_collider_reduction)
+  );
+  elements['tolerant-planar'].checked = (
+    job.building_collider_reduction === 'tolerant-planar'
   );
   invalidateInspection();
   refreshSelection();
@@ -701,8 +721,9 @@ async function inspectSelection() {
       latitude: numeric('latitude'), longitude: numeric('longitude'),
       halfExtentNorthSouth: numeric('northSouth'), halfExtentEastWest: numeric('eastWest'),
       buildingPhysicsLevel: numeric('physics-level'),
-      buildingColliderReduction: elements['convex-decompose'].checked
-        ? 'convex-decompose'
+      buildingColliderReduction: elements['tolerant-planar'].checked
+        ? 'tolerant-planar'
+        : elements['convex-decompose'].checked ? 'convex-decompose'
         : elements['coplanar-union'].checked ? 'coplanar-union' : 'safe',
     });
     writeLog(command);

@@ -115,14 +115,17 @@ textureは変更しない。選択値はrequest hash、job記録、result manife
 
 ## 5.2 Collider削減オプション
 
-ブラウザには階層的なcheck boxを2個置く。両方OFFは`safe`、隣接凸面だけONは
-`coplanar-union`、両方ONは`convex-decompose`とする。下段をONにすると上段もONになり、
-上段をOFFにすると下段もOFFになる。Workerは選択値を`mjcf.building_collider_reduction`へ
+ブラウザには階層的なcheck boxを3個置く。すべてOFFは`safe`、隣接凸面だけONは
+`coplanar-union`、上2段ONは`convex-decompose`、3段すべてONは`tolerant-planar`とする。
+下段をONにすると上段もONになり、上段をOFFにすると下段もOFFになる。Workerは選択値を
+`mjcf.building_collider_reduction`へ
 そのまま固定する。
 
 `coplanar-union`はP1〜P3について、同一建物・同一semantic surface種別・同一向きの
 同一平面にある、すでに凸なsource polygon Colliderを対象とする。`convex-decompose`はさらに
-凹・穴ありsource polygonの三角Colliderを同一source polygon内で再構成する。
+凹polygon由来の三角Colliderを再構成する。`tolerant-planar`はその後、WallSurfaceに限り
+法線差2度以内かつ派生平面まで最大5cmの隣接面を統合する。XYの隙間は補間せず、boxをmeshへ
+変える統合は行わない。
 いずれも2形状の和集合が単一の穴なし凸polygonになる組だけ段階的に1 Colliderへ統合する。
 凸包、頂点snap、隙間補間は行わない。条件不成立時は`safe`のColliderを維持する。
 Visual、texture、P0分類、地形、道路、橋は変更しない。実際に使ったモードは
