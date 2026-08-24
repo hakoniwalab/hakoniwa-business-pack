@@ -695,14 +695,20 @@ def _require_fields(section: dict[str, Any], label: str, allowed: set[str]) -> N
         raise RecipeError(f"unknown {label} fields: {', '.join(unknown)}")
 
 
-def resolve_experiment(path: Path) -> Experiment:
+def resolve_experiment(
+    path: Path,
+    *,
+    drone_count_override: int | None = None,
+    process_count_override: int | None = None,
+    formation_scale_override: float | None = None,
+) -> Experiment:
     root = load_simple_yaml(path)
     _require_fields(
         root,
         "root",
         {
             "version", "experiment", "scale", "runtime", "scenario", "results",
-            "measurement", "matrix",
+            "measurement", "matrix", "resolved",
         },
     )
     if root.get("version") != 1:
@@ -818,6 +824,18 @@ def resolve_experiment(path: Path) -> Experiment:
             "Drone PRO research Recipe instead of the public default binaries; "
             "a PRO license and PRO source access are required"
         )
+    if drone_count_override is not None:
+        if not 1 <= drone_count_override <= GENERAL_USER_MAX_DRONES:
+            raise RecipeError(
+                "--drone-count must be in "
+                f"[1, {GENERAL_USER_MAX_DRONES}]"
+            )
+        drone_count = drone_count_override
+    if process_count_override is not None:
+        if not 1 <= process_count_override <= drone_count:
+            raise RecipeError("--process-count must be in [1, drone_count]")
+        process_count = process_count_override
+    drones_per_process = math.ceil(drone_count / process_count)
 
     experiment_id = identity.get("id")
     if not isinstance(experiment_id, str) or not experiment_id:
@@ -845,6 +863,13 @@ def resolve_experiment(path: Path) -> Experiment:
         if result < minimum:
             raise RecipeError(f"scenario.{name} must be >= {minimum}")
         return result
+
+    if formation_scale_override is not None:
+        if not 0.25 <= formation_scale_override <= 10.0:
+            raise RecipeError("--formation-scale must be in [0.25, 10.0]")
+        formation_scale = float(formation_scale_override)
+    else:
+        formation_scale = 1.0
 
     land = scenario.get("land")
     if not isinstance(land, bool):
@@ -1076,9 +1101,9 @@ def resolve_experiment(path: Path) -> Experiment:
         show_runner_real_time_sync=show_runner_real_time_sync,
         scenario_type=str(scenario["type"]),
         word=word,
-        letter_width_m=number("letter_width_m", minimum=0.001),
-        letter_height_m=number("letter_height_m", minimum=0.001),
-        letter_gap_m=number("letter_gap_m", minimum=0.0),
+        letter_width_m=number("letter_width_m", minimum=0.001) * formation_scale,
+        letter_height_m=number("letter_height_m", minimum=0.001) * formation_scale,
+        letter_gap_m=number("letter_gap_m", minimum=0.0) * formation_scale,
         altitude_m=number("altitude_m", minimum=0.5),
         duration_sec=number("duration_sec", minimum=0.001),
         hold_sec=number("hold_sec", minimum=0.0),
@@ -1606,9 +1631,9 @@ def materialize_mujoco_city_viewer(paths, viewer_root: Path) -> Path:
         json.dumps(viewer_config, indent=2) + "\n", encoding="utf-8"
     )
 
-    # The Map Viewer is intentionally generic.  Its Recipe-local copy gets the
-    # selected City World origin and explicitly advances the public fleet state
-    # source before projecting each pose onto Leaflet.
+    # The Map Viewer is intentionally generic. Its Recipe-local copy only gets
+    # the selected City World origin. DroneViewer owns PDU polling; adding a
+    # second consumer here would race the consuming PDU buffer.
     map_ui_path = web_root / "src" / "client" / "src" / "ui.js"
     map_ui = map_ui_path.read_text(encoding="utf-8")
     origin = city.get("origin", {})
@@ -1625,11 +1650,6 @@ def materialize_mujoco_city_viewer(paths, viewer_root: Path) -> Path:
     map_ui = map_ui.replace(
         "let ORIGIN_LON = 139.70625;",
         f"let ORIGIN_LON = {origin_lon};",
-    )
-    map_ui = map_ui.replace(
-        "setInterval(() => {\n      if (!viewer) return;\n      const drones = viewer.getDrones();",
-        "setInterval(async () => {\n      if (!viewer) return;\n"
-        "      await viewer.syncDroneStates();\n      const drones = viewer.getDrones();",
     )
     map_ui_path.write_text(map_ui, encoding="utf-8")
     return web_root
@@ -1749,8 +1769,21 @@ def configure(
     *,
     mujoco_city_world: Path | None = None,
     spawn_altitude_m: float = 0.20,
+    spawn_spacing_m: float = 1.0,
+    drone_count_override: int | None = None,
+    process_count_override: int | None = None,
+    formation_scale_override: float | None = None,
+    altitude_mode: str = "route-clearance",
+    above_city_clearance_m: float = 10.0,
+    formation_rotation_deg: float = 90.0,
+    formation_tilt_deg: float = 15.0,
 ) -> int:
-    experiment = resolve_experiment(experiment_path)
+    experiment = resolve_experiment(
+        experiment_path,
+        drone_count_override=drone_count_override,
+        process_count_override=process_count_override,
+        formation_scale_override=formation_scale_override,
+    )
     foundation = load_foundation_module()
     paths = foundation.resolve_workspace(ROOT, RECIPE_ID)
     foundation.prepare_workspace(paths)
@@ -1758,11 +1791,6 @@ def configure(
     prepare_config(paths, drone_root, experiment)
     mujoco_marker = paths.recipe_config / "mujoco-city-fleet.json"
     if mujoco_city_world is not None:
-        if experiment.process_count != 1:
-            raise RecipeError(
-                "MuJoCo City fleet requires scale.process_count=1 because all "
-                "drones share one mjModel/mjData world"
-            )
         try:
             from tools.recipe import drone_fleet_mujoco_city
         except ModuleNotFoundError:
@@ -1778,6 +1806,12 @@ def configure(
                 drone_count=experiment.drone_count,
                 recipe_config=paths.recipe_config,
                 spawn_altitude_m=spawn_altitude_m,
+                spawn_spacing_m=spawn_spacing_m,
+                altitude_mode=altitude_mode,
+                above_city_clearance_m=above_city_clearance_m,
+                process_count=experiment.process_count,
+                formation_rotation_deg=formation_rotation_deg,
+                formation_tilt_deg=formation_tilt_deg,
             )
         except drone_fleet_mujoco_city.FleetMujocoError as exc:
             raise RecipeError(str(exc)) from exc
@@ -1825,12 +1859,14 @@ def configure(
     print(f"Process count          : {experiment.process_count}")
     if marker is not None:
         print("Physics backend        : MuJoCo shared City World")
-        print(f"Shared MJB             : {marker['shared_mjb']}")
+        print(f"MuJoCo process models  : {len(marker['process_models'])}")
+        print(f"Process 1 MJB          : {marker['shared_mjb']}")
         plan = marker["flight_plan"]
         print(
             "Flight altitude        : "
             f"{plan['resolved_flight_altitude_m']:.3f} m local Z "
-            f"({plan['requested_agl_m']:.3f} m clearance)"
+            f"({plan.get('requested_clearance_m', plan['requested_agl_m']):.3f} m "
+            f"clearance, {plan.get('altitude_mode', 'route-clearance')})"
         )
         print(f"Safe launch points     : {len(plan['spawn_points'])}")
     print("Conductor topology     : built-in owner in drone-service-1")
@@ -1838,7 +1874,20 @@ def configure(
         "Visualization         : "
         + ("VSP + WebBridge + Three.js" if experiment.visualization else "disabled (headless)")
     )
-    print("Scenario               : takeoff -> HAKONIWA -> hold -> finish")
+    if marker is not None:
+        phases = marker["flight_plan"].get("show_phases", ["HAKONIWA"])
+        print(
+            "Scenario               : takeoff -> "
+            + " -> ".join(phases)
+            + " -> final hold"
+        )
+    else:
+        print("Scenario               : takeoff -> HAKONIWA -> hold -> finish")
+    print(
+        "Formation dimensions    : "
+        f"letter={experiment.letter_width_m:.3f} x "
+        f"{experiment.letter_height_m:.3f} m, gap={experiment.letter_gap_m:.3f} m"
+    )
     if measurement_config is not None:
         print(f"Measurement config     : {measurement_config}")
         print(f"Measurement trial      : {measurement_trial_dir(paths, experiment)}")
@@ -1852,8 +1901,12 @@ def configure(
     return 0
 
 
-def _load_workspace(experiment_path: Path):
-    experiment = resolve_experiment(experiment_path)
+def _load_workspace(
+    experiment_path: Path, *, drone_count_override: int | None = None
+):
+    experiment = resolve_experiment(
+        experiment_path, drone_count_override=drone_count_override
+    )
     foundation = load_foundation_module()
     paths = foundation.resolve_workspace(ROOT, RECIPE_ID)
     requirements = paths.recipe_config / "foundation-requirements.yaml"
@@ -1885,9 +1938,9 @@ def _mujoco_city_runtime_checks(
     )
     checks.append(
         (
-            "MuJoCo City single-process contract",
-            experiment.process_count == 1 and marker.get("process_count") == 1,
-            f"configured process_count={experiment.process_count}",
+            "MuJoCo City process-model contract",
+            marker.get("process_count") == experiment.process_count,
+            f"configured={experiment.process_count}, model={marker.get('process_count')}",
         )
     )
     checks.append(
@@ -1902,14 +1955,34 @@ def _mujoco_city_runtime_checks(
     safety_detail = "flight_plan is missing"
     if isinstance(flight_plan, dict):
         try:
+            altitude_mode = str(
+                flight_plan.get("altitude_mode", "route-clearance")
+            )
             requested_agl = float(flight_plan["requested_agl_m"])
+            requested_clearance = float(
+                flight_plan.get("requested_clearance_m", requested_agl)
+            )
             route_maximum = float(flight_plan["route_maximum_surface_height_m"])
+            altitude_reference = float(
+                flight_plan.get("altitude_reference_height_m", route_maximum)
+            )
             resolved_altitude = float(flight_plan["resolved_flight_altitude_m"])
             spawn_points = flight_plan["spawn_points"]
+            mode_ok = altitude_mode in {
+                "route-clearance",
+                "city-max-clearance",
+            }
+            scenario_clearance_ok = (
+                altitude_mode == "city-max-clearance"
+                or abs(requested_agl - experiment.altitude_m) < 1e-6
+            )
             safety_ok = (
                 len(spawn_points) == experiment.drone_count
-                and abs(requested_agl - experiment.altitude_m) < 1e-6
-                and resolved_altitude >= route_maximum + requested_agl - 1e-6
+                and mode_ok
+                and scenario_clearance_ok
+                and altitude_reference >= route_maximum - 1e-6
+                and resolved_altitude
+                >= altitude_reference + requested_clearance - 1e-6
                 and all(
                     float(point["surface_height_m"])
                     <= float(point["terrain_height_m"]) + 0.15
@@ -1917,14 +1990,52 @@ def _mujoco_city_runtime_checks(
                 )
             )
             safety_detail = (
-                f"launch_points={len(spawn_points)}, route_max={route_maximum:.3f} m, "
-                f"flight={resolved_altitude:.3f} m, clearance={requested_agl:.3f} m"
+                f"mode={altitude_mode}, launch_points={len(spawn_points)}, "
+                f"route_max={route_maximum:.3f} m, "
+                f"reference={altitude_reference:.3f} m, "
+                f"flight={resolved_altitude:.3f} m, "
+                f"clearance={requested_clearance:.3f} m"
             )
         except (KeyError, TypeError, ValueError) as exc:
             safety_detail = f"invalid flight_plan: {exc}"
     checks.append(("MuJoCo City terrain/wall clearance", safety_ok, safety_detail))
     shared_mjb = Path(str(marker.get("shared_mjb", "")))
-    checks.append(("Shared MuJoCo City MJB", shared_mjb.is_file(), str(shared_mjb)))
+    process_models = marker.get("process_models")
+    if not isinstance(process_models, list):
+        process_models = [
+            {
+                "process_index": 1,
+                "drone_ids": list(range(1, experiment.drone_count + 1)),
+                "mjb": str(shared_mjb),
+                "receipt": marker.get("shared_model_receipt", ""),
+            }
+        ]
+    observed_ids: list[int] = []
+    process_model_files_ok = len(process_models) == experiment.process_count
+    process_model_detail: list[str] = []
+    for process_model in process_models:
+        index = process_model.get("process_index")
+        ids = process_model.get("drone_ids")
+        mjb = Path(str(process_model.get("mjb", "")))
+        receipt = Path(str(process_model.get("receipt", "")))
+        if isinstance(ids, list):
+            observed_ids.extend(int(value) for value in ids)
+        else:
+            process_model_files_ok = False
+            ids = []
+        model_ok = mjb.is_file() and receipt.is_file()
+        process_model_files_ok = process_model_files_ok and model_ok
+        process_model_detail.append(
+            f"p{index}={len(ids)} drones, mjb={'OK' if mjb.is_file() else 'NG'}"
+        )
+    coverage_ok = observed_ids == list(range(1, experiment.drone_count + 1))
+    checks.append(
+        (
+            "MuJoCo City process models",
+            process_model_files_ok and coverage_ok,
+            "; ".join(process_model_detail),
+        )
+    )
     type_config = Path(str(marker.get("type_config", "")))
     checks.append(
         ("MuJoCo City Drone type config", type_config.is_file(), str(type_config))
@@ -1946,7 +2057,7 @@ def _mujoco_city_runtime_checks(
             )
         except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
             receipt_detail += f": {exc}"
-    checks.append(("Shared MJB compile receipt", receipt_ok, receipt_detail))
+    checks.append(("Process 1 MJB compile receipt", receipt_ok, receipt_detail))
     try:
         drone_binary = resolve_drone_binary(drone_root, system_name)
         checks.append(("Drone PRO service", True, str(drone_binary)))
@@ -1965,8 +2076,12 @@ def doctor(
     experiment_path: Path,
     drone_root: Path,
     viewer_root: Path,
+    *,
+    drone_count_override: int | None = None,
 ) -> int:
-    experiment, foundation, paths, requirements = _load_workspace(experiment_path)
+    experiment, foundation, paths, requirements = _load_workspace(
+        experiment_path, drone_count_override=drone_count_override
+    )
     inspection = foundation.inspect_foundation(requirements, paths.install_prefix)
     foundation.print_inspection(inspection, False)
     system_name = platform.system()
@@ -2111,10 +2226,19 @@ def start(
     experiment_path: Path,
     drone_root: Path,
     viewer_root: Path,
+    *,
+    drone_count_override: int | None = None,
 ) -> int:
-    if doctor(experiment_path, drone_root, viewer_root) != 0:
+    if doctor(
+        experiment_path,
+        drone_root,
+        viewer_root,
+        drone_count_override=drone_count_override,
+    ) != 0:
         return 1
-    experiment, _foundation, paths, _requirements = _load_workspace(experiment_path)
+    experiment, _foundation, paths, _requirements = _load_workspace(
+        experiment_path, drone_count_override=drone_count_override
+    )
     system_name = platform.system()
     trial = measurement_trial_dir(paths, experiment)
     if trial is not None:
@@ -2150,15 +2274,30 @@ def start(
     return rc
 
 
-def control(experiment_path: Path, drone_root: Path, operation: str) -> int:
-    _experiment, _foundation, paths, _requirements = _load_workspace(experiment_path)
+def control(
+    experiment_path: Path,
+    drone_root: Path,
+    operation: str,
+    *,
+    drone_count_override: int | None = None,
+) -> int:
+    _experiment, _foundation, paths, _requirements = _load_workspace(
+        experiment_path, drone_count_override=drone_count_override
+    )
     system_name = platform.system()
     command = _launcher_command(paths, system_name, operation)
     return _run(command, env=runtime_environment(paths, drone_root, system_name))
 
 
-def smoke(experiment_path: Path, timeout_sec: float) -> int:
-    experiment, _foundation, paths, _requirements = _load_workspace(experiment_path)
+def smoke(
+    experiment_path: Path,
+    timeout_sec: float,
+    *,
+    drone_count_override: int | None = None,
+) -> int:
+    experiment, _foundation, paths, _requirements = _load_workspace(
+        experiment_path, drone_count_override=drone_count_override
+    )
     trial = measurement_trial_dir(paths, experiment)
     if trial is not None:
         result = trial / "result.json"
@@ -2255,11 +2394,27 @@ def open_browser(url: str) -> bool:
             "WSL2: open the URL in a Windows browser. WSL localhost forwarding "
             "exposes HTTP port 8000 and WebSocket port 8765 to the host."
         )
+        return True
+    if platform.system() == "Darwin":
+        try:
+            completed = subprocess.run(["open", url], check=False)
+        except OSError as exc:
+            print(f"[WARN] could not open the macOS browser: {exc}")
+            return False
+        if completed.returncode != 0:
+            print(
+                "[WARN] macOS 'open' failed; open the URL printed above manually"
+            )
+            return False
     return True
 
 
-def open_viewer(experiment_path: Path) -> int:
-    experiment, _foundation, paths, _requirements = _load_workspace(experiment_path)
+def open_viewer(
+    experiment_path: Path, *, drone_count_override: int | None = None
+) -> int:
+    experiment, _foundation, paths, _requirements = _load_workspace(
+        experiment_path, drone_count_override=drone_count_override
+    )
     if not experiment.visualization:
         raise RecipeError(
             "runtime.visualization=false; this headless experiment does not start "
@@ -2270,6 +2425,61 @@ def open_viewer(experiment_path: Path) -> int:
         map_viewer=(paths.recipe_config / "mujoco-city-fleet.json").is_file(),
     )
     return 0 if open_browser(url) else 1
+
+
+def configured_experiment_path() -> Path:
+    return (
+        ROOT
+        / "work"
+        / "recipes"
+        / RECIPE_ID
+        / "config"
+        / "resolved-experiment.yaml"
+    )
+
+
+def configured_drone_root() -> Path | None:
+    marker = configured_experiment_path().with_name("mujoco-city-fleet.json")
+    if not marker.is_file():
+        return None
+    try:
+        payload = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    value = payload.get("drone_root")
+    if not isinstance(value, str) or not value:
+        return None
+    return Path(value).expanduser().absolute()
+
+
+def command_experiment_path(command: str, requested: Path | None) -> Path:
+    if requested is not None:
+        return requested.absolute()
+    configured = configured_experiment_path()
+    if command != "configure" and configured.is_file():
+        return configured
+    return DEFAULT_EXPERIMENT.absolute()
+
+
+def command_drone_root(
+    command: str,
+    requested: Path | None,
+    *,
+    mujoco_city_world: Path | None = None,
+) -> Path:
+    if requested is not None:
+        return requested.absolute()
+    if command == "configure" and mujoco_city_world is not None:
+        # The MuJoCo City path compiles one shared MJB.  Loading that binary
+        # model is a Drone PRO contract; silently selecting Drone Core here
+        # produces a launcher that configures successfully and then dies before
+        # any dependent viewer asset can start.
+        return default_source("hakoniwa-drone-pro").absolute()
+    if command != "configure":
+        configured = configured_drone_root()
+        if configured is not None:
+            return configured
+    return default_source("hakoniwa-drone-core").absolute()
 
 
 def parser() -> argparse.ArgumentParser:
@@ -2290,20 +2500,48 @@ def parser() -> argparse.ArgumentParser:
             "stop",
         ],
     )
-    result.add_argument("--experiment", type=Path, default=DEFAULT_EXPERIMENT)
     result.add_argument(
-        "--drone-root", type=Path, default=default_source("hakoniwa-drone-core")
+        "--experiment",
+        type=Path,
+        help=(
+            "experiment YAML; after configure, omitted commands reuse the "
+            "workspace resolved experiment"
+        ),
+    )
+    result.add_argument(
+        "--drone-root",
+        type=Path,
+        help=(
+            "Drone workspace; after MuJoCo City configure, omitted commands "
+            "reuse the configured Drone PRO workspace"
+        ),
     )
     result.add_argument(
         "--viewer-root", type=Path, default=default_source("hakoniwa-threejs-drone")
     )
     result.add_argument("--timeout-sec", type=float, default=300.0)
     result.add_argument(
+        "--drone-count",
+        type=int,
+        help=(
+            "override scale.drone_count for a local run; configure "
+            "persists the resolved value for subsequent omitted commands"
+        ),
+    )
+    result.add_argument(
+        "--process-count",
+        type=int,
+        help=(
+            "configure only: split MuJoCo City drones across this many local "
+            "Drone Service processes; each gets an independent City model"
+        ),
+    )
+    result.add_argument(
         "--mujoco-city-world",
         type=Path,
         help=(
-            "configure only: City World receipt/XML used to generate one shared "
-            "MuJoCo fleet model (non-ICRA, process_count must be 1)"
+            "configure only: City World receipt/XML used to generate one "
+            "MuJoCo model per local Drone Service process (non-ICRA)"
         ),
     )
     result.add_argument(
@@ -2313,6 +2551,59 @@ def parser() -> argparse.ArgumentParser:
         help=(
             "initial drone body-origin clearance above the sampled DEM terrain "
             "(default: 0.20 m; City launch points are selected automatically)"
+        ),
+    )
+    result.add_argument(
+        "--spawn-spacing-m",
+        type=float,
+        default=1.0,
+        help=(
+            "configure only: minimum center-to-center spacing of the compact "
+            "MuJoCo City launch formation (default: 1.0 m; 1.0..5.0)"
+        ),
+    )
+    result.add_argument(
+        "--formation-scale",
+        type=float,
+        help=(
+            "configure only: multiply HAKONIWA letter width, height, and gap "
+            "by this factor (0.25..10.0); the resolved dimensions are persisted"
+        ),
+    )
+    result.add_argument(
+        "--formation-rotation-deg",
+        type=float,
+        default=90.0,
+        help=(
+            "configure only: clockwise rotation of the City show formation "
+            "on the ROS XY plane (default: 90 degrees for map readability)"
+        ),
+    )
+    result.add_argument(
+        "--formation-tilt-deg",
+        type=float,
+        default=15.0,
+        help=(
+            "configure only: tilt the non-ICRA City show plane toward an "
+            "audience looking upward (default: 15 degrees; 0..35)"
+        ),
+    )
+    result.add_argument(
+        "--altitude-mode",
+        choices=["route-clearance", "city-max-clearance"],
+        default="route-clearance",
+        help=(
+            "configure only: fly above planned-route colliders (default) or "
+            "above the highest building in the generated city"
+        ),
+    )
+    result.add_argument(
+        "--above-city-clearance-m",
+        type=float,
+        default=10.0,
+        help=(
+            "configure only: clearance above the highest city building when "
+            "--altitude-mode=city-max-clearance (default: 10 m)"
         ),
     )
     return result
@@ -2327,8 +2618,12 @@ def main(argv: list[str] | None = None) -> int:
                 f"unsupported native operating system: {system_name}; "
                 "drone-fleet-single-host supports macOS and Linux"
             )
-        experiment_path = args.experiment.absolute()
-        drone_root = args.drone_root.absolute()
+        experiment_path = command_experiment_path(args.command, args.experiment)
+        drone_root = command_drone_root(
+            args.command,
+            args.drone_root,
+            mujoco_city_world=args.mujoco_city_world,
+        )
         viewer_root = args.viewer_root.absolute()
         if args.command == "prepare-native":
             foundation = load_foundation_module()
@@ -2351,18 +2646,52 @@ def main(argv: list[str] | None = None) -> int:
                     else None
                 ),
                 spawn_altitude_m=args.spawn_altitude_m,
+                spawn_spacing_m=args.spawn_spacing_m,
+                drone_count_override=args.drone_count,
+                process_count_override=args.process_count,
+                formation_scale_override=args.formation_scale,
+                altitude_mode=args.altitude_mode,
+                above_city_clearance_m=args.above_city_clearance_m,
+                formation_rotation_deg=args.formation_rotation_deg,
+                formation_tilt_deg=args.formation_tilt_deg,
             )
         if args.command == "doctor":
-            return doctor(experiment_path, drone_root, viewer_root)
+            return doctor(
+                experiment_path,
+                drone_root,
+                viewer_root,
+                drone_count_override=args.drone_count,
+            )
         if args.command == "start":
-            return start(experiment_path, drone_root, viewer_root)
+            return start(
+                experiment_path,
+                drone_root,
+                viewer_root,
+                drone_count_override=args.drone_count,
+            )
         if args.command == "status":
-            return control(experiment_path, drone_root, "status")
+            return control(
+                experiment_path,
+                drone_root,
+                "status",
+                drone_count_override=args.drone_count,
+            )
         if args.command == "stop":
-            return control(experiment_path, drone_root, "terminate")
+            return control(
+                experiment_path,
+                drone_root,
+                "terminate",
+                drone_count_override=args.drone_count,
+            )
         if args.command == "open-viewer":
-            return open_viewer(experiment_path)
-        return smoke(experiment_path, args.timeout_sec)
+            return open_viewer(
+                experiment_path, drone_count_override=args.drone_count
+            )
+        return smoke(
+            experiment_path,
+            args.timeout_sec,
+            drone_count_override=args.drone_count,
+        )
     except RecipeError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

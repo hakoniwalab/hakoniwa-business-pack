@@ -6,7 +6,7 @@ experiment:
 scale:
   drone_count: 2
   drones_per_process: 2
-  # One process is mandatory: both aircraft advance one shared mjData world.
+  # configure --process-count may split the fleet into independent City worlds.
   process_count: 1
 
 runtime:

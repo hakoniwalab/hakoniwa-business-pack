@@ -145,6 +145,141 @@ profiles:
             )
             self.assertEqual(experiment.process_count, 11)
 
+    def test_drone_count_override_updates_single_process_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = self._experiment(Path(temporary), drones=2, per_process=2)
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    "  process_count: auto", "  process_count: 1"
+                ),
+                encoding="utf-8",
+            )
+            experiment = recipe.resolve_experiment(
+                path, drone_count_override=4
+            )
+            self.assertEqual(experiment.drone_count, 4)
+            self.assertEqual(experiment.drones_per_process, 4)
+            self.assertEqual(experiment.process_count, 1)
+
+    def test_drone_and_process_count_overrides_resolve_partition_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            experiment = recipe.resolve_experiment(
+                self._experiment(Path(temporary), drones=4, per_process=2),
+                drone_count_override=128,
+                process_count_override=2,
+            )
+            self.assertEqual(experiment.drone_count, 128)
+            self.assertEqual(experiment.process_count, 2)
+            self.assertEqual(experiment.drones_per_process, 64)
+
+    def test_parser_accepts_drone_count_override(self) -> None:
+        args = recipe.parser().parse_args(
+            ["configure", "--drone-count", "128", "--process-count", "2"]
+        )
+        self.assertEqual(args.drone_count, 128)
+        self.assertEqual(args.process_count, 2)
+
+    def test_formation_scale_override_scales_resolved_dimensions(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = self._experiment(Path(temporary), drones=2, per_process=2)
+            baseline = recipe.resolve_experiment(path)
+            scaled = recipe.resolve_experiment(
+                path, formation_scale_override=5.0
+            )
+            self.assertEqual(scaled.letter_width_m, baseline.letter_width_m * 5.0)
+            self.assertEqual(scaled.letter_height_m, baseline.letter_height_m * 5.0)
+            self.assertEqual(scaled.letter_gap_m, baseline.letter_gap_m * 5.0)
+
+    def test_formation_scale_override_is_bounded(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaisesRegex(recipe.RecipeError, "formation-scale"):
+                recipe.resolve_experiment(
+                    self._experiment(Path(temporary), drones=2, per_process=2),
+                    formation_scale_override=20.0,
+                )
+
+    def test_parser_accepts_city_max_altitude_and_formation_scale(self) -> None:
+        args = recipe.parser().parse_args(
+            [
+                "configure",
+                "--formation-scale",
+                "5",
+                "--altitude-mode",
+                "city-max-clearance",
+                "--above-city-clearance-m",
+                "12",
+                "--spawn-spacing-m",
+                "1.25",
+                "--formation-tilt-deg",
+                "18",
+            ]
+        )
+        self.assertEqual(args.formation_scale, 5.0)
+        self.assertEqual(args.altitude_mode, "city-max-clearance")
+        self.assertEqual(args.above_city_clearance_m, 12.0)
+        self.assertEqual(args.spawn_spacing_m, 1.25)
+        self.assertEqual(args.formation_tilt_deg, 18.0)
+
+    def test_commands_reuse_configured_experiment_and_drone_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            configured = (
+                root
+                / "work"
+                / "recipes"
+                / recipe.RECIPE_ID
+                / "config"
+                / "resolved-experiment.yaml"
+            )
+            configured.parent.mkdir(parents=True)
+            configured.write_text("version: 1\n", encoding="utf-8")
+            drone_root = root / "hakoniwa-drone-pro"
+            configured.with_name("mujoco-city-fleet.json").write_text(
+                json.dumps({"drone_root": str(drone_root)}), encoding="utf-8"
+            )
+            with mock.patch.object(recipe, "ROOT", root):
+                self.assertEqual(
+                    recipe.command_experiment_path("start", None), configured
+                )
+                self.assertEqual(
+                    recipe.command_drone_root("start", None), drone_root
+                )
+
+    def test_configure_without_experiment_keeps_source_default(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            configured = (
+                root
+                / "work"
+                / "recipes"
+                / recipe.RECIPE_ID
+                / "config"
+                / "resolved-experiment.yaml"
+            )
+            configured.parent.mkdir(parents=True)
+            configured.touch()
+            default_experiment = root / "default.yaml"
+            with mock.patch.object(recipe, "ROOT", root), mock.patch.object(
+                recipe, "DEFAULT_EXPERIMENT", default_experiment
+            ):
+                self.assertEqual(
+                    recipe.command_experiment_path("configure", None),
+                    default_experiment.absolute(),
+                )
+
+    def test_mujoco_city_configure_defaults_to_drone_pro(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with mock.patch.object(recipe, "ROOT", root):
+                self.assertEqual(
+                    recipe.command_drone_root(
+                        "configure",
+                        None,
+                        mujoco_city_world=root / "city-world-job",
+                    ),
+                    (root.parent / "hakoniwa-drone-pro").absolute(),
+                )
+
     def test_asset_limit_boundaries_match_single_host_launcher_assets(self) -> None:
         def resolve(root: Path, process_count: int, visualization: bool):
             path = self._experiment(
@@ -254,7 +389,10 @@ profiles:
                     recipe.start(experiment_path, root / "drone", root / "viewer"), 1
                 )
             doctor.assert_called_once_with(
-                experiment_path, root / "drone", root / "viewer"
+                experiment_path,
+                root / "drone",
+                root / "viewer",
+                drone_count_override=None,
             )
             run.assert_not_called()
 
@@ -912,7 +1050,7 @@ profiles:
                 / "ui.js"
             ).read_text(encoding="utf-8")
             self.assertIn("[35.0988, 138.8587], 17", generated_map_ui)
-            self.assertIn("await viewer.syncDroneStates()", generated_map_ui)
+            self.assertNotIn("await viewer.syncDroneStates()", generated_map_ui)
 
     def test_headless_launcher_omits_visualization_processes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1023,14 +1161,27 @@ profiles:
         self.assertIn("templateDroneIndex=0", url)
         self.assertIn("maxDynamicDrones=26", url)
 
-    def test_open_browser_only_prints_url(self) -> None:
+    def test_open_browser_only_prints_url_on_non_macos(self) -> None:
         with mock.patch.object(recipe, "is_wsl", return_value=False), mock.patch(
             "builtins.print"
-        ) as output:
+        ) as output, mock.patch.object(
+            recipe.platform, "system", return_value="Linux"
+        ):
             self.assertTrue(recipe.open_browser("http://127.0.0.1:8000/test?a=1&b=2"))
         output.assert_called_once_with(
             "Open this URL in a browser: http://127.0.0.1:8000/test?a=1&b=2"
         )
+
+    def test_open_browser_uses_macos_open_command(self) -> None:
+        url = "http://127.0.0.1:8000/test?a=1&b=2"
+        completed = mock.Mock(returncode=0)
+        with mock.patch.object(recipe, "is_wsl", return_value=False), mock.patch.object(
+            recipe.platform, "system", return_value="Darwin"
+        ), mock.patch.object(
+            recipe.subprocess, "run", return_value=completed
+        ) as run:
+            self.assertTrue(recipe.open_browser(url))
+        run.assert_called_once_with(["open", url], check=False)
 
     def test_prepare_viewer_updates_existing_submodules(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

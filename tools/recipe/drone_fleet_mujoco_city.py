@@ -56,13 +56,52 @@ MODEL_SIZE = {"nstack": "40000000", "nconmax": "500000"}
 DRONE_BODY_PATTERN = re.compile(r"d[1-9][0-9]*_b_drone_base")
 LANDING_GEAR_CLEARANCE_M = 0.20
 SPAWN_CLEARANCE_RADIUS_M = 0.75
-SPAWN_MIN_SEPARATION_M = 2.0
+SPAWN_MIN_SEPARATION_M = 1.0
+SPAWN_MAX_SEPARATION_M = 5.0
 SURFACE_MATCH_TOLERANCE_M = 0.15
 MAX_SPAWN_SLOPE_DELTA_M = 0.25
+ALTITUDE_MODES = {"route-clearance", "city-max-clearance"}
 
 
 class FleetMujocoError(RuntimeError):
     pass
+
+
+def _validate_spawn_spacing(spawn_spacing_m: float) -> float:
+    value = float(spawn_spacing_m)
+    if (
+        not math.isfinite(value)
+        or value < SPAWN_MIN_SEPARATION_M
+        or value > SPAWN_MAX_SEPARATION_M
+    ):
+        raise FleetMujocoError(
+            "spawn_spacing_m must be a finite value in "
+            f"[{SPAWN_MIN_SEPARATION_M}, {SPAWN_MAX_SEPARATION_M}]"
+        )
+    return value
+
+
+def _city_visual_max_height(city_receipt_path: Path) -> tuple[float, Path]:
+    """Return the highest visual-building Z in the City World's local frame.
+
+    GLB uses Y-up while the Physics World uses Z-up, so the GLB receipt's
+    maximum Y is the corresponding local altitude.
+    """
+    try:
+        city_receipt = json.loads(city_receipt_path.read_text(encoding="utf-8"))
+        buildings_xml = Path(city_receipt["components"]["buildings_xml"]).resolve()
+        glb_receipt_path = buildings_xml.with_name("buildings-glb-receipt.json")
+        glb_receipt = json.loads(glb_receipt_path.read_text(encoding="utf-8"))
+        maximum = glb_receipt["bounds"]["max"]
+        height_m = float(maximum[1])
+    except (OSError, KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise FleetMujocoError(
+            "city-max-clearance requires a valid buildings-glb-receipt.json: "
+            f"{exc}"
+        ) from exc
+    if not math.isfinite(height_m):
+        raise FleetMujocoError("City visual maximum building height is not finite")
+    return height_m, glb_receipt_path
 
 
 class _MujocoRayScene:
@@ -214,9 +253,13 @@ def _select_safe_spawn_points(
     half_extent_m: dict[str, Any],
     terrain_height: Any,
     city_height: Any,
+    spawn_spacing_m: float = SPAWN_MIN_SEPARATION_M,
 ) -> list[dict[str, float]]:
+    spawn_spacing_m = _validate_spawn_spacing(spawn_spacing_m)
     selected: list[dict[str, float]] = []
-    for x_m, y_m in _candidate_spawn_centers(half_extent_m):
+    for x_m, y_m in _candidate_spawn_centers(
+        half_extent_m, spacing_m=spawn_spacing_m
+    ):
         probes = _clearance_probe_points(x_m, y_m)
         terrain = [float(terrain_height(x, y)) for x, y in probes]
         city = [float(city_height(x, y)) for x, y in probes]
@@ -229,7 +272,7 @@ def _select_safe_spawn_points(
             continue
         if any(
             math.hypot(x_m - item["x_m"], y_m - item["y_m"])
-            < SPAWN_MIN_SEPARATION_M
+            < spawn_spacing_m
             for item in selected
         ):
             continue
@@ -283,6 +326,272 @@ def _formation_targets(
                     )
                 )
     return targets
+
+
+def _point_span(points: list[list[float]], axis: int) -> float:
+    values = [float(point[axis]) for point in points if len(point) > axis]
+    return max(values) - min(values) if values else 0.0
+
+
+def _sample_closed_outline(
+    vertices: list[tuple[float, float]], count: int
+) -> list[list[float]]:
+    """Sample a closed 2D outline at approximately equal arc-length."""
+    if count < 1 or len(vertices) < 3:
+        raise FleetMujocoError("closed outline requires >= 3 vertices and count >= 1")
+    segments: list[tuple[tuple[float, float], tuple[float, float], float]] = []
+    perimeter = 0.0
+    for index, start in enumerate(vertices):
+        end = vertices[(index + 1) % len(vertices)]
+        length = math.hypot(end[0] - start[0], end[1] - start[1])
+        if length <= 0.0:
+            continue
+        segments.append((start, end, length))
+        perimeter += length
+    if perimeter <= 0.0:
+        raise FleetMujocoError("closed outline has zero perimeter")
+    points: list[list[float]] = []
+    segment_index = 0
+    traversed = 0.0
+    for point_index in range(count):
+        distance = perimeter * point_index / count
+        while (
+            segment_index + 1 < len(segments)
+            and traversed + segments[segment_index][2] < distance
+        ):
+            traversed += segments[segment_index][2]
+            segment_index += 1
+        start, end, length = segments[segment_index]
+        ratio = min(1.0, max(0.0, (distance - traversed) / length))
+        points.append(
+            [
+                start[0] + (end[0] - start[0]) * ratio,
+                start[1] + (end[1] - start[1]) * ratio,
+                0.0,
+            ]
+        )
+    return points
+
+
+def _ellipse_vertices(
+    center_x: float,
+    center_y: float,
+    radius_x: float,
+    radius_y: float,
+    *,
+    samples: int = 180,
+) -> list[tuple[float, float]]:
+    return [
+        (
+            center_x + radius_x * math.cos(math.tau * index / samples),
+            center_y + radius_y * math.sin(math.tau * index / samples),
+        )
+        for index in range(samples)
+    ]
+
+
+def _sample_picture_components(
+    components: list[tuple[list[tuple[float, float]], float]], count: int
+) -> list[list[float]]:
+    """Distribute drones across independent outlines while preserving total count."""
+    if count < len(components) * 3:
+        raise FleetMujocoError("picture formation has too few drones")
+    total_weight = sum(weight for _, weight in components)
+    allocations = [
+        max(3, int(count * weight / total_weight)) for _, weight in components
+    ]
+    while sum(allocations) < count:
+        index = max(
+            range(len(components)),
+            key=lambda item: count * components[item][1] / total_weight - allocations[item],
+        )
+        allocations[index] += 1
+    while sum(allocations) > count:
+        index = max(range(len(components)), key=lambda item: allocations[item])
+        allocations[index] -= 1
+    points: list[list[float]] = []
+    for (vertices, _), allocation in zip(components, allocations):
+        points.extend(_sample_closed_outline(vertices, allocation))
+    return points
+
+
+def _face_features() -> list[tuple[list[tuple[float, float]], float]]:
+    return [
+        (_ellipse_vertices(-0.27, -0.05, 0.065, 0.105), 0.07),
+        (_ellipse_vertices(0.27, -0.05, 0.065, 0.105), 0.07),
+        ([(-0.14, -0.30), (0.0, -0.39), (0.14, -0.30)], 0.08),
+    ]
+
+
+def _chiikawa_picture(count: int) -> list[list[float]]:
+    return _sample_picture_components(
+        [
+            (_ellipse_vertices(0.0, -0.08, 0.82, 0.70), 0.60),
+            (_ellipse_vertices(-0.61, 0.48, 0.25, 0.27), 0.16),
+            (_ellipse_vertices(0.61, 0.48, 0.25, 0.27), 0.16),
+            *_face_features(),
+        ],
+        count,
+    )
+
+
+def _hachiware_picture(count: int) -> list[list[float]]:
+    head = [
+        (-0.82, 0.12),
+        (-0.78, 0.68),
+        (-0.39, 0.47),
+        (0.0, 0.68),
+        (0.39, 0.47),
+        (0.78, 0.68),
+        (0.82, 0.12),
+        (0.70, -0.51),
+        (0.0, -0.76),
+        (-0.70, -0.51),
+    ]
+    forehead_patch = [
+        (-0.58, 0.30),
+        (-0.30, 0.10),
+        (0.0, 0.34),
+        (0.30, 0.10),
+        (0.58, 0.30),
+    ]
+    return _sample_picture_components(
+        [(head, 0.72), (forehead_patch, 0.16), *_face_features()], count
+    )
+
+
+def _usagi_picture(count: int) -> list[list[float]]:
+    return _sample_picture_components(
+        [
+            (_ellipse_vertices(0.0, -0.24, 0.80, 0.62), 0.58),
+            (_ellipse_vertices(-0.34, 0.62, 0.20, 0.58), 0.19),
+            (_ellipse_vertices(0.34, 0.62, 0.20, 0.58), 0.19),
+            *_face_features(),
+        ],
+        count,
+    )
+
+
+def _materialize_three_phase_city_show(
+    show: dict[str, Any],
+    *,
+    show_path: Path,
+    drone_count: int,
+) -> None:
+    """Replace the word with three simple character-face formations."""
+    entries = show.get("formation_files")
+    if not isinstance(entries, list) or not entries:
+        raise FleetMujocoError("generated HAKONIWA formation is missing")
+    word_path = (show_path.parent / entries[0]["path"]).resolve()
+    word = json.loads(word_path.read_text(encoding="utf-8"))
+    word_points = word.get("points")
+    if not isinstance(word_points, list) or len(word_points) != drone_count:
+        raise FleetMujocoError("generated HAKONIWA point count is invalid")
+    word_long_span = max(_point_span(word_points, 0), _point_span(word_points, 1))
+    word_short_span = min(_point_span(word_points, 0), _point_span(word_points, 1))
+
+    target_span = max(word_short_span * 2.0, word_long_span * 0.55)
+    specifications = (
+        ("CHIIKAWA", _chiikawa_picture(drone_count), "generated-chiikawa-face"),
+        ("HACHIWARE", _hachiware_picture(drone_count), "generated-hachiware-face"),
+        ("USAGI", _usagi_picture(drone_count), "generated-usagi-face"),
+    )
+    generated_entries = []
+    for formation_id, sampled, source_description in specifications:
+        source_span = max(_point_span(sampled, 0), _point_span(sampled, 1))
+        if source_span <= 0.0:
+            raise FleetMujocoError(f"formation template has zero span: {formation_id}")
+        scale = target_span / source_span
+        for point in sampled:
+            point[0] *= scale
+            point[1] *= scale
+            point[2] *= scale
+        output_name = f"formation-{formation_id}.json"
+        output_path = show_path.parent / "formations" / output_name
+        output_path.write_text(
+            json.dumps(
+                {
+                    "id": formation_id,
+                    "points": sampled,
+                    "derived_from": source_description,
+                    "resampling": "equal-arc-length-per-component",
+                    "source_point_count": drone_count,
+                    "target_point_count": drone_count,
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        generated_entries.append(
+            {"id": formation_id, "path": f"formations/{output_name}"}
+        )
+
+    show["formation_files"] = generated_entries
+    show["timeline"] = [
+        {"formation": "CHIIKAWA", "duration_sec": 8.0, "hold_sec": 6.0},
+        {"formation": "HACHIWARE", "duration_sec": 8.0, "hold_sec": 6.0},
+        {"formation": "USAGI", "duration_sec": 8.0, "hold_sec": 6.0},
+    ]
+    show.setdefault("meta", {})["city_show_phases"] = 3
+    show_path.write_text(json.dumps(show, indent=2) + "\n", encoding="utf-8")
+
+
+def _rotate_formation_files(
+    show: dict[str, Any],
+    *,
+    show_path: Path,
+    rotation_deg: float,
+    tilt_deg: float = 0.0,
+) -> None:
+    for entry in show.get("formation_files", []):
+        if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
+            continue
+        formation_path = (show_path.parent / entry["path"]).resolve()
+        payload = json.loads(formation_path.read_text(encoding="utf-8"))
+        previous_rotation_deg = float(
+            payload.get("rotation_deg_clockwise", 0.0)
+        )
+        previous_tilt_deg = float(payload.get("audience_tilt_deg", 0.0))
+        if math.isclose(previous_rotation_deg, rotation_deg) and math.isclose(
+            previous_tilt_deg, tilt_deg
+        ):
+            continue
+        if not math.isclose(previous_tilt_deg, 0.0):
+            raise FleetMujocoError(
+                "cannot change an already materialized audience tilt; rerun configure"
+            )
+        delta_deg = rotation_deg - previous_rotation_deg
+        radians = math.radians(delta_deg)
+        cosine = math.cos(radians)
+        sine = math.sin(radians)
+        points = payload.get("points")
+        if not isinstance(points, list):
+            continue
+        for point in points:
+            if not isinstance(point, list) or len(point) < 2:
+                continue
+            x_m, y_m = float(point[0]), float(point[1])
+            point[0] = cosine * x_m + sine * y_m
+            point[1] = -sine * x_m + cosine * y_m
+        if not math.isclose(tilt_deg, 0.0):
+            tilt_radians = math.radians(tilt_deg)
+            tilt_cosine = math.cos(tilt_radians)
+            tilt_sine = math.sin(tilt_radians)
+            pivot_x = min(float(point[0]) for point in points if len(point) >= 3)
+            for point in points:
+                if not isinstance(point, list) or len(point) < 3:
+                    continue
+                offset_x = float(point[0]) - pivot_x
+                source_z = float(point[2])
+                point[0] = pivot_x + tilt_cosine * offset_x - tilt_sine * source_z
+                point[2] = tilt_sine * offset_x + tilt_cosine * source_z
+        payload["rotation_deg_clockwise"] = rotation_deg
+        payload["audience_tilt_deg"] = tilt_deg
+        payload["audience_tilt_axis"] = "ROS-Y after map rotation"
+        formation_path.write_text(
+            json.dumps(payload, indent=2) + "\n", encoding="utf-8"
+        )
 
 
 def _path_points(
@@ -346,7 +655,12 @@ def _remove_demo_landmarks(root: ET.Element) -> list[str]:
     return removed
 
 
-def _prepare_base_fleet_xml(path: Path, expected_count: int) -> dict[str, Any]:
+def _prepare_base_fleet_xml(
+    path: Path,
+    expected_count: int,
+    *,
+    drone_ids: list[int] | None = None,
+) -> dict[str, Any]:
     tree = ET.parse(path)
     root = tree.getroot()
     removed_landmarks = _remove_demo_landmarks(root)
@@ -359,12 +673,20 @@ def _prepare_base_fleet_xml(path: Path, expected_count: int) -> dict[str, Any]:
     if drone_default is None:
         raise FleetMujocoError("generated fleet MJCF has no drone geom default")
     drone_default.attrib.update(DRONE_COLLISION_MASK)
+    selected_ids = drone_ids or list(range(1, expected_count + 1))
+    selected_names = {f"d{index}_b_drone_base" for index in selected_ids}
+    worldbody = root.find("worldbody")
+    assert worldbody is not None
+    for body in list(worldbody.findall("body")):
+        name = body.get("name", "")
+        if DRONE_BODY_PATTERN.fullmatch(name) and name not in selected_names:
+            worldbody.remove(body)
     names = [
         body.get("name", "")
         for body in root.findall("./worldbody/body")
         if DRONE_BODY_PATTERN.fullmatch(body.get("name", ""))
     ]
-    expected = [f"d{index}_b_drone_base" for index in range(1, expected_count + 1)]
+    expected = [f"d{index}_b_drone_base" for index in selected_ids]
     if names != expected:
         raise FleetMujocoError(
             f"generated drone body contract mismatch: expected={expected}, actual={names}"
@@ -375,7 +697,12 @@ def _prepare_base_fleet_xml(path: Path, expected_count: int) -> dict[str, Any]:
 
 
 def build_shared_model(
-    *, drone_root: Path, city_world_path: Path, drone_count: int, output_dir: Path
+    *,
+    drone_root: Path,
+    city_world_path: Path,
+    drone_count: int,
+    output_dir: Path,
+    drone_ids: list[int] | None = None,
 ) -> dict[str, Any]:
     if not 1 <= drone_count <= 200:
         raise FleetMujocoError("drone_count must be in [1, 200]")
@@ -398,7 +725,9 @@ def build_shared_model(
     shared_xml = output_dir / "city-fleet.xml"
     shared_mjb = output_dir / "city-fleet.mjb"
     _generate_base_fleet_xml(drone_root, drone_count, base_xml)
-    fleet = _prepare_base_fleet_xml(base_xml, drone_count)
+    fleet = _prepare_base_fleet_xml(
+        base_xml, drone_count, drone_ids=drone_ids
+    )
     try:
         composition = city_drone._compose_drone_and_city_mjcf(
             base_xml, city_world.mjcf_path, shared_xml
@@ -414,6 +743,8 @@ def build_shared_model(
         "component": "drone-fleet-mujoco-city",
         "scope": "non-ICRA drone-fleet-single-host",
         "drone_count": drone_count,
+        "local_drone_count": len(fleet["drone_body_names"]),
+        "drone_ids": drone_ids or list(range(1, drone_count + 1)),
         "process_count_contract": 1,
         "city_world": {
             "receipt": str(city_world.receipt_path),
@@ -441,25 +772,99 @@ def build_shared_model(
     return receipt
 
 
+def _partition_drone_ids(drone_count: int, process_count: int) -> list[list[int]]:
+    if process_count < 1 or process_count > drone_count:
+        raise FleetMujocoError("process_count must be in [1, drone_count]")
+    base, remainder = divmod(drone_count, process_count)
+    counts = [base] * process_count
+    for index in range(process_count - remainder, process_count):
+        counts[index] += 1
+    result: list[list[int]] = []
+    next_id = 1
+    for count in counts:
+        result.append(list(range(next_id, next_id + count)))
+        next_id += count
+    return result
+
+
+def build_process_models(
+    *,
+    drone_root: Path,
+    city_world_path: Path,
+    drone_count: int,
+    process_count: int,
+    output_dir: Path,
+) -> dict[str, Any]:
+    process_models: list[dict[str, Any]] = []
+    for process_index, drone_ids in enumerate(
+        _partition_drone_ids(drone_count, process_count), start=1
+    ):
+        process_models.append(
+            build_shared_model(
+                drone_root=drone_root,
+                city_world_path=city_world_path,
+                drone_count=drone_count,
+                output_dir=output_dir / f"process-{process_index:02d}",
+                drone_ids=drone_ids,
+            )
+        )
+    aggregate = {
+        "schema_version": 1,
+        "component": "drone-fleet-mujoco-city-process-models",
+        "scope": "non-ICRA drone-fleet-single-host",
+        "drone_count": drone_count,
+        "process_count": process_count,
+        "city_world": process_models[0]["city_world"],
+        "process_models": process_models,
+    }
+    receipt_path = output_dir / "receipt.json"
+    receipt_path.write_text(
+        json.dumps(aggregate, indent=2) + "\n", encoding="utf-8"
+    )
+    return aggregate
+
+
 def materialize_fleet_config(
     *,
     drone_root: Path,
     recipe_config: Path,
     model_receipt: dict[str, Any],
     spawn_altitude_m: float = LANDING_GEAR_CLEARANCE_M,
+    spawn_spacing_m: float = SPAWN_MIN_SEPARATION_M,
+    altitude_mode: str = "route-clearance",
+    above_city_clearance_m: float = 10.0,
+    formation_rotation_deg: float = 90.0,
+    formation_tilt_deg: float = 15.0,
 ) -> dict[str, Any]:
     """Replace a configured non-ICRA fleet with its MuJoCo equivalent."""
+    if not math.isfinite(formation_rotation_deg):
+        raise FleetMujocoError("formation_rotation_deg must be finite")
+    if not math.isfinite(formation_tilt_deg) or not 0.0 <= formation_tilt_deg <= 35.0:
+        raise FleetMujocoError("formation_tilt_deg must be in [0, 35]")
     if not 0.18 <= spawn_altitude_m <= 2.0:
         raise FleetMujocoError(
             "spawn_altitude_m is the body-origin clearance above terrain and "
             "must be between 0.18 and 2.0"
         )
+    spawn_spacing_m = _validate_spawn_spacing(spawn_spacing_m)
+    if altitude_mode not in ALTITUDE_MODES:
+        raise FleetMujocoError(
+            f"altitude_mode must be one of {sorted(ALTITUDE_MODES)}"
+        )
+    if not 1.0 <= above_city_clearance_m <= 100.0:
+        raise FleetMujocoError("above_city_clearance_m must be in [1.0, 100.0]")
     drone_root = drone_root.expanduser().resolve()
     recipe_config = recipe_config.expanduser().resolve()
     drone_count = model_receipt.get("drone_count")
     if not isinstance(drone_count, int) or drone_count < 1:
         raise FleetMujocoError("shared model receipt has an invalid drone_count")
-    compiled = model_receipt.get("compiled_model")
+    process_count = int(model_receipt.get("process_count", 1))
+    process_models = model_receipt.get("process_models")
+    if not isinstance(process_models, list):
+        process_models = [model_receipt]
+    if len(process_models) != process_count:
+        raise FleetMujocoError("process model count does not match process_count")
+    compiled = process_models[0].get("compiled_model")
     city = model_receipt.get("city_world")
     if not isinstance(compiled, dict) or not isinstance(city, dict):
         raise FleetMujocoError("shared model receipt is incomplete")
@@ -538,6 +943,17 @@ def materialize_fleet_config(
     if not show_path.is_file():
         raise FleetMujocoError(f"generated show configuration not found: {show_path}")
     show = json.loads(show_path.read_text(encoding="utf-8"))
+    _materialize_three_phase_city_show(
+        show,
+        show_path=show_path,
+        drone_count=drone_count,
+    )
+    _rotate_formation_files(
+        show,
+        show_path=show_path,
+        rotation_deg=formation_rotation_deg,
+        tilt_deg=formation_tilt_deg,
+    )
     options = show.get("options")
     if not isinstance(options, dict):
         raise FleetMujocoError("generated show options are missing")
@@ -554,6 +970,7 @@ def materialize_fleet_config(
             half_extent_m=half_extent,
             terrain_height=terrain_scene.height,
             city_height=city_scene.height,
+            spawn_spacing_m=spawn_spacing_m,
         )
         targets = _formation_targets(show, show_path=show_path)
         if not targets:
@@ -567,7 +984,21 @@ def materialize_fleet_config(
             city_scene.height(x_m, y_m) for x_m, y_m in route_points
         )
 
-    flight_altitude_m = route_surface_height_m + requested_agl_m
+    city_visual_max_height_m: float | None = None
+    city_visual_receipt: Path | None = None
+    if altitude_mode == "city-max-clearance":
+        city_receipt_path = Path(str(city.get("receipt", ""))).resolve()
+        city_visual_max_height_m, city_visual_receipt = _city_visual_max_height(
+            city_receipt_path
+        )
+        altitude_reference_m = max(
+            route_surface_height_m, city_visual_max_height_m
+        )
+        requested_clearance_m = float(above_city_clearance_m)
+    else:
+        altitude_reference_m = route_surface_height_m
+        requested_clearance_m = requested_agl_m
+    flight_altitude_m = altitude_reference_m + requested_clearance_m
     fleet_config = json.loads(fleet.read_text(encoding="utf-8"))
     drones = fleet_config.get("drones")
     if not isinstance(drones, list) or len(drones) != drone_count:
@@ -580,16 +1011,99 @@ def materialize_fleet_config(
     options["base_alt"] = flight_altitude_m
     show_path.write_text(json.dumps(show, indent=2) + "\n", encoding="utf-8")
 
+    process_type_configs: list[str] = []
+    if process_count > 1:
+        splitter = drone_root / "tools" / "gen_fleet_split_config.py"
+        split_command = [
+            sys.executable,
+            str(splitter),
+            "--fleet-in",
+            str(fleet),
+            "--service-in",
+            str(service),
+            "--fleet-out-template",
+            str(recipe_config / "drone" / "fleets" / "api-current-part{part}.json"),
+            "--service-out-template",
+            str(
+                recipe_config
+                / "drone"
+                / "fleets"
+                / "services"
+                / "api-current-service-part{part}.json"
+            ),
+            "--shared-service-config-path",
+            "config/drone/fleets/services/api-current-service.json",
+            "--parts",
+            str(process_count),
+        ]
+        result = subprocess.run(split_command, cwd=recipe_config.parent, check=False)
+        if result.returncode != 0:
+            raise FleetMujocoError(
+                f"MuJoCo fleet partition generation failed with rc={result.returncode}"
+            )
+        for process_index, process_model in enumerate(process_models, start=1):
+            process_compiled = process_model.get("compiled_model")
+            if not isinstance(process_compiled, dict):
+                raise FleetMujocoError(
+                    f"process {process_index} compiled model receipt is missing"
+                )
+            process_model_path = Path(
+                str(process_compiled.get("output_mjb", ""))
+            ).resolve()
+            if not process_model_path.is_file():
+                raise FleetMujocoError(
+                    f"process {process_index} MJB not found: {process_model_path}"
+                )
+            process_type_relative = Path(
+                f"config/drone/fleets/types/api-mujoco-city-part{process_index}.json"
+            )
+            process_type_output = recipe_config / process_type_relative.relative_to(
+                "config"
+            )
+            process_type = json.loads(json.dumps(type_config))
+            process_type["components"]["droneDynamics"]["mujoco"][
+                "modelPath"
+            ] = str(process_model_path)
+            process_type_output.write_text(
+                json.dumps(process_type, indent=2) + "\n", encoding="utf-8"
+            )
+            partition_path = (
+                recipe_config
+                / "drone"
+                / "fleets"
+                / f"api-current-part{process_index}.json"
+            )
+            partition = json.loads(partition_path.read_text(encoding="utf-8"))
+            partition["types"]["api-mujoco-city"] = str(process_type_relative)
+            partition_path.write_text(
+                json.dumps(partition, indent=2) + "\n", encoding="utf-8"
+            )
+            process_type_configs.append(str(process_type_output))
+
     flight_plan = {
-        "altitude_contract": "requested AGL above highest collider on planned routes",
+        "altitude_mode": altitude_mode,
+        "altitude_contract": (
+            "clearance above highest visual building in the generated city"
+            if altitude_mode == "city-max-clearance"
+            else "requested AGL above highest collider on planned routes"
+        ),
         "requested_agl_m": requested_agl_m,
+        "requested_clearance_m": requested_clearance_m,
         "route_maximum_surface_height_m": route_surface_height_m,
+        "city_visual_maximum_height_m": city_visual_max_height_m,
+        "city_visual_bounds_receipt": (
+            str(city_visual_receipt) if city_visual_receipt is not None else None
+        ),
+        "altitude_reference_height_m": altitude_reference_m,
         "resolved_flight_altitude_m": flight_altitude_m,
         "spawn_body_clearance_m": spawn_altitude_m,
         "spawn_clearance_radius_m": SPAWN_CLEARANCE_RADIUS_M,
-        "spawn_minimum_separation_m": SPAWN_MIN_SEPARATION_M,
+        "spawn_minimum_separation_m": spawn_spacing_m,
         "spawn_points": spawn_points,
         "formation_targets": [list(point) for point in targets],
+        "formation_rotation_deg_clockwise": formation_rotation_deg,
+        "formation_audience_tilt_deg": formation_tilt_deg,
+        "show_phases": ["CHIIKAWA", "HACHIWARE", "USAGI"],
     }
     marker = {
         "schema_version": 1,
@@ -597,7 +1111,7 @@ def materialize_fleet_config(
         "scope": "non-ICRA drone-fleet-single-host",
         "drone_root": str(drone_root),
         "drone_count": drone_count,
-        "process_count": 1,
+        "process_count": process_count,
         "flight_plan": flight_plan,
         "fleet_config": str(fleet),
         "type_config": str(type_output),
@@ -605,6 +1119,19 @@ def materialize_fleet_config(
             Path(str(compiled["output_mjb"])).parent / "receipt.json"
         ),
         "shared_mjb": str(model_path),
+        "process_models": [
+            {
+                "process_index": index,
+                "drone_ids": process_model.get("drone_ids", []),
+                "mjb": str(process_model["compiled_model"]["output_mjb"]),
+                "receipt": str(
+                    Path(process_model["compiled_model"]["output_mjb"]).parent
+                    / "receipt.json"
+                ),
+            }
+            for index, process_model in enumerate(process_models, start=1)
+        ],
+        "process_type_configs": process_type_configs,
         "city_world": city,
     }
     marker_path = recipe_config / "mujoco-city-fleet.json"
@@ -619,11 +1146,21 @@ def configure_single_host_fleet(
     drone_count: int,
     recipe_config: Path,
     spawn_altitude_m: float = LANDING_GEAR_CLEARANCE_M,
+    spawn_spacing_m: float = SPAWN_MIN_SEPARATION_M,
+    altitude_mode: str = "route-clearance",
+    above_city_clearance_m: float = 10.0,
+    process_count: int = 1,
+    formation_rotation_deg: float = 90.0,
+    formation_tilt_deg: float = 15.0,
 ) -> dict[str, Any]:
-    model = build_shared_model(
+    spawn_spacing_m = _validate_spawn_spacing(spawn_spacing_m)
+    if process_count < 1 or process_count > drone_count:
+        raise FleetMujocoError("process_count must be in [1, drone_count]")
+    model = build_process_models(
         drone_root=drone_root,
         city_world_path=city_world_path,
         drone_count=drone_count,
+        process_count=process_count,
         output_dir=recipe_config / "drone" / "mujoco-city-fleet",
     )
     return materialize_fleet_config(
@@ -631,6 +1168,11 @@ def configure_single_host_fleet(
         recipe_config=recipe_config,
         model_receipt=model,
         spawn_altitude_m=spawn_altitude_m,
+        spawn_spacing_m=spawn_spacing_m,
+        altitude_mode=altitude_mode,
+        above_city_clearance_m=above_city_clearance_m,
+        formation_rotation_deg=formation_rotation_deg,
+        formation_tilt_deg=formation_tilt_deg,
     )
 
 

@@ -67,6 +67,16 @@ tools/recipe/drone_fleet_runtime.py
 
 新規Recipeは原則追加しない。既存のFleet Management、show scenario、`HAKONIWA` formation、Launcher、Visual State Publisher、WebBridgeを再利用し、physics backendをMuJoCo対応へ拡張する。
 
+City版の演目は、単純で遠方からも判別しやすいキャラクター風の顔アイコンを、機体数に合わせてRecipe workspaceへ派生生成する。
+
+```text
+CHIIKAWA
+  -> HACHIWARE
+  -> USAGI
+```
+
+参照formationとICRA Recipeは変更しない。地図上では既定90度回転し、観客が下から見上げた場合にも形を認識しやすいよう、ショー面を既定15度だけ傾ける。傾斜角は`configure --formation-tilt-deg`で変更可能とする。LEDは全機同期の約4.5秒周期で穏やかに明滅させる。
+
 ### 任意都市生成
 
 City Worldの正本は、既存のCity World Workerが生成した成果物とする。
@@ -238,32 +248,34 @@ PS4/PS5入力、飛行、接触の最終確認は利用者によるAcceptance Te
 
 ### 2.1 既存Fleet RecipeのMuJoCo化
 
-- [ ] `drone-fleet-single-host`へCity World artifact選択を追加する
-- [ ] 従来backendとMuJoCo backendの責務差を整理する
-- [ ] 100機すべての運動状態をMuJoCo内で進行させる
-- [ ] Fleet Managementのtakeoff、move、formation、hold、finishを維持する
-- [ ] 既存の`HAKONIWA` formation generatorを再利用する
-- [ ] ICRA performance Recipeからコードや設定を分岐コピーしない
-- [ ] ICRA測定条件と結果を変更しない
+- [x] `drone-fleet-single-host`へCity World artifact選択を追加する
+- [x] 従来backendとMuJoCo backendの責務差を整理する
+- [ ] 100機すべての運動状態をMuJoCo内で進行させる（64機まで実機確認済み）
+- [x] Fleet Managementのtakeoff、move、formation、hold、finishを維持する
+- [x] 既存の`HAKONIWA` formation generatorを再利用する
+- [x] ICRA performance Recipeからコードや設定を分岐コピーしない
+- [x] ICRA測定条件と結果を変更しない
 
 ### 2.2 100機のPhysics契約
 
-- [ ] City Colliderを可能な限り1つのMuJoCo worldで共有する
-- [ ] Drone間collisionを無効化する
-- [ ] 各DroneとCity Colliderのcollisionを有効化する
-- [ ] Drone ID、MuJoCo body ID、Fleet ID、PDU asset名をdeterministicに対応させる
-- [ ] 100機のinitial placementがCity Collider内や同一点にならないよう検証する
+- [x] City Colliderを可能な限り1つのMuJoCo worldで共有する
+- [x] Drone間collisionを無効化する
+- [x] 各DroneとCity Colliderのcollisionを有効化する
+- [x] Drone ID、MuJoCo body ID、Fleet ID、PDU asset名をdeterministicに対応させる
+- [x] initial placementがCity Collider内や同一点にならないよう検証する
 - [ ] MuJoCo model load時間、step時間、memory、geom/contact数をReceiptへ記録する
 - [ ] 実時間進行を必須条件にせず、見栄えと安定性を優先する
 
 ### 2.3 Showと表示
 
 - [ ] 100機が段階的または一斉に離陸する
-- [ ] 都市内の安全な表示高度へ移動する
+- [x] 経路上Colliderまたは都市内最高建物を基準に、安全な表示高度へ移動する
 - [ ] `HAKONIWA`文字を形成する
 - [ ] 一定時間holdする
 - [ ] 終了または着陸まで実行する
-- [ ] ブラウザで都市GLBと100機を同時表示する
+- [ ] ブラウザで都市GLBと100機を同時表示する（64機まで確認済み）
+- [x] 左パネルでDay/Nightを切り替え、地図・都市・UIを連動させる
+- [x] 全Droneへ軽量な点滅LED表示を付与する
 - [ ] 文字が視認できるcamera presetを用意する
 - [ ] 実行状態と完了理由をexecution summaryへ記録する
 
@@ -275,6 +287,60 @@ PS4/PS5入力、飛行、接触の最終確認は利用者によるAcceptance Te
 - [ ] 代表Droneを建物へ向けるとCity contactが発生する
 - [ ] `HAKONIWA`がブラウザで明瞭に読める
 - [ ] Showを3回実行し、欠落Drone、異常終了、残留processがない
+
+### 2.4 現在の実行入口と表示調整
+
+編隊の大きさと飛行高度はconfigure時に確定し、以後のdoctor/start/status/
+open-viewer/stopは引数なしで同じ設定を再利用する。例えば64機を5倍の文字間隔で、
+生成都市の最高建物より10m上へ飛ばす場合は次を実行する。
+
+```bash
+python tools/recipe/drone_fleet_single_host.py configure \
+  --experiment recipes/experiments/drone-fleet-single-host-mujoco-city-2.yaml \
+  --drone-root ../hakoniwa-drone-pro \
+  --mujoco-city-world work/remote-operation/city-world-worker/jobs/<JOB_ID> \
+  --drone-count 64 \
+  --process-count 2 \
+  --spawn-spacing-m 1 \
+  --formation-scale 5 \
+  --formation-rotation-deg 90 \
+  --altitude-mode city-max-clearance \
+  --above-city-clearance-m 10
+
+python tools/recipe/drone_fleet_single_host.py doctor
+python tools/recipe/drone_fleet_single_host.py start
+python tools/recipe/drone_fleet_single_host.py open-viewer
+```
+
+`--formation-scale`はYAMLの`letter_width_m`、`letter_height_m`、`letter_gap_m`
+へ一度だけ適用され、解決済み寸法として保存される。`route-clearance`は計画経路上の
+最高Colliderを基準にし、`city-max-clearance`はBuildings GLB receiptの最高高度と
+経路上Colliderの高い方を基準にする。後者はVisual建物を越えることを意図した
+ショー表示用であり、元データに最高高度の証跡がない場合はconfigureを失敗させる。
+
+`--spawn-spacing-m`は離陸前の初期編隊だけに適用する。デフォルトの1m間隔では
+64機を中心から半径約6m以内へ収め、全機がまず真上へ離陸してから、
+`--formation-scale`で拡大したHAKONIWA編隊へ水平移動する。実際の値は
+`config/mujoco-city-fleet.json`の`flight_plan.spawn_minimum_separation_m`へ記録する。
+
+`--formation-rotation-deg 90`はROS XY平面上で文字編隊を時計回りに90度回転し、
+ROS X（Mapでは南北）に並んでいた文字列をMapの東西方向へ向ける。
+
+`--process-count`が2以上の場合、City Worldの静的Colliderを各processのMJBへ複製し、
+Droneだけを重複なく連続分割する。例えば128機・2processでは、process 1が
+Drone 1–64、process 2がDrone 65–128を持つ。各MJBには担当Droneだけを含めるため、
+128機入りMJBを2回ロードする構成にはしない。Drone間collisionは元から無効であり、
+CityとのcollisionとConductorによる共通時刻進行は維持する。process別MJB、担当ID、
+type configは`config/mujoco-city-fleet.json`へ記録する。
+
+Map Viewer左パネルの`Night mode`チェックでDay/Nightをいつでも切り替えられる。
+NightではThree.js照明、背景、地図タイル、左パネルを暗くし、Droneの点滅LEDを
+強調する。LEDは機数に比例してPointLightを増やさず、additive Spriteを1機1枚だけ
+使用するため、100機規模でも照明計算を増加させない。
+
+Map上のDrone markerは機数に応じて自動縮小し、128機では14px、選択機だけ20pxで
+表示する。赤い航跡は選択機を4秒、それ以外を1.2秒だけ保持し、線幅・opacityも
+選択機を強調する。これにより文字編隊の輪郭をmarkerと航跡で塗り潰さない。
 
 ### Phase 2 完了条件
 
