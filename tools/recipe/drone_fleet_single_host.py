@@ -50,6 +50,11 @@ VIEWER_URL_BASE = (
     "?viewerConfigPath=/config/viewer-config-fleets.json"
     "&wsUri=ws://127.0.0.1:8765&wireVersion=v2"
 )
+MAP_VIEWER_URL_BASE = (
+    "http://127.0.0.1:8000/src/client/index.html"
+    "?threejsRoot=/thirdparty/hakoniwa-threejs-drone"
+    "&viewerConfigName=viewer-config-fleets.json"
+)
 HAKONIWA_STROKE_COUNT = 26
 RECOMMENDED_DRONES_PER_STROKE = 2
 # The public Drone Core distribution and the default Foundation build limits
@@ -1401,7 +1406,11 @@ def binary_candidates(drone_root: Path, system_name: str) -> tuple[Path, ...]:
         raise RecipeError(f"unsupported native operating system: {system_name}")
     # prepare-native extracts the verified public archive into its OS folder.
     # Prefer that materialized artifact over an unrelated pre-existing lib copy.
-    return drone_root / folder / name, drone_root / "lib" / name
+    return (
+        drone_root / folder / name,
+        drone_root / "lib" / name,
+        drone_root / ".hako" / "install" / "bin" / name,
+    )
 
 
 def visual_state_publisher_candidates(
@@ -1415,7 +1424,11 @@ def visual_state_publisher_candidates(
         name, folder = "win-drone_visual_state_publisher.exe", "win"
     else:
         raise RecipeError(f"unsupported native operating system: {system_name}")
-    return drone_root / folder / name, drone_root / "lib" / name
+    return (
+        drone_root / folder / name,
+        drone_root / "lib" / name,
+        drone_root / ".hako" / "install" / "bin" / name,
+    )
 
 
 def resolve_visual_state_publisher(drone_root: Path, system_name: str) -> Path:
@@ -1496,6 +1509,132 @@ def resolve_foundation_python(paths, system_name: str) -> Path:
     raise RecipeError("Foundation Python not found: " + ", ".join(map(str, candidates)))
 
 
+def materialize_mujoco_city_viewer(paths, viewer_root: Path) -> Path:
+    """Create a Recipe-local Map Viewer with a City-backed Three.js pane."""
+    marker_path = paths.recipe_config / "mujoco-city-fleet.json"
+    try:
+        marker = json.loads(marker_path.read_text(encoding="utf-8"))
+        city = marker["city_world"]
+        city_glb = Path(str(city["glb"])).resolve()
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise RecipeError(f"invalid MuJoCo City viewer contract {marker_path}: {exc}") from exc
+    if not city_glb.is_file():
+        raise RecipeError(f"MuJoCo City GLB not found: {city_glb}")
+
+    map_viewer_root = viewer_root.parent / "hakoniwa-map-viewer"
+    map_client = map_viewer_root / "src" / "client"
+    map_images = map_viewer_root / "images"
+    if not map_client.is_dir() or not map_images.is_dir():
+        raise RecipeError(
+            "Hakoniwa Map Viewer is required by the MuJoCo City fleet viewer: "
+            f"{map_viewer_root}"
+        )
+
+    web_root = paths.recipe_root / "web" / "map-viewer"
+    web_root.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(map_client, web_root / "src" / "client", dirs_exist_ok=True)
+    shutil.copytree(map_images, web_root / "images", dirs_exist_ok=True)
+
+    embedded = web_root / "thirdparty" / "hakoniwa-threejs-drone"
+    embedded.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(viewer_root / "index.html", embedded / "index.html")
+    for dirname in ("src", "config", "assets", "thirdparty"):
+        source = viewer_root / dirname
+        if not source.exists():
+            raise RecipeError(f"Three.js viewer resource not found: {source}")
+        shutil.copytree(source, embedded / dirname, dirs_exist_ok=True)
+
+    glb_destination = embedded / "assets" / "local_models" / "city-world.glb"
+    glb_destination.parent.mkdir(parents=True, exist_ok=True)
+    glb_destination.unlink(missing_ok=True)
+    try:
+        os.link(city_glb, glb_destination)
+    except OSError:
+        shutil.copy2(city_glb, glb_destination)
+
+    scene_path = embedded / "config" / "drone_config-city-fleet.json"
+    source_scene = viewer_root / "config" / "drone_config-compact-1.json"
+    try:
+        scene = json.loads(source_scene.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RecipeError(f"invalid Three.js scene {source_scene}: {exc}") from exc
+    scene["environments"] = [
+        {
+            "name": "city-world",
+            "model": "../assets/local_models/city-world.glb",
+            "pos": [0, 0, 0],
+            "hpr": [0, 0, 0],
+        }
+    ]
+    half_extent = city.get("half_extent_m", {})
+    camera_distance = max(
+        30.0,
+        float(half_extent.get("north_south", 100.0)),
+        float(half_extent.get("east_west", 100.0)),
+    )
+    scene["main_camera"].update(
+        {
+            "initialMode": "fixed",
+            "position": [-0.65 * camera_distance, -0.65 * camera_distance, 0.45 * camera_distance],
+            "target": "Drone",
+            "followDistance": 8.0,
+        }
+    )
+    scene_path.write_text(json.dumps(scene, indent=2) + "\n", encoding="utf-8")
+
+    viewer_config_path = embedded / "config" / "viewer-config-fleets.json"
+    try:
+        viewer_config = json.loads(
+            (viewer_root / "config" / "viewer-config-fleets.json").read_text(
+                encoding="utf-8"
+            )
+        )
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RecipeError(f"invalid Three.js fleet viewer config: {exc}") from exc
+    viewer_config["three"]["sceneConfigPath"] = "./drone_config-city-fleet.json"
+    fleet_options = viewer_config.setdefault("stateInput", {}).setdefault(
+        "fleets", {}
+    )
+    fleet_options.update(
+        {
+            "dynamicSpawn": True,
+            "templateDroneIndex": 0,
+            "maxDynamicDrones": int(marker["drone_count"]),
+        }
+    )
+    viewer_config_path.write_text(
+        json.dumps(viewer_config, indent=2) + "\n", encoding="utf-8"
+    )
+
+    # The Map Viewer is intentionally generic.  Its Recipe-local copy gets the
+    # selected City World origin and explicitly advances the public fleet state
+    # source before projecting each pose onto Leaflet.
+    map_ui_path = web_root / "src" / "client" / "src" / "ui.js"
+    map_ui = map_ui_path.read_text(encoding="utf-8")
+    origin = city.get("origin", {})
+    origin_lat = float(origin["latitude"])
+    origin_lon = float(origin["longitude"])
+    map_ui = map_ui.replace(
+        "const map = L.map('map').setView([35.6812, 139.7671], 15); // 東京駅",
+        f"const map = L.map('map').setView([{origin_lat}, {origin_lon}], 17);",
+    )
+    map_ui = map_ui.replace(
+        "let ORIGIN_LAT = 35.6625;   // zone の原点（仮）",
+        f"let ORIGIN_LAT = {origin_lat};",
+    )
+    map_ui = map_ui.replace(
+        "let ORIGIN_LON = 139.70625;",
+        f"let ORIGIN_LON = {origin_lon};",
+    )
+    map_ui = map_ui.replace(
+        "setInterval(() => {\n      if (!viewer) return;\n      const drones = viewer.getDrones();",
+        "setInterval(async () => {\n      if (!viewer) return;\n"
+        "      await viewer.syncDroneStates();\n      const drones = viewer.getDrones();",
+    )
+    map_ui_path.write_text(map_ui, encoding="utf-8")
+    return web_root
+
+
 def write_launcher(
     paths,
     drone_root: Path,
@@ -1523,11 +1662,17 @@ def write_launcher(
         if experiment.visualization
         else None
     )
+    mujoco_city_mode = (paths.recipe_config / "mujoco-city-fleet.json").is_file()
+    runtime_viewer_root = (
+        materialize_mujoco_city_viewer(paths, viewer_root)
+        if mujoco_city_mode and experiment.visualization
+        else viewer_root
+    )
     try:
         return fleet_runtime.prepare_launcher(
             paths,
             drone_root,
-            viewer_root,
+            runtime_viewer_root,
             fleet_runtime.LauncherRuntimeSpec(
                 local_drone_count=experiment.drone_count,
                 process_count=experiment.process_count,
@@ -1539,6 +1684,10 @@ def write_launcher(
                 land=experiment.land,
                 speed_m_s=experiment.speed_m_s,
                 timeout_sec=experiment.timeout_sec,
+                # A normal show-runner exit terminates every Launcher asset.
+                # Keep the non-ICRA City demo at its final formation so its
+                # browser viewer remains available until an explicit stop.
+                final_hold_extra_sec=86400.0 if mujoco_city_mode else 0.0,
             ),
             drone_binary=drone_binary,
             python=python,
@@ -1594,13 +1743,47 @@ def native_library_environment(
     return env
 
 
-def configure(experiment_path: Path, drone_root: Path) -> int:
+def configure(
+    experiment_path: Path,
+    drone_root: Path,
+    *,
+    mujoco_city_world: Path | None = None,
+    spawn_altitude_m: float = 0.20,
+) -> int:
     experiment = resolve_experiment(experiment_path)
     foundation = load_foundation_module()
     paths = foundation.resolve_workspace(ROOT, RECIPE_ID)
     foundation.prepare_workspace(paths)
     paths.recipe_validation.mkdir(parents=True, exist_ok=True)
     prepare_config(paths, drone_root, experiment)
+    mujoco_marker = paths.recipe_config / "mujoco-city-fleet.json"
+    if mujoco_city_world is not None:
+        if experiment.process_count != 1:
+            raise RecipeError(
+                "MuJoCo City fleet requires scale.process_count=1 because all "
+                "drones share one mjModel/mjData world"
+            )
+        try:
+            from tools.recipe import drone_fleet_mujoco_city
+        except ModuleNotFoundError:
+            # Direct script execution adds tools/recipe, not the repository
+            # root, to sys.path. Keep that supported because configure is also
+            # run with the Foundation Python executable.
+            import drone_fleet_mujoco_city  # type: ignore[no-redef]
+
+        try:
+            marker = drone_fleet_mujoco_city.configure_single_host_fleet(
+                drone_root=drone_root,
+                city_world_path=mujoco_city_world,
+                drone_count=experiment.drone_count,
+                recipe_config=paths.recipe_config,
+                spawn_altitude_m=spawn_altitude_m,
+            )
+        except drone_fleet_mujoco_city.FleetMujocoError as exc:
+            raise RecipeError(str(exc)) from exc
+    else:
+        marker = None
+        mujoco_marker.unlink(missing_ok=True)
     # Remove artifacts from the superseded external-Conductor topology.  The
     # single-host Recipe uses one Foundation Core domain and the first Drone
     # process owns its built-in Conductor.
@@ -1640,6 +1823,16 @@ def configure(experiment_path: Path, drone_root: Path) -> int:
     print("Launcher               : pending (generated by doctor/start)")
     print(f"Drone count            : {experiment.drone_count}")
     print(f"Process count          : {experiment.process_count}")
+    if marker is not None:
+        print("Physics backend        : MuJoCo shared City World")
+        print(f"Shared MJB             : {marker['shared_mjb']}")
+        plan = marker["flight_plan"]
+        print(
+            "Flight altitude        : "
+            f"{plan['resolved_flight_altitude_m']:.3f} m local Z "
+            f"({plan['requested_agl_m']:.3f} m clearance)"
+        )
+        print(f"Safe launch points     : {len(plan['spawn_points'])}")
     print("Conductor topology     : built-in owner in drone-service-1")
     print(
         "Visualization         : "
@@ -1669,6 +1862,105 @@ def _load_workspace(experiment_path: Path):
     return experiment, foundation, paths, requirements
 
 
+def _mujoco_city_runtime_checks(
+    paths, drone_root: Path, experiment: Experiment, system_name: str
+) -> list[tuple[str, bool, str]] | None:
+    marker_path = paths.recipe_config / "mujoco-city-fleet.json"
+    if not marker_path.is_file():
+        return None
+    checks: list[tuple[str, bool, str]] = []
+    try:
+        marker = json.loads(marker_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [("MuJoCo City fleet contract", False, f"invalid {marker_path}: {exc}")]
+    expected_root = Path(str(marker.get("drone_root", ""))).resolve()
+    checks.append(
+        (
+            "MuJoCo City Drone PRO workspace",
+            expected_root == drone_root.resolve(),
+            str(drone_root)
+            if expected_root == drone_root.resolve()
+            else f"configured={expected_root}, selected={drone_root.resolve()}",
+        )
+    )
+    checks.append(
+        (
+            "MuJoCo City single-process contract",
+            experiment.process_count == 1 and marker.get("process_count") == 1,
+            f"configured process_count={experiment.process_count}",
+        )
+    )
+    checks.append(
+        (
+            "MuJoCo City fleet size",
+            marker.get("drone_count") == experiment.drone_count,
+            f"configured={experiment.drone_count}, model={marker.get('drone_count')}",
+        )
+    )
+    flight_plan = marker.get("flight_plan")
+    safety_ok = False
+    safety_detail = "flight_plan is missing"
+    if isinstance(flight_plan, dict):
+        try:
+            requested_agl = float(flight_plan["requested_agl_m"])
+            route_maximum = float(flight_plan["route_maximum_surface_height_m"])
+            resolved_altitude = float(flight_plan["resolved_flight_altitude_m"])
+            spawn_points = flight_plan["spawn_points"]
+            safety_ok = (
+                len(spawn_points) == experiment.drone_count
+                and abs(requested_agl - experiment.altitude_m) < 1e-6
+                and resolved_altitude >= route_maximum + requested_agl - 1e-6
+                and all(
+                    float(point["surface_height_m"])
+                    <= float(point["terrain_height_m"]) + 0.15
+                    for point in spawn_points
+                )
+            )
+            safety_detail = (
+                f"launch_points={len(spawn_points)}, route_max={route_maximum:.3f} m, "
+                f"flight={resolved_altitude:.3f} m, clearance={requested_agl:.3f} m"
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            safety_detail = f"invalid flight_plan: {exc}"
+    checks.append(("MuJoCo City terrain/wall clearance", safety_ok, safety_detail))
+    shared_mjb = Path(str(marker.get("shared_mjb", "")))
+    checks.append(("Shared MuJoCo City MJB", shared_mjb.is_file(), str(shared_mjb)))
+    type_config = Path(str(marker.get("type_config", "")))
+    checks.append(
+        ("MuJoCo City Drone type config", type_config.is_file(), str(type_config))
+    )
+    receipt_path = Path(str(marker.get("shared_model_receipt", "")))
+    receipt_ok = False
+    receipt_detail = str(receipt_path)
+    if receipt_path.is_file() and shared_mjb.is_file():
+        try:
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            compiled = receipt["compiled_model"]
+            receipt_ok = (
+                compiled.get("reload_validation") == "passed"
+                and compiled.get("output_mjb_sha256") == _sha256(shared_mjb)
+            )
+            receipt_detail += (
+                f" (MuJoCo {compiled.get('mujoco_version')}, reload="
+                f"{compiled.get('reload_validation')})"
+            )
+        except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+            receipt_detail += f": {exc}"
+    checks.append(("Shared MJB compile receipt", receipt_ok, receipt_detail))
+    try:
+        drone_binary = resolve_drone_binary(drone_root, system_name)
+        checks.append(("Drone PRO service", True, str(drone_binary)))
+    except RecipeError as exc:
+        checks.append(("Drone PRO service", False, str(exc)))
+    if experiment.visualization:
+        try:
+            vsp = resolve_visual_state_publisher(drone_root, system_name)
+            checks.append(("Drone PRO visual-state publisher", True, str(vsp)))
+        except RecipeError as exc:
+            checks.append(("Drone PRO visual-state publisher", False, str(exc)))
+    return checks
+
+
 def doctor(
     experiment_path: Path,
     drone_root: Path,
@@ -1679,23 +1971,29 @@ def doctor(
     foundation.print_inspection(inspection, False)
     system_name = platform.system()
     checks: list[tuple[str, bool, str]] = []
-    native_runtime = load_native_runtime_module()
-    try:
-        _contract, native_checks = native_runtime.validate_requirement(
-            DRONE_CATALOG,
-            recipe_file(),
-            DRONE_COMPONENT_ID,
-            drone_root,
-            native_library_environment(paths, drone_root, system_name),
-            active_optional_roles=(
-                ("visual_state_publisher",) if experiment.visualization else ()
-            ),
-        )
-        checks.extend(
-            (check.label, check.ok, check.detail) for check in native_checks
-        )
-    except native_runtime.NativeRuntimeError as exc:
-        checks.append(("native runtime contract", False, str(exc)))
+    mujoco_city_checks = _mujoco_city_runtime_checks(
+        paths, drone_root, experiment, system_name
+    )
+    if mujoco_city_checks is not None:
+        checks.extend(mujoco_city_checks)
+    else:
+        native_runtime = load_native_runtime_module()
+        try:
+            _contract, native_checks = native_runtime.validate_requirement(
+                DRONE_CATALOG,
+                recipe_file(),
+                DRONE_COMPONENT_ID,
+                drone_root,
+                native_library_environment(paths, drone_root, system_name),
+                active_optional_roles=(
+                    ("visual_state_publisher",) if experiment.visualization else ()
+                ),
+            )
+            checks.extend(
+                (check.label, check.ok, check.detail) for check in native_checks
+            )
+        except native_runtime.NativeRuntimeError as exc:
+            checks.append(("native runtime contract", False, str(exc)))
 
     if experiment.visualization:
         bridge = web_bridge_path(paths, system_name)
@@ -1931,9 +2229,10 @@ def smoke(experiment_path: Path, timeout_sec: float) -> int:
     return 1
 
 
-def viewer_url(drone_count: int) -> str:
+def viewer_url(drone_count: int, *, map_viewer: bool = False) -> str:
+    base = MAP_VIEWER_URL_BASE if map_viewer else VIEWER_URL_BASE
     return (
-        f"{VIEWER_URL_BASE}&dynamicSpawn=true"
+        f"{base}&dynamicSpawn=true"
         f"&templateDroneIndex=0&maxDynamicDrones={drone_count}"
     )
 
@@ -1960,13 +2259,16 @@ def open_browser(url: str) -> bool:
 
 
 def open_viewer(experiment_path: Path) -> int:
-    experiment = resolve_experiment(experiment_path)
+    experiment, _foundation, paths, _requirements = _load_workspace(experiment_path)
     if not experiment.visualization:
         raise RecipeError(
             "runtime.visualization=false; this headless experiment does not start "
             "VSP, WebBridge, or the Three.js viewer"
         )
-    url = viewer_url(experiment.drone_count)
+    url = viewer_url(
+        experiment.drone_count,
+        map_viewer=(paths.recipe_config / "mujoco-city-fleet.json").is_file(),
+    )
     return 0 if open_browser(url) else 1
 
 
@@ -1996,6 +2298,23 @@ def parser() -> argparse.ArgumentParser:
         "--viewer-root", type=Path, default=default_source("hakoniwa-threejs-drone")
     )
     result.add_argument("--timeout-sec", type=float, default=300.0)
+    result.add_argument(
+        "--mujoco-city-world",
+        type=Path,
+        help=(
+            "configure only: City World receipt/XML used to generate one shared "
+            "MuJoCo fleet model (non-ICRA, process_count must be 1)"
+        ),
+    )
+    result.add_argument(
+        "--spawn-altitude-m",
+        type=float,
+        default=0.20,
+        help=(
+            "initial drone body-origin clearance above the sampled DEM terrain "
+            "(default: 0.20 m; City launch points are selected automatically)"
+        ),
+    )
     return result
 
 
@@ -2023,7 +2342,16 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "prepare-viewer":
             return prepare_viewer(viewer_root)
         if args.command == "configure":
-            return configure(experiment_path, drone_root)
+            return configure(
+                experiment_path,
+                drone_root,
+                mujoco_city_world=(
+                    args.mujoco_city_world.absolute()
+                    if args.mujoco_city_world is not None
+                    else None
+                ),
+                spawn_altitude_m=args.spawn_altitude_m,
+            )
         if args.command == "doctor":
             return doctor(experiment_path, drone_root, viewer_root)
         if args.command == "start":

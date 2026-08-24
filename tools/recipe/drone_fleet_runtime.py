@@ -87,6 +87,7 @@ class LauncherRuntimeSpec:
     delta_time_msec: int = 20
     z_offset_m: float = 0.0
     viewer_activation_timing: str = "after_start"
+    final_hold_extra_sec: float = 0.0
 
     def __post_init__(self) -> None:
         if self.local_drone_count < 1:
@@ -103,6 +104,8 @@ class LauncherRuntimeSpec:
             )
         if self.delta_time_msec < 1:
             raise ValueError("delta_time_msec must be positive")
+        if self.final_hold_extra_sec < 0:
+            raise ValueError("final_hold_extra_sec must be >= 0")
 
 
 def prepare_launcher(
@@ -188,7 +191,7 @@ def prepare_launcher(
         "--poll-sleep-msec",
         "0",
         "--final-hold-extra-sec",
-        "0",
+        str(spec.final_hold_extra_sec),
     ]
     if spec.show_runner_real_time_sync:
         show_args.append("--real-time-sync")

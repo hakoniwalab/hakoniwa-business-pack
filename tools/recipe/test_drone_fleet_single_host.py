@@ -744,6 +744,10 @@ profiles:
             show_runner_asset = assets["show-runner"]
             poll_sleep_index = show_runner_asset["args"].index("--poll-sleep-msec")
             self.assertEqual(show_runner_asset["args"][poll_sleep_index + 1], "0")
+            final_hold_index = show_runner_asset["args"].index(
+                "--final-hold-extra-sec"
+            )
+            self.assertEqual(show_runner_asset["args"][final_hold_index + 1], "0.0")
             self.assertIn("--real-time-sync", show_runner_asset["args"])
             self.assertIn("visual-state-publisher", serialized)
             self.assertIn("web-bridge-fleets", serialized)
@@ -752,6 +756,163 @@ profiles:
                 assets["threejs-viewer-webserver"]["activation_timing"],
                 "after_start",
             )
+
+    def test_mujoco_city_launcher_remains_alive_until_manual_stop(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths = foundation.resolve_workspace(root, recipe.RECIPE_ID)
+            foundation.prepare_workspace(paths)
+            experiment = recipe.resolve_experiment(
+                self._experiment(root, drones=2, per_process=2)
+            )
+            drone_root = root / "hakoniwa-drone-core"
+            (drone_root / "lib").mkdir(parents=True)
+            (drone_root / "lib" / "mac-main_hako_drone_service").touch()
+            (drone_root / "lib" / "mac-drone_visual_state_publisher").touch()
+            show_runner = (
+                drone_root / "drone_api" / "external_rpc" / "apps" / "show_asset_runner.py"
+            )
+            show_runner.parent.mkdir(parents=True)
+            show_runner.touch()
+            python = paths.foundation_python / "bin" / "python3"
+            python.parent.mkdir(parents=True)
+            python.touch()
+            (paths.recipe_config / "scenario").mkdir(parents=True)
+            paths.recipe_validation.mkdir(parents=True, exist_ok=True)
+            city_glb = root / "city-world.glb"
+            city_glb.write_bytes(b"city-glb")
+            (paths.recipe_config / "mujoco-city-fleet.json").write_text(
+                json.dumps(
+                    {
+                        "drone_count": 2,
+                        "city_world": {
+                            "glb": str(city_glb),
+                            "origin": {
+                                "latitude": 35.0988,
+                                "longitude": 138.8587,
+                            },
+                            "half_extent_m": {
+                                "north_south": 100.0,
+                                "east_west": 80.0,
+                            },
+                        }
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            viewer_root = root / "hakoniwa-threejs-drone"
+            viewer_root.mkdir()
+            map_viewer_root = root / "hakoniwa-map-viewer"
+            map_client = map_viewer_root / "src" / "client"
+            (map_client / "src").mkdir(parents=True)
+            (map_viewer_root / "images").mkdir()
+            (map_client / "index.html").write_text("<div id='map'></div>")
+            (map_client / "src" / "ui.js").write_text(
+                "const map = L.map('map').setView([35.6812, 139.7671], 15); // 東京駅\n"
+                "let ORIGIN_LAT = 35.6625;   // zone の原点（仮）\n"
+                "let ORIGIN_LON = 139.70625;\n"
+                "setInterval(() => {\n      if (!viewer) return;\n"
+                "      const drones = viewer.getDrones();\n"
+            )
+            (viewer_root / "index.html").touch()
+            for dirname in ("src", "config", "assets", "thirdparty"):
+                (viewer_root / dirname).mkdir()
+            (viewer_root / "config" / "drone_config-compact-1.json").write_text(
+                json.dumps(
+                    {
+                        "version": "1.0",
+                        "format": "compact",
+                        "environments": [],
+                        "main_camera": {},
+                        "droneTypesPath": "./drone-types.json",
+                        "drones": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (viewer_root / "config" / "viewer-config-fleets.json").write_text(
+                json.dumps(
+                    {
+                        "version": "1.0",
+                        "three": {"sceneConfigPath": "./old.json"},
+                        "pdu": {
+                            "pduDefPath": "./pdudef.json",
+                            "wsUri": "ws://127.0.0.1:8765",
+                            "wireVersion": "v2",
+                        },
+                        "stateInput": {
+                            "mode": "fleets",
+                            "fleets": {
+                                "roleMap": {
+                                    "visual_state_array": "hako_msgs/DroneVisualStateArray"
+                                }
+                            },
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            launcher = recipe.write_launcher(
+                paths, drone_root, viewer_root, experiment, "Darwin"
+            )
+            payload = json.loads(launcher.read_text(encoding="utf-8"))
+            show_runner_asset = next(
+                asset for asset in payload["assets"] if asset["name"] == "show-runner"
+            )
+            final_hold_index = show_runner_asset["args"].index(
+                "--final-hold-extra-sec"
+            )
+            self.assertEqual(
+                show_runner_asset["args"][final_hold_index + 1], "86400.0"
+            )
+            city_viewer = (
+                paths.recipe_root
+                / "web"
+                / "map-viewer"
+                / "thirdparty"
+                / "hakoniwa-threejs-drone"
+            )
+            generated_viewer = json.loads(
+                (city_viewer / "config" / "viewer-config-fleets.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            generated_scene = json.loads(
+                (city_viewer / "config" / "drone_config-city-fleet.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(
+                generated_viewer["three"]["sceneConfigPath"],
+                "./drone_config-city-fleet.json",
+            )
+            self.assertTrue(
+                generated_viewer["stateInput"]["fleets"]["dynamicSpawn"]
+            )
+            self.assertEqual(
+                generated_viewer["stateInput"]["fleets"]["maxDynamicDrones"], 2
+            )
+            self.assertEqual(
+                generated_scene["environments"][0]["model"],
+                "../assets/local_models/city-world.glb",
+            )
+            self.assertEqual(
+                (city_viewer / "assets" / "local_models" / "city-world.glb").read_bytes(),
+                b"city-glb",
+            )
+            generated_map_ui = (
+                paths.recipe_root
+                / "web"
+                / "map-viewer"
+                / "src"
+                / "client"
+                / "src"
+                / "ui.js"
+            ).read_text(encoding="utf-8")
+            self.assertIn("[35.0988, 138.8587], 17", generated_map_ui)
+            self.assertIn("await viewer.syncDroneStates()", generated_map_ui)
 
     def test_headless_launcher_omits_visualization_processes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
