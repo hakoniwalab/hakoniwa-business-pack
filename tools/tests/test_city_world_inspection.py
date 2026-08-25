@@ -492,6 +492,8 @@ class CityWorldInspectionTest(unittest.TestCase):
             self.assertIn("parallel_workers: 6", manifest)
             self.assertIn("dem_parallel_workers: 4", manifest)
             self.assertIn("terrain_spacing_m: 5", manifest)
+            self.assertIn("terrain_uncovered_policy: error", manifest)
+            self.assertIn("terrain_uncovered_elevation_m: 0", manifest)
             self.assertIn("lod_policy: highest_available", manifest)
             self.assertIn("texture_mode: embedded-if-available", manifest)
             level_three = request()

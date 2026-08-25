@@ -114,6 +114,12 @@
             <option value="3" selected>3 — P3 → P2 → P1 → P0</option>
           </select>
         </label>
+        <label>DEM未被覆領域
+          <select id="terrain-uncovered-policy">
+            <option value="error" selected>停止する（厳密・既定）</option>
+            <option value="constant">標高0 mで補完（水面向け）</option>
+          </select>
+        </label>
         <label class="checkbox-option">
           <input id="coplanar-union" type="checkbox">
           <span>同一平面の隣接する凸面も統合する（Collider削減）</span>
@@ -127,7 +133,7 @@
           <span>WallSurfaceを派生平面まで最大5cmで統合する（box維持・近似あり）</span>
         </label>
       </div>
-      <p class="hint">地図のクリック、中心マーカーまたは青い区画のドラッグで位置を変更できます。四隅のハンドルで範囲を変更できます。100m + 100mは一辺200mの範囲です。</p>
+      <p class="hint">地図のクリック、中心マーカーまたは青い区画のドラッグで位置を変更できます。四隅のハンドルで範囲を変更できます。100m + 100mは一辺200mの範囲です。海・河川を含む範囲では、PLATEAU DEMの未被覆部分を標高0 mで補完できます。</p>
       <div id="selection-summary"></div>
       <div id="mesh-summary"></div>
       <button id="inspect" type="button" disabled>2. Capabilityを診断</button>
@@ -172,6 +178,6 @@
   <script type="importmap">
     {"imports":{"three":"https://unpkg.com/three@0.180.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.180.0/examples/jsm/"}}
   </script>
-  <script type="module" src="./city-world-ui.js"></script>
+  <script type="module" src="./city-world-ui.js?v=20260825-dem-fill-1"></script>
 </body>
 </html>

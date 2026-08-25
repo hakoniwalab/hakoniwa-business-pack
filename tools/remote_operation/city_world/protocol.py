@@ -139,7 +139,10 @@ def validate_request(value: Any) -> dict[str, Any]:
     if "options" in request:
         options = _object(
             request["options"], "request.options", {"building_physics_level"},
-            {"building_collider_reduction"},
+            {
+                "building_collider_reduction", "terrain_uncovered_policy",
+                "terrain_uncovered_elevation_m",
+            },
         )
         _integer(
             options["building_physics_level"],
@@ -151,6 +154,15 @@ def validate_request(value: Any) -> dict[str, Any]:
             raise CityWorldProtocolError(
                 "request.options.building_collider_reduction must be safe, "
                 "coplanar-union, convex-decompose, or tolerant-planar"
+            )
+        if options.get("terrain_uncovered_policy", "error") not in {"error", "constant"}:
+            raise CityWorldProtocolError(
+                "request.options.terrain_uncovered_policy must be error or constant"
+            )
+        if "terrain_uncovered_elevation_m" in options:
+            _number(
+                options["terrain_uncovered_elevation_m"],
+                "request.options.terrain_uncovered_elevation_m", -1000, 10000,
             )
     selection = _object(request["selection"], "request.selection", {"center", "half_extent_m"})
     center = _object(

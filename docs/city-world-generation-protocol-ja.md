@@ -398,6 +398,12 @@ Business Pack Workerの方針なので、YAMLには決定後の数値を書く�
 
 ブラウザで`http://127.0.0.1:8008/`を開き、次の順に実行する。
 
+生成条件の「DEM未被覆領域」は既定で「停止する（厳密）」である。海・河川を含み、PLATEAU
+DEMが選択矩形を完全には覆わない場合は「標高0 mで補完（水面向け）」を選択してから、
+Capability診断と生成を実行する。補完は明示したジョブだけに適用され、設定値はrequest、
+job記録、Envsim manifestおよびterrain receiptへ残る。内陸のDEM欠損も0 mになる可能性が
+あるため、地形の正確性を優先する場合は既定値を使用する。
+
 Visual GLBは`embedded-if-available`で生成する。選択範囲のLOD2 Appearanceと
 参照画像が利用できる面はテクスチャをGLBへ埋め込み、利用できない面だけを
 フラット表示へフォールバックする。複数都市を軽量に一括検証するRecipeの

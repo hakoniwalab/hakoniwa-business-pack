@@ -12,7 +12,11 @@ from typing import Any, Callable
 
 from ..pdu_transport import PduJsonTransport, TransportError, write_websocket_endpoint_config
 from .inspection import PlateauSelectionInspector, inspect_request
-from .generation import CityWorldGenerationCanceled, CityWorldGenerator
+from .generation import (
+    CityWorldDemUncoveredError,
+    CityWorldGenerationCanceled,
+    CityWorldGenerator,
+)
 from .protocol import (
     PROTOCOL_NAME,
     SCHEMA_VERSION,
@@ -146,6 +150,11 @@ def handle_generate_command(
         publish("READY", inspection_sha256=inspection_hash, result=result)
     except CityWorldGenerationCanceled:
         publish("CANCELED")
+    except CityWorldDemUncoveredError as exc:
+        publish(
+            "FAILED",
+            error={"phase": "terrain", "code": "DEM_UNCOVERED", "message": str(exc)},
+        )
     except Exception as exc:
         publish(
             "FAILED",
@@ -224,6 +233,13 @@ def run_worker(
                     if terminal["type"] == "SELECTION_AVAILABLE":
                         inspections_by_request[command["request_sha256"]] = terminal["inspection"]
             elif command["type"] == "GENERATE":
+                terrain_policy = command["request"].get("options", {}).get(
+                    "terrain_uncovered_policy", "error"
+                )
+                print(
+                    f"[PDU][RECEIVE] GENERATE job_id={command['job_id']} "
+                    f"terrain_uncovered_policy={terrain_policy}"
+                )
                 if active is not None:
                     statuses = [_status(
                         command, "FAILED", command["sequence"] + 1,

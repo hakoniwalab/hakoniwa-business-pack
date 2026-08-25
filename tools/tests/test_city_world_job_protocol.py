@@ -28,6 +28,8 @@ def request() -> dict:
         "options": {
             "building_physics_level": 3,
             "building_collider_reduction": "safe",
+            "terrain_uncovered_policy": "error",
+            "terrain_uncovered_elevation_m": 0,
         },
     }
 
@@ -125,6 +127,9 @@ class CityWorldJobProtocolTest(unittest.TestCase):
         protocol.validate_request(req)
         req["options"]["building_collider_reduction"] = "tolerant-planar"
         protocol.validate_request(req)
+        req["options"]["terrain_uncovered_policy"] = "nearest"
+        with self.assertRaisesRegex(protocol.CityWorldProtocolError, "terrain_uncovered_policy"):
+            protocol.validate_request(req)
 
     def test_message_rejects_command_path_and_hash_mismatch(self) -> None:
         value = message("INSPECT_SELECTION", "command", request=request())

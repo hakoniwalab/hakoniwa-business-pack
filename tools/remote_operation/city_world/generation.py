@@ -7,6 +7,7 @@ import json
 import math
 import os
 import queue
+import re
 import signal
 import shutil
 import subprocess
@@ -22,6 +23,17 @@ from .protocol import SCHEMA_VERSION, canonical_sha256, validate_result
 
 class CityWorldGenerationError(RuntimeError):
     pass
+
+
+class CityWorldDemUncoveredError(CityWorldGenerationError):
+    def __init__(self, uncovered_samples: int | None = None) -> None:
+        self.uncovered_samples = uncovered_samples
+        count = f"{uncovered_samples}点の" if uncovered_samples is not None else ""
+        super().__init__(
+            f"{count}DEM未被覆領域が残っています。海・河川を含む場合は、生成条件の"
+            "「DEM未被覆領域」を「標高0 mで補完（水面向け）」へ変更し、"
+            "Capability診断からやり直してください。"
+        )
 
 
 class CityWorldGenerationCanceled(RuntimeError):
@@ -331,6 +343,12 @@ def _manifest_text(
     collider_reduction = request.get("options", {}).get(
         "building_collider_reduction", "safe"
     )
+    terrain_uncovered_policy = request.get("options", {}).get(
+        "terrain_uncovered_policy", "error"
+    )
+    terrain_uncovered_elevation_m = request.get("options", {}).get(
+        "terrain_uncovered_elevation_m", 0.0
+    )
     return f"""version: 1
 component: hakoniwa-envsim
 
@@ -380,6 +398,8 @@ city_world:
   parallel_workers: {parallel_workers}
   dem_parallel_workers: {dem_parallel_workers}
   terrain_spacing_m: {terrain_spacing_m:g}
+  terrain_uncovered_policy: {terrain_uncovered_policy}
+  terrain_uncovered_elevation_m: {terrain_uncovered_elevation_m:g}
   marking_vertical_offset_m: 0.055
   bridge_collision_thickness_m: 0.02
   bridge_max_surface_slope_deg: 60
@@ -588,6 +608,12 @@ class CityWorldGenerator:
             "generation_policy": {
                 "parallel_workers": self.parallel_workers,
                 "dem_parallel_workers": self.dem_parallel_workers,
+                "terrain_uncovered_policy": command["request"].get("options", {}).get(
+                    "terrain_uncovered_policy", "error"
+                ),
+                "terrain_uncovered_elevation_m": command["request"].get("options", {}).get(
+                    "terrain_uncovered_elevation_m", 0.0
+                ),
                 "terrain_spacing_m": {
                     "requested": self.terrain_spacing_policy,
                     "effective": effective_terrain_spacing_m,
@@ -673,8 +699,14 @@ class CityWorldGenerator:
             raise CityWorldGenerationCanceled("City World generation was canceled")
         if returncode:
             tail = log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-12:]
+            joined_tail = " | ".join(tail)
+            if "uncovered samples" in joined_tail:
+                match = re.search(r"height field has (\d+) uncovered samples", joined_tail)
+                raise CityWorldDemUncoveredError(
+                    int(match.group(1)) if match is not None else None
+                )
             raise CityWorldGenerationError(
-                f"hakoniwa-envsim build failed with rc={returncode}: " + " | ".join(tail)
+                f"hakoniwa-envsim build failed with rc={returncode}: " + joined_tail
             )
 
         progress(

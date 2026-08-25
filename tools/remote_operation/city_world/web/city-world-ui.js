@@ -1,7 +1,7 @@
-import { CityWorldPduClient } from './city-world-client.js';
+import { CityWorldPduClient } from './city-world-client.js?v=20260825-dem-fill-1';
 
 const elements = Object.fromEntries([
-  'latitude', 'longitude', 'northSouth', 'eastWest', 'physics-level', 'coplanar-union', 'convex-decompose', 'tolerant-planar', 'inspect', 'generate', 'cancel', 'connect',
+  'latitude', 'longitude', 'northSouth', 'eastWest', 'physics-level', 'terrain-uncovered-policy', 'coplanar-union', 'convex-decompose', 'tolerant-planar', 'inspect', 'generate', 'cancel', 'connect',
   'connection', 'connection-text', 'selection-summary', 'mesh-summary', 'overall',
   'municipality', 'capabilities', 'generation', 'artifact-select', 'artifact-path', 'artifact-detail', 'cache-info',
   'download', 'view3d', 'delete-artifact', 'viewer-visual', 'viewer-collider',
@@ -209,7 +209,7 @@ map.on('click', (event) => {
   setCenter(event.latlng);
 });
 marker.on('drag', (event) => setCenter(event.target.getLatLng()));
-for (const id of ['latitude', 'longitude', 'northSouth', 'eastWest', 'physics-level']) {
+for (const id of ['latitude', 'longitude', 'northSouth', 'eastWest', 'physics-level', 'terrain-uncovered-policy']) {
   elements[id].addEventListener('input', () => {
     invalidateInspection();
     refreshSelection();
@@ -348,6 +348,9 @@ function applyGeneratedSelection(job) {
   );
   elements['tolerant-planar'].checked = (
     job.building_collider_reduction === 'tolerant-planar'
+  );
+  elements['terrain-uncovered-policy'].value = (
+    job.terrain_uncovered_policy === 'constant' ? 'constant' : 'error'
   );
   invalidateInspection();
   refreshSelection();
@@ -671,7 +674,7 @@ function renderInspection(message, command) {
     : '';
   elements.overall.className = inspected.status;
   elements.overall.textContent = inspected.status === 'available'
-    ? `生成候補あり — ${inspected.source_file_count} files / 約${(inspected.estimated_download_bytes / 1_000_000).toFixed(1)} MB`
+    ? `生成候補あり — ${inspected.source_file_count} files / 約${(inspected.estimated_download_bytes / 1_000_000).toFixed(1)} MB / DEM未被覆: ${command.request.options?.terrain_uncovered_policy === 'constant' ? '標高0 mで補完' : '厳密停止'}`
     : `生成不可 — ${inspected.reason}`;
   elements.municipality.textContent = inspected.municipalities.length
     ? inspected.municipalities.map((item) => `${item.city} (${item.year}, spec ${item.spec})`).join(' / ')
@@ -725,6 +728,7 @@ async function inspectSelection() {
         ? 'tolerant-planar'
         : elements['convex-decompose'].checked ? 'convex-decompose'
         : elements['coplanar-union'].checked ? 'coplanar-union' : 'safe',
+      terrainUncoveredPolicy: elements['terrain-uncovered-policy'].value,
     });
     writeLog(command);
     while (true) {
@@ -791,7 +795,9 @@ async function generateWorld() {
       }
       if (status.type === 'FAILED') {
         elements.generation.className = 'generation failed';
-        elements.generation.textContent = `Generate失敗 — ${status.error.message}`;
+        elements.generation.textContent = status.error.code === 'DEM_UNCOVERED'
+          ? `地形生成を停止しました — ${status.error.message}`
+          : `Generate失敗 — ${status.error.message}`;
         break;
       }
     }

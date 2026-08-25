@@ -41,7 +41,9 @@
       "required": ["building_physics_level"],
       "properties": {
         "building_physics_level": {"type": "integer", "minimum": 0, "maximum": 3, "default": 3},
-        "building_collider_reduction": {"enum": ["safe", "coplanar-union", "convex-decompose"], "default": "safe"}
+        "building_collider_reduction": {"enum": ["safe", "coplanar-union", "convex-decompose", "tolerant-planar"], "default": "safe"},
+        "terrain_uncovered_policy": {"enum": ["error", "constant"], "default": "error"},
+        "terrain_uncovered_elevation_m": {"type": "number", "minimum": -1000, "maximum": 10000, "default": 0}
       }
     }
   }

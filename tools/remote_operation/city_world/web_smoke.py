@@ -51,10 +51,14 @@ def list_generated_jobs(worker_runtime_root: Path) -> list[dict]:
             if not artifact.is_file() or not visual.is_file():
                 continue
             selection = None
+            terrain_uncovered_policy = "error"
             try:
                 job_record = json.loads((job_root / "job.json").read_text(encoding="utf-8"))
                 request = validate_request(job_record["request"])
                 selection = request["selection"]
+                terrain_uncovered_policy = request.get("options", {}).get(
+                    "terrain_uncovered_policy", "error"
+                )
             except (KeyError, OSError, ValueError, json.JSONDecodeError):
                 # Keep older generated artifacts downloadable even when they
                 # predate selection metadata in the generated index.
@@ -74,6 +78,7 @@ def list_generated_jobs(worker_runtime_root: Path) -> list[dict]:
                 "building_collider_reduction": result.get(
                     "building_collider_reduction", "safe"
                 ),
+                "terrain_uncovered_policy": terrain_uncovered_policy,
                 "colliders": result.get("colliders"),
                 "selection": selection,
                 "updated_at_msec": int(manifest_path.stat().st_mtime * 1000),
@@ -147,11 +152,16 @@ def delete_generated_job(worker_runtime_root: Path, job_id: str) -> bool:
 
 def handler_factory(pdu_js_root: Path, worker_runtime_root: Path):
     class Handler(SimpleHTTPRequestHandler):
+        def end_headers(self) -> None:
+            # The UI and its ES modules are developed and served together.
+            # Prevent a browser from mixing a new HTML shell with stale JS.
+            self.send_header("Cache-Control", "no-store")
+            super().end_headers()
+
         def _send_bytes(self, payload: bytes, content_type: str) -> None:
             self.send_response(200)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(payload)))
-            self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(payload)
 

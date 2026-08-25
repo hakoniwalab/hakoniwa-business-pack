@@ -78,6 +78,7 @@ export class CityWorldPduClient {
     jobId, latitude, longitude, halfExtentNorthSouth, halfExtentEastWest,
     buildingPhysicsLevel,
     buildingColliderReduction = 'safe',
+    terrainUncoveredPolicy = 'error',
   }) {
     const request = {
       schema_version: 1,
@@ -93,6 +94,8 @@ export class CityWorldPduClient {
       options: {
         building_physics_level: Number(buildingPhysicsLevel),
         building_collider_reduction: buildingColliderReduction,
+        terrain_uncovered_policy: terrainUncoveredPolicy,
+        terrain_uncovered_elevation_m: 0,
       },
     };
     const message = {
