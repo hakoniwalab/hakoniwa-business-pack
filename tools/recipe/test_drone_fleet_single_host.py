@@ -945,13 +945,16 @@ profiles:
             map_client = map_viewer_root / "src" / "client"
             (map_client / "src").mkdir(parents=True)
             (map_viewer_root / "images").mkdir()
-            (map_client / "index.html").write_text("<div id='map'></div>")
+            (map_client / "index.html").write_text(
+                "<div id='map'></div>", encoding="utf-8"
+            )
             (map_client / "src" / "ui.js").write_text(
                 "const map = L.map('map').setView([35.6812, 139.7671], 15); // 東京駅\n"
                 "let ORIGIN_LAT = 35.6625;   // zone の原点（仮）\n"
                 "let ORIGIN_LON = 139.70625;\n"
                 "setInterval(() => {\n      if (!viewer) return;\n"
-                "      const drones = viewer.getDrones();\n"
+                "      const drones = viewer.getDrones();\n",
+                encoding="utf-8",
             )
             (viewer_root / "index.html").touch()
             for dirname in ("src", "config", "assets", "thirdparty"):
