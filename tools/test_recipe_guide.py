@@ -143,7 +143,12 @@ class RecipeGuideTest(unittest.TestCase):
         values = [item.command for item in commands]
         self.assertEqual(len(values), len(set(values)))
         self.assertEqual(
-            values.count("python tools/recipe/drone_shibuya_gamepad.py configure"),
+            sum(
+                value.startswith(
+                    "python tools/recipe/drone_shibuya_gamepad.py configure"
+                )
+                for value in values
+            ),
             1,
         )
         self.assertTrue(any("recipe.py doctor" in value for value in values))

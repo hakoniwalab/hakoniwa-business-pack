@@ -540,8 +540,6 @@ demo:
   prerequisites:
     - command: python tools/foundation.py doctor --recipe recipes/examples/drone-single-mujoco-shibuya-map-gamepad.yaml
       expected: Foundation SATISFIED
-    - command: python tools/recipe/drone_shibuya_gamepad.py configure --city-world work/remote-operation/city-world-worker/jobs/JOB_ID
-      expected: MuJoCo assets, Map Viewer bundle, portal, validation record, and Launcher generated.
   readiness:
     lifecycle_state:
       source: work/recipes/drone-single-mujoco-shibuya-map-gamepad/runtime/launcher-session.json

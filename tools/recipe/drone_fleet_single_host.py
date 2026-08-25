@@ -2412,14 +2412,20 @@ def open_browser(url: str) -> bool:
 def open_viewer(
     experiment_path: Path, *, drone_count_override: int | None = None
 ) -> int:
-    experiment, _foundation, paths, _requirements = _load_workspace(
+    # Headless is an experiment-level contract and should be rejected before
+    # consulting generated workspace state. This keeps diagnostics stable in a
+    # clean checkout where the Recipe has not been configured yet.
+    requested_experiment = resolve_experiment(
         experiment_path, drone_count_override=drone_count_override
     )
-    if not experiment.visualization:
+    if not requested_experiment.visualization:
         raise RecipeError(
             "runtime.visualization=false; this headless experiment does not start "
             "VSP, WebBridge, or the Three.js viewer"
         )
+    experiment, _foundation, paths, _requirements = _load_workspace(
+        experiment_path, drone_count_override=drone_count_override
+    )
     url = viewer_url(
         experiment.drone_count,
         map_viewer=(paths.recipe_config / "mujoco-city-fleet.json").is_file(),
