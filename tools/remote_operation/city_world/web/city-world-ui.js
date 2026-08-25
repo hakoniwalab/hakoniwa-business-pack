@@ -71,6 +71,11 @@ function progressText(progress) {
   const heading = phase ? `${phase} — ` : '';
   return `${progress.percent}% — ${heading}${progress.message}`;
 }
+
+function statusMatchesCommand(status, command) {
+  return status.job_id === command.job_id
+    && status.request_sha256 === command.request_sha256;
+}
 const client = new CityWorldPduClient();
 let connected = false;
 let inspecting = false;
@@ -703,7 +708,7 @@ function renderInspection(message, command) {
     ? {
       jobId: generatedJobId(command.request, inspected),
       request: command.request,
-      inspection: inspected,
+      inspectionSha256: message.inspection_sha256,
     }
     : null;
   elements.generate.disabled = !connected || lastAvailable === null;
@@ -720,7 +725,9 @@ async function inspectSelection() {
   elements.capabilities.replaceChildren();
   try {
     const command = await client.inspect({
-      jobId: 'inspection-current',
+      // A unique job ID prevents a delayed terminal status from an older
+      // inspection being mistaken for the latest map selection.
+      jobId: `inspection-${Date.now().toString(36)}`,
       latitude: numeric('latitude'), longitude: numeric('longitude'),
       halfExtentNorthSouth: numeric('northSouth'), halfExtentEastWest: numeric('eastWest'),
       buildingPhysicsLevel: numeric('physics-level'),
@@ -734,7 +741,7 @@ async function inspectSelection() {
     while (true) {
       const status = await client.nextStatus(120000);
       writeLog(status);
-      if (status.job_id !== command.job_id) continue;
+      if (!statusMatchesCommand(status, command)) continue;
       if (status.type === 'INSPECTING') continue;
       if (status.type === 'SELECTION_AVAILABLE' || status.type === 'SELECTION_UNAVAILABLE') {
         renderInspection(status, command);
@@ -777,7 +784,7 @@ async function generateWorld() {
     while (true) {
       const status = await client.nextStatus(30 * 60 * 1000);
       writeLog(status);
-      if (status.job_id !== command.job_id) continue;
+      if (!statusMatchesCommand(status, command)) continue;
       if (['ACCEPTED', 'DOWNLOADING', 'GENERATING', 'VALIDATING'].includes(status.type)) {
         elements.generation.textContent = progressText(status.progress);
         continue;

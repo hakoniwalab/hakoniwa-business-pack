@@ -673,7 +673,11 @@ class CityWorldInspectionTest(unittest.TestCase):
         self.assertIn("generatedJobId", script)
         self.assertIn("shizuoka", script)
         self.assertIn("toFixed(3)", script)
-        self.assertIn("jobId: 'inspection-current'", script)
+        self.assertIn("jobId: `inspection-${Date.now().toString(36)}`", script)
+        self.assertIn("statusMatchesCommand", script)
+        self.assertIn("inspectionSha256: message.inspection_sha256", script)
+        client_script = (web_root / "city-world-client.js").read_text(encoding="utf-8")
+        self.assertIn("inspection_sha256: inspectionSha256", client_script)
         for component in ("building", "terrain", "road", "road_markings", "bridge"):
             self.assertIn(f"{component}:", script)
 

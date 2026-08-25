@@ -402,7 +402,7 @@ def validate_message(value: Any) -> dict[str, Any]:
         "GENERATE": {"request", "inspection_sha256"},
         "CANCEL": set(),
         "INSPECTING": set(),
-        "SELECTION_AVAILABLE": {"inspection"},
+        "SELECTION_AVAILABLE": {"inspection", "inspection_sha256"},
         "SELECTION_UNAVAILABLE": {"inspection"},
         "ACCEPTED": {"inspection_sha256", "progress"},
         "DOWNLOADING": {"inspection_sha256", "progress"},
@@ -423,7 +423,7 @@ def validate_message(value: Any) -> dict[str, Any]:
     required_by_type = {
         "INSPECT_SELECTION": {"request"},
         "GENERATE": {"request", "inspection_sha256"},
-        "SELECTION_AVAILABLE": {"inspection"},
+        "SELECTION_AVAILABLE": {"inspection", "inspection_sha256"},
         "SELECTION_UNAVAILABLE": {"inspection"},
         "READY": {"inspection_sha256", "result"},
         "FAILED": {"error"},
@@ -447,6 +447,12 @@ def validate_message(value: Any) -> dict[str, Any]:
         expected_status = "available" if message_type == "SELECTION_AVAILABLE" else "unavailable"
         if inspection["status"] != expected_status:
             raise CityWorldProtocolError("inspection status does not match message type")
+        if message_type == "SELECTION_AVAILABLE" and canonical_sha256(inspection) != message[
+            "inspection_sha256"
+        ]:
+            raise CityWorldProtocolError(
+                "message.inspection_sha256 does not match inspection"
+            )
     if "result" in message:
         result = validate_result(message["result"])
         if result["job_id"] != message["job_id"] or result["request_sha256"] != request_hash:

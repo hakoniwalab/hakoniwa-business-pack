@@ -64,7 +64,15 @@ def handle_inspection_command(
             else "SELECTION_UNAVAILABLE"
         )
         completed = _status(
-            command, message_type, command["sequence"] + 2, inspection=inspection,
+            command,
+            message_type,
+            command["sequence"] + 2,
+            inspection=inspection,
+            **(
+                {"inspection_sha256": canonical_sha256(inspection)}
+                if message_type == "SELECTION_AVAILABLE"
+                else {}
+            ),
         )
         completed = decode_message(encode_message(completed))
     except Exception as exc:
@@ -156,9 +164,17 @@ def handle_generate_command(
             error={"phase": "terrain", "code": "DEM_UNCOVERED", "message": str(exc)},
         )
     except Exception as exc:
+        inspection_mismatch = str(exc) == "Generate does not match the latest inspected selection"
         publish(
             "FAILED",
-            error={"phase": "generation", "code": "GENERATION_FAILED", "message": str(exc)},
+            error={
+                "phase": "generation",
+                "code": "INSPECTION_MISMATCH" if inspection_mismatch else "GENERATION_FAILED",
+                "message": (
+                    "診断結果が更新されています。現在の範囲と生成条件でCapability診断をやり直してください。"
+                    if inspection_mismatch else str(exc)
+                ),
+            },
         )
     return statuses
 

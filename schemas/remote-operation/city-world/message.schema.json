@@ -123,6 +123,10 @@
       "then": {"required": ["inspection"]}
     },
     {
+      "if": {"properties": {"type": {"const": "SELECTION_AVAILABLE"}}, "required": ["type"]},
+      "then": {"required": ["inspection_sha256"]}
+    },
+    {
       "if": {"properties": {"type": {"const": "READY"}}, "required": ["type"]},
       "then": {"required": ["inspection_sha256", "result"]}
     },
@@ -165,7 +169,7 @@
       "if": {
         "properties": {
           "type": {
-            "enum": ["GENERATE", "ACCEPTED", "DOWNLOADING", "GENERATING", "VALIDATING", "READY"]
+            "enum": ["GENERATE", "SELECTION_AVAILABLE", "ACCEPTED", "DOWNLOADING", "GENERATING", "VALIDATING", "READY"]
           }
         },
         "required": ["type"]

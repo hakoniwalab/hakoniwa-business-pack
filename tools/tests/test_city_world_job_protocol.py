@@ -145,6 +145,7 @@ class CityWorldJobProtocolTest(unittest.TestCase):
         available = inspection()
         protocol.validate_message(message(
             "SELECTION_AVAILABLE", "status", inspection=available,
+            inspection_sha256=protocol.canonical_sha256(available),
         ))
         unavailable = inspection(available=False)
         protocol.validate_message(message(
@@ -153,6 +154,15 @@ class CityWorldJobProtocolTest(unittest.TestCase):
         with self.assertRaisesRegex(protocol.CityWorldProtocolError, "does not match"):
             protocol.validate_message(message(
                 "SELECTION_AVAILABLE", "status", inspection=unavailable,
+                inspection_sha256=protocol.canonical_sha256(unavailable),
+            ))
+
+    def test_available_inspection_rejects_mismatched_identity(self) -> None:
+        available = inspection()
+        with self.assertRaisesRegex(protocol.CityWorldProtocolError, "inspection_sha256"):
+            protocol.validate_message(message(
+                "SELECTION_AVAILABLE", "status", inspection=available,
+                inspection_sha256=HASH_B,
             ))
 
     def test_generate_requires_matching_inspection_identity(self) -> None:

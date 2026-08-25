@@ -117,7 +117,7 @@ export class CityWorldPduClient {
     return message;
   }
 
-  async generate({ jobId, request, inspection }) {
+  async generate({ jobId, request, inspectionSha256 }) {
     const message = {
       schema_version: 1,
       protocol: 'hakoniwa.city-world-job',
@@ -127,7 +127,9 @@ export class CityWorldPduClient {
       sequence: ++this.sequence,
       source_host: 'city-world-browser',
       request_sha256: await sha256(request),
-      inspection_sha256: await sha256(inspection),
+      // Preserve the Worker's canonical JSON identity. Re-hashing the decoded
+      // object in JavaScript changes number spellings such as 35.0 to 35.
+      inspection_sha256: inspectionSha256,
       request,
     };
     const bytes = new TextEncoder().encode(canonicalize(message));
