@@ -582,6 +582,8 @@ class CityWorldInspectionTest(unittest.TestCase):
             jobs = web_smoke.list_generated_jobs(runtime)
             self.assertEqual([item["job_id"] for item in jobs], ["numazu-smoke-001"])
             self.assertTrue(jobs[0]["collider_available"])
+            self.assertEqual(jobs[0]["visual_size_bytes"], 3)
+            self.assertEqual(jobs[0]["collider_size_bytes"], 9)
             self.assertEqual(jobs[0]["building_physics_level"], 3)
             self.assertEqual(jobs[0]["colliders"]["total"], 0)
             self.assertEqual(
@@ -675,6 +677,8 @@ class CityWorldInspectionTest(unittest.TestCase):
         self.assertIn("toFixed(3)", script)
         self.assertIn("jobId: `inspection-${Date.now().toString(36)}`", script)
         self.assertIn("statusMatchesCommand", script)
+        self.assertIn("LARGE_VISUAL_PREVIEW_BYTES", script)
+        self.assertIn("missingRequestedLayer", script)
         self.assertIn("inspectionSha256: message.inspection_sha256", script)
         client_script = (web_root / "city-world-client.js").read_text(encoding="utf-8")
         self.assertIn("inspection_sha256: inspectionSha256", client_script)

@@ -44,6 +44,7 @@ const progressPhaseLabels = {
   collider_visualization: 'Collider表示生成',
   packaging: '検証・ZIP作成',
 };
+const LARGE_VISUAL_PREVIEW_BYTES = 256 * 1024 * 1024;
 const prefectureSlugs = {
   '01': 'hokkaido', '02': 'aomori', '03': 'iwate', '04': 'miyagi', '05': 'akita',
   '06': 'yamagata', '07': 'fukushima', '08': 'ibaraki', '09': 'tochigi', '10': 'gunma',
@@ -376,6 +377,11 @@ function updateArtifactSelection({ restoreSelection = false } = {}) {
   if (job !== null && !job.collider_available) {
     elements['viewer-visual'].checked = true;
     elements['viewer-collider'].checked = false;
+  } else if (job !== null && job.visual_size_bytes > LARGE_VISUAL_PREVIEW_BYTES) {
+    // A city-scale textured GLB can exceed browser memory limits. Prefer the
+    // much smaller collider preview while keeping Visual available on demand.
+    elements['viewer-visual'].checked = false;
+    elements['viewer-collider'].checked = true;
   }
   elements['artifact-path'].textContent = job === null
     ? '—'
@@ -395,6 +401,10 @@ function updateArtifactSelection({ restoreSelection = false } = {}) {
       `Physics Level: ${job.building_physics_level ?? '旧形式'}`,
       `Collider reduction: ${job.building_collider_reduction ?? 'safe'}`,
       `Collider total: ${job.colliders?.total ?? '不明'} geoms`,
+      `Preview files: Visual=${formatBytes(job.visual_size_bytes ?? 0)}, Collider=${formatBytes(job.collider_size_bytes ?? 0)}`,
+      job.visual_size_bytes > LARGE_VISUAL_PREVIEW_BYTES
+        ? 'Visualは大容量のため、3D表示はColliderを既定にしています。'
+        : null,
       componentText ? `Components: ${componentText}` : null,
       job.colliders?.by_physics_class ? `Building allocation: ${classText}` : null,
       geomTypes ? `Building geom types: box=${geomTypes.box}, mesh=${geomTypes.mesh}` : null,
@@ -403,8 +413,10 @@ function updateArtifactSelection({ restoreSelection = false } = {}) {
 }
 
 function applyViewerMode() {
-  if (viewerModels.visual === null) return;
-  viewerModels.visual.visible = elements['viewer-visual'].checked;
+  if (viewerModels.visual === null && viewerModels.collider === null) return;
+  if (viewerModels.visual !== null) {
+    viewerModels.visual.visible = elements['viewer-visual'].checked;
+  }
   if (viewerModels.collider !== null) {
     viewerModels.collider.visible = elements['viewer-collider'].checked;
   }
@@ -418,9 +430,17 @@ function viewerLayerLabel() {
   return elements['viewer-visual'].checked ? 'Visual' : 'Collider';
 }
 
-function changeViewerLayer(changedElement) {
+async function changeViewerLayer(changedElement) {
   if (!elements['viewer-visual'].checked && !elements['viewer-collider'].checked) {
     changedElement.checked = true;
+  }
+  const missingRequestedLayer = viewerJobId !== null && (
+    (elements['viewer-visual'].checked && viewerModels.visual === null)
+    || (elements['viewer-collider'].checked && viewerModels.collider === null)
+  );
+  if (missingRequestedLayer) {
+    await openSelectedViewer();
+    return;
   }
   applyViewerMode();
   if (viewerJobId !== null) {
@@ -571,16 +591,18 @@ async function openSelectedViewer() {
   try {
     const runtime = await initializeViewer();
     runtime.resize();
-    const visualGltf = await new runtime.GLTFLoader().loadAsync(
-      `/generated/${encodeURIComponent(job.job_id)}/city-world.glb`,
-    );
-    const colliderGltf = job.collider_available
+    const visualGltf = elements['viewer-visual'].checked
+      ? await new runtime.GLTFLoader().loadAsync(
+        `/generated/${encodeURIComponent(job.job_id)}/city-world.glb`,
+      )
+      : null;
+    const colliderGltf = job.collider_available && elements['viewer-collider'].checked
       ? await new runtime.GLTFLoader().loadAsync(
         `/generated/${encodeURIComponent(job.job_id)}/city-world-colliders.glb`,
       )
       : null;
     if (loadSequence !== viewerLoadSequence) {
-      disposeObject(visualGltf.scene);
+      if (visualGltf !== null) disposeObject(visualGltf.scene);
       if (colliderGltf !== null) disposeObject(colliderGltf.scene);
       return;
     }
@@ -588,9 +610,9 @@ async function openSelectedViewer() {
       runtime.scene.remove(model);
       disposeObject(model);
     }
-    viewerModels = { visual: visualGltf.scene, collider: colliderGltf?.scene ?? null };
+    viewerModels = { visual: visualGltf?.scene ?? null, collider: colliderGltf?.scene ?? null };
     viewerJobId = job.job_id;
-    runtime.scene.add(viewerModels.visual);
+    if (viewerModels.visual !== null) runtime.scene.add(viewerModels.visual);
     if (viewerModels.collider !== null) {
       const colliderMaterial = new runtime.THREE.MeshBasicMaterial({
         color: 0x28a86b, transparent: true, opacity: 0.38,
@@ -605,14 +627,17 @@ async function openSelectedViewer() {
       });
       runtime.scene.add(viewerModels.collider);
     }
-    const box = new runtime.THREE.Box3().setFromObject(viewerModels.visual);
+    const box = new runtime.THREE.Box3();
+    if (viewerModels.visual !== null) box.expandByObject(viewerModels.visual);
     if (viewerModels.collider !== null) box.expandByObject(viewerModels.collider);
     if (box.isEmpty()) throw new Error('GLBに表示可能なgeometryがありません');
     const center = box.getCenter(new runtime.THREE.Vector3());
     const size = box.getSize(new runtime.THREE.Vector3());
-    viewerModels.visual.position.set(-center.x, -box.min.y, -center.z);
+    if (viewerModels.visual !== null) {
+      viewerModels.visual.position.set(-center.x, -box.min.y, -center.z);
+    }
     if (viewerModels.collider !== null) {
-      viewerModels.collider.position.copy(viewerModels.visual.position);
+      viewerModels.collider.position.set(-center.x, -box.min.y, -center.z);
     }
     const distance = Math.max(size.x, size.y, size.z, 10) * 1.35;
     runtime.camera.near = Math.max(0.1, distance / 10000);
@@ -622,9 +647,7 @@ async function openSelectedViewer() {
     runtime.controls.target.set(0, Math.max(0, size.y * 0.2), 0);
     runtime.controls.update();
     applyViewerMode();
-    elements['viewer-status'].textContent = viewerModels.collider === null
-      ? `${job.job_id} — Visual（Collider表示なし）`
-      : `${job.job_id} — ${viewerLayerLabel()}`;
+    elements['viewer-status'].textContent = `${job.job_id} — ${viewerLayerLabel()}`;
   } catch (error) {
     elements['viewer-status'].textContent = '3D表示に失敗しました。通信ログを確認してください。';
     writeLog({ type: 'VIEWER_FAILED', job_id: job.job_id, error: String(error) });

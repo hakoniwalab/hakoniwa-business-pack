@@ -74,6 +74,8 @@ def list_generated_jobs(worker_runtime_root: Path) -> list[dict]:
                 "sha256": result["sha256"],
                 "server_relative_path": relative,
                 "collider_available": colliders.is_file(),
+                "visual_size_bytes": visual.stat().st_size,
+                "collider_size_bytes": colliders.stat().st_size if colliders.is_file() else None,
                 "building_physics_level": result.get("building_physics_level"),
                 "building_collider_reduction": result.get(
                     "building_collider_reduction", "safe"
@@ -201,8 +203,13 @@ def handler_factory(pdu_js_root: Path, worker_runtime_root: Path):
                     self.send_header("Content-Disposition", f'attachment; filename="{path.name}"')
                 self.end_headers()
                 with path.open("rb") as stream:
-                    while chunk := stream.read(1024 * 1024):
-                        self.wfile.write(chunk)
+                    try:
+                        while chunk := stream.read(1024 * 1024):
+                            self.wfile.write(chunk)
+                    except (BrokenPipeError, ConnectionResetError):
+                        # Browsers may cancel a large layer request when the
+                        # operator switches preview modes.
+                        pass
                 return
             super().do_GET()
 
