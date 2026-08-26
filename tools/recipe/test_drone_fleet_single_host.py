@@ -10,7 +10,7 @@ import tarfile
 import tempfile
 import unittest
 import zipfile
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -267,18 +267,30 @@ profiles:
                     default_experiment.absolute(),
                 )
 
-    def test_mujoco_city_configure_defaults_to_drone_pro(self) -> None:
+    def test_configure_defaults_to_public_drone_core(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             with mock.patch.object(recipe, "ROOT", root):
                 self.assertEqual(
-                    recipe.command_drone_root(
-                        "configure",
-                        None,
-                        mujoco_city_world=root / "city-world-job",
-                    ),
-                    (root.parent / "hakoniwa-drone-pro").absolute(),
+                    recipe.command_drone_root("configure", None),
+                    (root.parent / "hakoniwa-drone-core").absolute(),
                 )
+
+    def test_legacy_city_cli_points_to_drone_show_repository(self) -> None:
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            result = recipe.main(
+                [
+                    "configure",
+                    "--mujoco-city-world",
+                    "/tmp/city-world-receipt.json",
+                    "--altitude-mode",
+                    "city-max-clearance",
+                ]
+            )
+        self.assertEqual(result, 2)
+        self.assertIn("hakoniwa-drone-show", stderr.getvalue())
+        self.assertIn("virtual_drone_show.py configure", stderr.getvalue())
 
     def test_asset_limit_boundaries_match_single_host_launcher_assets(self) -> None:
         def resolve(root: Path, process_count: int, visualization: bool):

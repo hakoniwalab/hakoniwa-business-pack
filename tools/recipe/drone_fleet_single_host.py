@@ -40,6 +40,7 @@ except ModuleNotFoundError:
 
 RECIPE_ID = "drone-fleet-single-host"
 OPERATOR_NAME = "drone_fleet_single_host.py"
+OPERATOR_COMMAND = f"python tools/recipe/{OPERATOR_NAME}"
 TOOLS_DIR = Path(__file__).absolute().parents[1]
 ROOT = Path(__file__).absolute().parents[2]
 DEFAULT_EXPERIMENT = (
@@ -141,7 +142,7 @@ class Experiment:
 
 
 def operator_command(command: str) -> str:
-    return f"python tools/recipe/{OPERATOR_NAME} {command}"
+    return f"{OPERATOR_COMMAND} {command}"
 
 
 def load_foundation_module():
@@ -1767,16 +1768,9 @@ def configure(
     experiment_path: Path,
     drone_root: Path,
     *,
-    mujoco_city_world: Path | None = None,
-    spawn_altitude_m: float = 0.20,
-    spawn_spacing_m: float = 1.0,
     drone_count_override: int | None = None,
     process_count_override: int | None = None,
     formation_scale_override: float | None = None,
-    altitude_mode: str = "route-clearance",
-    above_city_clearance_m: float = 10.0,
-    formation_rotation_deg: float = 90.0,
-    formation_tilt_deg: float = 15.0,
 ) -> int:
     experiment = resolve_experiment(
         experiment_path,
@@ -1790,34 +1784,8 @@ def configure(
     paths.recipe_validation.mkdir(parents=True, exist_ok=True)
     prepare_config(paths, drone_root, experiment)
     mujoco_marker = paths.recipe_config / "mujoco-city-fleet.json"
-    if mujoco_city_world is not None:
-        try:
-            from tools.recipe import drone_fleet_mujoco_city
-        except ModuleNotFoundError:
-            # Direct script execution adds tools/recipe, not the repository
-            # root, to sys.path. Keep that supported because configure is also
-            # run with the Foundation Python executable.
-            import drone_fleet_mujoco_city  # type: ignore[no-redef]
-
-        try:
-            marker = drone_fleet_mujoco_city.configure_single_host_fleet(
-                drone_root=drone_root,
-                city_world_path=mujoco_city_world,
-                drone_count=experiment.drone_count,
-                recipe_config=paths.recipe_config,
-                spawn_altitude_m=spawn_altitude_m,
-                spawn_spacing_m=spawn_spacing_m,
-                altitude_mode=altitude_mode,
-                above_city_clearance_m=above_city_clearance_m,
-                process_count=experiment.process_count,
-                formation_rotation_deg=formation_rotation_deg,
-                formation_tilt_deg=formation_tilt_deg,
-            )
-        except drone_fleet_mujoco_city.FleetMujocoError as exc:
-            raise RecipeError(str(exc)) from exc
-    else:
-        marker = None
-        mujoco_marker.unlink(missing_ok=True)
+    marker = None
+    mujoco_marker.unlink(missing_ok=True)
     # Remove artifacts from the superseded external-Conductor topology.  The
     # single-host Recipe uses one Foundation Core domain and the first Drone
     # process owns its built-in Conductor.
@@ -2470,17 +2438,9 @@ def command_experiment_path(command: str, requested: Path | None) -> Path:
 def command_drone_root(
     command: str,
     requested: Path | None,
-    *,
-    mujoco_city_world: Path | None = None,
 ) -> Path:
     if requested is not None:
         return requested.absolute()
-    if command == "configure" and mujoco_city_world is not None:
-        # The MuJoCo City path compiles one shared MJB.  Loading that binary
-        # model is a Drone PRO contract; silently selecting Drone Core here
-        # produces a launcher that configures successfully and then dies before
-        # any dependent viewer asset can start.
-        return default_source("hakoniwa-drone-pro").absolute()
     if command != "configure":
         configured = configured_drone_root()
         if configured is not None:
@@ -2518,8 +2478,8 @@ def parser() -> argparse.ArgumentParser:
         "--drone-root",
         type=Path,
         help=(
-            "Drone workspace; after MuJoCo City configure, omitted commands "
-            "reuse the configured Drone PRO workspace"
+            "Drone workspace; after configure, omitted commands reuse the "
+            "configured workspace"
         ),
     )
     result.add_argument(
@@ -2538,35 +2498,26 @@ def parser() -> argparse.ArgumentParser:
         "--process-count",
         type=int,
         help=(
-            "configure only: split MuJoCo City drones across this many local "
-            "Drone Service processes; each gets an independent City model"
+            "configure only: split drones across this many local Drone Service "
+            "processes"
         ),
     )
     result.add_argument(
         "--mujoco-city-world",
         type=Path,
-        help=(
-            "configure only: City World receipt/XML used to generate one "
-            "MuJoCo model per local Drone Service process (non-ICRA)"
-        ),
+        help=argparse.SUPPRESS,
     )
     result.add_argument(
         "--spawn-altitude-m",
         type=float,
         default=0.20,
-        help=(
-            "initial drone body-origin clearance above the sampled DEM terrain "
-            "(default: 0.20 m; City launch points are selected automatically)"
-        ),
+        help=argparse.SUPPRESS,
     )
     result.add_argument(
         "--spawn-spacing-m",
         type=float,
         default=1.0,
-        help=(
-            "configure only: minimum center-to-center spacing of the compact "
-            "MuJoCo City launch formation (default: 1.0 m; 1.0..5.0)"
-        ),
+        help=argparse.SUPPRESS,
     )
     result.add_argument(
         "--formation-scale",
@@ -2580,37 +2531,25 @@ def parser() -> argparse.ArgumentParser:
         "--formation-rotation-deg",
         type=float,
         default=90.0,
-        help=(
-            "configure only: clockwise rotation of the City show formation "
-            "on the ROS XY plane (default: 90 degrees for map readability)"
-        ),
+        help=argparse.SUPPRESS,
     )
     result.add_argument(
         "--formation-tilt-deg",
         type=float,
         default=15.0,
-        help=(
-            "configure only: tilt the non-ICRA City show plane toward an "
-            "audience looking upward (default: 15 degrees; 0..35)"
-        ),
+        help=argparse.SUPPRESS,
     )
     result.add_argument(
         "--altitude-mode",
         choices=["route-clearance", "city-max-clearance"],
         default="route-clearance",
-        help=(
-            "configure only: fly above planned-route colliders (default) or "
-            "above the highest building in the generated city"
-        ),
+        help=argparse.SUPPRESS,
     )
     result.add_argument(
         "--above-city-clearance-m",
         type=float,
         default=10.0,
-        help=(
-            "configure only: clearance above the highest city building when "
-            "--altitude-mode=city-max-clearance (default: 10 m)"
-        ),
+        help=argparse.SUPPRESS,
     )
     return result
 
@@ -2618,6 +2557,12 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
+        if args.mujoco_city_world is not None:
+            raise RecipeError(
+                "the private MuJoCo City drone-show Recipe moved to the sibling "
+                "hakoniwa-drone-show repository; use "
+                "'python tools/recipe/virtual_drone_show.py configure' there"
+            )
         system_name = platform.system()
         if system_name not in SUPPORTED_NATIVE_SYSTEMS:
             raise RecipeError(
@@ -2625,11 +2570,7 @@ def main(argv: list[str] | None = None) -> int:
                 "drone-fleet-single-host supports macOS and Linux"
             )
         experiment_path = command_experiment_path(args.command, args.experiment)
-        drone_root = command_drone_root(
-            args.command,
-            args.drone_root,
-            mujoco_city_world=args.mujoco_city_world,
-        )
+        drone_root = command_drone_root(args.command, args.drone_root)
         viewer_root = args.viewer_root.absolute()
         if args.command == "prepare-native":
             foundation = load_foundation_module()
@@ -2646,20 +2587,9 @@ def main(argv: list[str] | None = None) -> int:
             return configure(
                 experiment_path,
                 drone_root,
-                mujoco_city_world=(
-                    args.mujoco_city_world.absolute()
-                    if args.mujoco_city_world is not None
-                    else None
-                ),
-                spawn_altitude_m=args.spawn_altitude_m,
-                spawn_spacing_m=args.spawn_spacing_m,
                 drone_count_override=args.drone_count,
                 process_count_override=args.process_count,
                 formation_scale_override=args.formation_scale,
-                altitude_mode=args.altitude_mode,
-                above_city_clearance_m=args.above_city_clearance_m,
-                formation_rotation_deg=args.formation_rotation_deg,
-                formation_tilt_deg=args.formation_tilt_deg,
             )
         if args.command == "doctor":
             return doctor(

@@ -295,10 +295,13 @@ open-viewer/stopは引数なしで同じ設定を再利用する。例えば64�
 生成都市の最高建物より10m上へ飛ばす場合は次を実行する。
 
 ```bash
-python tools/recipe/drone_fleet_single_host.py configure \
-  --experiment recipes/experiments/drone-fleet-single-host-mujoco-city-2.yaml \
+cd ../hakoniwa-drone-show
+
+python3 tools/recipe/virtual_drone_show.py configure \
+  --experiment recipes/experiments/virtual-drone-show-city.yaml \
   --drone-root ../hakoniwa-drone-pro \
-  --mujoco-city-world work/remote-operation/city-world-worker/jobs/<JOB_ID> \
+  --mujoco-city-world \
+  ../hakoniwa-business-pack/work/remote-operation/city-world-worker/jobs/<JOB_ID>/build/world/city-world-receipt.json \
   --drone-count 64 \
   --process-count 2 \
   --spawn-spacing-m 1 \
@@ -307,10 +310,14 @@ python tools/recipe/drone_fleet_single_host.py configure \
   --altitude-mode city-max-clearance \
   --above-city-clearance-m 10
 
-python tools/recipe/drone_fleet_single_host.py doctor
-python tools/recipe/drone_fleet_single_host.py start
-python tools/recipe/drone_fleet_single_host.py open-viewer
+python3 tools/recipe/virtual_drone_show.py doctor
+python3 tools/recipe/virtual_drone_show.py start
+python3 tools/recipe/virtual_drone_show.py open-viewer
 ```
+
+ショー専用operator、experiment、Formation生成およびテストの正本は
+`hakoniwa-drone-show`へ移行した。Business Packは汎用Fleet Recipe基盤、City World生成、
+Launcher／Viewer統合および納品統合を担当する。
 
 `--formation-scale`はYAMLの`letter_width_m`、`letter_height_m`、`letter_gap_m`
 へ一度だけ適用され、解決済み寸法として保存される。`route-clearance`は計画経路上の
