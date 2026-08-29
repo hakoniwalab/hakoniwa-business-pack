@@ -29,7 +29,7 @@ Usecases are not limited to requests that Hakoniwa can already realize.
 Before reducing a new user goal directly to Catalog components, search existing
 Usecases for the same reusable outcome. If no matching Usecase exists, a reusable
 request may become a Usecase Fragment or canonical Usecase candidate even when its
-current realization is `not_feasible`, `partially_feasible`, or `unknown`.
+current realization is `partially_feasible` or `unknown`.
 
 Keep the desired outcome separate from implementation gaps:
 
@@ -88,6 +88,7 @@ Keep feasibility and validation separate:
   behavior described by the Usecase.
 - `partially_verified`: only a narrower reference path has been executed.
 - `not_tested`: no execution evidence exists for the composed Usecase.
+- `blocked`: validation cannot currently proceed because a required dependency or condition is unavailable.
 
 A verified reference demo does not verify every customer environment, robot model,
 network topology, or operational outcome. Record those boundaries in `limitations`.
