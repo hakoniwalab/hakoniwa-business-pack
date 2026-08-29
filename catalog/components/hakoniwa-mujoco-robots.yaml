@@ -296,4 +296,65 @@ runtime_checks:
     working_directory: repository
     output: text
     notes:
-      - Cross-platform component-owned entry point. On macOS/Linux it delegates to doctor.bash; on Windows it delegates to build-win
+      - Cross-platform component-owned entry point. On macOS/Linux it delegates to doctor.bash; on Windows it delegates to build-win.ps1 -DoctorOnly.
+      - Exit status 0 means the environment passed the declared preflight; this is not behavioral verification of a complete Recipe.
+operations:
+  build:
+    commands:
+      - python tools/hako.py doctor
+      - python tools/hako.py build
+    notes:
+      - tools/hako.py validates hakoniwa-build.yaml and is the preferred OS-independent entry point; native build scripts remain available for low-level debugging.
+  test:
+    commands: []
+    notes: Sensor and tools tests exist in the repository; exact recipe-level invocation remains outside this catalog entry.
+  run:
+    commands:
+      - ./src/cmake-build/main_for_sample/tb3/tb3_sim
+      - python python/tb3_gamepad.py
+      - python python/lidar_visualizer.py
+      - hako-cmd start
+    notes:
+      - TurtleBot3 quick start uses multiple processes/terminals.
+known_gaps:
+  - Need to map individual examples/sensors and examples/actuators into recipe fragments.
+  - Event-driven JointTrajectory reception is an adapter capability; end-to-end arm command execution remains a Recipe-level integration concern.
+source_refs:
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: README.md
+    revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+    description: Main overview, architecture, samples, requirements, and integration boundaries.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: include/hakoniwa/pdu/adapter/geometry_msgs/twist.hpp
+    revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+    description: Event-driven Twist receive adapter and take() contract.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: include/hakoniwa/pdu/adapter/trajectory_msgs/joint_trajectory.hpp
+    revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+    description: Event-driven JointTrajectory receive adapter and JointTrajectoryTarget conversion.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: tests/sensors/imu/unit/imu_body_frame_velocity_test.cpp
+    revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+    description: IMU body-frame velocity regression coverage.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: hakoniwa-build.yaml
+    revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+    description: Build manifest version and build-directory policy.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: tools/hako.py
+    revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+    description: Manifest-aware cross-platform doctor/build entry point.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: tools/test_hako.py
+    revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+    description: Unit tests for build-manifest parsing and command resolution.
+tags:
+  - hakoniwa
+  - mujoco
+  - robot
+  - turtlebot3
+  - lidar
+  - sensor
+  - actuator
+  - forklift
+  - pdu
