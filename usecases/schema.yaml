@@ -64,8 +64,10 @@ reference_rules:
         - path
         - revision
       notes:
+        - The repository must be represented by a Catalog component.
         - Use a pinned source revision so a Usecase does not silently follow an unreviewed component Recipe HEAD.
         - Prefer an external reference over copying a component-owned Recipe into Business Pack solely for discoverability.
+        - Mandatory CI validates reference shape and Catalog ownership but does not fetch private repositories; source existence is reviewed when the Usecase or Catalog is maintained.
         - Repository access and commercial/private requirements remain governed by the owning component.
     notes:
       - Use an empty list only when no local or component-owned Recipe exists.
