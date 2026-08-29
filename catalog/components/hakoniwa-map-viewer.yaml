@@ -11,8 +11,8 @@ distribution:
     - Public OSS component distributed under the MIT license.
     - The reference PLATEAU Shibuya GLB is distributed separately as a GitHub Release asset and requires source attribution.
 verification:
-  verified_at: 2026-07-31
-  source_revision: de4bda78970b6b3ec68cd367cd38df7ce03ed0f0
+  verified_at: 2026-08-30
+  source_revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
   source_ref: main
 summary: Browser-based Hakoniwa Drone monitor that combines a Leaflet map and a Three.js scene to visualize live drone position, attitude, trails, and PLATEAU city context.
 category:
@@ -26,49 +26,90 @@ status:
   maturity: active
   catalog_confidence: high
   notes:
-    - Cataloged from the public README, browser integration source, coordinate conversion implementation, submodule declaration, and MIT license.
+    - Cataloged from the public README, browser integration source, coordinate conversion implementation, component-owned validation, submodule declaration, and MIT license.
+    - Current main uses the public createDroneViewer() API, adds adaptive large-fleet map presentation and night mode, and owns static doctor/test/smoke validation while remaining a visualization client rather than a simulation runtime.
 capabilities:
   - name: Integrated map and 3D drone monitoring
     description: Displays live Hakoniwa Drone state in a split browser view with a Leaflet map and an embedded Three.js scene.
     evidence:
       - repository: hakoniwalab/hakoniwa-map-viewer
         path: README.md
-        revision: de4bda78970b6b3ec68cd367cd38df7ce03ed0f0
+        revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
       - repository: hakoniwalab/hakoniwa-map-viewer
         path: src/client/index.html
-        revision: de4bda78970b6b3ec68cd367cd38df7ce03ed0f0
+        revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
   - name: PLATEAU city-model visualization
     description: Documents a Shibuya PLATEAU GLB release asset and loads city context around live drone visualization.
     evidence:
       - repository: hakoniwalab/hakoniwa-map-viewer
         path: README.md
-        revision: de4bda78970b6b3ec68cd367cd38df7ce03ed0f0
+        revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
+  - name: Public Three.js viewer API integration
+    description: Imports hakoniwa-threejs-drone and integrates its public createDroneViewer() browser API instead of depending on internal viewer implementation details.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-map-viewer
+        path: README.md
+        revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
+      - repository: hakoniwalab/hakoniwa-map-viewer
+        path: src/client/src/ui.js
+        revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
   - name: Configurable Three.js integration
     description: Loads hakoniwa-threejs-drone as a submodule or alternate browser-visible root and selects its viewer configuration through URL query parameters.
     evidence:
       - repository: hakoniwalab/hakoniwa-map-viewer
         path: .gitmodules
-        revision: de4bda78970b6b3ec68cd367cd38df7ce03ed0f0
+        revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
       - repository: hakoniwalab/hakoniwa-map-viewer
         path: src/client/src/ui.js
-        revision: de4bda78970b6b3ec68cd367cd38df7ce03ed0f0
+        revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
   - name: Multi-drone selection, follow, and trails
     description: Tracks multiple drone states, lets the operator select and follow a drone, and draws recent movement trails on the map.
     evidence:
       - repository: hakoniwalab/hakoniwa-map-viewer
         path: src/client/src/ui.js
-        revision: de4bda78970b6b3ec68cd367cd38df7ce03ed0f0
+        revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
+  - name: Adaptive large-fleet map presentation
+    description: Adapts marker size and trail retention and emphasis to fleet size and selected-drone state, with documented behavior through at least the 128-drone presentation branch.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-map-viewer
+        path: src/client/src/ui.js
+        revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
+      - repository: hakoniwalab/hakoniwa-map-viewer
+        path: tools/test_map_viewer.py
+        revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
+  - name: Coordinated map and Three.js night presentation
+    description: Provides a browser night-mode toggle that darkens the Leaflet presentation and forwards the same presentation state to the embedded Three.js viewer when its public API supports setNightMode().
+    evidence:
+      - repository: hakoniwalab/hakoniwa-map-viewer
+        path: src/client/index.html
+        revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
+      - repository: hakoniwalab/hakoniwa-map-viewer
+        path: src/client/src/ui.js
+        revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
   - name: ROS, ENU, and geographic coordinate mapping
     description: Converts Hakoniwa ROS-frame positions through local ENU coordinates into latitude and longitude using EPSG:6677.
     evidence:
       - repository: hakoniwalab/hakoniwa-map-viewer
         path: src/client/src/frame.js
-        revision: de4bda78970b6b3ec68cd367cd38df7ce03ed0f0
+        revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
+  - name: Component-owned static validation
+    description: Provides hako.py doctor, test, and smoke operations that validate required files, recursive Three.js submodule readiness, map and coordinate contracts, nested Three.js tests, and integrated HTTP retrieval without claiming WebSocket or browser-rendering E2E coverage.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-map-viewer
+        path: tools/hako.py
+        revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
+      - repository: hakoniwalab/hakoniwa-map-viewer
+        path: tools/test_map_viewer.py
+        revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
+      - repository: hakoniwalab/hakoniwa-map-viewer
+        path: .github/workflows/validate-map-viewer.yml
+        revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
 limitations:
   - This component visualizes simulation state; it does not run drone physics or generate environmental effects.
   - Live monitoring requires a compatible WebSocket bridge, PDU definition, and drone visual-state publisher.
-  - The documented end-to-end deployment targets Windows 11 WSL2 with Docker; other host platforms are not explicitly verified.
+  - Component-owned doctor/test/smoke checks static integration and HTTP retrieval; actual WebSocket state updates, browser rendering, and PLATEAU/MuJoCo coordinate alignment remain E2E Recipe concerns.
   - The Shibuya PLATEAU GLB is a separately downloaded release asset rather than a file committed in the repository.
+  - Large-fleet marker and trail adaptation improves presentation behavior but does not establish a universal browser performance limit for arbitrary fleet size, hardware, update rate, or scene complexity.
 interfaces:
   inputs:
     - name: Drone visual state
@@ -86,7 +127,7 @@ interfaces:
   outputs:
     - name: Integrated browser monitor
       kind: api
-      description: Leaflet map, Three.js scene, selected-drone telemetry, follow control, and movement trails.
+      description: Leaflet map, Three.js scene, selected-drone telemetry, follow control, adaptive movement trails, and presentation controls.
   protocols:
     - name: WebSocket
       role: client
@@ -96,9 +137,9 @@ interfaces:
       notes: Loads static application files, viewer configuration, JavaScript modules, and GLB assets.
   configuration:
     - path: src/client/index.html
-      description: Browser entry point and split map/3D layout.
+      description: Browser entry point and split map/3D layout including presentation controls.
     - path: src/client/src/ui.js
-      description: Three.js integration, WebSocket connection, drone selection, map marker, and trail behavior.
+      description: Three.js public API integration, WebSocket connection, drone selection, adaptive fleet markers/trails, night presentation, and map tracking.
     - path: src/client/src/frame.js
       description: ROS, ENU, and latitude/longitude coordinate conversion.
 dependencies:
@@ -124,18 +165,18 @@ dependencies:
       notes: Provides environment data authoring and simulation context used by the documented integrated stack.
     - name: PLATEAU Shibuya GLB
       type: package
-      notes: Approximately 100 MB reference city model distributed through the map-viewer GitHub Releases page.
+      notes: Reference city model distributed through the map-viewer GitHub Releases page when available for the PLATEAU composition.
 platforms:
   supported:
     - Browser
   notes:
-    - The documented full stack uses Windows 11 WSL2 and Docker.
-    - The browser application may work on other hosts, but end-to-end verification is not documented.
+    - The static validation workflow runs on the repository's GitHub Actions environment and requires Python 3.9 or later.
+    - Browser/WebSocket end-to-end behavior depends on the surrounding Hakoniwa runtime composition.
 connects_to:
   - component_id: hakoniwa-threejs-drone
     direction: uses
-    interface: public DroneViewer browser API and viewer configuration
-    notes: map-viewer imports the Three.js viewer module from its submodule or an alternate threejsRoot.
+    interface: public createDroneViewer() browser API and viewer configuration
+    notes: map-viewer imports the Three.js viewer module from its submodule or an alternate threejsRoot and uses the public viewer API.
   - component_id: hakoniwa-pdu-bridge-core
     direction: uses
     interface: WebSocket PDU state stream
@@ -154,35 +195,45 @@ data_contracts:
     source:
       - repository: hakoniwalab/hakoniwa-map-viewer
         path: README.md
-        revision: de4bda78970b6b3ec68cd367cd38df7ce03ed0f0
+        revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
       - repository: hakoniwalab/hakoniwa-map-viewer
         path: src/client/src/ui.js
-        revision: de4bda78970b6b3ec68cd367cd38df7ce03ed0f0
+        revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
+  - name: Public Three.js integration contract
+    description: map-viewer integrates Three.js through createDroneViewer() and public viewer methods, keeping Three.js rendering responsibilities separate from map-viewer map and telemetry presentation.
+    source:
+      - repository: hakoniwalab/hakoniwa-map-viewer
+        path: README.md
+        revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
+      - repository: hakoniwalab/hakoniwa-map-viewer
+        path: src/client/src/ui.js
+        revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
   - name: Coordinate-frame contract
     description: Drone ROS coordinates are converted to ENU, then mapped to latitude and longitude relative to a configured geographic origin.
     source:
       - repository: hakoniwalab/hakoniwa-map-viewer
         path: src/client/src/frame.js
-        revision: de4bda78970b6b3ec68cd367cd38df7ce03ed0f0
+        revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
   - name: PLATEAU asset placement contract
-    description: The Shibuya GLB release asset is downloaded separately and placed under assets/models for the documented viewer composition.
+    description: PLATEAU city GLB assets are optional to the base viewer; a PLATEAU Recipe must record GLB, scene configuration, origin, axes, scale, provenance, and checksum as an explicit asset contract.
     source:
       - repository: hakoniwalab/hakoniwa-map-viewer
         path: README.md
-        revision: de4bda78970b6b3ec68cd367cd38df7ce03ed0f0
+        revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
 recipe_roles:
   - role: visualizer
     description: Presents live Hakoniwa Drone state as a combined map and Three.js browser view.
   - role: monitor
-    description: Exposes selected-drone telemetry, follow behavior, geographic markers, and recent movement trails.
+    description: Exposes selected-drone telemetry, follow behavior, geographic markers, adaptive recent movement trails, and presentation controls.
   - role: integration_boundary
     description: Joins browser UI, Three.js visualization, WebSocket PDU state, geographic coordinates, and city assets.
   - role: visualization_asset_source
     description: Owns the documented distribution and placement contract for the reference Shibuya PLATEAU GLB.
 typical_usecases:
   - Monitor Hakoniwa Drone flight on both a geographic map and a 3D city scene.
-  - Demonstrate drone operation over the PLATEAU Shibuya reference model.
+  - Demonstrate drone operation over a PLATEAU city model with an explicit asset contract.
   - Inspect selected-drone position, attitude, and recent movement trails from a browser.
+  - Present larger simulated fleets with adaptive map markers and shorter, lower-emphasis non-selected trails.
   - Provide the browser visualization surface for an envsim and Hakoniwa Drone integration recipe.
 anti_usecases:
   - Running drone dynamics, collision physics, or flight-controller simulation.
@@ -191,7 +242,7 @@ anti_usecases:
   - General-purpose GIS analysis unrelated to Hakoniwa Drone state.
 demo_candidates:
   - name: Shibuya PLATEAU drone monitor
-    description: Run Hakoniwa Drone with a compatible WebSocket bridge, load the Shibuya GLB, and display live motion on the Leaflet map and Three.js city view.
+    description: Run Hakoniwa Drone with a compatible WebSocket bridge, load the PLATEAU city asset, and display live motion on the Leaflet map and Three.js city view.
     required_components:
       - hakoniwa-map-viewer
       - hakoniwa-threejs-drone
@@ -200,59 +251,35 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-map-viewer
         path: README.md
-        revision: de4bda78970b6b3ec68cd367cd38df7ce03ed0f0
+        revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
 operations:
   build:
     commands: []
-    notes: No native build is required; initialize the Three.js submodule before serving the static files.
+    notes: No native build or install step is defined; initialize the Three.js submodule before serving the static files.
   test:
-    commands: []
-    notes: No automated browser end-to-end test is documented. Validate WebSocket connection, map marker updates, trails, selected-drone telemetry, and Three.js motion.
+    commands:
+      - python tools/hako.py test
+    notes:
+      - Validates map-viewer static contracts and runs the embedded Three.js viewer tests.
   run:
     commands:
       - git submodule update --init --recursive
       - python -m http.server 8001
     notes:
-      - Serve from the repository root and open http://localhost:8001/src/client/index.html.
-      - Download the Shibuya GLB release asset into assets/models when using the PLATEAU reference scene.
-known_gaps:
-  - No component-owned hako.py, doctor, smoke, or automated browser end-to-end test is documented.
-  - The Release asset checksum, attribution file, and machine-readable asset manifest are not yet part of the repository contract.
-  - macOS and native Linux end-to-end verification are not explicitly documented.
-  - The current browser page loads several third-party JavaScript libraries from public CDNs.
-source_refs:
-  - repository: hakoniwalab/hakoniwa-map-viewer
-    path: README.md
-    revision: de4bda78970b6b3ec68cd367cd38df7ce03ed0f0
-    description: Main architecture, dependency repositories, PLATEAU Shibuya asset, deployment assumptions, and launch flow.
-  - repository: hakoniwalab/hakoniwa-map-viewer
-    path: src/client/src/ui.js
-    revision: de4bda78970b6b3ec68cd367cd38df7ce03ed0f0
-    description: Three.js module integration, viewer configuration, WebSocket connection, drone selection, map tracking, and trails.
-  - repository: hakoniwalab/hakoniwa-map-viewer
-    path: src/client/src/frame.js
-    revision: de4bda78970b6b3ec68cd367cd38df7ce03ed0f0
-    description: ROS, ENU, EPSG:6677, and latitude/longitude conversion.
-  - repository: hakoniwalab/hakoniwa-map-viewer
-    path: .gitmodules
-    revision: de4bda78970b6b3ec68cd367cd38df7ce03ed0f0
-    description: hakoniwa-threejs-drone submodule dependency.
-  - repository: hakoniwalab/hakoniwa-map-viewer
-    path: LICENSE
-    revision: de4bda78970b6b3ec68cd367cd38df7ce03ed0f0
-    description: MIT license.
-tags:
-  - hakoniwa
-  - map-viewer
-  - drone
-  - threejs
-  - leaflet
-  - browser
-  - visualization
-  - monitoring
-  - websocket
-  - pdu
-  - plateau
-  - shibuya
-  - glb
-  - geospatial
+      - Serve from the repository root and open the src/client/index.html browser entry point.
+      - PLATEAU city assets are optional to the base viewer and are installed only for compositions that require them.
+  smoke:
+    commands:
+      - python tools/hako.py smoke
+    notes:
+      - Runs doctor, the embedded Three.js smoke path, then serves and retrieves map-viewer and nested viewer assets over HTTP; it is not a WebSocket/browser-rendering E2E test.
+runtime_checks:
+  - id: map-viewer-readiness
+    kind: doctor
+    platforms: [macos, linux, windows]
+    command: [python, tools/hako.py, doctor]
+    working_directory: repository
+    output: text
+  - id: map-viewer-static-contracts
+    kind: test
+    platforms: [macos, linux, windows
