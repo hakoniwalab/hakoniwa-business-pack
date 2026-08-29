@@ -93,6 +93,9 @@ usecase_paths.each do |path|
     end
 
     if [repository, external_path, revision].all? { |value| value && !value.empty? }
+      allowed_keys = Set.new(%w[repository path revision role])
+      unknown_keys = reference.keys.to_set - allowed_keys
+      errors << "#{label}: realized_by external reference has unknown fields: #{unknown_keys.to_a.sort.join(', ')}" unless unknown_keys.empty?
       errors << "#{label}: realized_by external repository #{repository} is not represented by a Catalog component" unless catalog_repositories.include?(repository)
       errors << "#{label}: realized_by external path must be repository-relative" if external_path.start_with?("/") || external_path.split("/").include?("..")
       errors << "#{label}: realized_by external revision must be a full 40-character commit SHA" unless revision.match?(/\A[0-9a-f]{40}\z/i)
