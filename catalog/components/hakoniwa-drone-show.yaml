@@ -18,7 +18,7 @@ verification:
   source_revision: ccc55d398a540210acc298ed9964bd63e4b8011e
   source_ref: main
 
-summary: >
+summary: >-
   Commercial virtual drone-show toolchain for Hakoniwa. It owns show files and resolved
   show plans, formation generation, drone assignment, transition planning, LED direction,
   show start/status control, audience preview including mobile AR, and reproducible wind
