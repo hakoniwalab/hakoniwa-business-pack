@@ -42,8 +42,8 @@ Unmet demand
      unresolved connection
 ```
 
-When Catalog capabilities, Recipes, or validation evidence change, previously blocked
-or unknown Usecases should be considered for re-evaluation.
+When Catalog capabilities, Recipes, or validation evidence change, Usecases with
+`unknown` feasibility or `blocked` validation should be considered for re-evaluation.
 
 Maintainers should also work in the reverse direction: inspect existing Catalog
 capabilities and validated Recipes, identify the reusable user outcomes they enable,
@@ -148,7 +148,7 @@ available.
    superiority unless explicit evidence supports that statement.
 7. Keep commercial/private access and human approval gates visible.
 8. Put missing validation or a needed Recipe in `next_steps`.
-9. Re-evaluate blocked or unknown Usecases after relevant Catalog / Recipe changes.
+9. Re-evaluate Usecases after relevant Catalog / Recipe changes when feasibility is `unknown` or validation is `blocked`.
 10. Run the Usecase validator after adding or changing a Usecase.
 
 ## Validation
