@@ -26,10 +26,7 @@ category:
   primary: physics-environment
   secondary:
     - environment-model
-    - plateau
-    - city-world
     - visualization
-    - collision-model
     - integration
 
 status:
@@ -247,8 +244,6 @@ recipe_roles:
     description: Supplies environmental fields such as wind, temperature, pressure, GPS strength, and local zones.
   - role: asset_generator
     description: Converts PLATEAU data into aligned visual and physics City World assets.
-  - role: physics_environment
-    description: Supplies terrain and semantic collision geometry for MuJoCo simulations.
   - role: visualizer
     description: Supplies GLB city assets for external viewers.
   - role: integration_boundary
