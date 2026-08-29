@@ -27,6 +27,9 @@ jobs:
           ruby catalog/tools/generate_index.rb
           git diff --exit-code catalog/index.yaml
 
+      - name: Test catalog freshness checker
+        run: ruby catalog/tools/test_check_freshness.rb
+
       - name: Validate recipes
         run: ruby recipes/tools/validate_recipes.rb
 
