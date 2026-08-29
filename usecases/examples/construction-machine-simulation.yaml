@@ -1,0 +1,93 @@
+id: construction-machine-simulation
+title: 建設機械の移動・関節操作・掘削環境シミュレーション
+usecase_version: 0.1
+
+audience:
+  primary:
+    - construction-automation-team
+    - robot-system-integrator
+    - simulation-engineer
+  notes:
+    - The current reference model is MathScavator9000 Excavator in hakoniwa-robot-arm-pack.
+
+situation: >
+  A team wants to evaluate a construction machine before using physical equipment,
+  including mobile-base motion, articulated-arm commands, manual operation, and contact
+  with a configurable worksite environment.
+
+problem: >
+  A construction machine combines responsibilities that are usually separated in simpler
+  robot simulations: mobile-base motion, articulated joints, operator input, terrain,
+  contact geometry, and material-like objects. Treating only the arm or only the vehicle
+  does not expose the interaction between these elements.
+
+desired_outcome: >
+  Run a construction-machine model in MuJoCo as a Hakoniwa asset, drive its mobile base,
+  control its articulated joints, switch between automatic and manual operation, and
+  experiment with terrain, soil particles, and bucket collision proxies while keeping
+  the fidelity and verification limits explicit.
+
+status:
+  feasibility: feasible
+  validation: partially_verified
+  confidence: high
+  rationale:
+    - The MathScavator9000 headless runtime is recorded as verified for six-wheel differential motion followed by four-joint JointTrajectory execution.
+    - Automatic and manual excavator control paths, deadman handling, PS5 DualSense mapping, terrain, soil, and bucket collision-proxy assets exist in the implementation repository.
+    - The moving excavator is not recorded as verified in the interactive MuJoCo Viewer, and digging/contact fidelity remains experimental rather than physically validated.
+
+realized_by: []
+
+supported_by:
+  - component_id: hakoniwa-robot-arm-pack
+    role: Provide the excavator model, dedicated mobile/articulated runtime, control paths, worksite configuration, and collision-proxy assets.
+  - component_id: hakoniwa-mujoco-robots
+    role: Provide the MuJoCo and Hakoniwa robot simulation foundation used by the construction-machine runtime.
+  - component_id: hakoniwa-pdu-endpoint
+    role: Provide command and state PDU exchange for the simulated machine.
+  - component_id: hakoniwa-core-pro
+    role: Provide Hakoniwa asset lifecycle and simulation synchronization.
+  - component_id: hakoniwa-pdu-python
+    role: Provide reference scripted command senders used by excavator examples.
+
+communication_notes:
+  safe_statements:
+    - The reference excavator combines a four-joint articulated mechanism and a six-wheel differential mobile base.
+    - The headless runtime has been verified for mobile motion, stop, four-joint JointTrajectory execution, JointState output, and numerical stability.
+    - Automatic and manual control paths are available, including PS5 DualSense mapping for the documented macOS path.
+    - Terrain, soil-particle, and configurable bucket collision-proxy assets are available for digging experiments.
+  avoid_statements:
+    - The excavator simulation reproduces real hydraulic behavior.
+    - Soil mechanics or digging performance are physically validated.
+    - Bucket contact geometry is CAD accurate.
+    - The moving excavator has been verified in every MuJoCo Viewer or host environment.
+    - Simulation results establish real-machine safety or performance.
+
+limitations:
+  - Access approval is required for the private construction-machine integration assets.
+  - The excavator uses a dedicated runtime rather than the common industrial robot-arm runtime.
+  - Bucket collision proxies approximate contact surfaces and require manual or generated calibration.
+  - Soil is represented as a simulation approximation for interaction experiments, not as a validated continuum or granular-material model.
+  - Verification coverage differs across headless runtime, viewer execution, manual operation, and digging/contact experiments.
+  - Real-machine dynamics, hydraulics, payload behavior, terrain properties, and safety criteria require separate validation.
+
+next_steps:
+  - Re-run and record verification after bucket-collision and digging-runtime changes.
+  - Add repeatable acceptance criteria for bucket proxy geometry and digging scenarios.
+  - Separate visual plausibility, contact behavior, and physical-fidelity claims in future validation records.
+  - Add public metadata-only Recipe coverage when an externally reproducible composition is defined.
+
+tags:
+  - construction-machine
+  - excavator
+  - mobile-manipulator
+  - mujoco
+  - joint-trajectory
+  - joint-state
+  - differential-drive
+  - ps5
+  - terrain
+  - soil
+  - digging
+  - collision
+  - simulation
