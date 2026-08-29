@@ -122,6 +122,7 @@ controlled_fields:
       - environment_model
       - integration_boundary
       - language_binding
+      - measurement
       - monitor
       - physics_runtime
       - rd_runtime
