@@ -99,10 +99,15 @@ network topology, or operational outcome. Record those boundaries in `limitation
 For a Business Pack Recipe, use its `recipe_id`.
 
 For a component-owned Recipe, record `repository`, `path`, and a full pinned commit
-`revision`. Do not copy the Recipe into Business Pack solely to make it discoverable.
-The pinned revision prevents a Usecase from silently claiming an unreviewed newer
-component Recipe. Private and commercial access requirements remain those of the
-owning component.
+`revision`. The owning repository must already be represented by a Catalog component.
+Do not copy the Recipe into Business Pack solely to make it discoverable. The pinned
+revision prevents a Usecase from silently claiming an unreviewed newer component Recipe.
+Private and commercial access requirements remain those of the owning component.
+
+Mandatory CI validates the external reference shape and that its repository is known to
+the Catalog. It intentionally does not fetch private repositories. Maintainers verify the
+referenced path and revision when adding or refreshing the Usecase, just as Catalog source
+evidence is reviewed at a pinned revision.
 
 ## Audience vocabulary
 
@@ -155,8 +160,8 @@ ruby usecases/tools/validate_usecases.rb
 
 The validator checks required fields, file and index IDs, controlled audience values,
 status values, Catalog component references, local Recipe IDs, pinned component-owned
-Recipe references, and duplicate IDs. It validates the shape of external references;
-it does not fetch private repositories during mandatory CI.
+Recipe references, and duplicate IDs. It validates the shape and Catalog ownership of
+external references; it does not fetch private repositories during mandatory CI.
 
 ## Layout
 
