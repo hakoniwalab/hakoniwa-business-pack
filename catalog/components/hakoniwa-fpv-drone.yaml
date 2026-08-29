@@ -1,0 +1,275 @@
+id: hakoniwa-fpv-drone
+name: Hakoniwa FPV Drone
+repository:
+  owner: hakoniwalab
+  name: hakoniwa-fpv-drone
+  url: https://github.com/hakoniwalab/hakoniwa-fpv-drone
+  visibility: private
+distribution:
+  channel: oss
+  notes:
+    - The Hakoniwa FPV Drone source, Catalog, Recipe, and documentation are provided under the MIT License.
+    - Repository visibility and software licensing are separate facts; this Catalog records the currently private repository visibility independently from the MIT terms.
+    - Hakoniwa Drone Core or PRO, PID auto-tuning, third-party component data, models, and libraries retain their own license terms.
+verification:
+  verified_at: 2026-08-29
+  source_revision: f482a713b286df965e2ea663033a0fef3a727f2d
+  source_ref: main
+summary: Catalog-driven FPV drone design pack that resolves selected frame, motor, propeller, battery, camera, and controller parts into a traceable MuJoCo and Hakoniwa vehicle package for pre-build simulation.
+category:
+  primary: tool
+  secondary:
+    - asset-generation
+    - code-generation
+    - simulator
+    - integration
+
+status:
+  maturity: experimental
+  catalog_confidence: high
+  notes:
+    - The generic 5-inch quad-X End-to-End path is implemented and unit-tested.
+    - Generated Angle-mode flight with a PS5 DualSense controller was verified locally on macOS.
+    - Catalog values are generic examples and are not presented as measured specifications of real products.
+
+capabilities:
+  - name: FPV component catalog and Vehicle Recipe
+    description: Separates reusable FPV part definitions from a user-selected aircraft configuration that references those parts by stable IDs.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-fpv-drone
+        path: docs/catalog-spec.md
+        revision: f482a713b286df965e2ea663033a0fef3a727f2d
+      - repository: hakoniwalab/hakoniwa-fpv-drone
+        path: recipes/examples/5inch-fpv.yaml
+        revision: f482a713b286df965e2ea663033a0fef3a727f2d
+  - name: Physical vehicle model compilation
+    description: Resolves mass, center of mass, inertia, motor placement, rotor direction, thrust parameters, and thrust-to-weight estimates without silently inventing unavailable values.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-fpv-drone
+        path: src/fpv_drone_generator/resolver.py
+        revision: f482a713b286df965e2ea663033a0fef3a727f2d
+      - repository: hakoniwalab/hakoniwa-fpv-drone
+        path: tests/test_resolver.py
+        revision: f482a713b286df965e2ea663033a0fef3a727f2d
+  - name: MuJoCo and Hakoniwa Generated Vehicle Package
+    description: Generates a portable package containing MuJoCo XML, Drone Core configuration, control parameters, BOM, resolved inputs, physical report, and provenance hashes.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-fpv-drone
+        path: docs/generated-package.md
+        revision: f482a713b286df965e2ea663033a0fef3a727f2d
+      - repository: hakoniwalab/hakoniwa-fpv-drone
+        path: tests/test_generate.py
+        revision: f482a713b286df965e2ea663033a0fef3a727f2d
+  - name: PS5 Angle-mode simulation
+    description: Materializes and runs the generated vehicle with the existing Hakoniwa Drone Radio Controller and verified PS4 mapping for a PS5 DualSense controller.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-fpv-drone
+        path: README.md
+        revision: f482a713b286df965e2ea663033a0fef3a727f2d
+      - source: user-runtime-confirmation
+        date: 2026-08-29
+  - name: Licensed vehicle-specific PID tuning connection
+    description: Connects a frozen generated vehicle profile to Hakoniwa Drone PRO Hover and Angle PID auto-tuning, quantitative gates, waveform review, and temporary PS5 validation.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-fpv-drone
+        path: docs/pid-tuning-knowhow.md
+        revision: f482a713b286df965e2ea663033a0fef3a727f2d
+
+limitations:
+  - The current generator supports quad-X aircraft with four motors only.
+  - Included parts are generic examples rather than evidence-backed real-product catalog records.
+  - Frame geometry is a box proxy and non-frame inertia uses a documented point-mass approximation.
+  - Rate configuration can be generated, but the currently verified interactive runtime path is Angle mode.
+  - Generated controller values and auto-tuned simulation values are not recommendations for direct use on a physical aircraft.
+  - Betaflight backend, real-flight log identification, FPV Web UI, and Three.js FPV camera integration are not implemented.
+
+interfaces:
+  inputs:
+    - name: Component catalogs
+      kind: config
+      description: YAML catalogs for frames, motors, propellers, batteries, cameras, and controller profiles.
+    - name: FPV Vehicle Recipe
+      kind: config
+      description: User-owned YAML that selects catalog component IDs, control mode, and component placements for one aircraft.
+  outputs:
+    - name: Generated Vehicle Package
+      kind: file
+      description: BOM, resolved inputs, report, MuJoCo XML, Drone Core configuration, and controller parameter files.
+    - name: FPV generator CLI
+      kind: command
+      description: Validates recipes, displays BOMs, generates packages, and operates the current Angle-mode runtime adapter.
+    - name: PID tuning adapter
+      kind: command
+      description: Creates immutable tuning inputs and invokes licensed Drone PRO tuning phases without modifying Catalog or Recipe sources.
+  protocols:
+    - name: Generated artifact contract
+      role: file
+      notes: Connects the component compiler to MuJoCo and the existing Drone Core configuration formats.
+    - name: Hakoniwa PDU
+      role: local
+      notes: Existing Drone Core PDU definitions carry controller input and vehicle state; no incompatible FPV-only PDU format is introduced.
+  configuration:
+    - path: catalogs/*.yaml
+      description: Reusable generic or evidence-backed FPV component definitions.
+    - path: recipes/examples/5inch-fpv.yaml
+      description: Verified generic quad-X Vehicle Recipe.
+    - path: recipes/business-pack/fpv-drone-design-angle-flight.yaml
+      description: Component-owned Hakoniwa Business Pack system Recipe that references the Vehicle Recipe rather than duplicating it.
+
+dependencies:
+  required:
+    - name: hakoniwa-drone-core
+      type: repository
+      notes: Provides the MuJoCo vehicle physics, rotor and mixer implementation, Radio Controller, Angle control, and commercial Drone PRO runtime path.
+    - name: hakoniwa-core-pro
+      type: repository
+      notes: Provides Hakoniwa lifecycle, shared memory, and simulation-time coordination.
+    - name: hakoniwa-pdu-python
+      type: repository
+      notes: Provides the Foundation Python environment and background Launcher lifecycle.
+    - name: Python 3.12
+      type: runtime
+      notes: Runs package generation, runtime materialization, and PID tuning adapters.
+    - name: MuJoCo
+      type: runtime
+      notes: Executes the generated physical vehicle model.
+  optional:
+    - name: Hakoniwa Drone PRO PID auto-tuning entitlement
+      type: runtime
+      notes: Enables vehicle-specific automated Hover and Angle tuning; it is not implied by access to this component repository alone.
+
+platforms:
+  supported:
+    - macOS
+  notes:
+    - Catalog and Recipe generation are portable Python workflows, but the current executable Angle-mode Recipe has only been verified on macOS arm64.
+
+connects_to:
+  - component_id: hakoniwa-drone-core
+    direction: uses
+    interface: generated drone.xml, drone_config.json, and control-param.txt
+    notes: Renders the resolved FPV vehicle into existing Drone Core and MuJoCo runtime contracts.
+  - component_id: hakoniwa-core-pro
+    direction: uses
+    interface: lifecycle, shared-memory PDU, and simulation time
+    notes: Runs the generated vehicle as a synchronized Hakoniwa simulation asset.
+  - component_id: hakoniwa-pdu-python
+    direction: uses
+    interface: Python Launcher and background session control
+    notes: Owns normal start, status, and terminate operations for the generated runtime.
+
+data_contracts:
+  - name: Catalog to Vehicle Recipe reference
+    description: A Vehicle Recipe selects component records by stable ID; catalog attributes may grow without changing the reference form.
+    source:
+      - repository: hakoniwalab/hakoniwa-fpv-drone
+        path: docs/recipe-spec.md
+        revision: f482a713b286df965e2ea663033a0fef3a727f2d
+  - name: Resolved Vehicle Model
+    description: Typed intermediate model separates component facts and user choices from backend-specific generated artifacts.
+    source:
+      - repository: hakoniwalab/hakoniwa-fpv-drone
+        path: docs/architecture.md
+        revision: f482a713b286df965e2ea663033a0fef3a727f2d
+  - name: Generated Vehicle Package
+    description: Generated files preserve input copies, resolved components, calculated and approximated properties, runtime files, and provenance hashes.
+    source:
+      - repository: hakoniwalab/hakoniwa-fpv-drone
+        path: docs/generated-package.md
+        revision: f482a713b286df965e2ea663033a0fef3a727f2d
+
+recipe_roles:
+  - role: asset_generator
+    description: Compiles a selected FPV component set into a physical vehicle model.
+  - role: code_generator
+    description: Renders the resolved model into MuJoCo and Hakoniwa runtime files.
+  - role: integration_boundary
+    description: Adapts generated vehicles to existing Drone Core, Launcher, Radio Controller, and PID tuning contracts.
+
+typical_usecases:
+  - Compare candidate FPV part combinations before purchasing and assembling physical hardware.
+  - Generate a traceable virtual quad-X model from a reusable component catalog and a user-owned Vehicle Recipe.
+  - Evaluate Angle-mode handling with a PS5 controller in simulation.
+  - Use licensed PID auto-tuning to reduce manual trial-and-error for each generated virtual aircraft.
+  - Prepare a future loop from real-flight logs to model identification and simulation correction.
+
+anti_usecases:
+  - Treating generic example component values as official specifications of a real product.
+  - Applying generated or tuned simulation PID values directly to a physical aircraft without expert review and controlled real-world validation.
+  - Using the current MVP as a Betaflight replacement or a complete FPV training game.
+  - Assuming the FPV toolchain's MIT License grants rights to every Hakoniwa Drone PRO option, PID tuning capability, third-party model, or component dataset.
+
+demo_candidates:
+  - name: Generic 5-inch FPV generation and PS5 Angle flight
+    description: Resolve the sample 5-inch Vehicle Recipe, generate its package, optionally tune under a PRO license, and verify Angle-mode response in the native MuJoCo Viewer.
+    required_components:
+      - hakoniwa-fpv-drone
+      - hakoniwa-drone-core
+      - hakoniwa-core-pro
+      - hakoniwa-pdu-python
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-fpv-drone
+        path: recipes/business-pack/fpv-drone-design-angle-flight.yaml
+        revision: main
+
+operations:
+  build:
+    commands:
+      - python3.12 tools/fpv.py configure
+    notes:
+      - The command resolves the component-owned Vehicle Recipe and materializes a generated package and runtime adapter.
+  test:
+    commands:
+      - PYTHONPATH=src python3.12 -m unittest discover -v
+    notes:
+      - MuJoCo load verification is skipped only when the selected Python environment lacks the optional MuJoCo binding.
+  run:
+    commands:
+      - python3.12 tools/fpv.py start
+      - python3.12 tools/fpv.py status
+      - python3.12 tools/fpv.py stop
+    notes:
+      - Follow the component-owned Business Pack Recipe and README for permissions, PID tuning gates, PS5 operation, and normal cleanup.
+
+known_gaps:
+  - Add evidence-backed real FPV product catalog records with clear data provenance and redistribution terms.
+  - Add the Drone Core Radio Controller Rate/Acro execution profile.
+  - Add Three.js FPV camera and aircraft appearance adapters.
+  - Add real-flight log ingestion and model-identification support.
+  - Extend runtime verification beyond macOS arm64.
+
+source_refs:
+  - repository: hakoniwalab/hakoniwa-fpv-drone
+    path: LICENSE
+    revision: main
+    description: MIT License covering this repository's software and documentation.
+  - repository: hakoniwalab/hakoniwa-fpv-drone
+    path: README.md
+    revision: f482a713b286df965e2ea663033a0fef3a727f2d
+    description: Product concept, generator workflow, Angle runtime, PID tuning boundary, and verified operator commands.
+  - repository: hakoniwalab/hakoniwa-fpv-drone
+    path: docs/architecture.md
+    revision: f482a713b286df965e2ea663033a0fef3a727f2d
+    description: Catalog, Vehicle Recipe, Resolved Vehicle Model, Generated Package, and backend adapter boundaries.
+  - repository: hakoniwalab/hakoniwa-fpv-drone
+    path: docs/pid-tuning-knowhow.md
+    revision: f482a713b286df965e2ea663033a0fef3a727f2d
+    description: Licensed tuning benefits, validated sequence, known pitfalls, and preflight checks.
+  - repository: hakoniwalab/hakoniwa-fpv-drone
+    path: recipes/business-pack/fpv-drone-design-angle-flight.yaml
+    revision: main
+    description: Component-owned Business Pack system Recipe referencing the FPV Vehicle Recipe.
+
+tags:
+  - hakoniwa
+  - fpv
+  - drone
+  - component-catalog
+  - vehicle-recipe
+  - mujoco
+  - angle-control
+  - pid-tuning
+  - ps5
+  - simulation
+  - oss
+  - mit

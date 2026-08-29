@@ -220,6 +220,41 @@ components:
   - mujoco
   - mjcf
   catalog_path: components/hakoniwa-envsim.yaml
+- id: hakoniwa-fpv-drone
+  name: Hakoniwa FPV Drone
+  category: tool
+  secondary_categories:
+  - asset-generation
+  - code-generation
+  - simulator
+  - integration
+  maturity: experimental
+  distribution: oss
+  summary: Catalog-driven FPV drone design pack that resolves selected frame, motor,
+    propeller, battery, camera, and controller parts into a traceable MuJoCo and Hakoniwa
+    vehicle package for pre-build simulation.
+  recipe_roles:
+  - asset_generator
+  - code_generator
+  - integration_boundary
+  connects_to:
+  - hakoniwa-drone-core
+  - hakoniwa-core-pro
+  - hakoniwa-pdu-python
+  tags:
+  - hakoniwa
+  - fpv
+  - drone
+  - component-catalog
+  - vehicle-recipe
+  - mujoco
+  - angle-control
+  - pid-tuning
+  - ps5
+  - simulation
+  - oss
+  - mit
+  catalog_path: components/hakoniwa-fpv-drone.yaml
 - id: hakoniwa-godot
   name: Hakoniwa Godot
   category: visualization
