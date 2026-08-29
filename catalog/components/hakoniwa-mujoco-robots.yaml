@@ -10,8 +10,8 @@ distribution:
   notes:
     - Public OSS Hakoniwa component.
 verification:
-  verified_at: 2026-07-28
-  source_revision: aecfd8010f832b07c1bc3852c795a2fd7944f406
+  verified_at: 2026-08-30
+  source_revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
   source_ref: main
 summary: MuJoCo-based robot simulation assets for Hakoniwa, including TurtleBot3, sensor and actuator examples, Python controllers, and PDU integration.
 category:
@@ -21,72 +21,97 @@ category:
     - physics-runtime
     - robot-body
     - visualization
-
 status:
   maturity: active
   catalog_confidence: high
   notes:
-    - Cataloged from README start-here and quick-start sections.
-    - Forklift RD-light is explicitly advanced and experimental.
-
+    - Cataloged from the public source tree, PDU adapters, sensor tests, build manifest, and component-owned build entry point.
+    - Current main adds event-driven Twist and JointTrajectory readers, IMU body-frame regression coverage, and manifest-driven cross-platform build selection.
 capabilities:
   - name: MuJoCo robot simulation
     description: Runs ROS/URDF-derived robot models such as TurtleBot3 Burger in MuJoCo.
     evidence:
       - repository: hakoniwalab/hakoniwa-mujoco-robots
         path: README.md
-        revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+        revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
   - name: Hakoniwa PDU integration
     description: Connects C++ MuJoCo simulators with Python controllers and visualizers through Hakoniwa PDU contracts.
     evidence:
       - repository: hakoniwalab/hakoniwa-mujoco-robots
         path: README.md
-        revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+        revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+  - name: Event-driven Twist command reader
+    description: Provides a Twist event reader that resolves and registers a receive-event PDU channel, converts received payloads to typed Twist data, and exposes the latest pending command through take().
+    evidence:
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: include/hakoniwa/pdu/adapter/geometry_msgs/twist.hpp
+        revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+  - name: Event-driven JointTrajectory command reader
+    description: Provides a JointTrajectory event reader that subscribes to endpoint receive events, converts PDU payloads into JointTrajectoryTarget values, and transfers the pending target to the robot runtime through take().
+    evidence:
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: include/hakoniwa/pdu/adapter/trajectory_msgs/joint_trajectory.hpp
+        revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
   - name: Sensor simulation
-    description: Provides LiDAR, ultrasonic, and color-camera examples, including configurable LiDAR noise profiles.
+    description: Provides LiDAR, ultrasonic, color-camera, and IMU-oriented examples and tests, including configurable LiDAR noise profiles and IMU body-frame regression coverage.
     evidence:
       - repository: hakoniwalab/hakoniwa-mujoco-robots
         path: README.md
-        revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+        revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: tests/sensors/imu/unit/imu_body_frame_velocity_test.cpp
+        revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: models/sensors/imu/rotated-inertial-frame-test.xml
+        revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
   - name: Actuator examples
     description: Provides joint position and velocity actuator examples and reusable actuator components.
     evidence:
       - repository: hakoniwalab/hakoniwa-mujoco-robots
         path: README.md
-        revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+        revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
   - name: MuJoCo-only robot actuator validation
     description: Supports validating generated robot MJCF, actuator JSON bindings, and finite MuJoCo execution before adding Hakoniwa Endpoint/PDU integration.
     evidence:
       - repository: hakoniwalab/hakoniwa-mujoco-robots
         path: examples/actuators/joint/README.md
-        revision: 3c7b6504d6cd82299fd05e7a02fb03b272d5c954
-      - repository: hakoniwalab/hakoniwa-mujoco-robots
-        path: examples/actuators/agilex_tracer/agilex-tracer-rover-example.cpp
-        revision: local-validation-2026-07-22
+        revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
   - name: Rover Twist PDU runtime prototype
     description: Supports a staged mobile-base runtime pattern where a viewer-capable plant asset registers with Hakoniwa, a Python controller sends geometry_msgs/Twist, shared rover kinematics convert commands to wheel targets, and hako-cmd start begins synchronized simulation after registration.
     evidence:
       - repository: hakoniwalab/hakoniwa-mujoco-robots
         path: include/robots/rover/differential_drive_kinematics.hpp
-        revision: local-validation-2026-07-22
+        revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
       - repository: hakoniwalab/hakoniwa-mujoco-robots
         path: examples/actuators/agilex_tracer/rover-twist-hakoniwa-asset.cpp
-        revision: local-validation-2026-07-22
+        revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
       - repository: hakoniwalab/hakoniwa-mujoco-robots
         path: examples/actuators/agilex_tracer/send_rover_twist.py
-        revision: local-validation-2026-07-22
+        revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+  - name: Manifest-driven cross-platform build entry point
+    description: Uses hakoniwa-build.yaml and tools/hako.py to select an auto or repository-relative build directory and delegate doctor/build operations to the platform-native scripts.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: hakoniwa-build.yaml
+        revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: tools/hako.py
+        revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: tools/test_hako.py
+        revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
   - name: Forklift context and RD-light demos
     description: Includes forklift samples with context save/restore and advanced RD-light handoff.
     evidence:
       - repository: hakoniwalab/hakoniwa-mujoco-robots
         path: README.md
-        revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
-
+        revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
 limitations:
-  - Requires installed hakoniwa-core-pro and hakoniwa-pdu-endpoint for core samples.
+  - Requires installed hakoniwa-core-pro and hakoniwa-pdu-endpoint for core Hakoniwa-integrated samples.
   - RD-light forklift handoff is advanced/experimental and not RD-full.
   - This repository provides robot simulation assets, not the canonical robot body conversion registry.
-
+  - Event readers implement command-reception adapters; they do not by themselves define trajectory planning, collision avoidance, or controller safety policy.
+  - IMU regression tests validate repository sensor/frame behavior under their test models; they are not a general sensor-accuracy or sim-to-real guarantee.
 interfaces:
   inputs:
     - name: MuJoCo model XML
@@ -104,6 +129,12 @@ interfaces:
     - name: Rover Twist command
       kind: pdu
       description: geometry_msgs/Twist command input for mobile-base linear.x/angular.z control.
+    - name: JointTrajectory command
+      kind: pdu
+      description: trajectory_msgs/JointTrajectory command consumed through the event-reader adapter and converted into a JointTrajectoryTarget.
+    - name: Build manifest
+      kind: config
+      description: hakoniwa-build.yaml version 1 selects the build directory policy used by tools/hako.py.
   outputs:
     - name: Robot state PDU
       kind: pdu
@@ -117,7 +148,7 @@ interfaces:
   protocols:
     - name: Hakoniwa PDU
       role: local
-      notes: Shared runtime contract between MuJoCo C++ simulator and Python tools.
+      notes: Shared runtime contract between MuJoCo C++ simulator and Python tools, including event-driven command reception where configured.
   configuration:
     - path: config
       description: PDU, sensor, actuator, and sample configs.
@@ -125,7 +156,8 @@ interfaces:
       description: LiDAR and sensor spec JSON files.
     - path: examples
       description: Standalone sensor and actuator examples.
-
+    - path: hakoniwa-build.yaml
+      description: Component-owned build-directory manifest consumed by tools/hako.py.
 dependencies:
   required:
     - name: hakoniwa-core-pro
@@ -142,7 +174,7 @@ dependencies:
       notes: Required for simulator build.
     - name: Python
       type: runtime
-      notes: Required for controllers and visualizers.
+      notes: Required for controllers, visualizers, and the component-owned build entry point.
   optional:
     - name: Gamepad
       type: runtime
@@ -150,7 +182,6 @@ dependencies:
     - name: Docker
       type: runtime
       notes: Docker scripts are provided.
-
 platforms:
   supported:
     - macOS
@@ -159,7 +190,6 @@ platforms:
   notes:
     - Component-owned build CI exercises the common hako.py build entry point on Ubuntu, macOS, and Windows.
     - Platform-specific native scripts remain implementation details behind tools/hako.py.
-
 connects_to:
   - component_id: hakoniwa-core-pro
     direction: uses
@@ -167,8 +197,8 @@ connects_to:
     notes: Required for simulator start and synchronization.
   - component_id: hakoniwa-pdu-endpoint
     direction: uses
-    interface: installed endpoint package
-    notes: Required for PDU endpoint linkage.
+    interface: installed endpoint package and receive-event callbacks
+    notes: Required for PDU endpoint linkage and event-driven Twist/JointTrajectory reception.
   - component_id: hakoniwa-pdu-registry
     direction: uses
     interface: PDU types and converters
@@ -181,21 +211,37 @@ connects_to:
     direction: related
     interface: PDU robot visualization path
     notes: Godot can visualize robot state produced by MuJoCo through endpoint/PDU sync.
-
 data_contracts:
   - name: PDU JSON contract
     description: C++ simulator and Python controller/visualizer share channel/type/size contracts through PDU JSON.
     source:
       - repository: hakoniwalab/hakoniwa-mujoco-robots
         path: README.md
-        revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+        revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+  - name: Event-driven command contract
+    description: Twist and JointTrajectory event readers resolve a PDU channel, register it as a receive event, subscribe a callback, convert received payloads into typed command values, and expose pending values through take() for consumption by the simulation runtime.
+    source:
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: include/hakoniwa/pdu/adapter/geometry_msgs/twist.hpp
+        revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: include/hakoniwa/pdu/adapter/trajectory_msgs/joint_trajectory.hpp
+        revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
   - name: Sensor config contract
     description: Sensor behavior such as LiDAR scan frequency, angular range, resolution, and noise model is loaded from JSON.
     source:
       - repository: hakoniwalab/hakoniwa-mujoco-robots
         path: docs/spec/sensor-actuator-config-schema.md
-        revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
-
+        revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+  - name: Build manifest contract
+    description: hakoniwa-build.yaml version 1 contains a build.dir value that is either auto or a repository-relative path; tools/hako.py validates the manifest and delegates doctor/build to the native platform script.
+    source:
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: hakoniwa-build.yaml
+        revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: tools/hako.py
+        revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
 recipe_roles:
   - role: physics_runtime
     description: Simulates robot physics and sensors.
@@ -203,20 +249,19 @@ recipe_roles:
     description: Participates as a Hakoniwa asset in synchronized simulation.
   - role: visualizer
     description: Provides Python visualizers for LiDAR and other inspection paths.
-
 typical_usecases:
   - Run TurtleBot3 with gamepad control and 2D LiDAR.
   - Compare LiDAR noise profiles for Sim2Real validation.
   - Test standalone MuJoCo sensor or actuator behavior.
+  - Receive event-driven Twist or JointTrajectory commands in a Hakoniwa-integrated MuJoCo robot asset.
   - Validate a newly converted robot body with MuJoCo-only actuator smoke before Hakoniwa PDU wiring.
   - Validate a rover/mobile-base Twist command path after plant and controller assets register, then start with hako-cmd.
   - Demonstrate forklift context save/restore and RD-light handoff.
-
 anti_usecases:
   - Pure robot body conversion without running MuJoCo.
   - Browser-only visualization.
   - Environment field modeling such as wind or radio strength.
-
+  - Treating command adapters as a complete motion planner or robot safety system.
 demo_candidates:
   - name: TurtleBot3 gamepad and LiDAR
     description: Run tb3_sim, Python gamepad controller, LiDAR visualizer, then start with hako-cmd.
@@ -227,7 +272,7 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-mujoco-robots
         path: README.md
-        revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
+        revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
   - name: Forklift unit sample
     description: Run forklift_unit_sim with Python forklift_simple_auto controller and hako-cmd start.
     required_components:
@@ -236,8 +281,7 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-mujoco-robots
         path: README.md
-        revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
-
+        revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
 runtime_checks:
   - id: build-readiness
     kind: doctor
@@ -254,17 +298,16 @@ runtime_checks:
     notes:
       - Cross-platform component-owned entry point. On macOS/Linux it delegates to doctor.bash; on Windows it delegates to build-win.ps1 -DoctorOnly.
       - Exit status 0 means the environment passed the declared preflight; this is not behavioral verification of a complete Recipe.
-
 operations:
   build:
     commands:
       - python tools/hako.py doctor
       - python tools/hako.py build
     notes:
-      - tools/hako.py is the preferred OS-independent entry point; native build scripts remain available for low-level debugging.
+      - tools/hako.py validates hakoniwa-build.yaml and is the preferred OS-independent entry point; native build scripts remain available for low-level debugging.
   test:
     commands: []
-    notes: Sensor tests exist under tests/sensors; exact commands should be cataloged later.
+    notes: Sensor and tools tests exist in the repository; exact recipe-level invocation remains outside this catalog entry.
   run:
     commands:
       - ./src/cmake-build/main_for_sample/tb3/tb3_sim
@@ -272,45 +315,39 @@ operations:
       - python python/lidar_visualizer.py
       - hako-cmd start
     notes:
-      - TurtleBot3 quick start uses four terminals.
-
+      - TurtleBot3 quick start uses multiple processes/terminals.
 known_gaps:
   - Need to map individual examples/sensors and examples/actuators into recipe fragments.
-
+  - Event-driven JointTrajectory reception is an adapter capability; end-to-end arm command execution remains a Recipe-level integration concern.
 source_refs:
   - repository: hakoniwalab/hakoniwa-mujoco-robots
     path: README.md
-    revision: aecfd8010f832b07c1bc3852c795a2fd7944f406
-    description: Main overview, architecture, quick starts, requirements, and cross-platform build entry point.
+    revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+    description: Main overview, architecture, samples, requirements, and integration boundaries.
   - repository: hakoniwalab/hakoniwa-mujoco-robots
-    path: docs/README.md
-    revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
-    description: Documentation index.
+    path: include/hakoniwa/pdu/adapter/geometry_msgs/twist.hpp
+    revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+    description: Event-driven Twist receive adapter and take() contract.
   - repository: hakoniwalab/hakoniwa-mujoco-robots
-    path: docs/guide/sensor-actuator-user.md
-    revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
-    description: Sensor and actuator workflow.
+    path: include/hakoniwa/pdu/adapter/trajectory_msgs/joint_trajectory.hpp
+    revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+    description: Event-driven JointTrajectory receive adapter and JointTrajectoryTarget conversion.
   - repository: hakoniwalab/hakoniwa-mujoco-robots
-    path: docs/guide/forklift-context-rd.md
-    revision: a38f7b00ce49257f911efcd4745f0184b7d8df38
-    description: Forklift context and RD-light handoff notes.
+    path: tests/sensors/imu/unit/imu_body_frame_velocity_test.cpp
+    revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+    description: IMU body-frame velocity regression coverage.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: hakoniwa-build.yaml
+    revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+    description: Build manifest version and build-directory policy.
   - repository: hakoniwalab/hakoniwa-mujoco-robots
     path: tools/hako.py
-    revision: aecfd8010f832b07c1bc3852c795a2fd7944f406
-    description: Preferred OS-independent doctor/build entry point.
+    revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+    description: Manifest-aware cross-platform doctor/build entry point.
   - repository: hakoniwalab/hakoniwa-mujoco-robots
-    path: doctor.bash
-    revision: aecfd8010f832b07c1bc3852c795a2fd7944f406
-    description: macOS/Linux component-owned preflight delegated through tools/hako.py.
-  - repository: hakoniwalab/hakoniwa-mujoco-robots
-    path: build-win.ps1
-    revision: aecfd8010f832b07c1bc3852c795a2fd7944f406
-    description: Windows native build/preflight implementation delegated through tools/hako.py.
-  - repository: hakoniwalab/hakoniwa-mujoco-robots
-    path: .github/workflows/build.yml
-    revision: aecfd8010f832b07c1bc3852c795a2fd7944f406
-    description: Cross-platform CI using the common tools/hako.py build entry point.
-
+    path: tools/test_hako.py
+    revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+    description: Unit tests for build-manifest parsing and command resolution.
 tags:
   - hakoniwa
   - mujoco
