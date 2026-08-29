@@ -76,6 +76,7 @@ controlled_fields:
       - command
       - config
       - file
+      - log
       - protocol
       - pdu
   interfaces.protocols.role:
