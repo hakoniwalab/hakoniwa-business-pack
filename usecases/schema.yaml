@@ -67,6 +67,8 @@ reference_rules:
         - role
       notes:
         - The repository must be represented by a Catalog component.
+        - The path must be repository-relative.
+        - The revision must be a full commit SHA.
         - Use a pinned source revision so a Usecase does not silently follow an unreviewed component Recipe HEAD.
         - Prefer an external reference over copying a component-owned Recipe into Business Pack solely for discoverability.
         - Mandatory CI validates reference shape and Catalog ownership but does not fetch private repositories; source existence is reviewed when the Usecase or Catalog is maintained.
