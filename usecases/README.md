@@ -14,7 +14,8 @@ User Goal
 The layers have different responsibilities:
 
 - `catalog/` records component facts and evidence.
-- `recipes/` records concrete system compositions and runtime validation.
+- `recipes/` records concrete Business Pack system compositions and runtime validation.
+- Component repositories may own executable Recipes that are specific to that component or product.
 - `usecases/` records reusable problem contexts, intended outcomes, and the evidence
   boundary for communicating them.
 
@@ -91,6 +92,18 @@ Keep feasibility and validation separate:
 A verified reference demo does not verify every customer environment, robot model,
 network topology, or operational outcome. Record those boundaries in `limitations`.
 
+## Recipe references
+
+`realized_by` may point to either a Business Pack Recipe or a component-owned Recipe.
+
+For a Business Pack Recipe, use its `recipe_id`.
+
+For a component-owned Recipe, record `repository`, `path`, and a full pinned commit
+`revision`. Do not copy the Recipe into Business Pack solely to make it discoverable.
+The pinned revision prevents a Usecase from silently claiming an unreviewed newer
+component Recipe. Private and commercial access requirements remain those of the
+owning component.
+
 ## Audience vocabulary
 
 `audience.primary` uses the controlled vocabulary in `schema.yaml`. Reuse an existing
@@ -123,7 +136,7 @@ available.
 1. Start from an audience, situation, problem, and desired outcome.
 2. Search existing Usecases before creating a new canonical entry.
 3. Preserve reusable unmet demand even when no current Recipe can realize it.
-4. Reference existing Recipes in `realized_by` when available.
+4. Reference existing Business Pack or component-owned Recipes in `realized_by` when available.
 5. Reference Catalog components in `supported_by` only for capabilities actually used.
 6. Do not describe remote access, production readiness, cost reduction, safety, or
    superiority unless explicit evidence supports that statement.
@@ -141,7 +154,9 @@ ruby usecases/tools/validate_usecases.rb
 ```
 
 The validator checks required fields, file and index IDs, controlled audience values,
-status values, Catalog component references, Recipe references, and duplicate IDs.
+status values, Catalog component references, local Recipe IDs, pinned component-owned
+Recipe references, and duplicate IDs. It validates the shape of external references;
+it does not fetch private repositories during mandatory CI.
 
 ## Layout
 
