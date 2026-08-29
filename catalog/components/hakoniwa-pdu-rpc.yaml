@@ -10,8 +10,8 @@ distribution:
   notes:
     - Public OSS Hakoniwa component.
 verification:
-  verified_at: 2026-08-07
-  source_revision: 3085b01b7458538f7228ed875aa12944b0583213
+  verified_at: 2026-08-30
+  source_revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
   source_ref: main
 summary: Hakoniwa-native request-response layer built on Endpoint topology and generated PDU service definitions, with C++ APIs, Python CFFI typed clients, asynchronous futures, and native-backed Python TCP mux servers.
 category:
@@ -29,6 +29,8 @@ status:
     - Action supports point-to-point Client/Server and TCP Mux Server paths.
     - Native C++, C API, and Python CFFI Action surfaces are implemented and contract-tested.
     - Action Goal Response, Feedback, Cancel, Result, and Cancel/Result race behavior are defined by implemented design contracts.
+    - Typed Python Service client/server and typed Action client/server auto-wiring are implemented over Registry-generated packet types.
+    - Service and Action manifest generators produce resolved native RPC and Endpoint TCP configuration.
     - Scope remains narrower than a general-purpose RPC framework.
 capabilities:
   - name: PDU-native request-response
@@ -36,7 +38,7 @@ capabilities:
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: README.md
-        revision: 3085b01b7458538f7228ed875aa12944b0583213
+        revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: docs/test-contract.md
         revision: 3085b01b7458538f7228ed875aa12944b0583213
@@ -46,7 +48,7 @@ capabilities:
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: docs/design/action/README.md
-        revision: 3085b01b7458538f7228ed875aa12944b0583213
+        revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: include/hakoniwa/pdu/action/action_types.hpp
         revision: 3085b01b7458538f7228ed875aa12944b0583213
@@ -69,10 +71,10 @@ capabilities:
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: include/hakoniwa/pdu/action/action_services_client.hpp
-        revision: 3085b01b7458538f7228ed875aa12944b0583213
+        revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: include/hakoniwa/pdu/action/action_services_server.hpp
-        revision: 3085b01b7458538f7228ed875aa12944b0583213
+        revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: test/action_tcp_e2e_contract_test.cpp
         revision: 3085b01b7458538f7228ed875aa12944b0583213
@@ -105,37 +107,56 @@ capabilities:
         revision: 3085b01b7458538f7228ed875aa12944b0583213
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: python/test_cffi_action.py
-        revision: 3085b01b7458538f7228ed875aa12944b0583213
+        revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: python/test_cffi_action_mux_server.py
-        revision: 3085b01b7458538f7228ed875aa12944b0583213
+        revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
 
   - name: Config-driven Service and Action topology
-    description: Defines Service and Action endpoints and channels in JSON, with a user-facing Action manifest that can generate resolved Action and Endpoint runtime configuration.
+    description: Defines Service and Action endpoints and channels in user-facing manifests and generates resolved native RPC and Endpoint TCP runtime configuration for both Service and Action paths.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
-        path: config/schema/service-schema.json
-        revision: 3085b01b7458538f7228ed875aa12944b0583213
+        path: python/hakoniwa_pdu_rpc/service_config_generator.py
+        revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
       - repository: hakoniwalab/hakoniwa-pdu-rpc
-        path: config/schema/action-schema.json
-        revision: 3085b01b7458538f7228ed875aa12944b0583213
+        path: python/hakoniwa_pdu_rpc/action_config_generator.py
+        revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
       - repository: hakoniwalab/hakoniwa-pdu-rpc
-        path: tools/generate_action_config.py
-        revision: 3085b01b7458538f7228ed875aa12944b0583213
+        path: tools/test_generate_service_config.py
+        revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
 
-  - name: Registry-generated typed service auto-wiring
-    description: Resolves generated request and response packet classes and converters by service naming convention, preferring the installed hakoniwa-pdu package layout and falling back to the Registry source-tree layout.
+  - name: Registry-generated typed Service auto-wiring
+    description: Resolves generated request and response packet classes and converters by Service naming convention for typed Python clients and servers; the server path exposes body objects while preserving RPC header, request-ID, cancellation, and error ownership inside PDU-RPC.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: python/hakoniwa_pdu_rpc/auto_wire.py
-        revision: 3085b01b7458538f7228ed875aa12944b0583213
+        revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: docs/design/service/README.md
+        revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: python/test_cffi_typed_server_auto_wire.py
+        revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
+
+  - name: Registry-generated typed Action auto-wiring
+    description: Resolves generated Action request, response, and feedback packet types and converters by package/type convention and provides typed Python Action Client and Server adapters over the native Action lifecycle.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: python/hakoniwa_pdu_rpc/action_auto_wire.py
+        revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: python/test_cffi_typed_action_api.py
+        revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: python/test_action_auto_wire.py
+        revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
 
   - name: ROS-independent asynchronous Python Service API
     description: RpcClient.call_async returns RpcFuture and drives timeout, cancellation, and response/cancel race handling in a background worker without depending on rclpy or asyncio.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: python/hakoniwa_pdu_rpc/client.py
-        revision: 3085b01b7458538f7228ed875aa12944b0583213
+        revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: python/hakoniwa_pdu_rpc/future.py
         revision: 3085b01b7458538f7228ed875aa12944b0583213
@@ -159,10 +180,10 @@ capabilities:
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: .github/workflows/action-contract-tests.yml
-        revision: 3085b01b7458538f7228ed875aa12944b0583213
+        revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: tools/hako.py
-        revision: 3085b01b7458538f7228ed875aa12944b0583213
+        revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
 
 limitations:
   - Not a general-purpose RPC framework like gRPC.
@@ -171,6 +192,7 @@ limitations:
   - Action does not provide a built-in Future or callback scheduler; adapters own executor integration.
   - Action Goal IDs are supplied by the caller; the runtime rejects invalid or already-active identities rather than generating IDs.
   - One Python RpcClient instance permits one in-flight Service request. Independent concurrent Service requests require separate client instances.
+  - Typed Service and Action adapters automate generated PDU conversion and body mapping, but do not replace the native RPC/Action lifecycle, transport topology, or application execution policy.
   - Requires Endpoint and Registry alignment; mismatched endpoint IDs, node names, PDU sizes, generated package layouts, or channels fail at config, build, or runtime boundaries.
   - A ROS 2 Service or Action Bridge is owned by hakoniwa-pdu-ros, not this repository.
 
@@ -221,8 +243,12 @@ interfaces:
       description: User-facing Action manifest schema.
     - path: config/sample/action.json
       description: Sample Fibonacci Action manifest.
+    - path: tools/generate_service_config.py
+      description: CLI wrapper that generates resolved Service and Endpoint TCP configuration files.
     - path: tools/generate_action_config.py
-      description: Generates resolved Action and Endpoint TCP configuration files.
+      description: CLI wrapper that generates resolved Action and Endpoint TCP configuration files.
+    - path: docs/design/service/README.md
+      description: Canonical Service ownership, Typed Server, error, and lifecycle contracts.
     - path: docs/design/action/README.md
       description: Index of implemented Action protocol and state contracts.
 
@@ -243,10 +269,10 @@ dependencies:
   optional:
     - name: Python 3.12 or later
       type: runtime
-      notes: Required for Python CFFI APIs, tools/hako.py, and Action config generation.
+      notes: Required for Python CFFI APIs, tools/hako.py, typed auto-wiring, and Service/Action config generation.
     - name: hakoniwa-pdu
       type: package
-      notes: Installed generated PDU package layout preferred by typed Service auto-discovery.
+      notes: Installed generated PDU package layout preferred by typed Service and Action auto-discovery.
     - name: GoogleTest
       type: library
       notes: Used for native contract tests.
@@ -272,7 +298,7 @@ connects_to:
   - component_id: hakoniwa-pdu-python
     direction: related
     interface: installed hakoniwa_pdu.pdu_msgs package layout
-    notes: Typed Service auto-wiring prefers the installed generated PDU package layout used by Python applications.
+    notes: Typed Service and Action auto-wiring prefer the installed generated PDU package layout used by Python applications.
   - component_id: hakoniwa-pdu-ros
     direction: used_by
     interface: Service RPC and Action lifecycle boundary
@@ -293,6 +319,12 @@ data_contracts:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: docs/test-contract.md
         revision: 3085b01b7458538f7228ed875aa12944b0583213
+  - name: Typed Service ownership
+    description: Typed Python Service adapters expose generated request/response bodies while PDU-RPC retains packet headers, request IDs, cancellation lifecycle, response status, and converter ownership; non-OK responses surface as typed service errors.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: docs/design/service/README.md
+        revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
   - name: Action Goal identity
     description: A caller-supplied non-zero 128-bit Goal ID identifies one Action lifecycle and correlates Goal, Cancel, Feedback, and Result operations.
     source:
@@ -304,7 +336,7 @@ data_contracts:
     source:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: docs/design/action/04-state-model.md
-        revision: 3085b01b7458538f7228ed875aa12944b0583213
+        revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
   - name: Action Cancel and Result race
     description: Cancel and terminal Result decisions follow an explicit first-committed-decision contract instead of inferring terminal state from transport failure.
     source:
@@ -316,7 +348,7 @@ data_contracts:
     source:
       - repository: hakoniwalab/hakoniwa-pdu-rpc
         path: docs/design/action/12-endpoint-transaction-state.md
-        revision: 3085b01b7458538f7228ed875aa12944b0583213
+        revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
 
 recipe_roles:
   - role: control_plane
@@ -328,6 +360,8 @@ recipe_roles:
 
 typical_usecases:
   - Hakoniwa-native C++ control-plane Service RPC.
+  - Typed Python Service client/server integration using Registry-generated request and response bodies.
+  - Typed Python Action client/server integration using Registry-generated Goal, Result, and Feedback bodies.
   - Long-running Goal execution with progressive Feedback and terminal Result.
   - Client-requested or Runtime-requested Action cancellation.
   - Native or Python TCP Mux Action servers accepting multiple independent clients.
@@ -340,6 +374,7 @@ anti_usecases:
   - Generic streaming RPC workloads unrelated to Action Goal lifecycles.
   - Dynamic service discovery, authentication, tracing, or full service mesh requirements.
   - Treating Action transport failure as an implicit terminal Goal status.
+  - Expecting typed auto-wiring to discover arbitrary runtime services or replace the Action application scheduler.
   - Expecting the Action runtime to generate Goal IDs or provide an application scheduler.
 
 demo_candidates:
@@ -396,9 +431,10 @@ operations:
       - python tools/hako.py test
       - python tools/hako.py package-test
     notes:
-      - Reviewed Service and Action contract targets are included in hako.py test.
+      - Reviewed Service and Action contract targets, typed Python API tests, and config generator tests are included in hako.py test/package workflows.
   run:
     commands:
+      - python tools/generate_service_config.py --help
       - python tools/generate_action_config.py --config config/sample/action.json --output .hako/action
       - build/examples/hakoniwa_pdu_action_fibonacci_server
       - build/examples/hakoniwa_pdu_action_fibonacci_client 10
@@ -433,12 +469,32 @@ known_gaps:
 source_refs:
   - repository: hakoniwalab/hakoniwa-pdu-rpc
     path: README.md
-    revision: 3085b01b7458538f7228ed875aa12944b0583213
-    description: Main overview of Service RPC, Action, C/C++/Python surfaces, topology, and supported platforms.
+    revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
+    description: Main overview of Service RPC, typed Service client/server, Action, C/C++/Python surfaces, topology, and supported platforms.
+  - repository: hakoniwalab/hakoniwa-pdu-rpc
+    path: docs/design/service/README.md
+    revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
+    description: Service ownership, allocation, Typed Server, error, and lifecycle contracts.
   - repository: hakoniwalab/hakoniwa-pdu-rpc
     path: docs/design/action/README.md
-    revision: 3085b01b7458538f7228ed875aa12944b0583213
+    revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
     description: Implemented Action protocol, state, configuration, C API, race, Endpoint transaction, and Mux contracts.
+  - repository: hakoniwalab/hakoniwa-pdu-rpc
+    path: python/hakoniwa_pdu_rpc/auto_wire.py
+    revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
+    description: Typed Service client/server packet and converter auto-wiring.
+  - repository: hakoniwalab/hakoniwa-pdu-rpc
+    path: python/hakoniwa_pdu_rpc/action_auto_wire.py
+    revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
+    description: Typed Action client/server packet and converter auto-wiring.
+  - repository: hakoniwalab/hakoniwa-pdu-rpc
+    path: python/hakoniwa_pdu_rpc/service_config_generator.py
+    revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
+    description: User-facing Service manifest validation and resolved RPC/Endpoint configuration generation.
+  - repository: hakoniwalab/hakoniwa-pdu-rpc
+    path: python/hakoniwa_pdu_rpc/action_config_generator.py
+    revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
+    description: User-facing Action manifest validation and resolved Action/Endpoint configuration generation.
   - repository: hakoniwalab/hakoniwa-pdu-rpc
     path: include/hakoniwa/pdu/action/c_action.h
     revision: 3085b01b7458538f7228ed875aa12944b0583213
@@ -457,8 +513,8 @@ source_refs:
     description: Runnable Fibonacci Action server example.
   - repository: hakoniwalab/hakoniwa-pdu-rpc
     path: tools/hako.py
-    revision: 3085b01b7458538f7228ed875aa12944b0583213
-    description: Cross-platform build and reviewed contract-test entry point.
+    revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
+    description: Cross-platform build, reviewed contract-test, and config-generator entry point.
 
 tags:
   - hakoniwa
