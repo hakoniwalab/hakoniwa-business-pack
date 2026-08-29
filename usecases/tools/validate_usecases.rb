@@ -30,8 +30,12 @@ allowed_feasibility = schema.fetch("status").fetch("feasibility").fetch("allowed
 allowed_validation = schema.fetch("status").fetch("validation").fetch("allowed").to_set
 allowed_confidence = schema.fetch("status").fetch("confidence").fetch("allowed").to_set
 
-catalog_ids = Dir[File.join(CATALOG_DIR, "*.yaml")].map do |path|
-  load_yaml_file(path).fetch("id")
+catalog_entries = Dir[File.join(CATALOG_DIR, "*.yaml")].map { |path| load_yaml_file(path) }
+catalog_ids = catalog_entries.map { |entry| entry.fetch("id") }.to_set
+catalog_repositories = catalog_entries.filter_map do |entry|
+  owner = entry.dig("repository", "owner")
+  name = entry.dig("repository", "name")
+  "#{owner}/#{name}" if owner && name
 end.to_set
 
 recipe_ids = Dir[File.join(RECIPES_DIR, "*.yaml")].map do |path|
@@ -89,6 +93,7 @@ usecase_paths.each do |path|
     end
 
     if [repository, external_path, revision].all? { |value| value && !value.empty? }
+      errors << "#{label}: realized_by external repository #{repository} is not represented by a Catalog component" unless catalog_repositories.include?(repository)
       errors << "#{label}: realized_by external revision must be a full 40-character commit SHA" unless revision.match?(/\A[0-9a-f]{40}\z/i)
       next
     end
