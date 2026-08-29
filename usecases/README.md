@@ -100,11 +100,11 @@ network topology, or operational outcome. Record those boundaries in `limitation
 For a Business Pack Recipe, use its `recipe_id`.
 
 For a component-owned Recipe, record `repository`, a repository-relative `path`, and a
-full pinned commit `revision`. The owning repository must already be represented by a
-Catalog component. Do not copy the Recipe into Business Pack solely to make it
-discoverable. The pinned revision prevents a Usecase from silently claiming an
-unreviewed newer component Recipe. Private and commercial access requirements remain
-those of the owning component.
+full pinned commit `revision`. An optional `role` may describe why that Recipe realizes
+the Usecase. The owning repository must already be represented by a Catalog component.
+Do not copy the Recipe into Business Pack solely to make it discoverable. The pinned
+revision prevents a Usecase from silently claiming an unreviewed newer component Recipe.
+Private and commercial access requirements remain those of the owning component.
 
 Mandatory CI validates the external reference shape and that its repository is known to
 the Catalog. It intentionally does not fetch private repositories. Maintainers verify the
