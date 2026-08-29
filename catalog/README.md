@@ -26,7 +26,9 @@ catalog/
 ├── index.yaml
 ├── component-template.yaml
 ├── tools/
-│   └── generate_index.rb
+│   ├── check_freshness.rb
+│   ├── generate_index.rb
+│   ├── test_check_freshness.rb
 │   └── validate_catalog.rb
 └── components/
     └── <component-id>.yaml
@@ -48,6 +50,29 @@ Validate catalog entries before regenerating the index:
 
 ```bash
 ruby catalog/tools/validate_catalog.rb
+```
+
+Check whether recorded `verification.source_revision` values still match their
+source repositories:
+
+```bash
+ruby catalog/tools/check_freshness.rb
+```
+
+The freshness checker queries GitHub live and reports `current`, `behind`,
+`catalog-ahead`, `diverged`, or `unreachable`. Set `GITHUB_TOKEN` when private
+repositories must be checked. Use `--json` for machine-readable output and
+`--strict` when any non-current result should produce a non-zero exit status.
+Component IDs may be passed as positional arguments to limit the check.
+
+This live network check is intentionally separate from mandatory catalog CI.
+Repository visibility, credentials, GitHub availability, and API rate limits
+must not make schema validation or offline Business Pack tests flaky.
+
+Run the freshness classification unit tests without network access:
+
+```bash
+ruby catalog/tools/test_check_freshness.rb
 ```
 
 `schema.yaml` defines the controlled vocabulary used by catalog entries. When a
