@@ -1,6 +1,6 @@
 id: plateau-city-world-six-regions
 title: PLATEAU Six-region MJCF and GLB City World Smoke
-recipe_version: 0.1
+recipe_version: 0.2
 
 goal:
   user_request: 同一の軽量な変換条件で国内6地域のPLATEAUデータからMJCFとGLBを生成し、都市ごとのデータ差とフォールバックを確認したい
@@ -8,16 +8,18 @@ goal:
     Apply one hakoniwa-envsim City World conversion contract to six fixed
     200-meter selections. Generate MJCF and GLB assets, preserve source and
     artifact receipts, and summarize effective LOD, fallback, unavailable
-    features, and known limitations. This Recipe does not load MuJoCo or run a
-    physics simulation.
+    features, building-physics decisions, and known limitations. This Recipe
+    does not run a full physics simulation.
 
 feasibility:
   status: feasible
   confidence: high
   rationale:
-    - hakoniwa-envsim already generates aligned MJCF and GLB City World artifacts from bldg, tran, dem, and optional frn data.
-    - Every region changes only the configured center; extent and conversion policy are shared.
-    - Missing CityFurniture or usable LOD3 bridge surfaces are explicit non-blocking Dataset Validator results rather than inferred geometry.
+    - hakoniwa-envsim generates aligned MJCF and GLB City World artifacts from bldg, tran, dem, optional frn, and optional brid data.
+    - Current Envsim supports selectable P0-P3 building physics levels, semantic LOD2 colliders, and configurable collider reduction independently from visual LOD.
+    - Current Envsim also exposes bounded City World and DEM worker controls for larger selections; this Recipe keeps conservative defaults explicit.
+    - Every region changes only the configured center or explicitly declared optional feature types; extent and conversion policy are shared.
+    - Missing CityFurniture or usable bridge surfaces are explicit non-blocking Dataset Validator results rather than inferred geometry.
     - Region outputs and receipts are isolated, so a partial matrix can be resumed safely.
 
 validation:
@@ -31,7 +33,12 @@ validation:
     fallback without inferred markings. The Hiroshima profile uses an actual
     PLATEAU LOD3 bridge dataset. Its visual GLB and independent bridge-surface
     MJCF were generated, and the composed world loaded with MuJoCo 3.9.0.
-    Full physics simulation remains outside this validation scope.
+    Those recorded six-region results predate the current Envsim revision
+    b4bb442. Current P1-P3 semantic collider application, collider-reduction,
+    parallel-worker, and DEM worker capabilities are represented as the current
+    generation contract but are not claimed as re-verified across all six
+    regions by this Recipe yet. Full physics simulation remains outside this
+    validation scope.
   steps:
     - id: numazu_reference
       status: verified
@@ -60,6 +67,7 @@ validation:
         - The original six profiles produced city-world.xml, city-world.glb, provenance receipts, Dataset Validator output, and result.json.
         - Five unchanged regional centers retain that evidence; the Hiroshima center was subsequently moved to an actual LOD3 bridge dataset.
         - Full physics execution was not evaluated for the original six-region pass.
+        - This evidence predates the current Envsim b4bb442 generation contract and must not be used to claim six-region validation of newer collider-reduction or worker controls.
     - id: hiroshima_lod3_bridge_assets
       status: verified
       evidence:
@@ -78,9 +86,11 @@ constraints:
   - shared-200-meter-selection
   - flat-glb-material-mode
   - mjcf-and-glb-generation-only
-  - physics-simulation-not-evaluated
+  - full-physics-simulation-not-evaluated
+  - building-physics-level-is-independent-from-visual-lod
+  - collider-reduction-safe-is-the-recipe-default
   - bridge-physics-uses-lod3-outer-floor-surfaces-only
-  - bridge-collision-prisms-not-yet-optimized
+  - bridge-collision-prisms-not-yet-optimized-in-recorded-evidence
   - missing-lod3-road-markings-are-omitted-not-inferred
   - generated-data-remains-under-work
   - source-url-size-and-sha256-provenance-required
@@ -114,7 +124,7 @@ execution_environment:
 
 foundation_contract:
   mode: not_required
-  reason: This Recipe generates files with component-owned Python tools and does not start Hakoniwa Core or MuJoCo.
+  reason: This Recipe generates files with component-owned Python tools and does not start Hakoniwa Core or a persistent MuJoCo simulation.
 
 recipe_local_requirements_schema_version: 1
 recipe_local_requirements:
@@ -140,6 +150,10 @@ recipe_local_requirements:
         kind: file
       - path: src/city_pipeline/building_physics_classifier.py
         kind: file
+      - path: src/city_pipeline/building_lod2_colliders.py
+        kind: file
+      - path: src/city_pipeline/dem2hfield.py
+        kind: file
 
 components:
   - id: hakoniwa-envsim
@@ -150,10 +164,10 @@ connections: []
 
 data_flow:
   - Six fixed region profiles -> six generated hakoniwa-envsim manifests
-  - PLATEAU catalog and source files -> bldg, tran, dem, optional frn, and optional LOD3 brid component conversion
+  - PLATEAU catalog and source files -> bldg, tran, dem, optional frn, and optional brid component conversion
+  - Building LOD and semantic surfaces -> P0-P3 classification -> capped semantic collider application -> reduction strategy -> building Physics receipt
   - Component outputs -> aligned terrain, building, optional bridge physics, and city-world.xml/city-world.glb per region
   - Component receipts -> per-region Dataset Validator report
-  - Building LOD1/LOD2 semantics -> classification-only P0/P1/P2/P3 Physics strategy diagnosis
   - Six per-region results -> JSON, CSV, and Markdown Capability Matrix
 
 time_model:
@@ -167,7 +181,8 @@ artifact_sets:
     artifacts:
       - work/recipes/plateau-city-world-six-regions/cities/*/artifacts/world/city-world.xml
     notes:
-      - MJCF generation is evaluated; MuJoCo loading, collision behavior, and physics simulation are explicitly outside this Recipe.
+      - MJCF generation is evaluated; full MuJoCo physics behavior is explicitly outside this Recipe.
+      - Recorded six-region evidence predates the current b4bb442 collider-generation contract.
   visualization_artifacts:
     status: partially_verified
     artifacts:
@@ -199,10 +214,11 @@ artifacts:
     path: work/recipes/plateau-city-world-six-regions/summary/capability-matrix.md
 
 missing_pieces:
-  - Re-run the moved Hiroshima LOD3 bridge profile and then the complete six-region matrix.
-  - Convex bridge collision pieces are a correctness baseline; safe piece merging is future optimization work.
-  - Full physics simulation and drone flight belong to a separate downstream Recipe.
-  - P0-P3 building Physics classification is diagnostic; class-specific colliders are introduced and validated separately.
+  - Re-run the complete six-region matrix against Envsim b4bb442 before promoting current semantic collider and collider-reduction behavior to six-region verified evidence.
+  - Re-run the moved Hiroshima LOD3 bridge profile against the current Envsim revision.
+  - Compare safe, coplanar-union, convex-decompose, and tolerant-planar reduction modes on representative regions before making performance or fidelity claims.
+  - Measure worker-count effects rather than assuming that parallel_workers or dem_parallel_workers improve elapsed time.
+  - Full physics simulation and drone or construction-machine motion belong to separate downstream Recipes.
 
 plateau_city_world_matrix:
   schema_version: 1
@@ -228,12 +244,15 @@ plateau_city_world_matrix:
     collision: all
     floor: false
     building_physics_level: 3
+    building_collider_reduction: safe
   glb:
     enabled: true
     lod_policy: highest_available
     texture_mode: flat
   city_world:
     enabled: true
+    parallel_workers: 4
+    dem_parallel_workers: 2
     terrain_spacing_m: 2
     marking_vertical_offset_m: 0.055
     bridge_collision_thickness_m: 0.02
@@ -276,7 +295,7 @@ plateau_city_world_matrix:
         brid: true
       focus: lod3-bridge-visual-and-physics-reference
       known_limitations:
-        - Bridge collision uses unoptimized independent triangular-prism meshes.
+        - Recorded bridge collision evidence uses unoptimized independent triangular-prism meshes and predates the current Envsim revision.
         - Bridge inspection geometry and inferred rail collision are outside scope.
     - id: okinawa-naha
       name: 沖縄・那覇
@@ -297,13 +316,13 @@ demo:
       expected: List all six fixed regions, their centers, scope, status, and known limitations without network access.
     - id: configure_matrix
       command: python tools/recipe/plateau_city_world_six_regions.py configure
-      expected: Create the managed Recipe Python environment and one Envsim manifest per region.
+      expected: Create the managed Recipe Python environment and one Envsim manifest per region with explicit Physics and worker defaults.
     - id: inspect_dependencies
       command: python tools/recipe/plateau_city_world_six_regions.py doctor
       expected: Validate every generated manifest and all component-owned conversion prerequisites.
     - id: build_one
       command: python tools/recipe/plateau_city_world_six_regions.py build --region shizuoka-numazu
-      expected: Generate and validate one region's MJCF and GLB without executing physics.
+      expected: Generate and validate one region's MJCF and GLB without executing a full physics simulation.
     - id: build_all
       command: python tools/recipe/plateau_city_world_six_regions.py build-all
       expected: Generate every pending region sequentially, reuse matching completed results, and write the Capability Matrix.
@@ -319,17 +338,22 @@ demo:
       - Downloads and generated assets remain isolated under each region directory.
     verification_checks:
       - Confirm each completed region has city-world.xml, city-world.glb, receipts, Dataset Validator output, and result.json.
-      - Confirm the summary explicitly states that physics simulation was not evaluated.
-      - Confirm Hiroshima reports both bridge visualization and bridge collision capabilities.
+      - Confirm the summary explicitly states that full physics simulation was not evaluated.
+      - Confirm Hiroshima reports both bridge visualization and bridge collision capabilities when the source dataset provides usable bridge surfaces.
+      - Confirm the build receipt records the selected building physics level and collider-reduction mode.
     cautions:
       - A 200-meter selection limits output geometry, but PLATEAU source downloads use dataset mesh granularity and can be substantially larger.
       - latest data can change; resolved years, URLs, sizes, and SHA-256 values are preserved in each download manifest.
+      - Worker-count settings are controls, not performance guarantees.
 
 expected_result: >
   Six fixed 200-meter PLATEAU selections produce isolated MJCF and GLB City
   World assets wherever the declared source contract is available. The matrix
-  reports effective LOD, fallback, missing road markings, artifact sizes, and
-  known limitations without claiming MuJoCo loading or physics behavior.
+  reports effective LOD, fallback, missing road markings, building-physics
+  decisions, artifact sizes, and known limitations without claiming full
+  physics behavior. Current Envsim supports semantic P0-P3 collision generation
+  and collider reduction, but those newer behaviors remain pending six-region
+  re-verification in this Recipe.
 
 source_catalogs:
   - component_id: hakoniwa-envsim
@@ -337,5 +361,9 @@ source_catalogs:
 source_artifacts:
   - repository: hakoniwalab/hakoniwa-envsim
     path: tools/hako.py
-    revision: d7a257606ca88b65a5109d88bd6045a5c9a9b8da
-    description: Component-owned PLATEAU acquisition, City World conversion, and Dataset Validator lifecycle.
+    revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+    description: Current component-owned PLATEAU acquisition, City World conversion, building Physics, reduction, worker-control, and Dataset Validator lifecycle.
+  - repository: hakoniwalab/hakoniwa-envsim
+    path: docs/hakoniwa-build-reference.md
+    revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+    description: Current manifest contract for building physics levels, collider reduction, parallel workers, DEM workers, bridges, and terrain generation.
