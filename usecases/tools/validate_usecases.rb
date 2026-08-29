@@ -78,11 +78,22 @@ usecase_paths.each do |path|
 
   Array(data["realized_by"]).each do |reference|
     recipe_id = reference["recipe_id"]
-    if recipe_id.nil? || recipe_id.empty?
-      errors << "#{label}: realized_by entry missing recipe_id"
-    elsif !recipe_ids.include?(recipe_id)
-      errors << "#{label}: realized_by references unknown recipe #{recipe_id}"
+    repository = reference["repository"]
+    external_path = reference["path"]
+    revision = reference["revision"]
+
+    if recipe_id && !recipe_id.empty?
+      errors << "#{label}: realized_by local reference must not mix recipe_id with repository/path/revision" if [repository, external_path, revision].any? { |value| value && !value.empty? }
+      errors << "#{label}: realized_by references unknown recipe #{recipe_id}" unless recipe_ids.include?(recipe_id)
+      next
     end
+
+    if [repository, external_path, revision].all? { |value| value && !value.empty? }
+      errors << "#{label}: realized_by external revision must be a full 40-character commit SHA" unless revision.match?(/\A[0-9a-f]{40}\z/i)
+      next
+    end
+
+    errors << "#{label}: realized_by entry must contain recipe_id or repository/path/revision"
   end
 
   supported_component_ids = Array(data["supported_by"]).map do |reference|
@@ -95,7 +106,7 @@ usecase_paths.each do |path|
     component_id
   end.compact
 
-  counts = supported_component_ids.each_with_object(Hash.new(0)) { |id, h| h[id] += 1 }
+  counts = supported_component_ids.each_with_object(Hash.new(0)) { |component_id, h| h[component_id] += 1 }
   duplicates = counts.select { |_component_id, count| count > 1 }.keys
   warnings << "#{label}: duplicate supported_by components: #{duplicates.join(', ')}" unless duplicates.empty?
 end
