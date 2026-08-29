@@ -53,9 +53,22 @@ status:
 
 reference_rules:
   realized_by:
-    target: recipes/examples/*.yaml
+    local:
+      target: recipes/examples/*.yaml
+      required_fields:
+        - recipe_id
+    external:
+      target: component-owned recipe
+      required_fields:
+        - repository
+        - path
+        - revision
+      notes:
+        - Use a pinned source revision so a Usecase does not silently follow an unreviewed component Recipe HEAD.
+        - Prefer an external reference over copying a component-owned Recipe into Business Pack solely for discoverability.
+        - Repository access and commercial/private requirements remain governed by the owning component.
     notes:
-      - Use an empty list when no Recipe exists.
+      - Use an empty list only when no local or component-owned Recipe exists.
   supported_by:
     target: catalog/components/*.yaml
     notes:
