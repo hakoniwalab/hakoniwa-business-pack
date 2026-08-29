@@ -63,6 +63,8 @@ reference_rules:
         - repository
         - path
         - revision
+      optional_fields:
+        - role
       notes:
         - The repository must be represented by a Catalog component.
         - Use a pinned source revision so a Usecase does not silently follow an unreviewed component Recipe HEAD.
