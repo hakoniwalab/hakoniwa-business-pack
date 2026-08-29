@@ -282,4 +282,62 @@ runtime_checks:
     output: text
   - id: map-viewer-static-contracts
     kind: test
-    platforms: [macos, linux, windows
+    platforms: [macos, linux, windows]
+    command: [python, tools/hako.py, test]
+    working_directory: repository
+    output: text
+  - id: map-viewer-static-smoke
+    kind: smoke-test
+    platforms: [macos, linux, windows]
+    command: [python, tools/hako.py, smoke]
+    working_directory: repository
+    output: text
+known_gaps:
+  - WebSocket state flow and actual browser rendering still require an E2E runtime; component smoke covers static HTTP retrieval only.
+  - The Release asset checksum, attribution file, and machine-readable asset manifest are not yet part of the repository contract.
+  - PLATEAU GLB and MuJoCo world coordinate alignment is not established by component-owned static validation.
+  - The current browser page loads several third-party JavaScript libraries from public CDNs.
+source_refs:
+  - repository: hakoniwalab/hakoniwa-map-viewer
+    path: README.md
+    revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
+    description: Current architecture, responsibility boundary, Three.js public API, component-owned validation, PLATEAU asset contract, and launch flow.
+  - repository: hakoniwalab/hakoniwa-map-viewer
+    path: src/client/src/ui.js
+    revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
+    description: Three.js public API integration, viewer configuration, WebSocket connection, drone selection, adaptive large-fleet presentation, night mode, and trails.
+  - repository: hakoniwalab/hakoniwa-map-viewer
+    path: src/client/src/frame.js
+    revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
+    description: ROS, ENU, EPSG:6677, and latitude/longitude conversion.
+  - repository: hakoniwalab/hakoniwa-map-viewer
+    path: tools/hako.py
+    revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
+    description: Component-owned doctor, test, nested Three.js validation, and static-server smoke contract.
+  - repository: hakoniwalab/hakoniwa-map-viewer
+    path: tools/test_map_viewer.py
+    revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
+    description: Static contracts for Three.js public API use, coordinate conversion, and adaptive large-fleet presentation.
+  - repository: hakoniwalab/hakoniwa-map-viewer
+    path: .gitmodules
+    revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
+    description: hakoniwa-threejs-drone submodule dependency.
+  - repository: hakoniwalab/hakoniwa-map-viewer
+    path: LICENSE
+    revision: 2c4ad0a4524374c93357801d45df16eff96ee2b9
+    description: MIT license.
+tags:
+  - hakoniwa
+  - map-viewer
+  - drone
+  - threejs
+  - leaflet
+  - browser
+  - visualization
+  - monitoring
+  - websocket
+  - pdu
+  - plateau
+  - shibuya
+  - glb
+  - geospatial
