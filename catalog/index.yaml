@@ -193,14 +193,16 @@ components:
   - integration
   maturity: active
   distribution: oss
-  summary: Environment modeling toolkit for runtime environmental factors and PLATEAU-derived
-    MuJoCo/GLB City Worlds containing terrain, roads, available road markings, and
-    buildings.
+  summary: 'Environment modeling and PLATEAU City World generation toolkit. It models
+    runtime environmental fields and converts PLATEAU CityGML into aligned GLB visual
+    assets and MuJoCo physics assets for terrain, roads, buildings, available road
+    markings, and optional bridges.
+
+    '
   recipe_roles:
   - environment_model
-  - data_model
-  - visualizer
   - asset_generator
+  - visualizer
   - integration_boundary
   connects_to:
   - hakoniwa-core-pro
@@ -210,15 +212,18 @@ components:
   tags:
   - hakoniwa
   - environment
-  - wind
-  - gps
-  - temperature
-  - fastsearch
-  - json-schema
   - plateau
   - citygml
+  - city-world
   - mujoco
-  - mjcf
+  - glb
+  - terrain
+  - road
+  - building
+  - bridge
+  - collision
+  - physics
+  - simulation
   catalog_path: components/hakoniwa-envsim.yaml
 - id: hakoniwa-fpv-drone
   name: Hakoniwa FPV Drone
@@ -680,13 +685,15 @@ components:
   - commercial
   maturity: active
   distribution: commercial
-  summary: Manifest-driven Hakoniwa and MuJoCo integration pack for industrial robot
-    arms, accepting JointTrajectory commands and publishing JointState through Hakoniwa
-    PDU. A FAIRINO FR5 reference integration has been executed locally.
+  summary: Manifest- and Recipe-driven Hakoniwa/MuJoCo integration pack for articulated
+    robots and construction machines. FR5, Nova5, and SO-101 share a common arm runtime,
+    while MathScavator9000 combines a dedicated articulated-arm and mobile-base runtime
+    with manual and automatic control paths.
   recipe_roles:
   - physics_runtime
   - simulation_core
   - integration_boundary
+  - environment_model
   - commercial_pack
   connects_to:
   - hakoniwa-mujoco-robots
@@ -694,19 +701,23 @@ components:
   - hakoniwa-pdu-endpoint
   - hakoniwa-core-pro
   - hakoniwa-pdu-python
+  - hakoniwa-pdu-ros
   tags:
   - hakoniwa
   - robot-arm
   - industrial-robot
+  - construction-machine
+  - excavator
   - mujoco
   - joint-trajectory
   - joint-state
+  - ros2
+  - tcp
   - pdu
-  - endpoint
+  - ps5
+  - digging
+  - collision
   - simulation
-  - integration
-  - commercial
-  - private
   catalog_path: components/hakoniwa-robot-arm-pack.yaml
 - id: hakoniwa-scratch
   name: Hakoniwa Scratch
@@ -812,4 +823,3 @@ components:
   - integration
   - dual-license
   catalog_path: components/tobas.yaml
-
