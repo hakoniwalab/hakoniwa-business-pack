@@ -35,3 +35,8 @@ usecases:
     title: 独立したシミュレーション参加者の同期実行
     feasibility: feasible
     validation: partially_verified
+  - id: urban-drone-show-rehearsal
+    path: examples/urban-drone-show-rehearsal.yaml
+    title: PLATEAU都市空間を用いた多数機ドローンショー事前リハーサル
+    feasibility: feasible
+    validation: partially_verified
