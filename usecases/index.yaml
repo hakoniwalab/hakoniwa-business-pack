@@ -15,6 +15,11 @@ usecases:
     title: 産業用ロボットアーム導入前の指令・状態統合検証
     feasibility: feasible
     validation: partially_verified
+  - id: construction-machine-simulation
+    path: examples/construction-machine-simulation.yaml
+    title: 建設機械の移動・関節操作・掘削環境シミュレーション
+    feasibility: feasible
+    validation: partially_verified
   - id: ros2-application-integration
     path: examples/ros2-application-integration.yaml
     title: ROS 2アプリケーション資産を維持した箱庭統合検証
