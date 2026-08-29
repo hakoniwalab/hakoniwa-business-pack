@@ -66,7 +66,7 @@ reference_rules:
       optional_fields:
         - role
       notes:
-        - The repository must be represented by a Catalog component.
+        - The repository must be represented by a Catalog component repository.owner/name pair.
         - The path must be repository-relative.
         - The revision must be a full commit SHA.
         - role is optional human-readable context and is not a controlled identifier.
