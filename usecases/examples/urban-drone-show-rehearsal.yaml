@@ -35,9 +35,13 @@ status:
     - Hakoniwa Drone Show owns show files and resolved plans, formation generation, assignment, transition planning, LED direction, show lifecycle, audience preview, AR preview, and wind-scenario evaluation.
     - A recorded city-show baseline verifies 128 drones across six processes, runtime launcher lifecycle, Show Runner registration, all-aircraft takeoff completion, Map Viewer response, and clean shutdown.
     - Hakoniwa Envsim provides PLATEAU-derived aligned GLB visual and MuJoCo physics city assets, while Hakoniwa Drone Core/PRO owns fleet dynamics.
-    - A Business Pack Recipe that composes these commercial and OSS components is not yet recorded, so end-to-end Business Pack validation remains partial.
+    - The executable experiment Recipe is owned by the private Hakoniwa Drone Show repository; Business Pack records a pinned external reference instead of copying that Recipe.
 
-realized_by: []
+realized_by:
+  - repository: hakoniwalab/hakoniwa-drone-show
+    path: recipes/experiments/virtual-drone-show-city.yaml
+    revision: ccc55d3e193ec10b56fc21e3c154ae437490c25d
+    role: Component-owned executable experiment Recipe for the 128-drone PLATEAU city show, viewer, wind scenario, and show-file composition.
 
 supported_by:
   - component_id: hakoniwa-drone-show
@@ -62,18 +66,18 @@ communication_notes:
     - A collision-free simulation proves regulatory or operational approval.
     - Wind-response results are equivalent to real aircraft behavior without model validation.
     - PLATEAU geometry is CAD-accurate or sufficient for final flight clearance by itself.
-    - The Business Pack currently provides a fully validated public one-command Recipe for this complete use case.
+    - The component-owned private Recipe is a public one-command Recipe available without the required commercial dependencies.
 
 limitations:
   - Hakoniwa Drone Show is a private commercial component and requires the appropriate access and license.
   - Commercial fleet execution follows the Hakoniwa Drone PRO licensing path represented by the dual-license Drone catalog component.
+  - The executable reference Recipe is component-owned in the private Hakoniwa Drone Show repository; Business Pack stores only its repository, path, and pinned revision.
   - PLATEAU geometry fidelity depends on the source dataset, available LODs, semantic surfaces, textures, and terrain coverage.
   - Simulation collision geometry and wind response do not establish real-flight safety, regulatory compliance, venue approval, or aircraft certification.
   - The recorded 128-drone baseline is representative evidence, not a guarantee for arbitrary fleet size, city extent, hardware, or show complexity.
-  - A Business Pack system Recipe for the complete show rehearsal composition has not yet been added.
 
 next_steps:
-  - Add a Business Pack Recipe that composes Drone Show, Drone Core/PRO, Envsim City World, and the selected viewer runtime.
+  - Keep the external Recipe reference pinned to the reviewed Hakoniwa Drone Show revision and refresh it only after reviewing source changes.
   - Record a repeatable A/no-wind, A/wind, and revised-B/same-wind rehearsal comparison with quantitative position and formation metrics.
   - Add explicit collision and city-clearance metrics only where their observation and classification are verified.
   - Keep real-flight safety, regulatory approval, and operational acceptance outside the simulation claim boundary.
