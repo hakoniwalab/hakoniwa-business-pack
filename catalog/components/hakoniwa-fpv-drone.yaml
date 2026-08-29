@@ -5,21 +5,25 @@ repository:
   name: hakoniwa-fpv-drone
   url: https://github.com/hakoniwalab/hakoniwa-fpv-drone
   visibility: private
+
 distribution:
   channel: oss
   notes:
     - The Hakoniwa FPV Drone source, Catalog, Recipe, and documentation are provided under the MIT License.
     - Repository visibility and software licensing are separate facts; this Catalog records the currently private repository visibility independently from the MIT terms.
     - Hakoniwa Drone Core or PRO, PID auto-tuning, third-party component data, models, and libraries retain their own license terms.
+
 verification:
   verified_at: 2026-08-29
   source_revision: 4b8cd8f7de488f1e51cf7f553b6b9793d5c795f7
   source_ref: main
+
 summary: >-
   Catalog-driven FPV drone design pack that resolves selected frame, motor, propeller,
   battery, camera, and controller parts into a traceable MuJoCo/Hakoniwa vehicle package,
   composes reusable physical FPV courses, and optionally materializes a Three.js FPV viewer
   while keeping MuJoCo as the source of truth for vehicle physics and collision.
+
 category:
   primary: tool
   secondary:
@@ -48,6 +52,7 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-fpv-drone
         path: recipes/examples/5inch-fpv.yaml
         revision: 4b8cd8f7de488f1e51cf7f553b6b9793d5c795f7
+
   - name: Physical vehicle model compilation
     description: Resolves mass, center of mass, inertia, motor placement, rotor direction, thrust parameters, and thrust-to-weight estimates without silently inventing unavailable values.
     evidence:
@@ -57,6 +62,7 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-fpv-drone
         path: tests/test_resolver.py
         revision: 4b8cd8f7de488f1e51cf7f553b6b9793d5c795f7
+
   - name: MuJoCo and Hakoniwa Generated Vehicle Package
     description: Generates a portable package containing MuJoCo XML, Drone Core configuration, control parameters, BOM, resolved inputs, physical report, provenance hashes, and optional World/Three.js course artifacts.
     evidence:
@@ -66,6 +72,7 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-fpv-drone
         path: tests/test_generate.py
         revision: 4b8cd8f7de488f1e51cf7f553b6b9793d5c795f7
+
   - name: Reusable FPV World and physical course
     description: Defines the flight location independently from the vehicle Recipe using World YAML with lighting, ground, contact parameters, and collision-enabled gate, pylon, and box obstacles.
     evidence:
@@ -75,6 +82,7 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-fpv-drone
         path: recipes/environments/fpv-training-course.yaml
         revision: 4b8cd8f7de488f1e51cf7f553b6b9793d5c795f7
+
   - name: Native MuJoCo FPV camera and PiP
     description: Runs Drone PRO with the generated fixed FPV camera as the main view and an operable external camera as picture-in-picture, with keyboard switching and PiP visibility control.
     evidence:
@@ -84,6 +92,7 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-fpv-drone
         path: docs/fpv-world.md
         revision: 4b8cd8f7de488f1e51cf7f553b6b9793d5c795f7
+
   - name: Optional Three.js FPV viewer
     description: Adds Visual State Publisher, WebBridge, and HTTP viewer only when requested; it uses the runtime MuJoCo FPV camera as the camera source of truth, scales the existing drone GLB to generated wheelbase, animates propellers from PWM, and renders the generated FPV course.
     evidence:
@@ -96,6 +105,7 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-fpv-drone
         path: tests/test_fpv_tool.py
         revision: 4b8cd8f7de488f1e51cf7f553b6b9793d5c795f7
+
   - name: PS5 Angle-mode simulation
     description: Materializes and runs the generated vehicle with the existing Hakoniwa Drone Radio Controller and PS4 mapping used for a PS5 DualSense controller.
     evidence:
@@ -105,6 +115,7 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-fpv-drone
         path: verified-configs/example-5inch-angle/README.md
         revision: 4b8cd8f7de488f1e51cf7f553b6b9793d5c795f7
+
   - name: Licensed vehicle-specific PID tuning connection
     description: Connects a frozen generated vehicle profile to Hakoniwa Drone PRO Hover and Angle PID auto-tuning, quantitative gates, waveform review, and PS5 validation without exposing PRO tuning internals in this repository.
     evidence:
@@ -266,4 +277,113 @@ typical_usecases:
   - Compare candidate FPV part combinations before purchasing and assembling physical hardware.
   - Generate a traceable virtual quad-X model from a reusable component catalog and a user-owned Vehicle Recipe.
   - Reuse the same FPV course across different generated aircraft and swap the course independently from the vehicle definition.
-  - Evaluate Angle-mode handling with a PS5 controller in a collision-enabled
+  - Evaluate Angle-mode handling with a PS5 controller in a collision-enabled FPV course.
+  - Preview the generated aircraft and course through the optional Three.js FPV viewer.
+  - Use licensed PID auto-tuning to reduce manual trial-and-error for each generated virtual aircraft.
+
+anti_usecases:
+  - Treating generic example component values as official specifications of a real product.
+  - Applying generated or tuned simulation PID values directly to a physical aircraft without expert review and controlled real-world validation.
+  - Using the current toolchain as a Betaflight replacement or a certified FPV training system.
+  - Assuming the FPV toolchain's MIT License grants rights to every Hakoniwa Drone PRO option, PID tuning capability, third-party model, or component dataset.
+
+demo_candidates:
+  - name: Generic 5-inch FPV generation and PS5 Angle flight
+    description: Resolve the sample 5-inch Vehicle Recipe, compose the default physical FPV course, materialize the verified Angle configuration, and verify controller response with a PS5 DualSense controller in the native MuJoCo FPV/PiP view.
+    required_components:
+      - hakoniwa-fpv-drone
+      - hakoniwa-drone-core
+      - hakoniwa-core-pro
+      - hakoniwa-pdu-python
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-fpv-drone
+        path: recipes/business-pack/fpv-drone-design-angle-flight.yaml
+        revision: 4b8cd8f7de488f1e51cf7f553b6b9793d5c795f7
+      - repository: hakoniwalab/hakoniwa-fpv-drone
+        path: verified-configs/example-5inch-angle/README.md
+        revision: 4b8cd8f7de488f1e51cf7f553b6b9793d5c795f7
+  - name: Optional Three.js FPV course preview
+    description: Configure the same generated vehicle and World with --threejs, open the browser viewer, and verify the FPV camera, PiP convention, scaled aircraft GLB, propeller animation, and World-derived course visualization.
+    required_components:
+      - hakoniwa-fpv-drone
+      - hakoniwa-drone-core
+      - hakoniwa-core-pro
+      - hakoniwa-pdu-python
+      - hakoniwa-threejs-drone
+      - hakoniwa-pdu-bridge-core
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-fpv-drone
+        path: README.md
+        revision: 4b8cd8f7de488f1e51cf7f553b6b9793d5c795f7
+      - repository: hakoniwalab/hakoniwa-fpv-drone
+        path: docs/fpv-world.md
+        revision: 4b8cd8f7de488f1e51cf7f553b6b9793d5c795f7
+
+operations:
+  build:
+    commands:
+      - python3.12 tools/fpv.py configure
+      - python3.12 tools/fpv.py configure --threejs
+    notes:
+      - The default command materializes the verified native MuJoCo/Drone PRO runtime; --threejs adds only the optional browser visualization path.
+  test:
+    commands:
+      - PYTHONPATH=src python3.12 -m unittest discover -v
+    notes:
+      - MuJoCo load verification is skipped only when the selected Python environment lacks the optional MuJoCo binding.
+  run:
+    commands:
+      - python3.12 tools/fpv.py start
+      - python3.12 tools/fpv.py status
+      - python3.12 tools/fpv.py open-viewer
+      - python3.12 tools/fpv.py stop
+    notes:
+      - open-viewer requires a runtime configured with --threejs; normal cleanup remains the Launcher terminate path.
+
+known_gaps:
+  - Add evidence-backed real FPV product catalog records with clear data provenance and redistribution terms.
+  - Add the Drone Core Radio Controller Rate/Acro execution profile.
+  - Add real-flight log ingestion and model-identification support.
+  - Extend runtime verification beyond macOS arm64 and broaden browser/device verification for the optional Three.js path.
+
+source_refs:
+  - repository: hakoniwalab/hakoniwa-fpv-drone
+    path: LICENSE
+    revision: 4b8cd8f7de488f1e51cf7f553b6b9793d5c795f7
+    description: MIT License covering this repository's software and documentation.
+  - repository: hakoniwalab/hakoniwa-fpv-drone
+    path: README.md
+    revision: 4b8cd8f7de488f1e51cf7f553b6b9793d5c795f7
+    description: Product concept, generator workflow, FPV World, native FPV camera/PiP, optional Three.js runtime, Angle runtime, PID tuning boundary, and operator commands.
+  - repository: hakoniwalab/hakoniwa-fpv-drone
+    path: docs/fpv-world.md
+    revision: 4b8cd8f7de488f1e51cf7f553b6b9793d5c795f7
+    description: World/course schema, collision-enabled obstacles, contact settings, native FPV view, and optional Three.js adapter boundary.
+  - repository: hakoniwalab/hakoniwa-fpv-drone
+    path: docs/generated-package.md
+    revision: 4b8cd8f7de488f1e51cf7f553b6b9793d5c795f7
+    description: Generated vehicle/world artifacts, fpv-course.json, verified configuration application, and provenance behavior.
+  - repository: hakoniwalab/hakoniwa-fpv-drone
+    path: verified-configs/example-5inch-angle/README.md
+    revision: 4b8cd8f7de488f1e51cf7f553b6b9793d5c795f7
+    description: Reviewed 5-inch Angle configuration with successful Hover/Angle tuning gates followed by PS5 flight confirmation.
+  - repository: hakoniwalab/hakoniwa-fpv-drone
+    path: recipes/business-pack/fpv-drone-design-angle-flight.yaml
+    revision: 4b8cd8f7de488f1e51cf7f553b6b9793d5c795f7
+    description: Component-owned Business Pack system Recipe referencing the FPV Vehicle Recipe.
+
+tags:
+  - hakoniwa
+  - fpv
+  - drone
+  - component-catalog
+  - vehicle-recipe
+  - mujoco
+  - angle-control
+  - pid-tuning
+  - ps5
+  - fpv-course
+  - threejs
+  - simulation
+  - oss
+  - mit
