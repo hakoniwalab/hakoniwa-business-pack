@@ -20,6 +20,11 @@ usecases:
     title: 建設機械の移動・関節操作・掘削環境シミュレーション
     feasibility: feasible
     validation: partially_verified
+  - id: urban-drone-show-rehearsal
+    path: examples/urban-drone-show-rehearsal.yaml
+    title: PLATEAU都市空間を用いた多数機ドローンショー事前リハーサル
+    feasibility: feasible
+    validation: partially_verified
   - id: ros2-application-integration
     path: examples/ros2-application-integration.yaml
     title: ROS 2アプリケーション資産を維持した箱庭統合検証
