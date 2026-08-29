@@ -92,4 +92,4 @@ authoring_rules:
   - Do not infer customer outcomes such as lower cost, higher safety, or production readiness without evidence.
   - Do not describe local browser visualization as remote access unless networking and deployment are validated.
   - Commercial and private dependencies must remain explicit.
-  - Missing Recipes and validation gaps belong in next_steps.
+  - Missing local and component-owned Recipes and validation gaps belong in next_steps.
