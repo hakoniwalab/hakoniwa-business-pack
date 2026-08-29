@@ -265,7 +265,7 @@ runtime_checks:
     working_directory: repository
     output: text
   - id: static-http-smoke
-    kind: smoke
+    kind: smoke-test
     platforms: [macos, linux, windows]
     command: [python, tools/hako.py, smoke]
     working_directory: repository
