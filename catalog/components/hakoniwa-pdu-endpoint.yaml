@@ -347,7 +347,7 @@ demo_candidates:
   - name: Storage replay and inspection
     description: Send packets through storage latest and queue endpoints, then inspect binary files with hako_pdu_storage_debug and JSON output.
     required_components:
-      - hakoniwa-pdu-endpoint
+      - hakoniwalab/hakoniwa-pdu-endpoint
     source_examples:
       - repository: hakoniwalab/hakoniwa-pdu-endpoint
         path: examples/endpoint_storage_latest.cpp
@@ -465,5 +465,3 @@ tags:
   - cplusplus
   - python
   - csharp
-  - reconnect
-  - diagnostics
