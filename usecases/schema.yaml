@@ -55,25 +55,16 @@ reference_rules:
   realized_by:
     local:
       target: recipes/examples/*.yaml
-      required_fields:
-        - recipe_id
+      required_fields: [recipe_id]
     external:
       target: component-owned recipe
-      required_fields:
-        - repository
-        - path
-        - revision
-      optional_fields:
-        - role
+      required_fields: [repository, path, revision]
+      optional_fields: [role]
       notes:
-        - The repository must be represented by a Catalog component repository.owner/name pair.
-        - The path must be repository-relative.
-        - The revision must be a full commit SHA.
-        - role is optional human-readable context and is not a controlled identifier.
-        - Use a pinned source revision so a Usecase does not silently follow an unreviewed component Recipe HEAD.
-        - Prefer an external reference over copying a component-owned Recipe into Business Pack solely for discoverability.
-        - Mandatory CI validates reference shape and Catalog ownership but does not fetch private repositories; source existence is reviewed when the Usecase or Catalog is maintained.
-        - Repository access and commercial/private requirements remain governed by the owning component.
+        - repository must match a Catalog component repository.owner/name pair.
+        - path is repository-relative and revision is a full pinned commit SHA.
+        - Prefer a pinned external reference over copying a component-owned Recipe solely for discoverability.
+        - Mandatory CI does not fetch private repositories; maintainers verify source existence when adding or refreshing the reference.
     notes:
       - Use an empty list only when no local or component-owned Recipe exists.
   supported_by:
