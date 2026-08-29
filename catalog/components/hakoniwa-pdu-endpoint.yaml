@@ -10,8 +10,8 @@ distribution:
   notes:
     - Public OSS Hakoniwa component.
 verification:
-  verified_at: 2026-07-26
-  source_revision: 5c2b815ae661f6063a91840c356717558dab9ab3
+  verified_at: 2026-08-29
+  source_revision: 9015a17415fd4a2042de2528b835a265af85b165
   source_ref: main
 summary: Config-driven PDU endpoint layer that makes cache lifetime, communication transport, and PDU meaning explicit for distributed Hakoniwa simulations.
 category:
@@ -25,10 +25,11 @@ status:
   maturity: active
   catalog_confidence: high
   notes:
-    - Cataloged from README, design philosophy, tutorial, config samples, examples, benchmark docs, build architecture, and Core variant package CI.
+    - Cataloged from README, design philosophy, tutorial, config samples, examples, benchmark docs, build architecture, TCP runtime contract, and Core variant package CI.
     - This component is intentionally stricter and heavier than a minimal messaging library.
     - Core-aware consumers can choose explicit callback or polling package targets without changing the manifest schema.
     - Installed-package composability is verified with external CMake consumers on x64 and ARM64 platforms.
+    - TCP and TCP mux lifecycle behavior is documented and covered by runtime-contract tests, including timeout, disconnect, reconnect, stop, and diagnostic behavior.
 
 capabilities:
   - name: Explicit endpoint composition
@@ -97,6 +98,15 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-pdu-endpoint
         path: test/package_consumer
         revision: 5c2b815ae661f6063a91840c356717558dab9ab3
+  - name: Explicit TCP lifecycle and diagnostic contract
+    description: Defines timeout, disconnect, reconnect, stop, and failed-session ownership for TCP and TCP mux, with connection-scoped diagnostics that preserve native socket errors and mapped Endpoint errors.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: docs/tcp-runtime-contract.md
+        revision: 9015a17415fd4a2042de2528b835a265af85b165
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: test/tcp_runtime_contract_test.cpp
+        revision: 9015a17415fd4a2042de2528b835a265af85b165
 
 limitations:
   - Not a general-purpose messaging library.
@@ -105,6 +115,8 @@ limitations:
   - SHM communication and Hakoniwa time source features require Hakoniwa Core, and new Core-aware consumers should choose either callback or polling package variants explicitly.
   - Python package depends on the native shared library and CFFI extension; it is not pip-only in the endpoint repository.
   - Transport-level reliability, persistence, and delivery semantics depend on the selected comm backend.
+  - A positive TCP read or write timeout is a terminal error boundary for the current connection; the failed socket is closed rather than reused.
+  - TCP diagnostic monotonic timestamps order events within one process and are not wall-clock timestamps for direct cross-host comparison.
 
 interfaces:
   inputs:
@@ -116,7 +128,7 @@ interfaces:
       description: JSON file defining latest or queue cache behavior.
     - name: Communication configuration
       kind: config
-      description: JSON file defining protocol, role, address, port, storage path, or pub/sub prefix.
+      description: JSON file defining protocol, role, address, port, storage path, pub/sub prefix, or transport timeout options.
     - name: PDU definition
       kind: config
       description: Optional JSON mapping PDU names to channel IDs, sizes, and type names.
@@ -133,10 +145,13 @@ interfaces:
     - name: Debug metadata
       kind: command
       description: Human-readable or JSON summaries from hako_pdu_storage_debug.
+    - name: TCP transport diagnostics
+      kind: log
+      description: Connection-scoped failure diagnostics containing transport, role, connection ID, peer, operation, native socket error, mapped Endpoint error, and configured timeout when available.
   protocols:
     - name: TCP
       role: client | server
-      notes: Reliable stream communication with explicit endpoint roles.
+      notes: Reliable stream communication with explicit endpoint roles. Server endpoints return to accept after a failed connection, while clients return to the connect loop; positive blocking I/O timeout expiration terminates the current connection.
     - name: UDP
       role: unicast | broadcast | multicast
       notes: Connectionless communication for local or network PDU delivery.
@@ -164,7 +179,7 @@ interfaces:
     - path: config/schema/cache_schema.json
       description: Cache schema.
     - path: config/schema/comm_schema.json
-      description: Communication schema.
+      description: Communication schema including TCP read and write timeout options.
     - path: config/schema/pdu_def_schema.json
       description: PDU definition schema.
     - path: config/tutorial/endpoint_tcp_server.json
@@ -186,7 +201,7 @@ dependencies:
       notes: Required build system.
     - name: Boost headers
       type: library
-      notes: Required for networking implementation.
+      notes: Required for networking implementation; tools/hako.py doctor probes Boost.Asio and Boost.Beast with a C++20 compile check on supported platforms.
   optional:
     - name: Hakoniwa Core Library
       type: repository
@@ -215,6 +230,8 @@ platforms:
   notes:
     - Normal CI covers manifest-driven builds and transport combinations.
     - Core-variant package CI verifies external consumers on Ubuntu x64, native Linux ARM64, macOS, and Windows x64.
+    - Hakoniwa Core integration CI validates Core-aware runtime composition.
+    - Boost prerequisite diagnosis uses the same CMake/C++20 header compile probe across platforms; Windows may use a resolved vcpkg toolchain while native CMake discovery remains valid.
     - On Windows, Boost through vcpkg is recommended and Hakoniwa Core keeps its static-first library design.
     - The manifest's hakoniwa_core flag controls whether Core-aware artifacts are built; callback versus polling is selected by the downstream CMake target, not by the manifest.
 
@@ -283,6 +300,12 @@ data_contracts:
       - repository: hakoniwalab/hakoniwa-pdu-endpoint
         path: README.md
         revision: 5c2b815ae661f6063a91840c356717558dab9ab3
+  - name: TCP runtime contract
+    description: Positive blocking I/O timeouts terminate the current TCP connection; normal TCP server/client endpoints recreate transport ownership through accept/connect loops, while failed TCP mux sessions are replaced by the upper layer. Stop-triggered shutdown is treated as expected lifecycle rather than abnormal disconnect.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-endpoint
+        path: docs/tcp-runtime-contract.md
+        revision: 9015a17415fd4a2042de2528b835a265af85b165
 
 recipe_roles:
   - role: bridge
@@ -297,6 +320,7 @@ recipe_roles:
 typical_usecases:
   - Multi-asset simulations where communication semantics must be explicit and auditable.
   - Swapping TCP, UDP, WebSocket, or pub/sub transports without changing application code.
+  - Long-lived TCP simulation links where disconnect, timeout, reconnect, and diagnostic behavior must be explicit.
   - Local high-performance Hakoniwa asset communication through shared memory.
   - Persisting PDU traffic for replay, audit, debugging, or offline analysis.
   - Building higher-level bridge, RPC, visualization, or engine-integration components on a common PDU endpoint abstraction.
@@ -362,6 +386,7 @@ operations:
       - C++ tests use GoogleTest.
       - Python and C# smoke tests are provided by helper scripts.
       - core-variants CI builds a separate external CMake consumer to validate the installed package contract.
+      - TCP runtime-contract tests cover timeout mapping, disconnect/reconnect ownership, stop behavior, and socket portability semantics.
   run:
     commands:
       - build/examples/endpoint_minimal config/tutorial/endpoint_tcp_server.json recv 10
@@ -379,16 +404,24 @@ known_gaps:
 source_refs:
   - repository: hakoniwalab/hakoniwa-pdu-endpoint
     path: README.md
-    revision: 5c2b815ae661f6063a91840c356717558dab9ab3
-    description: Main overview, manifest flow, Core variants, installed package targets, supported platforms, and consumer guidance.
+    revision: 9015a17415fd4a2042de2528b835a265af85b165
+    description: Main overview, manifest flow, Core variants, installed package targets, supported platforms, prerequisite diagnosis, and consumer guidance.
   - repository: hakoniwalab/hakoniwa-pdu-endpoint
     path: docs/build-architecture.md
-    revision: 5c2b815ae661f6063a91840c356717558dab9ab3
+    revision: 9015a17415fd4a2042de2528b835a265af85b165
     description: Manifest resolution and cross-platform build architecture.
   - repository: hakoniwalab/hakoniwa-pdu-endpoint
+    path: docs/tcp-runtime-contract.md
+    revision: 9015a17415fd4a2042de2528b835a265af85b165
+    description: TCP and TCP mux timeout, disconnect, reconnect, stop, failed-session ownership, and diagnostic contract.
+  - repository: hakoniwalab/hakoniwa-pdu-endpoint
     path: .github/workflows/core-variants.yml
-    revision: 5c2b815ae661f6063a91840c356717558dab9ab3
+    revision: 9015a17415fd4a2042de2528b835a265af85b165
     description: Core package, explicit frontend variants, and external consumer validation across x64 and ARM64 platforms.
+  - repository: hakoniwalab/hakoniwa-pdu-endpoint
+    path: .github/workflows/hako-core-integration.yml
+    revision: 9015a17415fd4a2042de2528b835a265af85b165
+    description: Hakoniwa Core integration validation for Core-aware Endpoint composition.
   - repository: hakoniwalab/hakoniwa-pdu-endpoint
     path: docs/design_philosophy.md
     revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
@@ -411,8 +444,8 @@ source_refs:
     description: TCP and SHM callback performance guidance.
   - repository: hakoniwalab/hakoniwa-pdu-endpoint
     path: config/schema
-    revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
-    description: JSON schemas for endpoint, cache, comm, and PDU definitions.
+    revision: 9015a17415fd4a2042de2528b835a265af85b165
+    description: JSON schemas for endpoint, cache, comm, and PDU definitions, including TCP timeout configuration.
   - repository: hakoniwalab/hakoniwa-pdu-endpoint
     path: examples
     revision: 5e8d412dca9dcf6c41456d273968714b077e2e99
@@ -432,3 +465,5 @@ tags:
   - cplusplus
   - python
   - csharp
+  - reconnect
+  - diagnostics
