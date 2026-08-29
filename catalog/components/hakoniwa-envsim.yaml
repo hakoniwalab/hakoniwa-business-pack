@@ -230,10 +230,10 @@ connects_to:
     direction: uses
     interface: position and Disturbance PDU contracts
     notes: HakoEnv reads position and writes disturbance data.
-  - component_id: hakoniwa-drone-pro
+  - component_id: hakoniwa-drone-core
     direction: bidirectional
     interface: per-drone position and disturbance PDU
-    notes: Environment fields can be supplied to Drone PRO through Disturbance.
+    notes: Environment fields can be supplied to the Hakoniwa Drone Core/PRO codebase through Disturbance; commercial use follows the Drone PRO license path represented by the dual-license component Catalog.
   - component_id: hakoniwa-mujoco-robots
     direction: used_by
     interface: generated MuJoCo world assets
