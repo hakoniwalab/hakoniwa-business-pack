@@ -234,7 +234,7 @@ components:
   connects_to:
   - hakoniwa-core-pro
   - hakoniwa-pdu-registry
-  - hakoniwa-drone-pro
+  - hakoniwa-drone-core
   - hakoniwa-mujoco-robots
   tags:
   - hakoniwa
