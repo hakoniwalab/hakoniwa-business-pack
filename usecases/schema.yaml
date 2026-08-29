@@ -63,6 +63,7 @@ reference_rules:
       notes:
         - repository must match a Catalog component repository.owner/name pair.
         - path is repository-relative and revision is a full pinned commit SHA.
+        - role is optional human-readable context.
         - Prefer a pinned external reference over copying a component-owned Recipe solely for discoverability.
         - Mandatory CI does not fetch private repositories; maintainers verify source existence when adding or refreshing the reference.
     notes:
