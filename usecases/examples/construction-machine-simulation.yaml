@@ -4,9 +4,9 @@ usecase_version: 0.1
 
 audience:
   primary:
-    - construction-automation-team
+    - manufacturing-engineering-team
     - robot-system-integrator
-    - simulation-engineer
+    - robot-development-team
   notes:
     - The current reference model is MathScavator9000 Excavator in hakoniwa-robot-arm-pack.
 
