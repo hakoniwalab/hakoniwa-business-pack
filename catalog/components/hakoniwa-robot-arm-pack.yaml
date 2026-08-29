@@ -20,8 +20,6 @@ category:
   primary: physics-environment
   secondary:
     - robot-arm
-    - construction-machine
-    - mobile-manipulator
     - simulator
     - integration
     - commercial
@@ -155,9 +153,6 @@ interfaces:
     - name: Hakoniwa PDU
       role: local
       notes: Carries trajectory, mobile-base, control, and state data between simulator components and external applications.
-    - name: TCP bridge
-      role: integration
-      notes: Connects the Hakoniwa PDU side to ROS 2 integration without coupling the common runtime to robot-specific ROS code.
   configuration:
     - path: recipes/<robot>/asset-manifest.json
       description: Robot-specific runtime entry manifest.
@@ -189,7 +184,7 @@ dependencies:
       type: runtime
       notes: Supported by the provided container profiles; per-robot E2E verification differs by distribution.
     - name: PS5 DualSense controller
-      type: device
+      type: tool
       notes: Optional manual input device for the excavator control path.
 
 platforms:
@@ -378,6 +373,3 @@ tags:
   - digging
   - collision
   - simulation
-  - integration
-  - commercial
-  - private

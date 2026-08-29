@@ -5,15 +5,23 @@ repository:
   name: hakoniwa-envsim
   url: https://github.com/hakoniwalab/hakoniwa-envsim
   visibility: public
+
 distribution:
   channel: oss
   notes:
     - Public OSS Hakoniwa component.
+
 verification:
-  verified_at: 2026-08-23
-  source_revision: d7a257606ca88b65a5109d88bd6045a5c9a9b8da
+  verified_at: 2026-08-29
+  source_revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
   source_ref: main
-summary: Environment modeling toolkit for runtime environmental factors and PLATEAU-derived MuJoCo/GLB City Worlds containing terrain, roads, available road markings, and buildings.
+
+summary: >
+  Environment modeling and PLATEAU City World generation toolkit. It models runtime
+  environmental fields and converts PLATEAU CityGML into aligned GLB visual assets and
+  MuJoCo physics assets for terrain, roads, buildings, available road markings, and
+  optional bridges.
+
 category:
   primary: physics-environment
   secondary:
@@ -25,160 +33,184 @@ status:
   maturity: active
   catalog_confidence: high
   notes:
-    - Cataloged from source, schemas, component-owned hako.py, offline smoke, and an official PLATEAU API E2E run.
+    - Catalog claims are based on source, schemas, documentation, conversion tests, and recorded PLATEAU pipeline behavior.
+    - No claim is made here that every PLATEAU dataset provides every optional feature or LOD.
 
 capabilities:
   - name: Creator environment model
-    description: Lets users define intuitive JSON environment models with base conditions and local zones.
+    description: Defines environmental conditions such as wind, temperature, pressure, GPS strength, local zones, turbulence, and priorities in human-authored JSON.
     evidence:
       - repository: hakoniwalab/hakoniwa-envsim
         path: README.md
-        revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
-  - name: Environment visualization
-    description: Supports visualizing environmental data with colors, arrows, and simple Python tooling.
-    evidence:
-      - repository: hakoniwalab/hakoniwa-envsim
-        path: README.md
-        revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
-  - name: Runtime model refinement
-    description: Converts human-authored creator models into execution-oriented split models for simulation use.
-    evidence:
-      - repository: hakoniwalab/hakoniwa-envsim
-        path: README.md
-        revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
-  - name: Fast position lookup
-    description: Provides a fast-search approach for mapping positions to environment values in large area models.
-    evidence:
-      - repository: hakoniwalab/hakoniwa-envsim
-        path: README.md
-        revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
-  - name: Kobe port sample scenario
-    description: Includes an example environment model with base wind, temperature, GPS strength, local zones, turbulence, and priorities.
-    evidence:
-      - repository: hakoniwalab/hakoniwa-envsim
-        path: README.md
-        revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
-  - name: PLATEAU range-to-MuJoCo wall conversion
-    description: Resolves building CityGML from latitude, longitude, and metric half extents through the official PLATEAU API, preserves original LOD1 footprints, then generates a query-centered MuJoCo MJCF with a user-selected OBB/detail tradeoff.
-    evidence:
-      - repository: hakoniwalab/hakoniwa-envsim
-        path: tools/hako.py
-        revision: 2f25a181d061db231b0b09d19e0fad7f8643baf1
-      - repository: hakoniwalab/hakoniwa-envsim
-        path: docs/plateau-citygml-to-mujoco.md
-        revision: ec02aa3764bbde40244d754423726eeccce23b87
-  - name: Direct PLATEAU range-to-GLB conversion
-    description: Uses the same query-centered building selection as the MuJoCo path, prefers CityGML LOD2 surfaces and Appearance textures, falls back to LOD1 solids per building, and emits a self-contained GLB without a Unity conversion step.
-    evidence:
-      - repository: hakoniwalab/hakoniwa-envsim
-        path: src/city_pipeline/citygml2glb.py
-        revision: ec02aa3764bbde40244d754423726eeccce23b87
-      - repository: hakoniwalab/hakoniwa-envsim
-        path: docs/plateau-citygml-to-mujoco.md
-        revision: ec02aa3764bbde40244d754423726eeccce23b87
-  - name: PLATEAU City World composition
-    description: Generates DEM terrain, highest-available LOD3/LOD2/LOD1 road surfaces, source-derived LOD3 road markings when available, and buildings independently under one world-frame contract, then composes aligned MJCF and GLB outputs.
-    evidence:
-      - repository: hakoniwalab/hakoniwa-envsim
-        path: src/city_pipeline/city_world_composer.py
-        revision: d7a257606ca88b65a5109d88bd6045a5c9a9b8da
-      - repository: hakoniwalab/hakoniwa-envsim
-        path: src/city_pipeline/world_frame.py
-        revision: d7a257606ca88b65a5109d88bd6045a5c9a9b8da
-  - name: PLATEAU dataset capability validation
-    description: Reports selected building and road LODs, ordered LOD3-to-LOD1 fallback counts, unavailable optional CityFurniture and LOD3 road markings, and the resulting collision/visualization capabilities as text and machine-readable JSON.
-    evidence:
-      - repository: hakoniwalab/hakoniwa-envsim
-        path: src/city_pipeline/city_dataset_validator.py
-        revision: d7a257606ca88b65a5109d88bd6045a5c9a9b8da
-  - name: Hakoniwa environment runtime asset
-    description: Registers HakoEnv, reads each drone pos PDU, resolves environment values by position, and writes the drone disturb PDU.
+        revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+
+  - name: Runtime environment lookup
+    description: Resolves environment values by simulated position and can publish per-drone Disturbance PDU data through the HakoEnv runtime asset.
     evidence:
       - repository: hakoniwalab/hakoniwa-envsim
         path: src/hakoniwa_envsim/envasset.py
-        revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
+        revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
       - repository: hakoniwalab/hakoniwa-envsim
         path: src/hakoniwa_envsim/asset/drone_io.py
-        revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
+        revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+
+  - name: PLATEAU City World generation
+    description: Generates a query-centered City World from PLATEAU building, transportation, DEM, optional CityFurniture, and optional bridge data, producing aligned visual and physics assets under one world-frame contract.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: src/city_pipeline/city_world_composer.py
+        revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: docs/hakoniwa-build-reference.md
+        revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+
+  - name: PLATEAU GLB visual generation
+    description: Produces self-contained GLB visual assets using the highest available supported building LOD, embedded textures when available, terrain, semantic roads, available source-derived road markings, and optional bridge visuals.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: src/city_pipeline/citygml2glb.py
+        revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: src/city_pipeline/bridge2glb.py
+        revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+
+  - name: Selectable building physics levels
+    description: Classifies each building into P0 through P3 collision strategies and lets users cap the applied physics level independently from visual LOD.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: docs/building-physics-classification.md
+        revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: src/city_pipeline/building_physics_classifier.py
+        revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+
+  - name: Semantic building collision generation
+    description: Uses lightweight LOD1 OBB or wall-and-roof collision for P0 and progressively incorporates LOD2 RoofSurface, WallSurface, OuterCeilingSurface, and OuterFloorSurface where higher physics classes require them.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: docs/building-physics-classification.md
+        revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: src/city_pipeline/building_lod2_colliders.py
+        revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+
+  - name: Building collider reduction
+    description: Reduces P1-P3 collider counts using selectable safe, coplanar-union, convex-decompose, or tolerant-planar strategies while keeping visual geometry unchanged; tolerant-planar is the only mode that intentionally permits bounded wall-surface approximation.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: docs/hakoniwa-build-reference.md
+        revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: src/city_pipeline/building_tolerant_planar.py
+        revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+
+  - name: Bridge visual and physics assets
+    description: Optionally converts PLATEAU bridge data to GLB and MuJoCo assets, including usable bridge-surface collision where the source geometry satisfies the configured slope and geometry constraints.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: src/city_pipeline/bridge2glb.py
+        revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: src/city_pipeline/bridge2mjcf.py
+        revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+
+  - name: Scalable City World generation controls
+    description: Supports arbitrary selection extents, configurable parallel workers for source and component generation, dedicated bounded DEM extraction workers, streaming DEM TIN scanning, and configurable terrain spacing.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: docs/hakoniwa-build-reference.md
+        revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: src/city_pipeline/dem2hfield.py
+        revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+
+  - name: Optional DEM uncovered-area fill
+    description: Supports an explicit constant-fill policy for uncovered DEM areas when configured; missing terrain is not silently invented by default.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: src/city_pipeline/dem2hfield.py
+        revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+
+  - name: PLATEAU dataset capability validation
+    description: Reports available components, selected LODs and fallbacks, omitted optional features, and the resulting visualization and collision capabilities as machine-readable evidence.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-envsim
+        path: src/city_pipeline/city_dataset_validator.py
+        revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
 
 limitations:
-  - Not a robot physics simulator.
-  - The City World path consumes EPSG:6697 bldg/tran/dem data plus optional frn data. Buildings prefer LOD2 and fall back to LOD1; road surfaces prefer LOD3, then LOD2, then LOD1; unavailable CityFurniture or LOD3 road markings are omitted and reported rather than inferred.
-  - PLATEAU Distribution Service is an external trial API; offline tests validate local conversion, not API availability.
-  - HakoEnv currently writes a complete Disturbance message and may overwrite custom slots owned by another producer; shared-writer arbitration remains a known gap.
-  - Creator schema and implementation inconsistencies outside the PLATEAU path remain to be resolved.
+  - Not a robot or drone dynamics simulator by itself.
+  - PLATEAU City World fidelity depends on the source dataset, available feature types, LODs, semantic surfaces, textures, and DEM coverage.
+  - P0-P3 is a Hakoniwa Envsim collision-strategy classification, not an official PLATEAU or CityGML classification and not a geometric proof of physical equivalence.
+  - Higher building physics levels preserve more source semantic structure but can increase MuJoCo geom and contact-processing cost.
+  - Collider reduction is designed to bound or avoid geometric changes according to the selected strategy; it does not establish CAD-level collision accuracy.
+  - Bridge collision is generated only from source surfaces considered usable by the implemented rules; it does not prove trafficability or structural safety.
+  - Constant DEM fill is an explicit approximation policy and must not be presented as measured terrain.
+  - PLATEAU Distribution Service is external; local conversion tests do not guarantee service availability.
+  - HakoEnv currently writes a complete Disturbance message and may conflict with another producer that owns fields in the same message.
 
 interfaces:
   inputs:
     - name: Creator environment model
       kind: config
-      description: JSON model with version, meta, grid, base, and zones.
-    - name: Runtime area/property/link models
+      description: JSON environment model containing base conditions and local zones.
+    - name: PLATEAU build manifest
       kind: config
-      description: Split execution model JSON for simulation-efficient lookup.
+      description: hakoniwa-build.yaml selecting source feature types, geographic extent, geometry policy, building physics level, collider reduction, GLB policy, City World generation settings, and output paths.
     - name: PLATEAU geographic selection
       kind: config
-      description: Latitude, longitude, north/south and east/west half extents, bldg/tran/dem/frn selection, dataset-year policy, and a 0-to-1 OBB empty-area threshold in hakoniwa-build.yaml.
-    - name: PLATEAU GLB policy
-      kind: config
-      description: GLB enablement, highest-available LOD policy, and embedded-if-available or flat texture mode in hakoniwa-build.yaml.
+      description: Latitude, longitude, and independent north/south and east/west metric half extents.
     - name: Drone position
       kind: pdu
-      description: Per-drone pos PDU read by the HakoEnv runtime asset.
+      description: Per-drone position PDU consumed by HakoEnv.
   outputs:
-    - name: Visualized environment
+    - name: PLATEAU City World MJCF
       kind: file
-      description: Human-readable visual representations of environmental fields.
-    - name: Position-to-environment query results
-      kind: api
-      description: Environment values such as wind or GPS strength for a given position.
-    - name: PLATEAU MuJoCo wall model
+      description: MuJoCo physics world containing configured terrain, building collision, roads where applicable, and optional bridge collision assets.
+    - name: PLATEAU City World GLB
       kind: file
-      description: Query-centered MJCF with one OBB per building by default, or original exterior/interior boundary wall boxes selected by the empty-area threshold.
-    - name: PLATEAU display model
+      description: Aligned visual world containing terrain, roads, available road markings, buildings, and optional bridges.
+    - name: Dataset capability report
       kind: file
-      description: Self-contained City World GLB using X=East, Y=Up, Z=-North, with terrain, semantic roads, available source-derived road markings, and buildings.
-    - name: PLATEAU Dataset Validator report
+      description: Machine-readable report describing available data, LOD choices and fallbacks, omitted features, and generated capabilities.
+    - name: Physics receipts
       kind: file
-      description: JSON report of component availability, LOD selection and fallback, omitted features, and usable collision/visualization capabilities.
+      description: Records classification, collision-generation decisions, reduction behavior, and generation evidence for PLATEAU physics assets.
     - name: Drone disturbance
       kind: pdu
-      description: Per-drone disturb PDU written by HakoEnv.
+      description: Environment-derived disturbance message written per configured drone.
   protocols:
     - name: PLATEAU Distribution Service REST API
       role: client
-      notes: Used only by an explicit hako.py build to search and download configured bldg/tran/dem/frn CityGML.
+      notes: Used during explicit build operations to search and download configured CityGML source data.
     - name: Hakoniwa PDU
       role: pubsub
-      notes: HakoEnv reads pos and writes disturb for each configured drone.
+      notes: Used by HakoEnv to read position and publish disturbance data.
   configuration:
-    - path: src/hakoniwa_envsim/schemas/environment_model.schema.json
-      description: Creator model schema.
-    - path: src/hakoniwa_envsim/schemas/space_area.schema.json
-      description: Runtime space area schema.
-    - path: src/hakoniwa_envsim/schemas/area_properties.schema.json
-      description: Runtime property schema.
-    - path: src/hakoniwa_envsim/schemas/link.schema.json
-      description: Runtime area/property link schema.
-    - path: examples/datasets/kobe/environment_model.json
-      description: Kobe port sample model.
     - path: hakoniwa-build.yaml
-      description: PLATEAU range selection and MuJoCo wall conversion manifest.
+      description: Main PLATEAU acquisition and asset-generation manifest.
     - path: schemas/hakoniwa-build.schema.json
-      description: Machine-readable schema for the PLATEAU acquisition and conversion manifest.
+      description: Machine-readable build-manifest schema.
+    - path: docs/hakoniwa-build-reference.md
+      description: Human-readable reference for all PLATEAU build settings.
+    - path: docs/building-physics-classification.md
+      description: P0-P3 building collision classification and fidelity contract.
 
 dependencies:
   required:
     - name: Python
       type: runtime
-      notes: Used by model, fast search, visualization, and pipeline tools.
+      notes: Used by environment modeling and PLATEAU conversion tools.
     - name: NumPy
       type: runtime
-      notes: Used by LOD1 footprint and OBB/wall conversion.
+      notes: Used by geometry and terrain processing.
     - name: Shapely
       type: runtime
-      notes: Owns deterministic footprint hull ordering, which is part of the generated building geom-ID contract.
-  optional: []
+      notes: Used by footprint and polygon geometry processing.
+  optional:
+    - name: MuJoCo
+      type: runtime
+      notes: Required to execute generated MJCF physics assets, but not to author the source PLATEAU dataset.
 
 platforms:
   supported:
@@ -186,198 +218,126 @@ platforms:
     - Linux
     - Windows
   notes:
-    - PLATEAU hako.py uses Python and no shell-specific conversion entrypoint.
-    - Runtime HakoEnv platform support still depends on its Hakoniwa Python/PDU environment.
+    - The Python PLATEAU conversion entrypoint is not shell-specific.
+    - Actual runtime support for HakoEnv and generated MuJoCo worlds also depends on the corresponding Hakoniwa and MuJoCo runtime environment.
 
 connects_to:
   - component_id: hakoniwa-core-pro
     direction: related
     interface: simulation integration target
-    notes: Runtime integration is a target use case, but exact wiring should be recipe-verified.
+    notes: Generated environment and runtime assets can participate in Hakoniwa simulations.
   - component_id: hakoniwa-pdu-registry
     direction: uses
-    interface: Twist position and hako_msgs/Disturbance PDU contracts
-    notes: HakoEnv reads pos and writes disturb; custom-slot writer ownership must be coordinated with other producers.
+    interface: position and Disturbance PDU contracts
+    notes: HakoEnv reads position and writes disturbance data.
   - component_id: hakoniwa-drone-pro
     direction: bidirectional
-    interface: per-drone pos/disturb PDU
-    notes: Environment wind, temperature, pressure, and GPS strength are supplied to the Drone PRO runtime through Disturbance.
+    interface: per-drone position and disturbance PDU
+    notes: Environment fields can be supplied to Drone PRO through Disturbance.
   - component_id: hakoniwa-mujoco-robots
     direction: used_by
-    interface: MuJoCo MJCF include asset
-    notes: The PLATEAU path generates query-centered building collision geoms that can be composed into a MuJoCo world.
-
-data_contracts:
-  - name: Creator model
-    description: Human-edited JSON model with CRS/units, grid, base environment, and zones.
-    source:
-      - repository: hakoniwalab/hakoniwa-envsim
-        path: src/hakoniwa_envsim/schemas/environment_model.schema.json
-        revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
-  - name: Execution model split
-    description: Runtime model separates space_area, area_properties, link, and optional boundary definitions.
-    source:
-      - repository: hakoniwalab/hakoniwa-envsim
-        path: README.md
-        revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
-  - name: PLATEAU download provenance
-    description: Records search bbox, city, year, specification, source URL, catalog size, actual size, SHA-256, and reuse mode for each CityGML object.
-    source:
-      - repository: hakoniwalab/hakoniwa-envsim
-        path: tools/plateau_citygml.py
-        revision: 2f25a181d061db231b0b09d19e0fad7f8643baf1
-  - name: Local city coordinate frame
-    description: Converts EPSG:6697 latitude/longitude to query-centered local ENU meters, then maps ENU to MuJoCo X=North, Y=-East, Z=Up.
-    source:
-      - repository: hakoniwalab/hakoniwa-envsim
-        path: src/city_pipeline/gml_lod1_extract.py
-        revision: 2f25a181d061db231b0b09d19e0fad7f8643baf1
-      - repository: hakoniwalab/hakoniwa-envsim
-        path: src/city_pipeline/obb2mjcf.py
-        revision: 2f25a181d061db231b0b09d19e0fad7f8643baf1
-  - name: City World dataset capability report
-    description: Machine-readable contract exposing LOD fallback and missing-feature consequences to Recipe doctor and future Visualizer surfaces.
-    source:
-      - repository: hakoniwalab/hakoniwa-envsim
-        path: src/city_pipeline/city_dataset_validator.py
-        revision: d7a257606ca88b65a5109d88bd6045a5c9a9b8da
-  - name: Disturbance custom-slot ownership
-    description: Envsim currently owns GPS strength in d_user_custom slot 0, while other producers such as rotor-fault control may own later slots; full-message writes require arbitration or preservation.
-    source:
-      - repository: hakoniwalab/hakoniwa-envsim
-        path: src/hakoniwa_envsim/asset/drone_io.py
-        revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
+    interface: generated MuJoCo world assets
+    notes: PLATEAU City World physics can be composed with MuJoCo robot and drone simulation assets.
 
 recipe_roles:
   - role: environment_model
-    description: Supplies environmental fields such as wind, temperature, pressure, and GPS strength.
-  - role: data_model
-    description: Defines creator and runtime schemas for environment data.
-  - role: visualizer
-    description: Provides pre-simulation environment inspection views.
+    description: Supplies environmental fields such as wind, temperature, pressure, GPS strength, and local zones.
   - role: asset_generator
-    description: Materializes PLATEAU terrain, roads, available road markings, and buildings as aligned MuJoCo/GLB City World assets.
+    description: Converts PLATEAU data into aligned visual and physics City World assets.
+  - role: visualizer
+    description: Supplies GLB city assets for external viewers.
   - role: integration_boundary
-    description: Resolves environment values at drone positions and publishes Disturbance PDU data.
+    description: Maps simulated positions to runtime environment values and disturbance PDU data.
 
 typical_usecases:
-  - Define wind, GPS, temperature, and turbulence zones for robot/drone scenarios.
-  - Visualize environment conditions before running a simulation.
-  - Query environmental values by position at runtime.
-  - Build realistic Sim2Real validation scenarios.
-  - Generate and inspect a MuJoCo/GLB City World for a latitude/longitude-centered area.
+  - Generate a PLATEAU-derived city environment for drone or robot simulation.
+  - Use detailed visual geometry and independently selectable collision fidelity in the same city world.
+  - Preserve roofs, walls, overhang undersides, and external floors when the source LOD2 semantics require them.
+  - Reduce collider counts when full semantic collision would be too expensive for the intended simulation scale.
+  - Generate terrain and roads for construction-machine or ground-robot simulation.
+  - Include bridge visuals and usable bridge-surface collision when bridge data is available.
+  - Define position-dependent wind, GPS, temperature, pressure, and turbulence scenarios.
 
 anti_usecases:
-  - Robot body conversion.
-  - PDU communication transport.
-  - MuJoCo physics stepping by itself.
+  - Safety certification based solely on generated collision geometry.
+  - Treating PLATEAU visual LOD as automatically equivalent to simulation physics fidelity.
+  - Assuming missing terrain, road markings, bridge surfaces, or semantic building features exist when the source dataset does not provide them.
+  - Robot-body modeling or dynamics simulation by itself.
 
 demo_candidates:
-  - name: Kobe port environment model
-    description: Load and visualize examples/datasets/kobe/environment_model.json.
+  - name: PLATEAU City World visual and physics generation
+    description: Build the configured geographic selection into aligned GLB visual and MuJoCo physics assets, inspect the dataset capability report, and compare building physics levels without changing visual LOD.
     required_components:
       - hakoniwa-envsim
     source_examples:
       - repository: hakoniwalab/hakoniwa-envsim
-        path: examples/datasets/kobe/environment_model.json
-        revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
+        path: hakoniwa-build.yaml
+        revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
 
 operations:
   build:
     commands:
       - python tools/hako.py build
-    notes: Explicitly queries the PLATEAU API, downloads matching CityGML, and records actual SHA-256 provenance before conversion.
+    notes: Downloads configured PLATEAU source data when needed and materializes City World assets and receipts.
   test:
     commands:
       - python tools/hako.py test
       - python tools/hako.py smoke
-    notes: Unit tests and smoke are offline so external API availability cannot mask a local regression.
+    notes: Catalog does not infer CI status from these commands; they are the component-owned test and smoke entrypoints.
   run:
     commands:
       - python tools/hako.py doctor
       - python tools/hako.py configure
       - python tools/hako.py install
-    notes: Configure is local-only; build performs acquisition; install publishes the MJCF and provenance under the configured prefix.
-
-runtime_checks:
-  - id: plateau-build-readiness
-    kind: doctor
-    platforms:
-      - macos
-      - linux
-      - windows
-    command:
-      - python
-      - tools/hako.py
-      - doctor
-    working_directory: repository
-    output: text
-    notes:
-      - Validates the manifest, dependencies, and local conversion tools without accessing the network.
-  - id: plateau-offline-smoke
-    kind: smoke-test
-    platforms:
-      - macos
-      - linux
-      - windows
-    command:
-      - python
-      - tools/hako.py
-      - smoke
-    working_directory: repository
-    output: text
-    notes:
-      - Converts a checked-in minimal EPSG:6697 CityGML fixture through MJCF without the external API.
-
-hako_cli:
-  contract_version: "1.1"
-  path: tools/hako.py
-  common_options:
-    - --config
-  commands:
-    - doctor
-    - configure
-    - build
-    - test
-    - install
-    - smoke
+    notes: Doctor and configure validate local readiness and configuration; build performs acquisition and generation; install publishes generated assets under the configured prefix.
 
 known_gaps:
-  - Disturbance shared-writer ownership must be implemented so environment updates preserve rotor-fault and other custom slots.
-  - Creator grid schema and implementation use different extent representations and need a separate compatibility fix.
-  - Runtime HakoEnv lifecycle and an end-to-end drone recipe still need component-owned integration coverage.
+  - Measure end-to-end City World generation cost across representative city sizes and hardware instead of assuming worker-count scaling.
+  - Continue validating P0-P3 classification and collider-reduction tradeoffs against representative PLATEAU datasets.
+  - Define multi-producer ownership or preservation rules for shared Disturbance fields.
 
 source_refs:
   - repository: hakoniwalab/hakoniwa-envsim
-    path: README.md
-    revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
-    description: Main overview, use cases, schemas, and Kobe sample.
+    path: docs/hakoniwa-build-reference.md
+    revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+    description: PLATEAU build-manifest contract including bridge, physics-level, reduction, parallelism, and terrain settings.
   - repository: hakoniwalab/hakoniwa-envsim
-    path: src/hakoniwa_envsim/schemas
-    revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
-    description: Creator and runtime schemas.
+    path: docs/building-physics-classification.md
+    revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+    description: P0-P3 building physics classification and semantic collision contract.
   - repository: hakoniwalab/hakoniwa-envsim
-    path: src/hakoniwa_envsim/fastsearch
-    revision: e9a808756f2fbba05b9fa35e9df84fd977f2a22e
-    description: Fast position lookup implementation.
+    path: src/city_pipeline/city_world_composer.py
+    revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+    description: City World component composition.
   - repository: hakoniwalab/hakoniwa-envsim
-    path: tools/hako.py
-    revision: 2f25a181d061db231b0b09d19e0fad7f8643baf1
-    description: Component-owned PLATEAU acquisition, conversion, provenance, doctor, test, smoke, and install contract.
+    path: src/city_pipeline/city_dataset_validator.py
+    revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+    description: Dataset capability and fallback reporting.
   - repository: hakoniwalab/hakoniwa-envsim
-    path: docs/plateau-citygml-to-mujoco.md
-    revision: 2f25a181d061db231b0b09d19e0fad7f8643baf1
-    description: Geographic selection, output layout, coordinate frame, and operation guide.
+    path: src/city_pipeline/building_physics_classifier.py
+    revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+    description: Building P0-P3 classification implementation.
+  - repository: hakoniwalab/hakoniwa-envsim
+    path: src/city_pipeline/bridge2mjcf.py
+    revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+    description: Optional bridge physics conversion.
+  - repository: hakoniwalab/hakoniwa-envsim
+    path: src/city_pipeline/dem2hfield.py
+    revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
+    description: Terrain generation, bounded extraction, and explicit uncovered-area policy.
 
 tags:
   - hakoniwa
   - environment
-  - wind
-  - gps
-  - temperature
-  - fastsearch
-  - json-schema
   - plateau
   - citygml
+  - city-world
   - mujoco
-  - mjcf
+  - glb
+  - terrain
+  - road
+  - building
+  - bridge
+  - collision
+  - physics
+  - simulation
