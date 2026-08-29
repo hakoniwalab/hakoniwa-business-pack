@@ -44,5 +44,5 @@ index = {
   "components" => components
 }
 
-File.write(INDEX_PATH, "#{index.to_yaml.sub(/^---\n/, "")}\n")
+File.write(INDEX_PATH, index.to_yaml.sub(/^---\n/, ""))
 puts "generated #{INDEX_PATH} (components=#{components.length})"
