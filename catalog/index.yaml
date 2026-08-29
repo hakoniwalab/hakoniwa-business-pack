@@ -263,16 +263,21 @@ components:
   maturity: experimental
   distribution: oss
   summary: Catalog-driven FPV drone design pack that resolves selected frame, motor,
-    propeller, battery, camera, and controller parts into a traceable MuJoCo and Hakoniwa
-    vehicle package for pre-build simulation.
+    propeller, battery, camera, and controller parts into a traceable MuJoCo/Hakoniwa
+    vehicle package, composes reusable physical FPV courses, and optionally materializes
+    a Three.js FPV viewer while keeping MuJoCo as the source of truth for vehicle
+    physics and collision.
   recipe_roles:
   - asset_generator
   - code_generator
   - integration_boundary
+  - visualizer
   connects_to:
   - hakoniwa-drone-core
   - hakoniwa-core-pro
   - hakoniwa-pdu-python
+  - hakoniwa-threejs-drone
+  - hakoniwa-pdu-bridge-core
   tags:
   - hakoniwa
   - fpv
@@ -283,6 +288,8 @@ components:
   - angle-control
   - pid-tuning
   - ps5
+  - fpv-course
+  - threejs
   - simulation
   - oss
   - mit
