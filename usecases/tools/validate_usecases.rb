@@ -94,6 +94,7 @@ usecase_paths.each do |path|
 
     if [repository, external_path, revision].all? { |value| value && !value.empty? }
       errors << "#{label}: realized_by external repository #{repository} is not represented by a Catalog component" unless catalog_repositories.include?(repository)
+      errors << "#{label}: realized_by external path must be repository-relative" if external_path.start_with?("/") || external_path.split("/").include?("..")
       errors << "#{label}: realized_by external revision must be a full 40-character commit SHA" unless revision.match?(/\A[0-9a-f]{40}\z/i)
       next
     end
