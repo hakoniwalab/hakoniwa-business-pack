@@ -121,13 +121,14 @@ components:
   maturity: active
   distribution: oss
   summary: Hakoniwa core runtime extension layer built on hakoniwa-core-cpp, providing
-    shared-memory simulation hub integration, asset APIs, commands, events, and RPC
-    services.
+    shared-memory simulation hub integration, asset APIs, commands, events, RPC services,
+    and reusable Python measurement support for simulation runs.
   recipe_roles:
   - simulation_core
   - communication_infrastructure
   - control_plane
   - time_sync
+  - measurement
   connects_to:
   - hakoniwa-pdu-endpoint
   - hakoniwa-pdu-bridge-core
@@ -145,6 +146,7 @@ components:
   - asset
   - time-sync
   - hako-cmd
+  - measurement
   catalog_path: components/hakoniwa-core-pro.yaml
 - id: hakoniwa-drone-core
   name: Hakoniwa Drone
