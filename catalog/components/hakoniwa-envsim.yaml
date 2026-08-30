@@ -16,7 +16,7 @@ verification:
   source_revision: b4bb4429708677b7c3e61310c6b9c07efbd4df90
   source_ref: main
 
-summary: >
+summary: >-
   Environment modeling and PLATEAU City World generation toolkit. It models runtime
   environmental fields and converts PLATEAU CityGML into aligned GLB visual assets and
   MuJoCo physics assets for terrain, roads, buildings, available road markings, and

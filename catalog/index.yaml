@@ -222,12 +222,10 @@ components:
   - integration
   maturity: active
   distribution: oss
-  summary: 'Environment modeling and PLATEAU City World generation toolkit. It models
+  summary: Environment modeling and PLATEAU City World generation toolkit. It models
     runtime environmental fields and converts PLATEAU CityGML into aligned GLB visual
     assets and MuJoCo physics assets for terrain, roads, buildings, available road
     markings, and optional bridges.
-
-'
   recipe_roles:
   - environment_model
   - asset_generator
