@@ -13,7 +13,7 @@ distribution:
     - Public OSS Hakoniwa component distributed as hakoniwa-pdu on PyPI.
 verification:
   verified_at: 2026-08-30
-  source_revision: fdbc7ccbf7b2c6150797d54e13c4c80f691cf0f8
+  source_revision: 994ef0fc7e71d78e7f365dc85dbbaa93b72368c7
   source_ref: main
 summary: Python PDU package providing generated type and offset-based binary conversion independently of Hakoniwa Core, with optional WebSocket, shared-memory, RPC, and Launcher runtime capabilities.
 category:
@@ -29,7 +29,7 @@ status:
     - Core-free packet conversion and Core-dependent runtime integration are separate capability profiles.
     - The package does not install hakopy, hako-cmd, or Hakoniwa Core by itself.
     - Core-integrated Foundation Recipes use the same managed CPython 3.12 interpreter for hakoniwa-pdu and the SOABI-tagged hakopy artifact declared by the Core Receipt.
-    - Current main adds activate-only background startup and explicit cleanup coverage; uncommitted local readiness-gate work is not included in this Catalog revision.
+    - Current main adds activate-only background startup, explicit cleanup coverage, and an optional bounded hako_asset readiness gate.
 capabilities:
   - name: Python PDU communication
     description: Provides Python APIs for Hakoniwa PDU topic and RPC communication.
@@ -118,6 +118,18 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-pdu-python
         path: tests/test_launcher_cleanup.py
         revision: fdbc7ccbf7b2c6150797d54e13c4c80f691cf0f8
+  - name: Optional Hakoniwa asset readiness gate
+    description: An asset may explicitly require exact-name registration in bounded hako-cmd ls probes before the Launcher starts the next process; omitted readiness preserves the existing process-liveness behavior for non-Hakoniwa assets.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: src/hakoniwa_pdu/apps/launcher/model.py
+        revision: 994ef0fc7e71d78e7f365dc85dbbaa93b72368c7
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: src/hakoniwa_pdu/apps/launcher/hako_monitor.py
+        revision: 994ef0fc7e71d78e7f365dc85dbbaa93b72368c7
+      - repository: hakoniwalab/hakoniwa-pdu-python
+        path: tests/test_launcher_readiness.py
+        revision: 994ef0fc7e71d78e7f365dc85dbbaa93b72368c7
 limitations:
   - Offset files are required for binary conversion and are resolved through HAKO_BINARY_PATH or an installed offset path.
   - WebSocket URI scope must be explicitly configured.
