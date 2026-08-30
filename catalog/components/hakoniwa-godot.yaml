@@ -10,8 +10,8 @@ distribution:
   notes:
     - Public OSS Hakoniwa component.
 verification:
-  verified_at: 2026-07-19
-  source_revision: 8f5d7d1765b319f107420f8ac4f87b24ab26ae76
+  verified_at: 2026-08-30
+  source_revision: 5ca7e06007bcd7838419181344714a24649a1446
   source_ref: main
 summary: Godot addon and integration package that makes Godot a Hakoniwa simulation participant for visualization, PDU exchange, control, and optional physics time synchronization.
 category:
@@ -26,6 +26,7 @@ status:
   catalog_confidence: high
   notes:
     - Cataloged from README architecture, robot sync, and supported platform sections.
+    - Current main hardens the Windows/WSL Core Pro smoke path with explicit configuration and documents its platform-specific execution boundary.
 
 capabilities:
   - name: Godot as Hakoniwa node
@@ -53,11 +54,14 @@ capabilities:
         path: README.md
         revision: 8f5d7d1765b319f107420f8ac4f87b24ab26ae76
   - name: Codec and smoke-test workflow
-    description: Provides codec nodes, generated message addon sync, smoke tests, and integration tests.
+    description: Provides codec nodes, generated message addon sync, smoke tests, and integration tests, including explicit Windows/WSL Core Pro smoke configuration.
     evidence:
       - repository: hakoniwalab/hakoniwa-godot
-        path: README.md
-        revision: 8f5d7d1765b319f107420f8ac4f87b24ab26ae76
+        path: tests/README.md
+        revision: 5ca7e06007bcd7838419181344714a24649a1446
+      - repository: hakoniwalab/hakoniwa-godot
+        path: tools/run_core_pro_smoke.ps1
+        revision: 5ca7e06007bcd7838419181344714a24649a1446
 
 limitations:
   - PDU-RPC integration is marked as next work in the README status table.
@@ -253,4 +257,3 @@ tags:
   - endpoint
   - robot-sync
   - time-sync
-

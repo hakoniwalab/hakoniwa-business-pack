@@ -10,8 +10,8 @@ distribution:
   notes:
     - Public OSS Hakoniwa component under the MIT license.
 verification:
-  verified_at: 2026-07-26
-  source_revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
+  verified_at: 2026-08-30
+  source_revision: b7cd3b7961ed210fd45b0b0d753eddbd11531339
   source_ref: main
 summary: >-
   Output-only Foxglove adapter for hakoniwa-pdu-endpoint that publishes
@@ -35,6 +35,7 @@ status:
     - The repository-level Shadow Hand integration directly uses hakoniwa-pdu-bridge-core with Endpoint core_callback on the Hakoniwa side.
     - Shadow Hand JointState publication and URDF-backed Foxglove 3D visualization remain runtime-verified on macOS arm64; cross-platform CI does not claim full Shadow Hand runtime E2E portability.
     - A separate Windows x64 CI performs build, CTest, and publisher smoke validation.
+    - Current main records the Shadow Hand integration's Endpoint and Bridge variants as explicit manifests and validates required local artifacts before launch.
 
 capabilities:
   - name: Foxglove live output
@@ -109,6 +110,21 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-pdu-foxglove
         path: README.md
         revision: f603ca545cd4a27a3a894c1e7d75137029529dbf
+  - name: Manifest-defined Shadow Hand dependency composition
+    description: Keeps Core-free Endpoint, Core callback Endpoint, and Shadow Hand Bridge build intents in separate manifests so one build directory is not silently reused across incompatible variants.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-foxglove
+        path: config/manifests/endpoint-core-free.yaml
+        revision: b7cd3b7961ed210fd45b0b0d753eddbd11531339
+      - repository: hakoniwalab/hakoniwa-pdu-foxglove
+        path: config/manifests/endpoint-core-callback.yaml
+        revision: b7cd3b7961ed210fd45b0b0d753eddbd11531339
+      - repository: hakoniwalab/hakoniwa-pdu-foxglove
+        path: config/manifests/bridge-shadow-hand.yaml
+        revision: b7cd3b7961ed210fd45b0b0d753eddbd11531339
+      - repository: hakoniwalab/hakoniwa-pdu-foxglove
+        path: tools/launch.bash
+        revision: b7cd3b7961ed210fd45b0b0d753eddbd11531339
 
 limitations:
   - Output-only; recv and recv_next are unsupported.

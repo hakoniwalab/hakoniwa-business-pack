@@ -227,7 +227,7 @@ components:
     assets and MuJoCo physics assets for terrain, roads, buildings, available road
     markings, and optional bridges.
 
-    '
+'
   recipe_roles:
   - environment_model
   - asset_generator

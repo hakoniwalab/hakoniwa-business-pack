@@ -13,8 +13,8 @@ distribution:
     - Upstream robot descriptions and meshes retain their upstream licenses when materialized locally.
 
 verification:
-  verified_at: 2026-07-25
-  source_revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+  verified_at: 2026-08-30
+  source_revision: 93a053913445d2f97a6dddc1ccb959c985a3db44
   source_ref: main
 
 summary: >-
@@ -37,6 +37,7 @@ status:
   notes:
     - Current responsibility boundary was re-reviewed after TurtleBot3, AgileX Tracer, and Shadow Hand cross-repository validation.
     - Artifact preparation/export belongs here; runtime lifecycle, control, transport, and synchronization behavior belong downstream.
+    - The current README was audited and condensed around this responsibility boundary; it does not introduce a new downstream runtime claim.
 
 capabilities:
   - name: Reproducible robot source materialization
