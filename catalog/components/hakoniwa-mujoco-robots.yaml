@@ -11,7 +11,7 @@ distribution:
     - Public OSS Hakoniwa component.
 verification:
   verified_at: 2026-08-30
-  source_revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+  source_revision: f5946fa53e08a531a7e421a94280a9ddaa3233c6
   source_ref: main
 summary: MuJoCo-based robot simulation assets for Hakoniwa, including TurtleBot3, sensor and actuator examples, Python controllers, and PDU integration.
 category:
@@ -27,6 +27,7 @@ status:
   notes:
     - Cataloged from the public source tree, PDU adapters, sensor tests, build manifest, and component-owned build entry point.
     - Current main adds event-driven Twist and JointTrajectory readers, IMU body-frame regression coverage, and manifest-driven cross-platform build selection.
+    - Current main also provides one manifest-driven Ackermann C++ asset for Golf Cart and Hunter V2, with PS5 operation and layered doctor/smoke/validate checks.
 capabilities:
   - name: MuJoCo robot simulation
     description: Runs ROS/URDF-derived robot models such as TurtleBot3 Burger in MuJoCo.
@@ -100,6 +101,33 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-mujoco-robots
         path: tools/test_hako.py
         revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+  - name: Manifest-driven Ackermann vehicle runtime
+    description: >
+      Runs different four-wheel Ackermann MJCF vehicles through one compiled
+      Hakoniwa asset by resolving vehicle geometry, semantic joint/actuator
+      bindings, control limits, and smoke criteria from schema-validated package files.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: docs/ackermann-asset-package.md
+        revision: f5946fa53e08a531a7e421a94280a9ddaa3233c6
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: examples/actuators/generic_ackermann/generic-ackermann-hakoniwa-asset.cpp
+        revision: f5946fa53e08a531a7e421a94280a9ddaa3233c6
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: tools/validate_ackermann_asset_package.py
+        revision: f5946fa53e08a531a7e421a94280a9ddaa3233c6
+  - name: Hunter V2 and Golf Cart PS5 recipes
+    description: >
+      Supplies shared game-controller PDU wiring and Launcher-managed runtime
+      recipes for manual Ackermann operation, while retaining separate static
+      doctor, fast dynamic smoke, and detailed MBody validation responsibilities.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: recipes/hunter/hunter-ackermann-ps5.yaml
+        revision: f5946fa53e08a531a7e421a94280a9ddaa3233c6
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: tools/recipe/hunter.py
+        revision: f5946fa53e08a531a7e421a94280a9ddaa3233c6
   - name: Forklift context and RD-light demos
     description: Includes forklift samples with context save/restore and advanced RD-light handoff.
     evidence:
@@ -126,6 +154,9 @@ interfaces:
     - name: Controller commands
       kind: pdu
       description: Python controller output consumed by simulator.
+    - name: Ackermann game-controller command
+      kind: pdu
+      description: PS5 axes carried through the shared GameControllerOperation PDU and converted to speed and Ackermann steering targets.
     - name: Rover Twist command
       kind: pdu
       description: geometry_msgs/Twist command input for mobile-base linear.x/angular.z control.
@@ -256,6 +287,7 @@ typical_usecases:
   - Receive event-driven Twist or JointTrajectory commands in a Hakoniwa-integrated MuJoCo robot asset.
   - Validate a newly converted robot body with MuJoCo-only actuator smoke before Hakoniwa PDU wiring.
   - Validate a rover/mobile-base Twist command path after plant and controller assets register, then start with hako-cmd.
+  - Generate and validate Golf Cart or Hunter V2, then operate the selected Ackermann package with a PS5 controller.
   - Demonstrate forklift context save/restore and RD-light handoff.
 anti_usecases:
   - Pure robot body conversion without running MuJoCo.
@@ -282,6 +314,17 @@ demo_candidates:
       - repository: hakoniwalab/hakoniwa-mujoco-robots
         path: README.md
         revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
+  - name: Hunter V2 PS5 Ackermann operation
+    description: Forge the pinned Hunter body in MBody, validate its package and dynamics, then run the shared Ackermann asset through Launcher with a PS5 controller.
+    required_components:
+      - hakoniwa-mujoco-robots
+      - hakoniwa-mbody-registry
+      - hakoniwa-core-pro
+      - hakoniwa-pdu-endpoint
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-mujoco-robots
+        path: recipes/hunter/README.md
+        revision: f5946fa53e08a531a7e421a94280a9ddaa3233c6
 runtime_checks:
   - id: build-readiness
     kind: doctor
@@ -306,8 +349,11 @@ operations:
     notes:
       - tools/hako.py validates hakoniwa-build.yaml and is the preferred OS-independent entry point; native build scripts remain available for low-level debugging.
   test:
-    commands: []
-    notes: Sensor and tools tests exist in the repository; exact recipe-level invocation remains outside this catalog entry.
+    commands:
+      - python3.12 tools/recipe/hunter.py doctor
+      - python3.12 tools/recipe/hunter.py smoke
+      - python3.12 tools/recipe/hunter.py validate
+    notes: doctor checks static package/schema/binding readiness, smoke performs a fast shared-C++ idle/straight/turn run, and validate delegates detailed scoring to MBody.
   run:
     commands:
       - ./src/cmake-build/main_for_sample/tb3/tb3_sim
@@ -348,6 +394,10 @@ source_refs:
     path: tools/test_hako.py
     revision: fa2dd37eb58597a47b1b4788f931da19ef09aab6
     description: Unit tests for build-manifest parsing and command resolution.
+  - repository: hakoniwalab/hakoniwa-mujoco-robots
+    path: recipes/hunter/README.md
+    revision: f5946fa53e08a531a7e421a94280a9ddaa3233c6
+    description: Reproducible Hunter Forge, package validation, shared runtime, and PS5 operating procedure.
 tags:
   - hakoniwa
   - mujoco
@@ -358,3 +408,6 @@ tags:
   - actuator
   - forklift
   - pdu
+  - ackermann
+  - hunter-v2
+  - gamepad

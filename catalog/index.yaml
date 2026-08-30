@@ -403,6 +403,8 @@ components:
   - pdu
   - asset-generation
   - source-materialization
+  - ackermann
+  - hunter-v2
   catalog_path: components/hakoniwa-mbody-registry.yaml
 - id: hakoniwa-mujoco-robots
   name: Hakoniwa MuJoCo Robots
@@ -436,6 +438,9 @@ components:
   - actuator
   - forklift
   - pdu
+  - ackermann
+  - hunter-v2
+  - gamepad
   catalog_path: components/hakoniwa-mujoco-robots.yaml
 - id: hakoniwa-pdu-bridge-core
   name: Hakoniwa PDU Bridge Core

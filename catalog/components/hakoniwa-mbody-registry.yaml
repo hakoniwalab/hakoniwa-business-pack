@@ -14,7 +14,7 @@ distribution:
 
 verification:
   verified_at: 2026-08-30
-  source_revision: 93a053913445d2f97a6dddc1ccb959c985a3db44
+  source_revision: a3a5582599c8fbe1c270fa715a7d55b53ad13e84
   source_ref: main
 
 summary: >-
@@ -38,6 +38,7 @@ status:
     - Current responsibility boundary was re-reviewed after TurtleBot3, AgileX Tracer, and Shadow Hand cross-repository validation.
     - Artifact preparation/export belongs here; runtime lifecycle, control, transport, and synchronization behavior belong downstream.
     - The current README was audited and condensed around this responsibility boundary; it does not introduce a new downstream runtime claim.
+    - Ackermann body migration now has a dedicated Forge, deterministic artifact verification, scored dynamic validation, and an optional non-promoting Optuna search boundary.
 
 capabilities:
   - name: Reproducible robot source materialization
@@ -118,6 +119,36 @@ capabilities:
         path: tools/mjcf_compose_world.py
         revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
 
+  - name: Ackermann body Forge and migration validation
+    description: >
+      Reproducibly materializes Ackermann vehicle sources, applies explicit
+      porting overlays, regenerates committed artifacts byte-for-byte, and
+      evaluates idle, straight, left/right-turn, numerical-health, RTF, and
+      user-weighted quality metrics without embedding vehicle names in the validator.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: tools/ackermann/forge.py
+        revision: a3a5582599c8fbe1c270fa715a7d55b53ad13e84
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: tools/ackermann/validate.py
+        revision: a3a5582599c8fbe1c270fa715a7d55b53ad13e84
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: bodies/hunter_v2/config/ackermann-forge.yaml
+        revision: a3a5582599c8fbe1c270fa715a7d55b53ad13e84
+
+  - name: Recipe-owned MJCF visual material overlay
+    description: >
+      Assigns explicit MuJoCo materials to named mesh geoms during Forge so
+      upstream models without portable material metadata retain a reproducible
+      visual presentation without hand-editing generated MJCF.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: tools/mjcf_apply_visual_materials.py
+        revision: a3a5582599c8fbe1c270fa715a7d55b53ad13e84
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: bodies/hunter_v2/config/visual_materials.yaml
+        revision: a3a5582599c8fbe1c270fa715a7d55b53ad13e84
+
   - name: GLB and runtime-neutral view-model generation
     description: >
       Produces single or split GLB visual assets and a view-only model derived from
@@ -177,7 +208,7 @@ interfaces:
       description: Upstream MJCF tree used by forge.mode mjcf_passthrough.
     - name: Robot preparation configs
       kind: config
-      description: Optional actuator, collision, contact, world, PDU, viewer, and Godot export inputs.
+      description: Optional visual-material, actuator, collision, contact, world, PDU, viewer, and Godot export inputs.
   outputs:
     - name: Normalized URDF
       kind: file
@@ -253,6 +284,7 @@ typical_usecases:
   - Convert ROS-origin Xacro/URDF into structural MJCF and GLB without requiring a ROS runtime.
   - Consume an upstream authoritative MJCF model directly when URDF conversion is inappropriate.
   - Prepare MuJoCo-specific actuator/collision/world artifacts before handing them to a runtime runner.
+  - Port and score an Ackermann vehicle body before wiring it to a downstream manual-control runtime.
   - Generate robot-specific PDU or Godot artifacts while keeping runtime behavior in downstream components.
 
 anti_usecases:
@@ -287,6 +319,15 @@ demo_candidates:
       - repository: hakoniwalab/hakoniwa-mbody-registry
         path: sources/shadow_hand.yaml
         revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
+  - name: Hunter V2 Ackermann Forge and visual-material handoff
+    description: Materialize the pinned Apache-2.0 Hunter source, generate and score its MuJoCo body, and reproduce the gray body, black tires, and blue test floor from declarative overlays.
+    required_components:
+      - hakoniwa-mbody-registry
+      - hakoniwa-mujoco-robots
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-mbody-registry
+        path: bodies/hunter_v2/config/README.md
+        revision: a3a5582599c8fbe1c270fa715a7d55b53ad13e84
 
 source_refs:
   - repository: hakoniwalab/hakoniwa-mbody-registry
@@ -309,6 +350,10 @@ source_refs:
     path: docs/mjcf-passthrough.md
     revision: 07cb0e0d4086970c7e5de959cdd98570731a4ff3
     description: Direct authoritative MJCF materialization and asset-closure validation.
+  - repository: hakoniwalab/hakoniwa-mbody-registry
+    path: docs/ackermann-validation.md
+    revision: a3a5582599c8fbe1c270fa715a7d55b53ad13e84
+    description: Ackermann migration scenarios, score semantics, optimizer boundary, and validation limits.
 
 tags:
   - hakoniwa
@@ -323,3 +368,5 @@ tags:
   - pdu
   - asset-generation
   - source-materialization
+  - ackermann
+  - hunter-v2
