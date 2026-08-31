@@ -1,0 +1,111 @@
+id: recipe-local-requirements-cannot-pin-a-commit-sha
+title: Recipe source materialization cannot pin a commit SHA, so a verified Recipe run is not reproducible by construction
+
+status: candidate
+
+knowledge_type:
+  - implementation_fact
+  - known_pitfall
+
+summary: >
+  A Recipe records its verification evidence as commit SHAs, but the code that
+  materializes sources clones with "git clone --branch <revision>
+  --single-branch", and git rejects a commit SHA there. Combined with
+  catalog/foundation-components.json carrying no revision for the component, a
+  fresh run of a Recipe whose evidence names SHAs actually builds the current
+  default branches. For athrill-v850e2m-build both dependencies have already
+  moved past the recorded evidence, so the default path can no longer build the
+  state that was declared verified.
+
+observation:
+  context: >
+    Preparing an independent Windows reproduction of
+    recipes/examples/athrill-v850e2m-build.yaml at exactly the revisions named in
+    its validation evidence.
+  details:
+    - tools/recipe.py::_clone_repository builds "git clone --recurse-submodules [--branch <revision> --single-branch] <url> <target>", so revision is passed to --branch.
+    - git accepts only a branch or tag name for --branch; a full commit SHA fails with "fatal: Remote branch <sha> not found in upstream origin".
+    - recipes/examples/athrill-v850e2m-build.yaml declares recipe_local_requirements.athrill.source.revision as master, and catalog/foundation-components.json registers athrill-target-v850e2m with no revision key, so neither dependency is pinned.
+    - The same Recipe records validation evidence at athrill 9b3190a0509310c5e02ba88fa47aa6a3fc58462f and athrill-target-v850e2m 1c2cea9dd518dfad1388ef91c2c3068815702fc3.
+    - _resolve_source_requirement reports provenance.reproducibility as pinned whenever a revision string is present, so a branch name such as master is labelled pinned even though it is a moving target.
+    - When the sibling directory already exists the action becomes reuse and the resolved revision is read from the existing checkout, which is the only currently available way to run a Recipe at a chosen SHA.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/recipe.py
+      revision: 046f14b
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: catalog/foundation-components.json
+      revision: 046f14b
+  runtime_evidence:
+    - description: >
+        "git clone --branch 9b3190a0509310c5e02ba88fa47aa6a3fc58462f
+        --single-branch <athrill> <target>" exits 128 with "fatal: Remote branch
+        9b3190a0509310c5e02ba88fa47aa6a3fc58462f not found in upstream origin",
+        while the same command with --branch master exits 0 (positive control on
+        the same source repository).
+    - description: >
+        On 2026-08-31 the default branches had moved beyond the recorded
+        evidence: toppers/athrill HEAD was edc75f2f14c21f185ef4ddc388c68be659d503ea
+        (evidence 9b3190a0...) and toppers/athrill-target-v850e2m HEAD was
+        d7123b6c36ccb36b71ce7ec3940b53199f1f719c (evidence 1c2cea9d...).
+    - description: >
+        Reproduction at the recorded SHAs succeeded only by pre-creating both
+        sibling checkouts at detached HEADs, after which "python tools/recipe.py
+        plan" reported "reuse ... resolved=1c2cea9d..." and
+        "reuse ... requested=master, resolved=9b3190a0...", and the run reached
+        Foundation SATISFIED.
+
+confidence: high
+
+contradictions:
+  - target: tools/recipe.py
+    existing_claim: >
+      provenance.reproducibility is reported as pinned when the source declares a
+      revision.
+    new_evidence: >
+      A branch name is accepted as a revision and labelled pinned, so the field
+      does not distinguish an immutable commit from a moving branch. The only
+      value that would make the label true is the one value the clone path
+      rejects.
+
+validation:
+  status: verified
+  required:
+    - Confirm the intended fix direction: accept a SHA in source.revision (clone then checkout), or state explicitly that Recipe evidence is only ever branch-level.
+  notes:
+    - The git behaviour was verified locally with a positive control rather than inferred from documentation.
+    - Whether the current default branches still build successfully was not tested; this candidate is about pinning, not about breakage on master.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - athrill-v850e2m-build
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      kind: validator
+      path: recipes/tools/validate_recipes.rb
+      mode: detect-only
+      notes:
+        - Flag a Recipe whose validation evidence names commit SHAs while its source requirements resolve to a branch, since that combination cannot be re-run as recorded.
+
+promotion_rationale:
+  - The mismatch between recorded evidence and materializable revisions is detectable from the Recipe files alone, so a validator check is the cheapest guard.
+  - No catalog claim is wrong on its own; the gap is in the materialization contract, so this belongs with the Recipe tooling rather than a component entry.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Pre-created sibling checkouts are a workaround, not a fix; they leave the pinning decision outside the Recipe.

@@ -1,0 +1,116 @@
+id: athrill-doctor-probes-ambient-path-not-the-build-shell
+title: Athrill V850E2M doctor probes the ambient PATH while every build command runs inside VsDevCmd
+
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+
+summary: >
+  On a Windows host whose CMake and Ninja come only from the Visual Studio
+  installation, the Athrill V850E2M Recipe stops at the component doctor with
+  "NG cmake" and "NG ninja" even though the build itself works. The component
+  CLI checks these tools with shutil.which in the ambient shell, but it runs
+  every real command inside VsDevCmd, where the Visual Studio copies of CMake
+  and Ninja are on PATH. The precondition is therefore evaluated in a
+  different environment from the one that executes the work, so the Recipe's
+  documented plain-shell entry path fails with a false negative.
+
+observation:
+  context: >
+    Independent Windows reproduction of recipes/examples/athrill-v850e2m-build.yaml
+    on a native Windows 11 x64 host (Visual Studio 2022 Community, no standalone
+    CMake or Ninja installation, vcpkg checkout, Python 3.12.7, Ruby 3.2.11),
+    following the Recipe demo steps verbatim from an ordinary shell.
+  details:
+    - tools/hako.py doctor() decides the cmake and ninja checks with shutil.which, which reads the PATH of the invoking shell.
+    - tools/hako.py _run() executes configure, build, install, and smoke through 'cmd.exe /d /c call "<VsDevCmd.bat>" -arch=x64 -host_arch=x64 && ...', so those commands see the Visual Studio developer PATH instead.
+    - Visual Studio 2022 Community ships cmake.exe and ninja.exe under Common7/IDE/CommonExtensions/Microsoft/CMake; they are absent from the ambient PATH and present inside VsDevCmd.
+    - Because create_build_plan runs doctor first, a non-zero doctor aborts the whole Recipe before any build attempt, so the false negative is fatal rather than cosmetic.
+    - The same doctor invocation returns all OK when it is run inside the VsDevCmd shell that _run uses, which isolates the cause to the environment mismatch rather than to a missing tool.
+    - The catalog component lists "CMake and C compiler" as a required tool dependency, so a host that relies on the Visual Studio copies is not obviously out of contract; the Recipe's platform note states that the component-owned CLI initializes Visual Studio.
+
+sources:
+  repositories:
+    - repository: toppers/athrill-target-v850e2m
+      path: tools/hako.py
+      revision: 1c2cea9dd518dfad1388ef91c2c3068815702fc3
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: recipes/examples/athrill-v850e2m-build.yaml
+      revision: 046f14b
+  runtime_evidence:
+    - description: >
+        Recipe run from an ordinary shell, Windows 11 x64: "python tools/recipe.py
+        configure --recipe recipes/examples/athrill-v850e2m-build.yaml" exited 2
+        after the component doctor printed "NG cmake", "NG ninja", "OK athrill
+        common CMake", "OK Visual Studio C++", "OK vcpkg", followed by "error:
+        athrill-target-v850e2m command failed with exit code 1".
+    - description: >
+        Same component doctor, same manifest, executed inside the VsDevCmd shell
+        used by _run: exit 0 with "OK cmake", "OK ninja", "OK athrill common
+        CMake", "OK Visual Studio C++", "OK vcpkg".
+    - description: >
+        'where cmake' and 'where ninja' inside VsDevCmd resolve to
+        Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe and
+        Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe, while
+        shutil.which returns None for both in the ambient shell.
+    - description: >
+        With only those two Visual Studio directories prepended to PATH and no
+        other change, the identical Recipe command completed: 92 Ninja targets
+        built, install wrote bin/athrill2.exe, CTest reported 3/3 passed, and
+        Foundation reported SATISFIED.
+
+confidence: high
+
+contradictions:
+  - target: recipes/examples/athrill-v850e2m-build.yaml
+    existing_claim: >
+      validation.status is verified and steps[windows_foundation_build].status is
+      verified for native Windows x64.
+    new_evidence: >
+      The build does reproduce on Windows, but not through the documented
+      plain-shell entry path on a host without standalone CMake and Ninja: the
+      component doctor rejects it first. The verified claim appears to assume a
+      host that also has standalone CMake and Ninja on PATH, which is not stated
+      in the Recipe or the catalog entry.
+
+validation:
+  status: verified
+  required: []
+  notes:
+    - Verified on one Windows 11 x64 host on 2026-08-31; the negative and positive shells were both exercised with the same manifest, so the difference is attributable to PATH resolution.
+    - Not reproduced on macOS or Linux, where _run does not wrap commands in a developer shell and the ambient probe matches the execution environment.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog:
+    - athrill-target-v850e2m
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - athrill-v850e2m-build
+  executable_guardrails:
+    - repository: toppers/athrill-target-v850e2m
+      kind: doctor
+      path: tools/hako.py
+      mode: detect-and-suggest-remediation
+      notes:
+        - Probe cmake and ninja in the same shell that _run uses on Windows, rather than with shutil.which in the ambient shell.
+        - When the tools are only reachable inside VsDevCmd, report that explicitly instead of NG, so the message distinguishes "not installed" from "not on the ambient PATH".
+
+promotion_rationale:
+  - The rule is machine-checkable inside the component's own doctor, which is where the false negative is produced.
+  - A catalog note is also appropriate because the host expectation (standalone CMake and Ninja, or a developer shell) is currently unstated.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Reported from an independent Windows reproduction; no upstream change has been made yet.
