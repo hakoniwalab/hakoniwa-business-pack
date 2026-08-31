@@ -57,6 +57,13 @@ sources:
         plan" reported "reuse ... resolved=1c2cea9d..." and
         "reuse ... requested=master, resolved=9b3190a0...", and the run reached
         Foundation SATISFIED.
+    - description: >
+        The unpinned path was then measured as well: with both siblings replaced
+        by fresh clones of the default branches (edc75f2f / d7123b6c), the same
+        build reached Foundation SATISFIED with CTest 3/3 and a Receipt recording
+        source_revision d7123b6c and capabilities.exdev true. The default
+        branches are healthy on Windows; what the Recipe cannot do is re-create
+        the state its evidence names.
 
 confidence: high
 
@@ -77,7 +84,7 @@ validation:
   notes:
     - The git behaviour was verified locally with a positive control rather than inferred from documentation.
     - Open maintainer decision, not a verification gap: accept a raw commit ID in source.revision (clone then checkout), tag the verified state, or state explicitly that Recipe evidence is only ever branch-level.
-    - Whether the current default branches still build successfully was not tested; this candidate is about pinning, not about breakage on master.
+    - The current default branches were then built as a separate observation and are healthy on Windows (see the last runtime_evidence entry), so the finding is purely about pinning, not about breakage on master.
 
 tracking:
   implementation_status: open
