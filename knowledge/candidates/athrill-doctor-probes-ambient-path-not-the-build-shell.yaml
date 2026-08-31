@@ -9,12 +9,15 @@ knowledge_type:
 summary: >
   On a Windows host whose CMake and Ninja come only from the Visual Studio
   installation, the Athrill V850E2M Recipe stops at the component doctor with
-  "NG cmake" and "NG ninja" even though the build itself works. The component
-  CLI checks these tools with shutil.which in the ambient shell, but it runs
-  every real command inside VsDevCmd, where the Visual Studio copies of CMake
-  and Ninja are on PATH. The precondition is therefore evaluated in a
-  different environment from the one that executes the work, so the Recipe's
-  documented plain-shell entry path fails with a false negative.
+  "NG cmake" and "NG ninja" even though the build completes once those tools are
+  reachable. The component CLI checks them with shutil.which in the ambient
+  shell, but it runs every real command inside VsDevCmd, where the Visual Studio
+  copies are on PATH, so the precondition is evaluated in a different
+  environment from the one that executes the work. Whether such a host is in
+  contract is an open question for the maintainers: the catalog lists "CMake and
+  C compiler" as a required tool, which may be intended to mean a standalone
+  installation. Either way the two environments should agree, and the message
+  should distinguish "not installed" from "not on the ambient PATH".
 
 observation:
   context: >
@@ -26,9 +29,10 @@ observation:
     - tools/hako.py doctor() decides the cmake and ninja checks with shutil.which, which reads the PATH of the invoking shell.
     - tools/hako.py _run() executes configure, build, install, and smoke through 'cmd.exe /d /c call "<VsDevCmd.bat>" -arch=x64 -host_arch=x64 && ...', so those commands see the Visual Studio developer PATH instead.
     - Visual Studio 2022 Community ships cmake.exe and ninja.exe under Common7/IDE/CommonExtensions/Microsoft/CMake; they are absent from the ambient PATH and present inside VsDevCmd.
-    - Because create_build_plan runs doctor first, a non-zero doctor aborts the whole Recipe before any build attempt, so the false negative is fatal rather than cosmetic.
+    - Because create_build_plan runs doctor first, a non-zero doctor aborts the whole Recipe before any build attempt, so the rejection is fatal rather than cosmetic.
     - The same doctor invocation returns all OK when it is run inside the VsDevCmd shell that _run uses, which isolates the cause to the environment mismatch rather than to a missing tool.
-    - The catalog component lists "CMake and C compiler" as a required tool dependency, so a host that relies on the Visual Studio copies is not obviously out of contract; the Recipe's platform note states that the component-owned CLI initializes Visual Studio.
+    - The catalog component lists "CMake and C compiler" as a required tool dependency. If that is meant to require a standalone installation, this host was out of contract and the finding reduces to a message and documentation gap rather than a build defect; neither the catalog entry nor the Recipe states which is intended, and the Recipe's platform note assigns Visual Studio initialization to the component-owned CLI.
+    - The repository's own managed workspace does not close the gap: inside "tools/workspace.py run --", shutil.which returns None for both tools and the component doctor still exits 1, so this is not a case of ignoring the recommended entry path.
 
 sources:
   repositories:
@@ -55,12 +59,17 @@ sources:
         Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe, while
         shutil.which returns None for both in the ambient shell.
     - description: >
+        Inside the repository's managed workspace, running the same probe
+        through "python tools/workspace.py run --" printed "cmake: None" and
+        "ninja: None", and the component doctor invoked the same way still
+        reported "NG ninja" and exited 1.
+    - description: >
         With only those two Visual Studio directories prepended to PATH and no
         other change, the identical Recipe command completed: 92 Ninja targets
         built, install wrote bin/athrill2.exe, CTest reported 3/3 passed, and
         Foundation reported SATISFIED.
 
-confidence: high
+confidence: medium
 
 contradictions:
   - target: recipes/examples/athrill-v850e2m-build.yaml
@@ -75,14 +84,15 @@ contradictions:
       in the Recipe or the catalog entry.
 
 validation:
-  status: verified
-  required: []
+  status: partially_verified
+  required:
+    - Confirm whether a Visual Studio-bundled CMake and Ninja are intended to satisfy the component's required tool dependency. If they are not, this is a message and documentation gap rather than a defect, and the title should be narrowed accordingly.
   notes:
     - Verified on one Windows 11 x64 host on 2026-08-31; the negative and positive shells were both exercised with the same manifest, so the difference is attributable to PATH resolution.
     - Not reproduced on macOS or Linux, where _run does not wrap commands in a developer shell and the ambient probe matches the execution environment.
 
 tracking:
-  implementation_status: none
+  implementation_status: open
   issues: []
 
 promotion_targets:
@@ -103,7 +113,7 @@ promotion_targets:
         - When the tools are only reachable inside VsDevCmd, report that explicitly instead of NG, so the message distinguishes "not installed" from "not on the ambient PATH".
 
 promotion_rationale:
-  - The rule is machine-checkable inside the component's own doctor, which is where the false negative is produced.
+  - The rule is machine-checkable inside the component's own doctor, which is where the rejection is produced.
   - A catalog note is also appropriate because the host expectation (standalone CMake and Ninja, or a developer shell) is currently unstated.
 
 resolution:
@@ -114,3 +124,4 @@ resolution:
   executable_guardrails: []
   notes:
     - Reported from an independent Windows reproduction; no upstream change has been made yet.
+    - No issue has been filed in the owning repository yet, because the contract question above decides which repository should own it.

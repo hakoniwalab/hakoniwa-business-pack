@@ -68,15 +68,16 @@ contradictions:
       accurate and is the limitation worth keeping.
 
 validation:
-  status: partially_verified
-  required:
-    - Run an Athrill target ELF against live Hakoniwa time and EV3 PDU traffic to close the behavioural gap; the shared-library test covers loading, not exchange.
+  status: verified
+  required: []
   notes:
+    - The verified claim is narrow and complete: the Windows smoke executes three CTest cases, one of which loads the EXDEV shared library, so the catalog's "startup/usage only" wording understates it.
+    - Still open, and already tracked by the athrill-device candidate rather than this one: running a target ELF against live Hakoniwa time and EV3 PDU traffic. Loading is not exchange.
     - Verified on one Windows 11 x64 host on 2026-08-31 with the component and common source pinned to the revisions in the Recipe evidence.
     - This candidate refines a limitation wording; it does not claim that EXDEV runtime behaviour is proven.
 
 tracking:
-  implementation_status: none
+  implementation_status: open
   issues: []
 
 promotion_targets:
@@ -101,3 +102,4 @@ resolution:
   executable_guardrails: []
   notes:
     - Suggested minimal edit: keep the ELF/memory-configuration limitation and drop or qualify "startup/usage only".
+    - No issue has been filed; this is a one-line wording change in this repository, so the pull request itself may be the smallest useful tracking unit.
