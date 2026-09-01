@@ -1,27 +1,28 @@
 id: pdu-rpc-action-client-has-no-transport-loss-event
-title: An Action Client has no event for transport loss; the only way to notice a killed server is to poll is_running() and wait roughly 1.8s for it to flip
+title: Action Server process crash or SIGKILL is outside the Action runtime contract; the supported signal is transport disconnect, and a killed Server is only observable by polling is_running()
 status: candidate
 
 knowledge_type:
-  - runtime_rule
-  - known_pitfall
+  - design_intent
   - interface_contract
+  - runtime_rule
 
 summary: >
-  hakoniwa-pdu-rpc's Action Client CFFI surface (action_cffi.py) exposes exactly
-  seven ActionClientEvent values -- NONE, GOAL_RESPONSE, FEEDBACK,
-  CANCEL_RESPONSE, RESULT, TIMEOUT, ERROR -- and none of them fires when the
-  Action Server process is killed mid-goal. SIGKILLing the server does not hang
-  the client and does not raise an exception; it simply stops delivering any
-  further event, forever, unless the caller separately polls is_running() and
-  treats a False return as the signal. Measured on a real Windows host to WSL2
-  TCP boundary, that flip from True to False took 1.75-1.84 seconds after the
-  kill, which is the client's only path to a finite-time conclusion. This is not
-  an oversight: the design document that owns Action Client state
-  (05-client-state-model.md, section 11) explicitly says the Runtime does not
-  infer Server death from missing traffic and leaves it to the caller. The
-  candidate records this as an observability gap for Client implementers, not
-  as a protocol defect.
+  Crash or SIGKILL of the Action Server Runtime process is explicitly outside
+  the supported runtime contract, as confirmed by the maintainers. What the
+  Runtime does support is transport disconnect, which it can observe while
+  alive, and which hakoniwalab/hakoniwa-pdu-rpc#78 covers. This candidate
+  therefore records a design boundary rather than a missing feature: the
+  Client's seven ActionClientEvent values (NONE, GOAL_RESPONSE, FEEDBACK,
+  CANCEL_RESPONSE, RESULT, TIMEOUT, ERROR) are not expected to fire for a
+  killed Server process, and the design document that owns Client state
+  (05-client-state-model.md, section 11) already states that the Runtime does
+  not infer Server death from missing traffic. What the measurement adds is
+  where the boundary sits in practice: after a SIGKILL the Client neither hangs
+  nor raises, and the only finite-time signal available to a caller is
+  polling is_running(), which flipped 1.75-1.84s after the kill on a Windows
+  host to WSL2 TCP path. Do not generalize that into a claim that the Action
+  Client lacks transport-loss handling in general.
 
 observation:
   context: >
@@ -89,9 +90,6 @@ contradictions: []
 validation:
   status: verified
   required:
-    - Confirm whether upstream intends to add an Application-facing helper
-      (e.g. a documented recommended poll interval, or an optional heartbeat)
-      rather than leaving detection entirely to caller-authored polling.
     - Not measured on a Windows-to-Windows or WSL2-to-WSL2 boundary; the
       1.75-1.84s figure is specific to this Windows-host/WSL2-peer TCP path and
       should not be assumed to generalize to other transports or OS pairs.
@@ -101,10 +99,25 @@ validation:
       and confirmed against a real cross-boundary TCP measurement performed in
       this workspace. All three lines of evidence agree, which is why this is
       verified rather than partially_verified.
+    - >-
+      Reframed on 2026-08-31 after maintainer review. Server process crash and
+      SIGKILL are stated to be outside the runtime contract, so the measured
+      behavior documents where that boundary lies rather than an observability
+      gap to close. Transport disconnect, the case the Runtime does support,
+      is tracked separately in hakoniwa-pdu-rpc#78.
+    - >-
+      The candidate id still says "has-no-transport-loss-event" because
+      renaming it would detach the review thread it was raised in; the title
+      and framing carry the corrected meaning, and the id can be renamed on
+      merge if the maintainers prefer.
 
 tracking:
-  implementation_status: none
-  issues: []
+  implementation_status: resolved
+  issues:
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      number: 78
+      relation: fix
+      status: closed
 
 promotion_targets:
   catalog:
@@ -122,10 +135,11 @@ promotion_rationale:
     polling is the only path, belongs in the runtime primer so it is learned
     once rather than rediscovered per binding.
   - >-
-    No executable guardrail is proposed. The absence of an event is a design
-    choice documented upstream (05-client-state-model.md section 11), not a
-    defect a doctor/validator could flag without contradicting that design
-    intent.
+    No executable guardrail is proposed. Server process failure is out of
+    contract by design (confirmed by the maintainers) and the absence of an
+    event is documented upstream (05-client-state-model.md section 11), so
+    there is nothing here a doctor or validator could flag without
+    contradicting the stated design.
 
 resolution:
   status: documented
@@ -135,9 +149,10 @@ resolution:
   executable_guardrails: []
   notes:
     - >-
-      This is recorded as documented rather than pending because the design
-      document already states the intended (NOP) behavior; nothing in
-      hakoniwa-pdu-rpc needs to change for this candidate to be resolved as a
-      documentation/observability note. resolution.verified stays false because
-      no fix or documentation change has actually been proposed or merged
-      upstream yet -- only this workspace's own reading and measurement exist.
+      Recorded as documented because the behavior is intended: the design
+      document states the NOP policy, and the maintainers have confirmed that
+      Server Runtime crash and SIGKILL sit outside the supported contract.
+      Nothing in hakoniwa-pdu-rpc needs to change for this candidate.
+      resolution.verified stays false because no documentation change stating
+      the boundary in these words has been merged upstream; the supported
+      neighbouring case, transport disconnect, was addressed in #78.

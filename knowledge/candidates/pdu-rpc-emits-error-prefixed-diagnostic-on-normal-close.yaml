@@ -96,8 +96,12 @@ validation:
       only the allowlist pattern.
 
 tracking:
-  implementation_status: none
-  issues: []
+  implementation_status: open
+  issues:
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      number: 79
+      relation: fix
+      status: open
 
 promotion_targets:
   catalog:
@@ -114,9 +118,10 @@ promotion_targets:
       notes:
         - >-
           The anchored allowlist entry already added to this workspace's
-          verify.ps1 is itself the guardrail; it is workspace-local rather
-          than an upstream repository change, since the log line is intentional
-          upstream behavior, not a defect to fix there.
+          verify.ps1 is a consuming-side workaround, kept until
+          hakoniwa-pdu-rpc#79 changes the diagnostic severity upstream. It is
+          not the permanent answer: once #79 lands, the allowlist entry should
+          be removed and the run re-verified without it.
 
 promotion_rationale:
   - >-
@@ -126,10 +131,11 @@ promotion_rationale:
     is the right layer because the guidance is "how to write a verify harness
     against this component", not ecosystem-wide positioning or a Recipe.
   - >-
-    No upstream executable guardrail is proposed because the message itself is
-    correct upstream behavior (the #78 slot-release contract intentionally
-    surfaces normal disconnects); the guardrail that matters is on the
-    consuming side (this workspace's verify script), which already has it.
+    The maintainers have classified the ERROR-prefixed line on a normal close
+    as a diagnostic severity and observability problem in hakoniwa-pdu-rpc, not
+    as intended permanent behavior, and opened #79 for it. The consuming-side
+    allowlist in this workspace's verify script is therefore an interim measure
+    rather than the resolution.
 
 resolution:
   status: documented
@@ -140,9 +146,9 @@ resolution:
     - configs/action-fibonacci-win/verify.ps1
   notes:
     - >-
-      Resolved on this workspace's side by the anchored allowlist entry in
-      configs/action-fibonacci-win/verify.ps1; no upstream change is being
-      requested since the message is intentional. resolution.verified is false
+      Worked around on this workspace's side by the anchored allowlist entry in
+      configs/action-fibonacci-win/verify.ps1, pending the upstream fix in
+      hakoniwa-pdu-rpc#79. resolution.verified is false
       because this reflects a workspace-side documentation/tooling
       accommodation, not an upstream fix that has itself been re-verified
       against an upstream issue.

@@ -1,5 +1,5 @@
 id: business-pack-host-plus-docker-recipe-substituted-by-wsl2
-title: A host-plus-docker Recipe can run as host-plus-WSL2 instead when Docker Desktop is absent, but only with WSL2 listening and Windows dialing out, and only after working around two orphaned-process/PYTHONPATH traps
+title: A host-plus-docker Recipe can run as host-plus-WSL2 instead when Docker Desktop is absent; on the measured Windows 11 + WSL2 host only the WSL2-listening direction came up, and two orphaned-process/PYTHONPATH traps had to be worked around
 status: candidate
 
 knowledge_type:
@@ -20,7 +20,8 @@ summary: >
   environment, while Windows dialing out to a WSL2-side listener worked with no
   extra firewall configuration.
   Getting the substitution working also required two WSL2/ROS2-specific traps to
-  be worked around: `ros2 run`'s wrapper process is not exec-replaced, so killing
+  be worked around: `ros2 run` launches the node as a child process rather than
+  replacing itself, so killing
   its PID orphans the real node and the Action Server ends up answering twice;
   and putting hakoniwa-pdu-registry's path first on PYTHONPATH lets its stub
   builtin_interfaces shadow rclpy's real one and breaks rclpy entirely.
@@ -48,9 +49,12 @@ observation:
       inbound access to a Windows-side listener was not reachable in this
       environment, while Windows connecting to a WSL2 listener over the WSL2
       localhost forwarding path worked without extra firewall configuration."
-    - "Trap 1: ros2 run does not exec-replace, so PID-based kill orphans the
-      real node. `ros2 run <pkg> <node>` forks a Python wrapper process that
-      then imports and runs the node without replacing itself via exec; killing
+    - "Trap 1: ros2 run starts the node as a child process, so PID-based kill
+      orphans the real node. ROS 2 Jazzy's ros2run.api.run_executable() starts
+      the target executable with subprocess.Popen(cmd) and waits on it, so the
+      ros2 command is a launcher with a child, not a wrapper that imports the
+      node into itself. This is a launcher/child process-management issue:
+      killing
       only the wrapper's PID (as returned by a naive process-launch helper)
       leaves the actual ROS node running as an orphan. In this scenario that
       meant a 'stopped' Action Server was still alive and still bound to the
@@ -78,7 +82,7 @@ sources:
   repositories:
     - repository: hakoniwalab/hakoniwa-business-pack
       path: recipes/ros2-action-fibonacci-client-host-docker
-      revision: unknown
+      revision: 060907d
   runtime_evidence:
     - description: >-
         This workspace's own bring-up, Windows 11 Pro x64 host without Docker
@@ -101,6 +105,11 @@ validation:
       this candidate does not claim the WSL2 substitution is preferable when
       Docker Desktop is present, only that it is a viable fallback when it is
       not.
+    - The direction asymmetry (WSL2 listening and Windows dialing out worked;
+      the reverse did not reach the listener on two attempts) is reported as
+      the outcome on this specific Windows 11 + WSL2 Ubuntu-24.04 host, not as
+      a general requirement of WSL2 networking. The host-side cause was not
+      isolated, so another WSL2 host may behave differently.
     - The orphaned-node trap was observed with `ros2 run`; not separately
       tested against a node launched via a ROS 2 launch file, which may use a
       different process-management path.

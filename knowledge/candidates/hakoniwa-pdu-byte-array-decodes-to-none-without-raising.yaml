@@ -1,5 +1,5 @@
 id: hakoniwa-pdu-byte-array-decodes-to-none-without-raising
-title: "pip hakoniwa-pdu 1.6.7 lists ROS2 byte[] as a supported array type, but the decode direction has no runtime branch for it and returns None silently instead of raising; uint8[] is the safe substitute and is wire-identical in ROS2"
+title: "pip hakoniwa-pdu 1.6.7 accepted ROS2 byte/char but had no runtime branch for them, returning None silently on decode; fixed in 1.6.9, which normalizes byte and char to uint8 on all four conversion paths"
 status: candidate
 
 knowledge_type:
@@ -7,20 +7,21 @@ knowledge_type:
   - known_pitfall
 
 summary: >
-  pip package hakoniwa-pdu 1.6.7 accepts byte[] as a ROS2 array element type in
-  its type-generation allowlist, but its Python runtime type-conversion table
-  has no branch for 'byte' on the decode side. typeTobin_array('byte') (the
-  encode direction) correctly raises ValueError for the unhandled type, but
-  binToArrayValues('byte') (the decode direction) falls through without raising
-  and returns None instead -- a negative-path test would pass a value through
-  and get silence rather than an exception, which is a worse failure mode than
-  an explicit error because it can propagate a missing field deep into calling
-  code before anything notices. uint8[] is unaffected and behaves correctly in
-  both directions; since ROS2 byte and uint8 are wire-identical single-octet
-  types, uint8[] is a safe drop-in substitute with no protocol cost. No .msg
-  file anywhere in hakoniwa-pdu-registry actually uses byte[], which is
-  consistent with this being an unexercised code path rather than a
-  well-trodden and merely-undocumented one.
+  Historical, and fixed upstream. pip package hakoniwa-pdu 1.6.7 accepted byte
+  as a ROS2 element type in its type-generation allowlist while its Python
+  runtime conversion table had no branch for it. Executed on 1.6.7: the array
+  encode path raises ValueError, but the array decode path
+  (binToArrayValues) falls through and returns None with no exception, and the
+  scalar path is worse still -- typeTobin and binTovalue both return None
+  silently in each direction. A caller therefore receives a missing field
+  rather than an error. hakoniwalab/hakoniwa-pdu-registry#27 and
+  hakoniwalab/hakoniwa-pdu-python#54 have since normalized byte and char to
+  uint8 across all four conversion functions, and this was re-measured as
+  fixed on 1.6.9: byte, char and uint8 all round-trip identically in both the
+  scalar and array directions. Using uint8[] in place of byte[] remains a
+  correct substitution because ROS2 defines them as the same single-octet wire
+  type, but it is a workaround for versions before the fix, not a permanent
+  rule.
 
 observation:
   context: >
@@ -43,6 +44,16 @@ observation:
       decoding a PDU containing a byte[] field would receive None for that
       field with no exception, no log line, and no other indication that
       decoding did not actually happen for it."
+    - "Correction from executing the paths rather than reading them: on 1.6.7
+      the scalar direction is silent on BOTH sides, not just decode.
+      typeTobin('byte', 200) returns None without raising, as does
+      binTovalue('byte', ...). The loud ValueError is specific to the array
+      encode path (typeTobin_array). The original text generalized the array
+      encode behavior to the whole encode direction."
+    - "Fixed in 1.6.9. binary_io.py now begins typeTobin, binTovalue,
+      binToArrayValues and typeTobin_array with the same normalization,
+      mapping byte and char to uint8, so all four paths behave as uint8 does.
+      The 1.6.7 wheel has no such normalization anywhere in that file."
     - "uint8[] is unaffected. The same round trip (encode then decode) using
       uint8[] instead of byte[] for an otherwise identical field works
       correctly in both directions, and ROS2 defines byte and uint8 as the same
@@ -73,27 +84,38 @@ sources:
         uint8[]-based MissionLikeItem/NestedBytesItem generation and
         round-trip test, exit 0. A grep across hakoniwa-pdu-registry's .msg
         files for byte[] usage returned zero matches.
+    - description: >-
+        Executed against pip hakoniwa-pdu 1.6.7 on Windows 11 x64, 2026-08-31,
+        values [0, 1, 127, 128, 255]: typeTobin_array('byte') raises
+        "ValueError: typeTobin_array: Unsupported type byte" (same for 'char'),
+        binToArrayValues('byte', <uint8-encoded buffer>) returns None,
+        typeTobin('byte', 200) returns None, and binTovalue('byte', ...)
+        returns None. The uint8 control round-trips correctly in the same run.
+    - description: >-
+        Same probe against pip hakoniwa-pdu 1.6.9 in an isolated venv on the
+        same host and day: 'byte', 'char' and 'uint8' all encode to
+        b'\x00\x01\x7f\x80\xff' and decode back to (0, 1, 127, 128, 255),
+        and the scalar path round-trips 200 for all three. The fix is confirmed
+        by execution in both the array and scalar directions.
   expert_input: []
 
-confidence: medium
+confidence: high
 
 contradictions: []
 
 validation:
-  status: partially_verified
+  status: verified
   required:
-    - Actually execute typeTobin_array('byte') and binToArrayValues('byte')
-      (or a full encode/decode round trip through a .msg field declared as
-      byte[]) in this workspace to confirm the None-without-raising behavior
-      directly, rather than relying on reading the type-dispatch source. This
-      workspace has read the conversion tables and inferred the fall-through,
-      but has not executed the byte[] decode path itself.
-    - Confirm the same behavior against a from-source build of hakoniwa-pdu,
-      not only the pinned pip 1.6.7 wheel, in case the runtime differs from
-      the packaged version this workspace inspected.
+    - Not executed against a from-source build of hakoniwa-pdu; both
+      measurements used pip wheels (1.6.7 and 1.6.9).
   notes:
     - >-
-      validation.status is partially_verified rather than not_tested because
+      Upgraded to verified on 2026-08-31: both directions were executed on
+      1.6.7 (reproducing the silent None) and on 1.6.9 (confirming the fix),
+      rather than inferred from the dispatch table. The reasoning below is kept
+      as the record of why it was previously scored partially_verified.
+    - >-
+      validation.status was partially_verified rather than not_tested because
       the claim rests on direct reading of both conversion tables
       (typeTobin_array and binToArrayValues) in the actual shipped source, not
       on inference from documentation or by analogy -- the same standard of
@@ -118,8 +140,16 @@ validation:
       both directly confirmed.
 
 tracking:
-  implementation_status: none
-  issues: []
+  implementation_status: resolved
+  issues:
+    - repository: hakoniwalab/hakoniwa-pdu-registry
+      number: 27
+      relation: fix
+      status: closed
+    - repository: hakoniwalab/hakoniwa-pdu-python
+      number: 54
+      relation: fix
+      status: closed
 
 promotion_targets:
   catalog:
@@ -143,25 +173,41 @@ promotion_targets:
 
 promotion_rationale:
   - >-
-    Anyone designing a new PDU type with a binary-blob-style array field could
-    reasonably reach for ROS2's byte[] since it is accepted by the generator;
-    steering them to uint8[] instead, with the wire-identical substitution
-    explained, belongs in the runtime primer so this is learned before a field
-    is designed rather than after a silent decode failure is chased down.
+    Now that byte and char normalize to uint8 from 1.6.9 onward, the primer
+    entry is a version note rather than a design rule: on 1.6.9 and later
+    byte[] behaves correctly, and on earlier versions uint8[] is the
+    substitution that avoids a silent decode failure. Recording the version
+    boundary is what saves the next reader from either chasing the old bug or
+    avoiding byte[] forever without reason.
   - >-
     No executable guardrail is authored in this candidate itself, since this
     workspace has not executed the failing path to anchor a regression test on
     it; the suggested guardrail is left as a note for the owning repository.
 
 resolution:
-  status: pending
-  fixed_by: []
-  verified: false
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-pdu-registry
+      issue: 27
+      pull_request: null
+      revision: null
+    - repository: hakoniwalab/hakoniwa-pdu-python
+      issue: 54
+      pull_request: null
+      revision: null
+  verified: true
   promoted_to: []
   executable_guardrails: []
   notes:
     - >-
-      No upstream issue filed yet. This workspace's own mitigation is to use
-      uint8[] instead of byte[] for all new PDU array fields going forward,
-      which is already reflected in case T36's MissionLikeItem/NestedBytesItem
-      design.
+      Fixed upstream by normalizing byte and char to uint8 in all four
+      conversion functions; released in pip hakoniwa-pdu 1.6.9.
+      resolution.verified is true because this workspace re-ran the round trip
+      on 1.6.9 and saw byte[], char[] and their scalar forms behave identically
+      to uint8, having first reproduced the 1.6.7 failure in the same probe.
+    - >-
+      The uint8[] substitution used in case T36's
+      MissionLikeItem/NestedBytesItem design is a workaround for the
+      pre-1.6.9 behavior, not a permanent rule. Those types keep uint8[]
+      because they are already generated and wire-identical, not because
+      byte[] must be avoided going forward.

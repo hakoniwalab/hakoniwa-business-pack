@@ -105,10 +105,25 @@ validation:
       A/B measurement in this workspace toggling only read_timeout_ms between
       0 and upstream's sample value of 1000, holding the rest of the
       configuration and scenario fixed.
+    - >-
+      Lifecycle updated 2026-08-31 after maintainer review.
+      hakoniwa-pdu-endpoint#65 is closed and docs/tcp-runtime-contract-ja.md
+      now carries the contract in writing. This workspace read that document
+      directly rather than taking the status second-hand. It states that
+      read_timeout_ms and write_timeout_ms take millisecond values of 0 or
+      more, that long-running simulation connections without an explicit
+      inactivity deadline should use a read timeout and write timeout of 0,
+      and that choosing a positive timeout means the current connection ends
+      when the deadline is reached. That is exactly the tradeoff this
+      candidate measured, now documented upstream.
 
 tracking:
-  implementation_status: none
-  issues: []
+  implementation_status: resolved
+  issues:
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      number: 65
+      relation: documentation
+      status: closed
 
 promotion_targets:
   catalog:
@@ -150,8 +165,12 @@ promotion_rationale:
 
 resolution:
   status: documented
-  fixed_by: []
-  verified: false
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      issue: 65
+      pull_request: null
+      revision: null
+  verified: true
   promoted_to: []
   executable_guardrails: []
   notes:
@@ -160,6 +179,12 @@ resolution:
       read_timeout_ms=1000 behave exactly as configured. The candidate exists
       to document that "options": {} is not equivalent to copying upstream's
       sample value, and that the effective default (0, no timeout) is
-      unintuitive from the sample alone. resolution.verified is false because
-      no documentation change has actually been proposed or merged upstream
-      yet.
+      unintuitive from the sample alone.
+    - >-
+      The documentation gap this candidate pointed at is closed:
+      hakoniwa-pdu-endpoint#65 is closed and
+      docs/tcp-runtime-contract-ja.md states the contract, including the
+      recommendation to use 0 for long-running simulation connections and the
+      consequence of choosing a positive timeout. resolution.verified is true
+      on the basis of reading that document at its current revision; the
+      measured A/B behavior in this candidate agrees with it.
