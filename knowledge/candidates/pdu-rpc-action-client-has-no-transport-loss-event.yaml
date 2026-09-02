@@ -1,0 +1,158 @@
+id: pdu-rpc-action-client-has-no-transport-loss-event
+title: Action Server process crash or SIGKILL is outside the Action runtime contract; the supported signal is transport disconnect, and a killed Server is only observable by polling is_running()
+status: candidate
+
+knowledge_type:
+  - design_intent
+  - interface_contract
+  - runtime_rule
+
+summary: >
+  Crash or SIGKILL of the Action Server Runtime process is explicitly outside
+  the supported runtime contract, as confirmed by the maintainers. What the
+  Runtime does support is transport disconnect, which it can observe while
+  alive, and which hakoniwalab/hakoniwa-pdu-rpc#78 covers. This candidate
+  therefore records a design boundary rather than a missing feature: the
+  Client's seven ActionClientEvent values (NONE, GOAL_RESPONSE, FEEDBACK,
+  CANCEL_RESPONSE, RESULT, TIMEOUT, ERROR) are not expected to fire for a
+  killed Server process, and the design document that owns Client state
+  (05-client-state-model.md, section 11) already states that the Runtime does
+  not infer Server death from missing traffic. What the measurement adds is
+  where the boundary sits in practice: after a SIGKILL the Client neither hangs
+  nor raises, and the only finite-time signal available to a caller is
+  polling is_running(), which flipped 1.75-1.84s after the kill on a Windows
+  host to WSL2 TCP path. Do not generalize that into a claim that the Action
+  Client lacks transport-loss handling in general.
+
+observation:
+  context: >
+    Measuring cross-boundary (Windows host, WSL2 Ubuntu-24.04) Action Client
+    behavior under a real TCP transport, 2026-08-09/08-10, as part of comparing
+    disconnect and cancel handling to the same scenarios over loopback.
+    hakoniwa-pdu-rpc revision 501ce5a.
+  details:
+    - "The enum, read directly from source. action_cffi.py:45-52 defines
+      ActionClientEvent as NONE = 0, GOAL_RESPONSE = 1, FEEDBACK = 2,
+      CANCEL_RESPONSE = 3, RESULT = 4, TIMEOUT = 5, ERROR = 6. There is no
+      DISCONNECTED, no TRANSPORT_LOST, and no CONNECTION_ERROR value in this
+      set."
+    - "RuntimeCancelCause::TRANSPORT_DISCONNECTED exists, but it is a
+      Server-side-only concept. action_services_server.cpp:258 uses it to decide
+      how the Server reacts when ITS peer connection drops mid-goal; nothing
+      analogous is wired into the Client's event surface or into the seven
+      values above."
+    - "The design document treats this as intentional, not missing. Section 11
+      of hakoniwa-pdu-rpc's docs/design/action/05-client-state-model.md states
+      that on transport loss the Client does not infer or guess the Server's
+      state (NOP): it simply stops receiving events, and it is Application
+      Policy, not Runtime Policy, to decide how long to wait before giving up."
+    - "Measured client-visible behavior. With a goal in flight over a real
+      Windows-to-WSL2 TCP socket, killing the Action Server process with SIGKILL
+      produced zero ActionClientEvent deliveries afterward -- no TIMEOUT, no
+      ERROR -- while the process itself did not hang: pyactionclient.is_running()
+      continued returning True for a window and then flipped to False. Across
+      repeated trials the flip landed between 1.75s and 1.84s after the kill,
+      consistent with the underlying TCP stack's own dead-peer detection rather
+      than any explicit event from the Action protocol."
+    - "Practical consequence for Client implementers: there is no push-style
+      notification to react to. A Client that only awaits FEEDBACK/RESULT/ERROR
+      events will wait indefinitely (in wall-clock terms, until the caller gives
+      up) with no protocol signal that the peer is gone. Detecting the loss
+      requires a separate poll loop on is_running() with an application-chosen
+      interval, and the ~1.8s figure measured here is a TCP-stack artifact, not
+      a documented or configurable protocol bound."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      path: python/hakoniwa_pdu_rpc/action_cffi.py
+      revision: 501ce5a
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      path: src/action_services_server.cpp
+      revision: 501ce5a
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      path: docs/design/action/05-client-state-model.md
+      revision: 501ce5a
+  runtime_evidence:
+    - description: >-
+        This workspace's own measurement, Windows 11 Pro x64 host to WSL2
+        Ubuntu-24.04, real TCP (not loopback), 2026-08-09/08-10. Killed the
+        Action Server with SIGKILL mid-goal across multiple trials; zero
+        ActionClientEvent deliveries followed, is_running() flipped from True to
+        False after 1.75-1.84s in each trial, and the client process itself
+        never hung or raised.
+  expert_input: []
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - Not measured on a Windows-to-Windows or WSL2-to-WSL2 boundary; the
+      1.75-1.84s figure is specific to this Windows-host/WSL2-peer TCP path and
+      should not be assumed to generalize to other transports or OS pairs.
+  notes:
+    - Verified by direct source reading of the enum and the Server-only cancel
+      cause, cross-checked against the design document's explicit NOP policy,
+      and confirmed against a real cross-boundary TCP measurement performed in
+      this workspace. All three lines of evidence agree, which is why this is
+      verified rather than partially_verified.
+    - >-
+      Reframed on 2026-08-31 after maintainer review. Server process crash and
+      SIGKILL are stated to be outside the runtime contract, so the measured
+      behavior documents where that boundary lies rather than an observability
+      gap to close. Transport disconnect, the case the Runtime does support,
+      is tracked separately in hakoniwa-pdu-rpc#78.
+    - >-
+      The candidate id still says "has-no-transport-loss-event" because
+      renaming it would detach the review thread it was raised in; the title
+      and framing carry the corrected meaning, and the id can be renamed on
+      merge if the maintainers prefer.
+
+tracking:
+  implementation_status: resolved
+  issues:
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      number: 78
+      relation: fix
+      status: closed
+
+promotion_targets:
+  catalog:
+    - hakoniwa-pdu-rpc
+  runtime_primer: true
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+  executable_guardrails: []
+
+promotion_rationale:
+  - >-
+    Every Action Client implementer will eventually kill or lose a Server and
+    expect some event to fire. Recording that none does, and that is_running()
+    polling is the only path, belongs in the runtime primer so it is learned
+    once rather than rediscovered per binding.
+  - >-
+    No executable guardrail is proposed. Server process failure is out of
+    contract by design (confirmed by the maintainers) and the absence of an
+    event is documented upstream (05-client-state-model.md section 11), so
+    there is nothing here a doctor or validator could flag without
+    contradicting the stated design.
+
+resolution:
+  status: documented
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - >-
+      Recorded as documented because the behavior is intended: the design
+      document states the NOP policy, and the maintainers have confirmed that
+      Server Runtime crash and SIGKILL sit outside the supported contract.
+      Nothing in hakoniwa-pdu-rpc needs to change for this candidate.
+      resolution.verified stays false because no documentation change stating
+      the boundary in these words has been merged upstream; the supported
+      neighbouring case, transport disconnect, was addressed in #78.
