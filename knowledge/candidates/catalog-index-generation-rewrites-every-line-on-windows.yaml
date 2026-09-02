@@ -1,0 +1,106 @@
+id: catalog-index-generation-rewrites-every-line-on-windows
+title: The catalog index generator writes CRLF on Windows, so catalog preflight fails on a checkout that does not normalize newlines
+
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+
+summary: >
+  catalog/tools/generate_index.rb writes catalog/index.yaml with File.write in
+  text mode, so Ruby on Windows emits CRLF while the committed file is LF.
+  Whether that breaks catalog/tools/preflight.rb depends on the checkout: with
+  core.autocrlf=false and no text/eol attribute, git reports all 864 lines as
+  changed even though the content is identical and preflight aborts; with
+  core.autocrlf=true the clean filter normalizes the output and preflight
+  passes. Both were measured on the same host. The repository ships no
+  .gitattributes, so the outcome is left to each contributor's git
+  configuration, and in the failing configuration the abort message asks for
+  the whole-file difference to be committed.
+
+observation:
+  context: >
+    Running the checks from .github/workflows/validate-business-pack.yml locally
+    on Windows 11 x64 before opening a pull request, while preparing knowledge
+    candidates from an independent Windows Recipe reproduction.
+  details:
+    - catalog/tools/generate_index.rb line 47 is File.write(INDEX_PATH, index.to_yaml.sub(/^---\n/, "")), which opens the file in text mode.
+    - Ruby on Windows converts "\n" to "\r\n" in text mode, so the generated file is byte-different from the committed one on every line.
+    - catalog/tools/preflight.rb runs validate_catalog.rb, then generate_index.rb, then "git diff --exit-code -- catalog/index.yaml", and aborts with "catalog/index.yaml is stale" when the diff is non-empty.
+    - The abort message instructs the contributor to commit catalog/index.yaml, which on Windows would commit 864 line-ending-only changes and defeat the freshness signal for reviewers.
+    - Running preflight also leaves the working tree dirty, so a contributor who does not notice may include the churn in an unrelated pull request.
+    - The gate is enforced in CI on ubuntu-latest only, where the generator produces LF and the check passes, so the failing configuration is invisible upstream.
+    - The outcome depends on git's newline configuration rather than on Windows alone: with core.autocrlf=true the same regeneration passes preflight, because git's clean filter normalizes CRLF back to LF before the diff.
+    - The repository contains no .gitattributes, so neither the text nor the eol attribute pins the index file, and each contributor's core.autocrlf decides whether the gate is usable.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: catalog/tools/generate_index.rb
+      revision: 046f14b
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: catalog/tools/preflight.rb
+      revision: 046f14b
+  runtime_evidence:
+    - description: >
+        "ruby catalog/tools/preflight.rb" on Windows 11 x64 with Ruby 3.2.11
+        printed "catalog valid: components=25, warnings=0" and "generated
+        .../catalog/index.yaml (components=25)", then exited 1 with a
+        whole-file diff of catalog/index.yaml (864 lines removed, 864 added).
+    - description: >
+        Byte comparison of the same two versions: regenerated file has CRLF 864 /
+        LF 864, committed file has CRLF 0 / LF 864, and the two are equal after
+        normalizing CR, confirming the diff is line endings only.
+    - description: >
+        Same host, same regeneration, with core.autocrlf=true instead of false:
+        "ruby catalog/tools/preflight.rb" printed "catalog preflight passed" and
+        exited 0, which isolates the trigger to the newline configuration of the
+        checkout rather than to the operating system.
+    - description: >
+        "ruby catalog/tools/test_check_freshness.rb" passes on the same host
+        (4 runs, 0 failures), so the freshness classification logic itself is not
+        implicated.
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required: []
+  notes:
+    - Verified on Windows 11 x64 with Ruby 3.2.11 (x64-mingw-ucrt) on 2026-08-31 in both newline configurations; the working tree and the git configuration were restored afterwards.
+    - Not reproduced on a checkout that sets core.autocrlf=true, which is the configuration that makes the gate usable today.
+
+tracking:
+  implementation_status: open
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      kind: validator
+      path: catalog/tools/generate_index.rb
+      mode: detect-and-suggest-remediation
+      notes:
+        - Write the index with File.binwrite, or open it with "wb", so the output is LF on every host.
+        - Optionally have preflight report a line-ending-only diff distinctly from a genuinely stale index, so the message does not tell a Windows contributor to commit the churn.
+
+promotion_rationale:
+  - The fix is a one-line change in the generator, and the guard belongs where the bytes are written rather than in a policy document.
+  - Recording it as a pitfall also matters for contributors, because the failure message currently misdirects them toward committing the difference.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Workaround used while preparing this contribution: run preflight to confirm validity, then restore catalog/index.yaml with git checkout before committing. Setting core.autocrlf=true also works.
+    - No issue has been filed in this repository yet; say the word and one will be opened, or treat this candidate as the record if the maintainers prefer to track it here.

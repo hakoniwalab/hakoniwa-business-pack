@@ -1,0 +1,124 @@
+id: athrill-windows-smoke-covers-exdev-shared-library-load
+title: The Athrill V850E2M Windows smoke already covers EXDEV shared-library loading, which the catalog limitation understates
+
+status: candidate
+
+knowledge_type:
+  - capability
+
+summary: >
+  The catalog entry describes the component smoke as verifying executable
+  startup and usage only. On native Windows the smoke actually runs three CTest
+  cases, and one of them exercises EXDEV shared-library loading. That is
+  stronger coverage than the limitation implies, and it is the part of the
+  EXDEV story that the b94b0ff capability flip depends on, so recording it
+  narrows what is still unverified to target-program behaviour.
+
+observation:
+  context: >
+    Independent Windows reproduction of recipes/examples/athrill-v850e2m-build.yaml
+    at the revisions named in its validation evidence, capturing the smoke output.
+  details:
+    - The Windows smoke step runs "ctest --test-dir <build> -C Release --output-on-failure" and executes athrill2-usage, athrill-argument-parser, and athrill-exdev-shared-library.
+    - athrill-exdev-shared-library is registered in the component CMakeLists.txt and builds an athrill-shared-library-test executable, so the EXDEV loading path is compiled and executed on Windows rather than only compiled.
+    - The test does more than load: it opens athrill-exdev-test-device.dll, resolves the athrill_ex_device symbol, checks the descriptor's magic number, version and memory_size, calls devinit, supply_clock and cleanup, verifies the callbacks actually ran through the device's data pointer, and requires an error to be reported for a missing symbol.
+    - Both the test target and the device library are gated on ATHRILL_ENABLE_EXDEV, so the case disappears from the smoke set when the capability is off, which makes the test set itself an observable signal of the capability.
+    - The generated component manifest carried exdev true, and the configure line shows -DATHRILL_ENABLE_EXDEV=ON, so the passing test corresponds to the capability the Recipe requires.
+    - The installed Receipt reports capabilities.exdev true, platform.os windows, architecture x64, toolchain msvc, and artifacts bin/athrill2.exe, and Foundation reported the component SATISFIED.
+    - What remains uncovered is the behavioural layer the Recipe itself names: no target ELF or memory configuration is run, so simulated timing and live Hakoniwa time/PDU exchange are still untested.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: catalog/components/athrill-target-v850e2m.yaml
+      revision: 046f14b
+    - repository: toppers/athrill-target-v850e2m
+      path: CMakeLists.txt
+      revision: 1c2cea9dd518dfad1388ef91c2c3068815702fc3
+  runtime_evidence:
+    - description: >
+        Windows 11 x64 smoke output: "1/3 Test #1: athrill2-usage ... Passed",
+        "2/3 Test #2: athrill-argument-parser ... Passed", "3/3 Test #3:
+        athrill-exdev-shared-library ... Passed", "100% tests passed, 0 tests
+        failed out of 3".
+    - description: >
+        Installed Receipt at
+        work/foundation/install/share/hakoniwa/receipts/athrill-target-v850e2m.yaml
+        contains component.version 1.0.2, source_revision
+        1c2cea9dd518dfad1388ef91c2c3068815702fc3, platform.os windows,
+        architecture x64, toolchain msvc, capabilities.exdev true, and artifacts
+        bin/athrill2.exe (present, 511488 bytes).
+    - description: >
+        End-to-end control with a real build rather than an edited Receipt: a copy
+        of the Recipe with foundation_requirements.exdev set to false produced a
+        manifest with "features: exdev: false", a configure line with
+        -DATHRILL_ENABLE_EXDEV=OFF, a smoke set reduced to 2 CTest cases with the
+        EXDEV case absent, no athrill-exdev-test-device.dll in the build tree, and
+        a Receipt carrying capabilities.exdev false. Evaluating the unmodified
+        exdev-true Recipe against that install returned INCOMPATIBLE with exactly
+        {field: capabilities.exdev, required: true, installed: false}, while the
+        exdev-true install remained SATISFIED. The capability therefore flows from
+        the Recipe through the manifest and the compiler flag into the Receipt in
+        both directions.
+    - description: >
+        Detection power of the EXDEV test itself, exercised directly: the built
+        athrill-shared-library-test exits 0 against athrill-exdev-test-device.dll,
+        exits 2 for a nonexistent library, and exits 3 for a real Windows DLL that
+        does not export athrill_ex_device.
+    - description: >
+        Negative control on the same install: setting capabilities.exdev to false
+        in the Receipt made "tools/foundation.py doctor --json" exit 1 with status
+        INCOMPATIBLE and exactly one reason,
+        {field: capabilities.exdev, required: true, installed: false}; restoring
+        the Receipt returned the component to SATISFIED. This confirms the
+        capability equality check in evaluate_component is live rather than
+        nominally present.
+
+confidence: high
+
+contradictions:
+  - target: catalog/components/athrill-target-v850e2m.yaml
+    existing_claim: >
+      "The smoke test verifies executable startup/usage only; target-program
+      behavioral tests require a separate ELF and memory configuration."
+    new_evidence: >
+      The first half understates the Windows smoke, which also runs an argument
+      parser test and an EXDEV shared-library loading test. The second half is
+      accurate and is the limitation worth keeping.
+
+validation:
+  status: verified
+  required: []
+  notes:
+    - The verified claim is narrow and complete: the Windows smoke executes three CTest cases, one of which loads the EXDEV shared library, so the catalog's "startup/usage only" wording understates it.
+    - Still open, and already tracked by the athrill-device candidate rather than this one: running a target ELF against live Hakoniwa time and EV3 PDU traffic. Loading is not exchange.
+    - Verified on one Windows 11 x64 host on 2026-08-31 with the component and common source pinned to the revisions in the Recipe evidence.
+    - This candidate refines a limitation wording; it does not claim that EXDEV runtime behaviour is proven.
+
+tracking:
+  implementation_status: open
+  issues: []
+
+promotion_targets:
+  catalog:
+    - athrill-target-v850e2m
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - athrill-v850e2m-build
+  executable_guardrails: []
+
+promotion_rationale:
+  - The correction belongs in the catalog limitation text, which is where the understated claim lives.
+  - No guardrail is proposed because the coverage itself is already enforced by the component's own CTest set.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Suggested minimal edit: keep the ELF/memory-configuration limitation and drop or qualify "startup/usage only".
+    - No issue has been filed; this is a one-line wording change in this repository, so the pull request itself may be the smallest useful tracking unit.
