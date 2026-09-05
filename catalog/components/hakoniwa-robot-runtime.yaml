@@ -1,0 +1,305 @@
+id: hakoniwa-robot-runtime
+name: Hakoniwa Robot Runtime
+repository:
+  owner: hakoniwalab
+  name: hakoniwa-robot-runtime
+  url: https://github.com/hakoniwalab/hakoniwa-robot-runtime
+  visibility: public
+
+distribution:
+  channel: oss
+  notes:
+    - Public MIT-licensed Hakoniwa component.
+
+verification:
+  verified_at: 2026-09-05
+  source_revision: 0a9bba3d529c7acc0e62c98569a4443eb736beed
+  source_ref: main
+
+summary: >-
+  Common actuator-oriented robot execution runtime for Hakoniwa that composes
+  command sources, controllers, arbitration, a physical Plant, state publishing,
+  Hakoniwa PDU Endpoint adapters, MuJoCo integration, and Hakoniwa Asset lifecycle
+  without owning robot-specific models or Recipes.
+
+category:
+  primary: simulation-core
+  secondary:
+    - simulator
+    - physics-runtime
+    - integration
+    - robot-arm
+
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - Extracted as the single owner of the common runtime previously embedded in a robot-specific pack.
+    - Current implementation is validated with robot-arm compositions, but the core API is actuator-oriented rather than arm-specific.
+    - Current concrete physics adapter is MuJoCo; transport and execution policies are separated from the Runtime core.
+
+capabilities:
+  - name: Five-stage actuator runtime pipeline
+    description: >-
+      Executes CommandSource -> Controller -> Arbiter -> Plant -> Publisher as one
+      simulation step while ActuatorRuntime owns orchestration rather than the
+      responsibilities of any individual stage.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-robot-runtime
+        path: docs/design.md
+        revision: 0a9bba3d529c7acc0e62c98569a4443eb736beed
+      - repository: hakoniwalab/hakoniwa-robot-runtime
+        path: src/runtime/actuator_runtime.cpp
+        revision: 0a9bba3d529c7acc0e62c98569a4443eb736beed
+
+  - name: Declarative runtime composition
+    description: >-
+      Resolves manifest paths and Runtime-specific actuator, trajectory, manual,
+      and state-output semantics into a RuntimeDefinition and an application-facing Runner.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-robot-runtime
+        path: include/hakoniwa/robot_runtime/factory/manifest_factory.hpp
+        revision: 0a9bba3d529c7acc0e62c98569a4443eb736beed
+      - repository: hakoniwalab/hakoniwa-robot-runtime
+        path: src/runtime/runtime_factory.cpp
+        revision: 0a9bba3d529c7acc0e62c98569a4443eb736beed
+
+  - name: JointTrajectory, manual Joy, scalar direct, and Hold control
+    description: >-
+      Provides reusable command-source and controller paths for scalar actuator
+      commands, time-based JointTrajectory control, Joy-based manual jogging, and
+      low-priority position hold.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-robot-runtime
+        path: src/runtime/controller
+        revision: 0a9bba3d529c7acc0e62c98569a4443eb736beed
+      - repository: hakoniwalab/hakoniwa-robot-runtime
+        path: src/runtime/source
+        revision: 0a9bba3d529c7acc0e62c98569a4443eb736beed
+
+  - name: Logical-control priority arbitration
+    description: >-
+      Selects one logical Controller or control group per simulation step instead
+      of mixing commands actuator-by-actuator, and reports equal-priority conflicts
+      rather than silently choosing by registration order.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-robot-runtime
+        path: src/runtime/arbiter/priority_command_arbiter.cpp
+        revision: 0a9bba3d529c7acc0e62c98569a4443eb736beed
+      - repository: hakoniwalab/hakoniwa-robot-runtime
+        path: docs/design.md
+        revision: 0a9bba3d529c7acc0e62c98569a4443eb736beed
+
+  - name: Plant-side physical command guard
+    description: >-
+      Applies final actuator binding, command-type, time-validity, finite-value,
+      duplicate/missing-command, fallback, and limit guards at the physical Plant boundary.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-robot-runtime
+        path: src/adapters/physics/mujoco/mujoco_actuator_plant.cpp
+        revision: 0a9bba3d529c7acc0e62c98569a4443eb736beed
+      - repository: hakoniwalab/hakoniwa-robot-runtime
+        path: docs/design.md
+        revision: 0a9bba3d529c7acc0e62c98569a4443eb736beed
+
+  - name: Hakoniwa PDU Endpoint integration
+    description: >-
+      Adapts Float64, JointTrajectory, Joy, and JointState PDU traffic to the
+      Runtime's reader/writer seams while keeping transport details outside the core pipeline.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-robot-runtime
+        path: src/adapters/endpoint
+        revision: 0a9bba3d529c7acc0e62c98569a4443eb736beed
+
+  - name: Hakoniwa Asset execution lifecycle
+    description: >-
+      Runs an assembled ActuatorRuntime as a Hakoniwa Asset with Endpoint and
+      Conductor lifecycle, pause/reset/stop handling, model synchronization, and
+      optional wall-clock pacing.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-robot-runtime
+        path: src/runner/hakoniwa/hakoniwa_runner.cpp
+        revision: 0a9bba3d529c7acc0e62c98569a4443eb736beed
+      - repository: hakoniwalab/hakoniwa-robot-runtime
+        path: src/runner/hakoniwa/hakoniwa_asset_driver.cpp
+        revision: 0a9bba3d529c7acc0e62c98569a4443eb736beed
+
+  - name: Plant-derived simulation time model
+    description: >-
+      Uses the physical Plant time and fixed timestep as the Runtime-local source
+      of truth instead of maintaining a second independent simulation clock.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-robot-runtime
+        path: docs/design.md
+        revision: 0a9bba3d529c7acc0e62c98569a4443eb736beed
+      - repository: hakoniwalab/hakoniwa-robot-runtime
+        path: src/runtime/types.hpp
+        revision: 0a9bba3d529c7acc0e62c98569a4443eb736beed
+
+limitations:
+  - Does not own robot-specific MuJoCo models, actuator/controller configuration, Recipes, demos, or Launcher composition.
+  - Does not provide a ROS 2 API or physical gamepad frontend directly; those remain bridge/frontend responsibilities outside this Runtime.
+  - Current validated scope is centered on joint and scalar actuators; wheel, legged, gait, navigation, and robot-specific kinematics are not claimed as built-in features.
+  - Current concrete physical Plant implementation is MuJoCo.
+  - The current application-facing IRunner still exposes MuJoCo model/data handles for Viewer integration, so presentation/backend neutrality is not complete.
+  - The repository owns Runtime sources, while top-level CMake target composition is currently provided by consuming Robot Packs.
+
+interfaces:
+  inputs:
+    - name: Runtime manifest
+      kind: config
+      description: Top-level model, PDU definition, Endpoint, runtime config, and component references consumed by ManifestFactory.
+    - name: Scalar actuator command
+      kind: pdu
+      description: std_msgs/Float64-compatible command input for direct scalar actuator control.
+    - name: JointTrajectory command
+      kind: pdu
+      description: trajectory_msgs/JointTrajectory-compatible command input for time-based joint control.
+    - name: Joy command
+      kind: pdu
+      description: sensor_msgs/Joy-compatible logical manual-control input.
+  outputs:
+    - name: JointState output
+      kind: pdu
+      description: sensor_msgs/JointState-compatible post-physics state output.
+    - name: RobotState
+      kind: api
+      description: Runtime-internal physical-state snapshot with Plant-derived simulation timestamp.
+  protocols:
+    - name: Hakoniwa PDU Endpoint
+      role: local
+      notes: Concrete Endpoint adapters bridge Hakoniwa PDU receive/publish events to Runtime seams.
+  configuration:
+    - path: manifest file supplied by Robot Pack
+      description: Concrete Robot Packs own model paths, PDU definitions, runtime configuration, and component bindings.
+
+dependencies:
+  required:
+    - name: hakoniwa-core-pro
+      type: runtime
+      notes: Provides Hakoniwa Asset and Conductor runtime APIs used by HakoniwaRunner.
+    - name: hakoniwa-pdu-endpoint
+      type: library
+      notes: Provides the Endpoint API used by concrete PDU adapters and ManifestFactory composition.
+    - name: hakoniwa-mujoco-robots
+      type: repository
+      notes: Supplies reusable MuJoCo robot actuator/physics implementation dependencies used by the current MujocoActuatorPlant.
+    - name: MuJoCo
+      type: runtime
+      notes: Current concrete physical backend.
+    - name: C++20 toolchain
+      type: tool
+      notes: Required to compile the Runtime sources in a consuming build.
+  optional: []
+
+platforms:
+  supported:
+    - macOS
+    - Linux
+  notes:
+    - Current extraction and end-to-end validation were completed on macOS arm64.
+    - Linux is an intended supported target through the consuming Robot Pack build; broader platform validation remains consumer-specific.
+
+connects_to:
+  - component_id: hakoniwa-core-pro
+    direction: uses
+    interface: Hakoniwa Asset / Conductor lifecycle
+    notes: HakoniwaRunner executes the Runtime under Hakoniwa lifecycle control.
+  - component_id: hakoniwa-pdu-endpoint
+    direction: uses
+    interface: PDU Endpoint reader/writer adapters
+    notes: Endpoint adapters translate external PDU traffic into Runtime input/output seams.
+  - component_id: hakoniwa-mujoco-robots
+    direction: uses
+    interface: MuJoCo robot actuator/physics implementation
+    notes: The current MujocoActuatorPlant uses reusable MuJoCo robot infrastructure from this component.
+  - component_id: hakoniwa-mbody-registry
+    direction: related
+    interface: prepared robot-body and MJCF artifacts
+    notes: Robot Packs can use MBody Registry to prepare models that are then executed through this Runtime.
+  - component_id: hakoniwa-pdu-bridge-core
+    direction: related
+    interface: bridged PDU traffic
+    notes: Bridges can expose Runtime PDU inputs/outputs to external applications without becoming part of the Runtime core.
+
+recipe_roles:
+  - role: simulation_core
+    description: Provides the reusable execution pipeline and Runtime composition for actuator-oriented robot Recipes.
+  - role: physics_runtime
+    description: Connects selected actuator commands to the current MuJoCo physical Plant and returns physical state.
+  - role: integration_boundary
+    description: Connects Hakoniwa PDU Endpoint, physical Plant, Runtime core, and Runner lifecycle through explicit adapters and factories.
+
+typical_usecases:
+  - Build a Robot Pack that executes a MuJoCo robot from declarative actuator/controller/PDU configuration.
+  - Add JointTrajectory and JointState behavior to an actuator-oriented Hakoniwa robot without reimplementing Runtime orchestration.
+  - Combine manual Joy control, automatic trajectory control, direct scalar commands, and Hold under one deterministic arbitration policy.
+  - Reuse Hakoniwa Asset lifecycle and Endpoint integration across multiple robot models while keeping robot-specific models and Recipes outside the Runtime repository.
+
+anti_usecases:
+  - Store or distribute robot-specific meshes, MJCF models, demos, or customer-specific Recipes in the common Runtime repository.
+  - Treat the Runtime as a ROS 2 bridge, gamepad driver, motion planner, navigation stack, gait generator, or robot-specific kinematics package.
+  - Claim arbitrary robot classes are supported solely because they can be expressed with actuators; validate each new Robot Pack composition separately.
+
+demo_candidates:
+  - name: Manifest-driven joint robot runtime
+    description: Run a Robot Pack model with JointTrajectory input, JointState output, Hold, and optional Joy manual override through the common Runtime.
+    required_components:
+      - hakoniwa-robot-runtime
+      - hakoniwa-core-pro
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-mujoco-robots
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-robot-runtime
+        path: docs/design.md
+        revision: 0a9bba3d529c7acc0e62c98569a4443eb736beed
+
+operations:
+  build:
+    commands: []
+    notes:
+      - Runtime source ownership is in this repository; current top-level build target composition is consumer-owned.
+  test:
+    commands: []
+    notes:
+      - Current regression tests are executed by consuming Robot Packs until repository-local build/test ownership is introduced.
+  run:
+    commands: []
+    notes:
+      - Runtime is normally instantiated through a consuming Robot Pack ManifestFactory/Runner composition.
+
+known_gaps:
+  - Repository-local top-level CMake/build/test ownership has not yet been introduced.
+  - Standalone Runner is a design extension point, not a current implementation.
+  - IRunner presentation access remains partially MuJoCo-specific.
+  - Additional robot classes require explicit behavioral validation in their Robot Packs.
+
+source_refs:
+  - repository: hakoniwalab/hakoniwa-robot-runtime
+    path: README.md
+    revision: 0a9bba3d529c7acc0e62c98569a4443eb736beed
+    description: Runtime role, scope, ownership boundary, and design principles.
+  - repository: hakoniwalab/hakoniwa-robot-runtime
+    path: docs/design.md
+    revision: 0a9bba3d529c7acc0e62c98569a4443eb736beed
+    description: Runtime architecture and responsibility boundaries.
+  - repository: hakoniwalab/hakoniwa-robot-runtime
+    path: src/runtime
+    revision: 0a9bba3d529c7acc0e62c98569a4443eb736beed
+    description: Runtime core implementation.
+
+tags:
+  - hakoniwa
+  - robot-runtime
+  - actuator
+  - runtime
+  - mujoco
+  - joint-trajectory
+  - joint-state
+  - gamepad
+  - arbitration
+  - pdu
+  - endpoint
+  - simulation
+  - oss
+  - mit

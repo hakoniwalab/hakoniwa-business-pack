@@ -758,6 +758,46 @@ components:
   - collision
   - simulation
   catalog_path: components/hakoniwa-robot-arm-pack.yaml
+- id: hakoniwa-robot-runtime
+  name: Hakoniwa Robot Runtime
+  category: simulation-core
+  secondary_categories:
+  - simulator
+  - physics-runtime
+  - integration
+  - robot-arm
+  maturity: active
+  distribution: oss
+  summary: Common actuator-oriented robot execution runtime for Hakoniwa that composes
+    command sources, controllers, arbitration, a physical Plant, state publishing,
+    Hakoniwa PDU Endpoint adapters, MuJoCo integration, and Hakoniwa Asset lifecycle
+    without owning robot-specific models or Recipes.
+  recipe_roles:
+  - simulation_core
+  - physics_runtime
+  - integration_boundary
+  connects_to:
+  - hakoniwa-core-pro
+  - hakoniwa-pdu-endpoint
+  - hakoniwa-mujoco-robots
+  - hakoniwa-mbody-registry
+  - hakoniwa-pdu-bridge-core
+  tags:
+  - hakoniwa
+  - robot-runtime
+  - actuator
+  - runtime
+  - mujoco
+  - joint-trajectory
+  - joint-state
+  - gamepad
+  - arbitration
+  - pdu
+  - endpoint
+  - simulation
+  - oss
+  - mit
+  catalog_path: components/hakoniwa-robot-runtime.yaml
 - id: hakoniwa-scratch
   name: Hakoniwa Scratch
   category: language-binding
