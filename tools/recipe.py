@@ -42,6 +42,7 @@ RECIPE_LAUNCHER_FIELDS = {"template", "output", "mode"}
 RECIPE_LAUNCHER_MODES = {"immediate", "activate-only", "serve"}
 SECRET_ENV_MARKERS = ("TOKEN", "SECRET", "PASSWORD", "CREDENTIAL", "API_KEY")
 RUNTIME_PLACEHOLDER = re.compile(r"\$\{([^{}]+)\}")
+GIT_FULL_SHA1_PATTERN = re.compile(r"^[0-9a-fA-F]{40}$")
 
 
 def root() -> Path:
@@ -562,6 +563,39 @@ def recipe_python_requirements(recipe_path: Path, data: dict) -> Path | None:
 def _clone_repository(url: str, target: Path, *, revision: str | None = None) -> None:
     if target.exists():
         raise RecipeGuideError(f"refusing to overwrite clone target: {target}")
+
+    def run_git(command: list[str], operation: str) -> None:
+        print(">", subprocess.list2cmdline(command), flush=True)
+        completed = subprocess.run(command, cwd=target.parent, check=False)
+        if completed.returncode:
+            raise RecipeGuideError(
+                f"git {operation} failed with exit code {completed.returncode}: {target}"
+            )
+
+    # Keep the existing clone behavior for unpinned and named revisions so
+    # branches/tags retain their current semantics. A full commit SHA cannot be
+    # passed to `git clone --branch`, so materialize it explicitly and then
+    # resolve submodules from that exact detached commit.
+    if revision and GIT_FULL_SHA1_PATTERN.fullmatch(revision):
+        run_git(["git", "clone", "--no-checkout", url, str(target)], "clone")
+        run_git(
+            ["git", "-C", str(target), "checkout", "--detach", revision],
+            "checkout",
+        )
+        run_git(
+            [
+                "git",
+                "-C",
+                str(target),
+                "submodule",
+                "update",
+                "--init",
+                "--recursive",
+            ],
+            "submodule update",
+        )
+        return
+
     # Recipe dependencies are runtime source trees, not shallow file bundles.
     # Their declared artifacts may live in nested submodules, so every managed
     # clone materializes the complete pinned repository graph by default.
@@ -569,12 +603,7 @@ def _clone_repository(url: str, target: Path, *, revision: str | None = None) ->
     if revision:
         command.extend(["--branch", revision, "--single-branch"])
     command.extend([url, str(target)])
-    print(">", subprocess.list2cmdline(command), flush=True)
-    completed = subprocess.run(command, cwd=target.parent, check=False)
-    if completed.returncode:
-        raise RecipeGuideError(
-            f"git clone failed with exit code {completed.returncode}: {target}"
-        )
+    run_git(command, "clone")
 
 
 def _checkout_revision(target: Path) -> str | None:
