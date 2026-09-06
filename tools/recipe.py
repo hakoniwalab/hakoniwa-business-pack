@@ -511,6 +511,20 @@ def inspect_local_requirements(
                 )
                 if not satisfied:
                     missing.append(f"{kind}:{artifact_path}")
+            source = requirement["source"]
+            revision = source.get("revision")
+            if (
+                source["type"] == "git"
+                and isinstance(revision, str)
+                and GIT_FULL_SHA1_PATTERN.fullmatch(revision)
+            ):
+                resolved_revision = _checkout_revision(dependency_root)
+                if resolved_revision is None:
+                    missing.append("git checkout")
+                elif resolved_revision.lower() != revision.lower():
+                    missing.append(
+                        f"revision:{resolved_revision} != {revision}"
+                    )
         results.append(
             {
                 "dependency": dependency_id,
@@ -619,6 +633,94 @@ def _checkout_revision(target: Path) -> str | None:
     return revision if completed.returncode == 0 and revision else None
 
 
+def _git_worktree_is_dirty(target: Path) -> bool:
+    completed = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(target),
+            "status",
+            "--porcelain",
+            "--untracked-files=normal",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode:
+        raise RecipeGuideError(
+            f"git status failed with exit code {completed.returncode}: {target}"
+        )
+    return bool(completed.stdout.strip())
+
+
+def _git_revision_available(target: Path, revision: str) -> bool:
+    completed = subprocess.run(
+        ["git", "-C", str(target), "cat-file", "-e", f"{revision}^{{commit}}"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    return completed.returncode == 0
+
+
+def _checkout_existing_pinned_revision(target: Path, revision: str) -> None:
+    current = _checkout_revision(target)
+    if current is None:
+        raise RecipeGuideError(f"existing source is not a git checkout: {target}")
+    if current.lower() == revision.lower():
+        return
+    if _git_worktree_is_dirty(target):
+        raise RecipeGuideError(
+            "refusing to change a dirty git checkout for pinned Recipe source: "
+            f"{target} (current={current}, requested={revision})"
+        )
+
+    def run_git(command: list[str], operation: str) -> None:
+        print(">", subprocess.list2cmdline(command), flush=True)
+        completed = subprocess.run(command, cwd=target.parent, check=False)
+        if completed.returncode:
+            raise RecipeGuideError(
+                f"git {operation} failed with exit code {completed.returncode}: {target}"
+            )
+
+    if not _git_revision_available(target, revision):
+        run_git(
+            [
+                "git",
+                "-C",
+                str(target),
+                "fetch",
+                "--recurse-submodules=no",
+                "origin",
+                revision,
+            ],
+            "fetch",
+        )
+    run_git(
+        ["git", "-C", str(target), "checkout", "--detach", revision],
+        "checkout",
+    )
+    run_git(
+        [
+            "git",
+            "-C",
+            str(target),
+            "submodule",
+            "update",
+            "--init",
+            "--recursive",
+        ],
+        "submodule update",
+    )
+    resolved = _checkout_revision(target)
+    if resolved is None or resolved.lower() != revision.lower():
+        raise RecipeGuideError(
+            f"git checkout did not reach requested revision: {target}; "
+            f"requested={revision}, resolved={resolved or 'unknown'}"
+        )
+
+
 def _missing_source_artifacts(source: dict) -> list[str]:
     target = Path(source["target"])
     if not target.is_dir():
@@ -666,8 +768,38 @@ def _resolve_source_requirement(
             f"{kind} source {source_id} has an invalid revision"
         )
 
+    resolved_revision = (
+        _checkout_revision(target)
+        if target.exists() and source_type == "git"
+        else None
+    )
     if target.exists():
         action = "reuse"
+        if (
+            source_type == "git"
+            and revision is not None
+            and GIT_FULL_SHA1_PATTERN.fullmatch(revision)
+        ):
+            if resolved_revision is None:
+                raise RecipeGuideError(
+                    f"existing {kind} source is not a git checkout: "
+                    f"{source_id} target={target}"
+                )
+            if resolved_revision.lower() != revision.lower():
+                if overridden:
+                    raise RecipeGuideError(
+                        f"overridden {kind} source revision does not match Recipe pin: "
+                        f"{source_id} target={target}; requested={revision}, "
+                        f"resolved={resolved_revision}. Update the overridden checkout "
+                        "explicitly before continuing."
+                    )
+                if _git_worktree_is_dirty(target):
+                    raise RecipeGuideError(
+                        "refusing to change a dirty git checkout for pinned Recipe source: "
+                        f"{source_id} target={target}; requested={revision}, "
+                        f"resolved={resolved_revision}"
+                    )
+                action = "checkout"
     elif source_type != "git":
         action = "provide-local"
     elif overridden:
@@ -690,10 +822,14 @@ def _resolve_source_requirement(
         "required_artifacts": required_artifacts,
         "override_env": override_env,
         "provenance": {
-            "mode": "existing-checkout" if action == "reuse" else action,
+            "mode": (
+                "existing-checkout"
+                if action in {"reuse", "checkout"}
+                else action
+            ),
             "requested_revision": revision,
             "resolved_revision": (
-                _checkout_revision(target) if action == "reuse" else None
+                resolved_revision if action in {"reuse", "checkout"} else None
             ),
             "reproducibility": (
                 "pinned"
@@ -718,7 +854,7 @@ def materialize_sources(sources: list[dict]) -> None:
     unresolved = [
         source
         for source in sources
-        if source["action"] not in {"clone", "reuse"}
+        if source["action"] not in {"clone", "reuse", "checkout"}
     ]
     if unresolved:
         details = ", ".join(
@@ -731,13 +867,21 @@ def materialize_sources(sources: list[dict]) -> None:
         )
 
     for source in sources:
-        if source["action"] != "clone":
-            continue
-        _clone_repository(
-            source["repository"],
-            Path(source["target"]),
-            revision=source.get("revision"),
-        )
+        if source["action"] == "clone":
+            _clone_repository(
+                source["repository"],
+                Path(source["target"]),
+                revision=source.get("revision"),
+            )
+        elif source["action"] == "checkout":
+            revision = source.get("revision")
+            if not isinstance(revision, str) or not GIT_FULL_SHA1_PATTERN.fullmatch(revision):
+                raise RecipeGuideError(
+                    f"checkout action requires a full commit SHA: {source['id']}"
+                )
+            _checkout_existing_pinned_revision(
+                Path(source["target"]), revision
+            )
 
     for source in sources:
         missing = _missing_source_artifacts(source)
@@ -869,6 +1013,13 @@ def print_recipe_plan(plan: dict) -> None:
             print(
                 f"  - clone {label}: {source['repository']} -> "
                 f"{source['target']} (revision={revision})"
+            )
+        elif source["action"] == "checkout":
+            resolved = source["provenance"]["resolved_revision"] or "unknown"
+            requested = source["revision"] or "unknown"
+            print(
+                f"  - checkout {label}: {source['target']} "
+                f"(resolved={resolved} -> requested={requested})"
             )
         elif source["action"] == "reuse":
             resolved = source["provenance"]["resolved_revision"] or "unknown"
