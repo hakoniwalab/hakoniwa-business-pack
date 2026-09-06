@@ -1,0 +1,98 @@
+id: foundation-toolchain-config-is-not-reachable-from-an-alternate-install-dir
+title: The persisted vcpkg toolchain cannot be targeted at an alternate install prefix, so --install-dir is unusable on Windows
+
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+
+summary: >
+  tools/foundation.py toolchain has no --install-dir option, so it always writes
+  work/foundation/config/toolchain.json, while doctor, plan, and build resolve
+  the same file underneath whatever prefix --install-dir names. Pointing a build
+  at a second prefix therefore loads an empty toolchain, and on Windows the
+  component doctor reports NG vcpkg and the build aborts. Every other host is
+  unaffected, because vcpkg is only required on Windows. Copying the file into
+  the alternate prefix makes the identical command succeed.
+
+observation:
+  context: >
+    Building the same Recipe a second time into a separate prefix on Windows, to
+    keep an existing verified install intact while running a control experiment.
+  details:
+    - The toolchain subparser accepts only --recipe-id and --vcpkg-root; unlike doctor, plan, and build it has no --install-dir.
+    - foundation_toolchain_path returns paths.foundation_config / "toolchain.json", and paths are derived from the foundation root, which --install-dir overrides.
+    - load_foundation_toolchain returns an empty mapping when that file is absent, so no vcpkg root reaches the generated component manifest.
+    - The component doctor then prints NG vcpkg and exits 1, which aborts the Recipe before any compilation, with no message connecting the failure to the alternate prefix.
+    - An unrelated constraint compounds it: a prefix outside <repo>/work is rejected with "Foundation root must stay under the Business Pack work directory", so the alternate prefix must live inside the repository's work directory.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/foundation.py
+      revision: 046f14b
+  runtime_evidence:
+    - description: >
+        Windows 11 x64: "python tools/foundation.py build --recipe <recipe>
+        --install-dir work/alt-prefix/install" aborted with the component
+        doctor printing "OK cmake", "OK ninja", "OK athrill common CMake", "OK
+        Visual Studio C++", "NG vcpkg", then "error: athrill-target-v850e2m
+        command failed with exit code 1", even though the default prefix had a
+        valid toolchain.json recorded earlier by "tools/foundation.py toolchain
+        --vcpkg-root <root>".
+    - description: >
+        Directory listing at that moment: work/foundation/config/ contained
+        toolchain.json while work/alt-prefix/config/ was empty.
+    - description: >
+        After copying toolchain.json into the alternate prefix's config
+        directory and changing nothing else, the identical build command exited 0
+        and produced a Receipt, which isolates the cause to the unreachable
+        toolchain configuration.
+    - description: >
+        An earlier attempt with a prefix outside the repository work directory
+        failed differently, with "error: Foundation root must stay under the
+        Business Pack work directory".
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required: []
+  notes:
+    - Verified on Windows 11 x64 on 2026-08-31 with the athrill-v850e2m-build Recipe; both the failure and the copy-based recovery were observed on the same host.
+    - Not applicable to macOS or Linux, where the component build does not require vcpkg and an empty toolchain mapping is harmless.
+
+tracking:
+  implementation_status: open
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      kind: doctor
+      path: tools/foundation.py
+      mode: detect-and-suggest-remediation
+      notes:
+        - Give the toolchain subcommand the same --install-dir option the other subcommands accept, or resolve the toolchain configuration from a location shared by all prefixes.
+        - Until then, report the resolved toolchain path when it is missing on Windows, so the failure names the prefix instead of only the vcpkg check.
+
+promotion_rationale:
+  - The gap is in the CLI contract between subcommands, so the smallest fix and the clearest message both belong in tools/foundation.py.
+  - Recording it as a pitfall matters because the surface symptom (NG vcpkg) points at the host toolchain rather than at the prefix that was passed.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Workaround: copy work/foundation/config/toolchain.json into <alternate-prefix>/config/ before building.
+    - No issue has been filed in this repository yet.
