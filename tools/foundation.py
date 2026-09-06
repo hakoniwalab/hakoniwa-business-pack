@@ -899,6 +899,7 @@ def load_build_catalog(path: Path) -> dict[str, dict]:
         )
     components = data["components"]
     known_operations = {
+        "prepare",
         "doctor",
         "configure",
         "build",
