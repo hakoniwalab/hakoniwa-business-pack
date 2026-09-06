@@ -899,6 +899,7 @@ def load_build_catalog(path: Path) -> dict[str, dict]:
         )
     components = data["components"]
     known_operations = {
+        "prepare",
         "doctor",
         "configure",
         "build",
@@ -1287,7 +1288,7 @@ build:
   parallel: 0
 
 features:
-  exdev: {str(exdev_enabled).lower()}
+  exdev: {str(exdev_enabled)).lower()}
   mros: false
   vdev: false
 
