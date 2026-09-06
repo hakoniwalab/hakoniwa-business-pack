@@ -1288,7 +1288,7 @@ build:
   parallel: 0
 
 features:
-  exdev: {str(exdev_enabled)).lower()}
+  exdev: {str(exdev_enabled).lower()}
   mros: false
   vdev: false
 
