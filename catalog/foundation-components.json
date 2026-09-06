@@ -21,7 +21,7 @@
       "source": "../hakoniwa-pdu-endpoint",
       "repository": "https://github.com/hakoniwalab/hakoniwa-pdu-endpoint.git",
       "dependencies": ["hakoniwa-core-pro"],
-      "operations": ["doctor", "configure", "build", "install"],
+      "operations": ["prepare", "doctor", "configure", "build", "install"],
       "receipt": "share/hakoniwa/receipts/hakoniwa-pdu-endpoint.yaml"
     },
     "hakoniwa-pdu-rpc": {
