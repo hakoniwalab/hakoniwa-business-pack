@@ -13,6 +13,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Sequence
 
+TOOLS_DIR = Path(__file__).resolve().parent
+if str(TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(TOOLS_DIR))
+from workdir import resolve_work_dir
+
 
 class WorkspaceError(RuntimeError):
     pass
@@ -21,6 +26,7 @@ class WorkspaceError(RuntimeError):
 @dataclass(frozen=True)
 class WorkspacePaths:
     business_pack_root: Path
+    work_root: Path
     foundation_root: Path
     install_prefix: Path
     foundation_python_root: Path
@@ -38,9 +44,10 @@ def repository_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def resolve_workspace(root: Path | None = None) -> WorkspacePaths:
+def resolve_workspace(root: Path | None = None, work_dir: Path | str | None = None) -> WorkspacePaths:
     business_pack_root = (root or repository_root()).resolve()
-    foundation_root = business_pack_root / "work" / "foundation"
+    work_root = resolve_work_dir(business_pack_root, work_dir)
+    foundation_root = work_root / "foundation"
     install_prefix = foundation_root / "install"
     foundation_python_root = install_prefix / "python"
     if os.name == "nt":
@@ -51,6 +58,7 @@ def resolve_workspace(root: Path | None = None) -> WorkspacePaths:
         foundation_python_bin = foundation_python_root / "bin"
     return WorkspacePaths(
         business_pack_root=business_pack_root,
+        work_root=work_root,
         foundation_root=foundation_root,
         install_prefix=install_prefix,
         foundation_python_root=foundation_python_root,
@@ -90,6 +98,7 @@ def build_environment(
         {
             "HAKONIWA_WORKSPACE_ACTIVE": "1",
             "HAKONIWA_WORKSPACE_ROOT": str(paths.business_pack_root),
+            "HAKONIWA_WORK_DIR": str(paths.work_root),
             "HAKONIWA_HOME": str(paths.install_prefix),
             "HAKO_CONFIG_PATH": str(paths.foundation_config),
             "HAKO_PDU_ENDPOINT_RUNTIME_DIRS": str(paths.foundation_bin),
@@ -128,6 +137,7 @@ def _render_posix_activate(paths: WorkspacePaths) -> str:
         "VIRTUAL_ENV",
         "HAKONIWA_WORKSPACE_ACTIVE",
         "HAKONIWA_WORKSPACE_ROOT",
+        "HAKONIWA_WORK_DIR",
         "HAKONIWA_HOME",
         "HAKO_CONFIG_PATH",
         "HAKO_PDU_ENDPOINT_RUNTIME_DIRS",
@@ -171,6 +181,7 @@ def _render_posix_activate(paths: WorkspacePaths) -> str:
             "unset PYTHONHOME",
             _shell_assignment("HAKONIWA_WORKSPACE_ACTIVE", "1"),
             _shell_assignment("HAKONIWA_WORKSPACE_ROOT", str(paths.business_pack_root)),
+            _shell_assignment("HAKONIWA_WORK_DIR", str(paths.work_root)),
             _shell_assignment("HAKONIWA_HOME", str(paths.install_prefix)),
             _shell_assignment("HAKO_CONFIG_PATH", str(paths.foundation_config)),
             _shell_assignment("HAKO_PDU_ENDPOINT_RUNTIME_DIRS", str(paths.foundation_bin)),
@@ -218,6 +229,7 @@ def _render_powershell_activate(paths: WorkspacePaths) -> str:
         "VIRTUAL_ENV",
         "HAKONIWA_WORKSPACE_ACTIVE",
         "HAKONIWA_WORKSPACE_ROOT",
+        "HAKONIWA_WORK_DIR",
         "HAKONIWA_HOME",
         "HAKO_CONFIG_PATH",
         "HAKO_PDU_ENDPOINT_RUNTIME_DIRS",
@@ -256,6 +268,7 @@ def _render_powershell_activate(paths: WorkspacePaths) -> str:
             "Remove-Item Env:\\PYTHONHOME -ErrorAction SilentlyContinue",
             f"$env:HAKONIWA_WORKSPACE_ACTIVE = {_ps_quote('1')}",
             f"$env:HAKONIWA_WORKSPACE_ROOT = {_ps_quote(str(paths.business_pack_root))}",
+            f"$env:HAKONIWA_WORK_DIR = {_ps_quote(str(paths.work_root))}",
             f"$env:HAKONIWA_HOME = {_ps_quote(str(paths.install_prefix))}",
             f"$env:HAKO_CONFIG_PATH = {_ps_quote(str(paths.foundation_config))}",
             f"$env:HAKO_PDU_ENDPOINT_RUNTIME_DIRS = {_ps_quote(str(paths.foundation_bin))}",
@@ -513,6 +526,7 @@ def print_environment(paths: WorkspacePaths, json_output: bool) -> None:
     keys = (
         "HAKONIWA_WORKSPACE_ACTIVE",
         "HAKONIWA_WORKSPACE_ROOT",
+        "HAKONIWA_WORK_DIR",
         "HAKONIWA_HOME",
         "HAKO_CONFIG_PATH",
         "HAKO_PDU_ENDPOINT_RUNTIME_DIRS",
@@ -542,7 +556,8 @@ def create_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("prepare", help="regenerate compatibility activation scripts")
-    sub.add_parser("enter", help="prepare and open the standard (hako) child shell")
+    enter_parser = sub.add_parser("enter", help="prepare and open the standard (hako) child shell")
+    enter_parser.add_argument("--workdir", type=Path, help="working directory (overrides HAKONIWA_WORK_DIR)")
     sub.add_parser("doctor", help="verify Python and binding origins")
     env_parser = sub.add_parser("env", help="show the managed environment")
     env_parser.add_argument("--json", action="store_true", dest="json_output")
@@ -554,7 +569,7 @@ def create_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = create_parser().parse_args(argv)
     root = Path(args.root).expanduser() if args.root else None
-    paths = resolve_workspace(root)
+    paths = resolve_workspace(root, args.workdir if args.command == "enter" else None)
     try:
         if args.command == "prepare":
             posix, powershell = prepare(paths)
@@ -572,6 +587,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             return 0
         if args.command == "enter":
+            if os.environ.get("HAKONIWA_WORKSPACE_ACTIVE") == "1":
+                raise WorkspaceError(
+                    "cannot enter a new Hakoniwa Workspace from an active Workspace; "
+                    "exit the current shell first"
+                )
             return enter(paths)
         if args.command == "doctor":
             return doctor(paths)

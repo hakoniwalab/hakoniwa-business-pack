@@ -84,6 +84,7 @@ class RecipeGuideTest(unittest.TestCase):
             "test_workspace_guard.py",
             "workspace.py",
             "workspace_guard.py",
+            "workdir.py",
         }
         tools_dir = self.business_pack_root / "tools"
         actual = {path.name for path in tools_dir.iterdir() if path.is_file()}

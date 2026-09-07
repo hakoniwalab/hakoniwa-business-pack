@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import importlib.util
 import io
+import os
 import subprocess
 import sys
 import tempfile
@@ -64,6 +65,31 @@ class FoundationWorkspaceTest(unittest.TestCase):
                 self.assertNotIn("/usr/local", value)
                 self.assertNotIn("/etc/hakoniwa", value)
                 self.assertNotIn("/var/lib/hakoniwa", value)
+
+    def test_resolve_workspace_uses_selected_external_workdir(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "business-pack"
+            work = Path(temporary) / "external-work"
+            with mock.patch.dict(os.environ, {"HAKONIWA_WORK_DIR": str(work)}):
+                paths = foundation.resolve_workspace(root, "demo")
+            expected_work = work.resolve()
+            self.assertEqual(paths.work_root, expected_work)
+            self.assertEqual(paths.recipe_root, expected_work / "recipes" / "demo")
+            self.assertEqual(paths.business_pack_root, root.resolve())
+
+    def test_resolve_workspace_accepts_symlinked_workdir_and_override(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "business-pack"
+            real_work = base / "real-work"
+            link_work = base / "linked-work"
+            link_work.symlink_to(real_work, target_is_directory=True)
+            with mock.patch.dict(os.environ, {"HAKONIWA_WORK_DIR": str(link_work)}):
+                paths = foundation.resolve_workspace(root, "demo")
+                override = foundation.resolve_workspace(root, "demo", link_work / "foundation")
+            self.assertEqual(paths.work_root, real_work.resolve())
+            self.assertEqual(override.foundation_root, (real_work / "foundation").resolve())
+            self.assertEqual(override.foundation_root, (real_work / "foundation").resolve())
 
     def test_windows_layout_uses_the_same_relative_contract(self) -> None:
         root = PureWindowsPath("C:/work/hakoniwa-business-pack")
