@@ -97,6 +97,15 @@ class WorkspaceEnterTest(unittest.TestCase):
         workspace._apply_prompt_environment("/bin/bash", env)
         self.assertTrue(env["PS1"].startswith("(hako) "))
 
+    def test_enter_cli_workdir_is_passed_to_resolver(self) -> None:
+        selected = Path(self.temporary.name) / "selected"
+        with mock.patch.object(workspace, "enter", return_value=0) as enter:
+            self.assertEqual(
+                workspace.main(["--root", str(self.root), "enter", "--workdir", str(selected)]),
+                0,
+            )
+        self.assertEqual(enter.call_args.args[0].work_root, Path(os.path.abspath(selected)))
+
 
 if __name__ == "__main__":
     unittest.main()

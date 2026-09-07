@@ -64,6 +64,20 @@ class WorkspaceEnvironmentTest(unittest.TestCase):
         ):
             self.assertTrue(path.is_relative_to(self.root.resolve() / "work"))
 
+    def test_workdir_precedence_and_relative_resolution(self) -> None:
+        explicit = Path(self.temporary.name) / "explicit"
+        with mock.patch.dict(os.environ, {"HAKONIWA_WORK_DIR": str(Path(self.temporary.name) / "env")}, clear=False):
+            self.assertEqual(workspace.resolve_workspace(self.root).work_root, Path(os.path.abspath(Path(self.temporary.name) / "env")))
+            self.assertEqual(workspace.resolve_workspace(self.root, explicit).work_root, Path(os.path.abspath(explicit)))
+        self.assertEqual(
+            workspace.resolve_workspace(self.root, Path("relative-work")).work_root,
+            Path(os.path.abspath(Path.cwd() / "relative-work")),
+        )
+
+    def test_enter_parser_accepts_workdir(self) -> None:
+        args = workspace.create_parser().parse_args(["enter", "--workdir", "custom"])
+        self.assertEqual(args.workdir, Path("custom"))
+
     def test_environment_removes_ambient_python_discovery(self) -> None:
         base = {
             "PATH": os.pathsep.join(("/legacy/bin", "/another/bin")),
@@ -79,6 +93,7 @@ class WorkspaceEnvironmentTest(unittest.TestCase):
         self.assertEqual(env["PYTHONNOUSERSITE"], "1")
         self.assertEqual(env["HAKONIWA_WORKSPACE_ACTIVE"], "1")
         self.assertEqual(env["HAKONIWA_WORKSPACE_ROOT"], str(self.root.resolve()))
+        self.assertEqual(env["HAKONIWA_WORK_DIR"], str(self.paths.work_root))
         self.assertEqual(env["HAKONIWA_HOME"], str(self.paths.install_prefix))
         self.assertEqual(
             env["HAKO_PDU_ENDPOINT_RUNTIME_DIRS"],

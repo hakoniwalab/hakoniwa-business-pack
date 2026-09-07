@@ -9,6 +9,11 @@ import sys
 from pathlib import Path
 from typing import Mapping, Sequence, TextIO
 
+TOOLS_DIR = Path(__file__).resolve().parent
+if str(TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(TOOLS_DIR))
+from workdir import resolve_work_dir
+
 
 def repository_root() -> Path:
     return Path(__file__).resolve().parents[1]
@@ -24,9 +29,10 @@ def _same_path(value: str | None, expected: Path) -> bool:
     return bool(value) and _normalized_path(value) == _normalized_path(expected)
 
 
-def _expected_paths(root: Path) -> dict[str, Path]:
+def _expected_paths(root: Path, work_dir: Path | str | None = None) -> dict[str, Path]:
     business_pack_root = root.expanduser().resolve()
-    install = business_pack_root / "work" / "foundation" / "install"
+    work_root = resolve_work_dir(business_pack_root, work_dir)
+    install = work_root / "foundation" / "install"
     python_root = install / "python"
     python_bin = python_root / ("Scripts" if os.name == "nt" else "bin")
     return {
@@ -35,11 +41,8 @@ def _expected_paths(root: Path) -> dict[str, Path]:
         "virtual_env": python_root,
         "python_bin": python_bin,
         "foundation_bin": install / "bin",
-        "config": business_pack_root
-        / "work"
-        / "foundation"
-        / "config"
-        / "cpp_core_config.json",
+        "config": work_root / "foundation" / "config" / "cpp_core_config.json",
+        "work_dir": work_root,
     }
 
 
@@ -50,7 +53,7 @@ def validate_workspace(
     """Return Workspace identity mismatches without inspecting runtime artifacts."""
     selected_root = (root or repository_root()).expanduser().resolve()
     env = os.environ if environment is None else environment
-    expected = _expected_paths(selected_root)
+    expected = _expected_paths(selected_root, env.get("HAKONIWA_WORK_DIR"))
 
     if env.get("HAKONIWA_WORKSPACE_ACTIVE") != "1":
         return [
@@ -60,6 +63,7 @@ def validate_workspace(
     errors: list[str] = []
     path_contract = (
         ("HAKONIWA_WORKSPACE_ROOT", expected["root"]),
+        ("HAKONIWA_WORK_DIR", expected["work_dir"]),
         ("HAKONIWA_HOME", expected["home"]),
         ("VIRTUAL_ENV", expected["virtual_env"]),
         ("HAKO_CONFIG_PATH", expected["config"]),
