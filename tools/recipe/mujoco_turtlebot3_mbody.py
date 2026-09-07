@@ -10,6 +10,11 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+# Direct script execution must work without ambient PYTHONPATH.
+BUSINESS_PACK_ROOT = Path(__file__).resolve().parents[2]
+if str(BUSINESS_PACK_ROOT) not in sys.path:
+    sys.path.insert(0, str(BUSINESS_PACK_ROOT))
+
 from tools.workdir import foundation_root, recipe_root as selected_recipe_root
 
 

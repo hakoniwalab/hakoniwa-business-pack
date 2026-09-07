@@ -5,6 +5,7 @@ import importlib.util
 import hashlib
 import io
 import json
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -35,6 +36,24 @@ FOUNDATION_SPEC.loader.exec_module(foundation)
 
 
 class DroneFleetSingleHostTest(unittest.TestCase):
+    def test_recipe_entrypoints_start_without_pythonpath(self) -> None:
+        # -E ignores ambient PYTHONPATH; cwd is deliberately outside the repo.
+        with tempfile.TemporaryDirectory() as temporary:
+            for name in (
+                "drone_fleet_single_host.py",
+                "mujoco_turtlebot3_mbody.py",
+                "mujoco_turtlebot3_dual_mirror.py",
+                "mujoco_turtlebot3_wall_follower.py",
+                "shadow_hand_menagerie.py",
+            ):
+                with self.subTest(script=name):
+                    result = subprocess.run(
+                        [sys.executable, "-E", str(SCRIPT.with_name(name)), "--help"],
+                        cwd=temporary, text=True, capture_output=True, check=False,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIn("usage:", result.stdout.lower())
+
     def _experiment(
         self,
         root: Path,
@@ -122,7 +141,7 @@ profiles:
     def test_auto_process_count_and_build_limits(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             experiment = recipe.resolve_experiment(
-                self._experiment(Path(temporary), drones=100, per_process=10)
+                self._experiment(Path(temporary).resolve(), drones=100, per_process=10)
             )
             self.assertEqual(experiment.process_count, 10)
             self.assertEqual(
@@ -141,13 +160,13 @@ profiles:
     def test_auto_process_count_uses_ceiling(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             experiment = recipe.resolve_experiment(
-                self._experiment(Path(temporary), drones=101, per_process=10)
+                self._experiment(Path(temporary).resolve(), drones=101, per_process=10)
             )
             self.assertEqual(experiment.process_count, 11)
 
     def test_drone_count_override_updates_single_process_shape(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            path = self._experiment(Path(temporary), drones=2, per_process=2)
+            path = self._experiment(Path(temporary).resolve(), drones=2, per_process=2)
             path.write_text(
                 path.read_text(encoding="utf-8").replace(
                     "  process_count: auto", "  process_count: 1"
@@ -164,7 +183,7 @@ profiles:
     def test_drone_and_process_count_overrides_resolve_partition_shape(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             experiment = recipe.resolve_experiment(
-                self._experiment(Path(temporary), drones=4, per_process=2),
+                self._experiment(Path(temporary).resolve(), drones=4, per_process=2),
                 drone_count_override=128,
                 process_count_override=2,
             )
@@ -181,7 +200,7 @@ profiles:
 
     def test_formation_scale_override_scales_resolved_dimensions(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            path = self._experiment(Path(temporary), drones=2, per_process=2)
+            path = self._experiment(Path(temporary).resolve(), drones=2, per_process=2)
             baseline = recipe.resolve_experiment(path)
             scaled = recipe.resolve_experiment(
                 path, formation_scale_override=5.0
@@ -194,7 +213,7 @@ profiles:
         with tempfile.TemporaryDirectory() as temporary:
             with self.assertRaisesRegex(recipe.RecipeError, "formation-scale"):
                 recipe.resolve_experiment(
-                    self._experiment(Path(temporary), drones=2, per_process=2),
+                    self._experiment(Path(temporary).resolve(), drones=2, per_process=2),
                     formation_scale_override=20.0,
                 )
 
@@ -222,7 +241,7 @@ profiles:
 
     def test_commands_reuse_configured_experiment_and_drone_root(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             configured = (
                 root
                 / "work"
@@ -247,7 +266,7 @@ profiles:
 
     def test_configure_without_experiment_keeps_source_default(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             configured = (
                 root
                 / "work"
@@ -269,7 +288,7 @@ profiles:
 
     def test_configure_defaults_to_public_drone_core(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             with mock.patch.object(recipe, "ROOT", root):
                 self.assertEqual(
                     recipe.command_drone_root("configure", None),
@@ -311,7 +330,7 @@ profiles:
             return recipe.resolve_experiment(path)
 
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             self.assertEqual(
                 recipe.required_build_limits(resolve(root, 15, False))["asset_num"],
                 16,
@@ -331,7 +350,7 @@ profiles:
 
     def test_explicit_process_count_does_not_require_drones_per_process(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            path = self._experiment(Path(temporary), drones=100, per_process=10)
+            path = self._experiment(Path(temporary).resolve(), drones=100, per_process=10)
             content = path.read_text(encoding="utf-8")
             content = content.replace("  drones_per_process: 10\n", "")
             content = content.replace("  process_count: auto", "  process_count: 3")
@@ -342,7 +361,7 @@ profiles:
 
     def test_explicit_process_count_accepts_auto_drones_per_process(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            path = self._experiment(Path(temporary), drones=200, per_process=10)
+            path = self._experiment(Path(temporary).resolve(), drones=200, per_process=10)
             content = path.read_text(encoding="utf-8")
             content = content.replace("  drones_per_process: 10", "  drones_per_process: auto")
             content = content.replace("  process_count: auto", "  process_count: 3")
@@ -371,7 +390,7 @@ profiles:
 
     def test_materialized_experiment_rejects_missing_process_partition(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             paths = foundation.resolve_workspace(root, recipe.RECIPE_ID)
             foundation.prepare_workspace(paths)
             path = self._experiment(root, drones=200, per_process=25)
@@ -392,7 +411,7 @@ profiles:
 
     def test_start_does_not_launch_when_doctor_rejects_stale_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             experiment_path = self._experiment(root, drones=200, per_process=25)
             with mock.patch.object(recipe, "doctor", return_value=1) as doctor, mock.patch.object(
                 recipe, "_run"
@@ -410,7 +429,7 @@ profiles:
 
     def test_total_drone_count_is_derived_from_process_shape(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            path = self._experiment(Path(temporary), drones=100, per_process=10)
+            path = self._experiment(Path(temporary).resolve(), drones=100, per_process=10)
             content = path.read_text(encoding="utf-8")
             content = content.replace("  drone_count: 100", "  drone_count: auto")
             content = content.replace("  drones_per_process: 10", "  drones_per_process: 26")
@@ -424,14 +443,14 @@ profiles:
     def test_accepts_headless_mode(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             experiment = recipe.resolve_experiment(
-                self._experiment(Path(temporary), visualization=False)
+                self._experiment(Path(temporary).resolve(), visualization=False)
             )
             self.assertFalse(experiment.visualization)
 
     def test_accepts_one_drone_with_partial_hakoniwa_formation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             experiment = recipe.resolve_experiment(
-                self._experiment(Path(temporary), drones=1, per_process=1)
+                self._experiment(Path(temporary).resolve(), drones=1, per_process=1)
             )
             self.assertEqual(experiment.drone_count, 1)
             self.assertEqual(experiment.process_count, 1)
@@ -440,7 +459,7 @@ profiles:
         with tempfile.TemporaryDirectory() as temporary:
             with self.assertRaisesRegex(recipe.RecipeError, ">= 1"):
                 recipe.resolve_experiment(
-                    self._experiment(Path(temporary), drones=0, per_process=1)
+                    self._experiment(Path(temporary).resolve(), drones=0, per_process=1)
                 )
 
     def test_rejects_more_than_general_user_binary_profile(self) -> None:
@@ -450,19 +469,19 @@ profiles:
                 "general-user limit of 200.*512-drone.*PRO.*license",
             ):
                 recipe.resolve_experiment(
-                    self._experiment(Path(temporary), drones=201, per_process=10)
+                    self._experiment(Path(temporary).resolve(), drones=201, per_process=10)
                 )
 
     def test_accepts_general_user_limit(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             experiment = recipe.resolve_experiment(
-                self._experiment(Path(temporary), drones=200, per_process=10)
+                self._experiment(Path(temporary).resolve(), drones=200, per_process=10)
             )
             self.assertEqual(experiment.drone_count, 200)
 
     def test_prepare_native_downloads_verifies_and_extracts_linux_release(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             drone_root = root / "hakoniwa-drone-core"
             generator = drone_root / "tools" / "gen_fleet_scale_config.py"
             generator.parent.mkdir(parents=True)
@@ -539,7 +558,7 @@ profiles:
 
     def test_prepare_drone_workspace_clones_latest_main(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            drone_root = Path(temporary) / "hakoniwa-drone-core"
+            drone_root = Path(temporary).resolve() / "hakoniwa-drone-core"
 
             def run_checked(command, *, cwd=None):
                 if command[:2] == ["git", "clone"]:
@@ -569,7 +588,7 @@ profiles:
 
     def test_prepare_drone_workspace_reuses_current_main_and_reports_dirty(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            drone_root = Path(temporary) / "hakoniwa-drone-core"
+            drone_root = Path(temporary).resolve() / "hakoniwa-drone-core"
             (drone_root / ".git").mkdir(parents=True)
             generator = drone_root / "tools" / "gen_fleet_scale_config.py"
             generator.parent.mkdir(parents=True)
@@ -599,7 +618,7 @@ profiles:
 
     def test_prepare_drone_workspace_fast_forwards_stale_main(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            drone_root = Path(temporary) / "hakoniwa-drone-core"
+            drone_root = Path(temporary).resolve() / "hakoniwa-drone-core"
             (drone_root / ".git").mkdir(parents=True)
             generator = drone_root / "tools" / "gen_fleet_scale_config.py"
             generator.parent.mkdir(parents=True)
@@ -630,7 +649,7 @@ profiles:
 
     def test_prepare_drone_workspace_rejects_unrelated_checkout(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            drone_root = Path(temporary) / "hakoniwa-drone-core"
+            drone_root = Path(temporary).resolve() / "hakoniwa-drone-core"
             (drone_root / ".git").mkdir(parents=True)
             with mock.patch.object(
                 recipe,
@@ -641,7 +660,7 @@ profiles:
 
     def test_linux_mujoco_version_comes_from_drone_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             drone_root = root / "hakoniwa-drone-core"
             workspace_version = "9.8.7"
             self._mujoco_version(drone_root, mujoco_version=workspace_version)
@@ -684,7 +703,7 @@ profiles:
 
     def test_doctor_reports_missing_declared_linux_library_before_start(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             paths = foundation.resolve_workspace(root, recipe.RECIPE_ID)
             foundation.prepare_workspace(paths)
             experiment_path = self._experiment(
@@ -739,7 +758,7 @@ profiles:
 
     def test_macos_mujoco_runs_workspace_installer_and_linker(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             drone_root = root / "hakoniwa-drone-core"
             tools = drone_root / "tools"
             tools.mkdir(parents=True)
@@ -782,7 +801,7 @@ profiles:
 
     def test_verified_download_reuses_only_matching_cache(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            destination = Path(temporary) / "archive.zip"
+            destination = Path(temporary).resolve() / "archive.zip"
             payload = b"verified-cache"
             destination.write_bytes(payload)
             with mock.patch.object(recipe.urllib.request, "urlopen") as urlopen:
@@ -798,12 +817,12 @@ profiles:
         with tempfile.TemporaryDirectory() as temporary:
             with self.assertRaisesRegex(recipe.RecipeError, "supports macOS and Linux"):
                 recipe.prepare_native_distribution(
-                    Path(temporary) / "hakoniwa-drone-core", "Windows"
+                    Path(temporary).resolve() / "hakoniwa-drone-core", "Windows"
                 )
 
     def test_linux_runtime_resolves_distribution_and_ld_library_path(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             paths = foundation.resolve_workspace(root, recipe.RECIPE_ID)
             foundation.prepare_workspace(paths)
             python = paths.foundation_python / "bin" / "python3"
@@ -825,7 +844,7 @@ profiles:
 
     def test_prepare_native_rejects_archive_path_traversal(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             archive_path = root / "bad.zip"
             with zipfile.ZipFile(archive_path, "w") as archive:
                 archive.writestr("../outside", b"bad")
@@ -834,7 +853,7 @@ profiles:
 
     def test_generated_launcher_uses_one_builtin_conductor_owner(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             paths = foundation.resolve_workspace(root, recipe.RECIPE_ID)
             foundation.prepare_workspace(paths)
             experiment = recipe.resolve_experiment(
@@ -909,7 +928,7 @@ profiles:
 
     def test_mujoco_city_launcher_remains_alive_until_manual_stop(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             paths = foundation.resolve_workspace(root, recipe.RECIPE_ID)
             foundation.prepare_workspace(paths)
             experiment = recipe.resolve_experiment(
@@ -1069,7 +1088,7 @@ profiles:
 
     def test_headless_launcher_omits_visualization_processes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             paths = foundation.resolve_workspace(root, recipe.RECIPE_ID)
             foundation.prepare_workspace(paths)
             experiment = recipe.resolve_experiment(
@@ -1113,7 +1132,7 @@ profiles:
 
     def test_foundation_requirements_are_parseable_by_resolver(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             experiment = recipe.resolve_experiment(self._experiment(root))
             output = root / "requirements.yaml"
             recipe.write_foundation_requirements(output, experiment)
@@ -1133,7 +1152,7 @@ profiles:
 
     def test_headless_requirements_omit_web_bridge(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             experiment = recipe.resolve_experiment(
                 self._experiment(root, visualization=False)
             )
@@ -1147,7 +1166,7 @@ profiles:
 
     def test_open_viewer_rejects_headless_experiment(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            path = self._experiment(Path(temporary), visualization=False)
+            path = self._experiment(Path(temporary).resolve(), visualization=False)
             with self.assertRaisesRegex(recipe.RecipeError, "headless experiment"):
                 recipe.open_viewer(path)
 
@@ -1164,7 +1183,7 @@ profiles:
 
     def test_session_file_uses_recipe_runtime_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            paths = foundation.resolve_workspace(Path(temporary), recipe.RECIPE_ID)
+            paths = foundation.resolve_workspace(Path(temporary).resolve(), recipe.RECIPE_ID)
             self.assertEqual(
                 recipe.session_file(paths),
                 paths.recipe_root / "runtime" / "launcher-session.json",
@@ -1200,7 +1219,7 @@ profiles:
 
     def test_prepare_viewer_updates_existing_submodules(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            viewer_root = Path(temporary) / "hakoniwa-threejs-drone"
+            viewer_root = Path(temporary).resolve() / "hakoniwa-threejs-drone"
             (viewer_root / ".git").mkdir(parents=True)
             for required in recipe.viewer_required_files(viewer_root):
                 required.parent.mkdir(parents=True, exist_ok=True)
@@ -1214,7 +1233,7 @@ profiles:
 
     def test_prepare_viewer_rejects_incomplete_checkout(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            viewer_root = Path(temporary) / "hakoniwa-threejs-drone"
+            viewer_root = Path(temporary).resolve() / "hakoniwa-threejs-drone"
             viewer_root.mkdir()
             with self.assertRaisesRegex(recipe.RecipeError, "pdu-javascript"):
                 recipe.prepare_viewer(viewer_root)

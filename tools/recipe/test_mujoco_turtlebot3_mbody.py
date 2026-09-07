@@ -27,7 +27,7 @@ class TurtleBot3MBodyRecipeTest(unittest.TestCase):
 
     def test_workspace_paths_stay_under_business_pack_work(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / "business-pack"
+            root = Path(temporary).resolve() / "business-pack"
             with mock.patch.object(recipe, "business_root", return_value=root):
                 resolved = recipe.paths()
             for value in resolved.values():
@@ -39,7 +39,7 @@ class TurtleBot3MBodyRecipeTest(unittest.TestCase):
 
     def test_posix_configure_uses_managed_paths_without_windows_toolchain(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / "business-pack"
+            root = Path(temporary).resolve() / "business-pack"
             args = self.args(root)
             state = {"vcpkg_root": None}
             with mock.patch.object(recipe, "business_root", return_value=root), mock.patch.object(
@@ -54,7 +54,7 @@ class TurtleBot3MBodyRecipeTest(unittest.TestCase):
 
     def test_windows_configure_uses_selected_foundation_toolchain(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / "business-pack"
+            root = Path(temporary).resolve() / "business-pack"
             args = self.args(root)
             vcpkg = root / "work" / "foundation" / "tools" / "vcpkg"
             with mock.patch.object(recipe, "business_root", return_value=root), mock.patch.object(
@@ -66,7 +66,7 @@ class TurtleBot3MBodyRecipeTest(unittest.TestCase):
 
     def test_executable_layout_is_platform_internal(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            build = Path(temporary)
+            build = Path(temporary).resolve()
             windows = build / "main_for_sample" / "tb3" / "Release" / "tb3_sim_burger.exe"
             windows.parent.mkdir(parents=True)
             windows.touch()
@@ -80,7 +80,7 @@ class TurtleBot3MBodyRecipeTest(unittest.TestCase):
 
     def test_launcher_command_contract_is_same_on_both_platforms(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / "business-pack"
+            root = Path(temporary).resolve() / "business-pack"
             prefix = root / "work" / "foundation" / "install"
             for relative in ("python/Scripts/python.exe", "python/bin/python3"):
                 path = prefix / relative

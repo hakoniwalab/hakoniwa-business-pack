@@ -31,7 +31,7 @@ class WallFollowerRecipeTest(unittest.TestCase):
 
     def test_runtime_dependencies_install_into_foundation_python(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / "business"
+            root = Path(temporary).resolve() / "business"
             python = root / "work/foundation/install/python/bin/python3"
             python.parent.mkdir(parents=True, exist_ok=True)
             python.write_text("", encoding="utf-8")
@@ -46,7 +46,7 @@ class WallFollowerRecipeTest(unittest.TestCase):
 
     def test_headless_launcher_uses_foundation_python_and_wall_follower(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / "business"
+            root = Path(temporary).resolve() / "business"
             python = root / "work/foundation/install/python/bin/python3"
             python.parent.mkdir(parents=True, exist_ok=True)
             python.write_text("", encoding="utf-8")
@@ -63,7 +63,7 @@ class WallFollowerRecipeTest(unittest.TestCase):
 
     def test_gui_launcher_adds_lidar_visualizer(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / "business"
+            root = Path(temporary).resolve() / "business"
             python = root / "work/foundation/install/python/bin/python3"
             python.parent.mkdir(parents=True, exist_ok=True)
             python.write_text("", encoding="utf-8")
