@@ -87,11 +87,49 @@ def _prepend_path(current: str | None, entries: Sequence[Path]) -> str:
     return os.pathsep.join(result)
 
 
+def _without_workspace_paths(
+    current: str | None, work_root: Path, previous_home: str | None = None
+) -> str:
+    """Drop PATH entries belonging to a previously active Foundation."""
+    if not current:
+        return ""
+    managed_roots = {
+        (work_root / "foundation" / "install").resolve(),
+        (work_root / "foundation" / "install" / "python").resolve(),
+    }
+    if previous_home:
+        managed_roots.add(Path(previous_home).expanduser().resolve())
+    kept = []
+    for value in current.split(os.pathsep):
+        if not value:
+            continue
+        candidate = Path(value).expanduser()
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            resolved = candidate.absolute()
+        if any(resolved == root or root in resolved.parents for root in managed_roots):
+            continue
+        kept.append(value)
+    return os.pathsep.join(kept)
+
+
 def build_environment(
     paths: WorkspacePaths,
     base: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
     env = dict(os.environ if base is None else base)
+    previous_work = env.get("HAKONIWA_WORK_DIR", "").strip()
+    previous_home = env.get("HAKONIWA_HOME", "").strip()
+    if previous_work:
+        previous_root = Path(previous_work).expanduser().resolve()
+        env["PATH"] = _without_workspace_paths(env.get("PATH"), previous_root, previous_home)
+        env["LD_LIBRARY_PATH"] = _without_workspace_paths(
+            env.get("LD_LIBRARY_PATH"), previous_root, previous_home
+        )
+        env["DYLD_LIBRARY_PATH"] = _without_workspace_paths(
+            env.get("DYLD_LIBRARY_PATH"), previous_root, previous_home
+        )
     env.pop("PYTHONPATH", None)
     env.pop("PYTHONHOME", None)
     env.update(
