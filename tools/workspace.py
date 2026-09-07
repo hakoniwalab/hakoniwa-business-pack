@@ -88,15 +88,15 @@ def _prepend_path(current: str | None, entries: Sequence[Path]) -> str:
 
 
 def _without_workspace_paths(
-    current: str | None, work_root: Path, previous_home: str | None = None
+    current: str | None, work_root: Path | None, previous_home: str | None = None
 ) -> str:
     """Drop PATH entries belonging to a previously active Foundation."""
     if not current:
         return ""
-    managed_roots = {
-        (work_root / "foundation" / "install").resolve(),
-        (work_root / "foundation" / "install" / "python").resolve(),
-    }
+    managed_roots = set()
+    if work_root is not None:
+        managed_roots.add((work_root / "foundation" / "install").resolve())
+        managed_roots.add((work_root / "foundation" / "install" / "python").resolve())
     if previous_home:
         managed_roots.add(Path(previous_home).expanduser().resolve())
     kept = []
@@ -121,8 +121,9 @@ def build_environment(
     env = dict(os.environ if base is None else base)
     previous_work = env.get("HAKONIWA_WORK_DIR", "").strip()
     previous_home = env.get("HAKONIWA_HOME", "").strip()
-    if previous_work:
-        previous_root = Path(previous_work).expanduser().resolve()
+    if previous_work or previous_home:
+        # Legacy activations export HAKONIWA_HOME without HAKONIWA_WORK_DIR.
+        previous_root = Path(previous_work).expanduser().resolve() if previous_work else None
         env["PATH"] = _without_workspace_paths(env.get("PATH"), previous_root, previous_home)
         env["LD_LIBRARY_PATH"] = _without_workspace_paths(
             env.get("LD_LIBRARY_PATH"), previous_root, previous_home
