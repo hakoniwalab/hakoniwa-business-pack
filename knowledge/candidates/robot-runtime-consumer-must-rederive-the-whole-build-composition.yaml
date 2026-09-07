@@ -1,0 +1,98 @@
+id: robot-runtime-consumer-must-rederive-the-whole-build-composition
+title: With no repository-local build target, a hakoniwa-robot-runtime consumer must derive the source list and include roots by hand, with no reachable example to copy
+
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - implementation_fact
+
+summary: >
+  hakoniwa-robot-runtime currently leaves top-level CMake composition to the
+  consumer, and the catalog records that as a known gap. Working through it once
+  on Windows meant deriving 26 source files, two internal include roots and six
+  external include roots, none of which are stated in the repository or the
+  catalog. No worked example was available to copy: the catalog's separate
+  hakoniwa-robot-arm-pack entry is marked private and unreadable, and lists no
+  build commands of its own. The composition that did build is recorded here so
+  the next consumer has a starting point rather than a sequence of compiler
+  errors.
+
+observation:
+  context: >
+    Attempting to verify the component on Windows, where the first task turned
+    out to be reconstructing a build system rather than running one.
+  details:
+    - The pinned tree has 62 files, of which the only non-source entries are .gitignore, LICENSE, README.md and docs/design.md. There is no CMakeLists.txt, no Makefile, no script of any kind, no test directory and no CI workflow.
+    - docs/design.md section 13 states the intent plainly: the repository owns the sources and public headers while top-level CMake composition is performed by the consumer. The catalog mirrors it, with operations.build, operations.test and operations.run all carrying empty command lists and a known_gaps entry saying repository-local top-level CMake/build/test ownership has not yet been introduced.
+    - .gitignore nonetheless anticipates a build system that does not exist, ignoring build/, CMakeFiles/, CMakeCache.txt and cmake_install.cmake.
+    - The runtime's catalog entry refers to consuming Robot Packs generically and names none. A separate catalog entry, hakoniwa-robot-arm-pack, is marked visibility: private and is not readable, and its own operations.build.commands is empty with the note that build details are maintained with the implementation Recipes. Either way there is no reachable example composition to copy.
+    - Composition facts a consumer must discover for itself, all of which had to be derived by reading includes and searching repositories: the 26 translation units under src/; that src/ itself is an include root because sources include their internal headers as "runtime/..." and "runner/..." rather than by relative path; that C++20 is mandatory because adapters take std::span; and the six external include roots, two of which are not the install prefixes of the declared dependencies.
+    - None of this is a defect in the sources. It is the cost of the ownership split; it was paid once here, and the same derivation would face any consumer starting without an example.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-robot-runtime
+      path: docs/design.md
+      revision: 0a9bba3d529c7acc0e62c98569a4443eb736beed
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: catalog/components/hakoniwa-robot-runtime.yaml
+      revision: b5585c6
+  runtime_evidence:
+    - description: >
+        Tree of the pinned revision filtered for build-system, test, tool,
+        example and configuration file patterns returns zero paths; the file
+        count is 62, of which 26 are .cpp and 32 are .hpp.
+    - description: >
+        A minimal consumer composition that builds on Windows: one static
+        library target over the explicit list of 26 sources with
+        CMAKE_CXX_STANDARD 20; include roots include/ and src/ from the runtime;
+        core-pro's install include and its pdu subdirectory; pdu-endpoint's
+        install include; mujoco-robots' include and src; and the MuJoCo headers.
+        Link libraries: core-pro assets/conductor/hako/shakoc,
+        hakoniwa_pdu_endpoint, mujoco-common and mujoco. This produced
+        robot_runtime.lib and an executable linking ManifestFactory::create.
+    - description: >
+        gh api on hakoniwalab/hakoniwa-robot-arm-pack returns 404 with the
+        current token, and its catalog entry's operations.build.commands is an
+        empty list with the note that build details are maintained with the
+        implementation Recipes.
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required: []
+  notes:
+    - The composition above is verified on Windows only, with one consumer. Nothing is claimed about other platforms or about what a different consumer would need.
+    - This candidate documents a consequence of the current ownership split, not a defect. docs/design.md describes the arrangement as the present state and points at a future where it may change, so no permanent intent is imputed to it here.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog:
+    - hakoniwa-robot-runtime
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: true
+  recipes: []
+  executable_guardrails: []
+
+promotion_rationale:
+  - component_asset_guide is the right layer because the material is "how to compose this component into a build", which is guidance for using one component rather than an ecosystem-wide statement.
+  - No guardrail is proposed: while the repository owns no build target there is nothing for a doctor or validator to check, and introducing one is exactly the decision the maintainers have deferred.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Two ways to close it, both cheaper than each consumer rediscovering the composition: publish an interface CMake target (sources plus include roots, no top-level policy), which would preserve the consumer-owned composition while removing the guesswork; or record the source list and include roots in the catalog entry as build metadata.
+    - The composition above is offered as a starting point if a reference example is wanted; say the word and it can be contributed in whichever shape the maintainers prefer.
+    - implementation_status is none because no follow-up issue exists yet.

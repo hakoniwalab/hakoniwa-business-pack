@@ -1,0 +1,100 @@
+id: robot-runtime-dependencies-carry-no-version-constraint
+title: hakoniwa-robot-runtime declares its dependencies without version constraints, and a five-week-old mujoco-robots checkout already breaks the build
+
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+
+summary: >
+  The catalog lists hakoniwa-robot-runtime's required dependencies by name with
+  no minimum version, and the repository pins nothing either. A checkout of
+  hakoniwa-mujoco-robots from 2026-07-28 is already too old for the runtime
+  revision catalogued on 2026-09-05: one translation unit fails because
+  JointTrajectoryEventReader does not exist in that generation of the PDU
+  adapter headers. Swapping only that include root to a 2026-09-03 checkout, and
+  changing nothing else, turns 25 of 26 translation units into 26 of 26 plus a
+  successful link. A consumer following the dependency list as written has no
+  way to know which generation is required.
+
+observation:
+  context: >
+    Composing the runtime on Windows against the dependency checkouts already
+    present on the host, which had been built for earlier work in July 2026.
+  details:
+    - catalog/components/hakoniwa-robot-runtime.yaml lists hakoniwa-core-pro, hakoniwa-pdu-endpoint, hakoniwa-mujoco-robots, MuJoCo and a C++20 toolchain, each with a descriptive note and no version field.
+    - The runtime repository declares no versions either; there is no manifest, no CMake find_package call, and no README statement naming a revision.
+    - src/adapters/endpoint/joint_trajectory_pdu_event_reader.cpp constructs hako::robots::pdu::adapter::trajectory_msgs::JointTrajectoryEventReader. That class is absent from mujoco-robots 3d12fc8 (2026-07-28) and present in 326ff7c7 (2026-09-03), where it is declared in include/hakoniwa/pdu/adapter/trajectory_msgs/joint_trajectory.hpp.
+    - The failure is not obviously a version problem when it appears. MSVC reports C2039 for the missing member, then C3646, C4430 and C2614 as the type resolution collapses, so a reader sees seven errors from a single missing declaration and may reasonably suspect a compiler or language-level incompatibility.
+    - Linking succeeded against a mujoco-common.lib built from the older 3d12fc8 checkout while the adapter headers came from 326ff7c7, which shows the adapter/converter layer is header-only and carries no ABI in this direction. That is why an include-root swap alone was sufficient.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: catalog/components/hakoniwa-robot-runtime.yaml
+      revision: b5585c6
+    - repository: hakoniwalab/hakoniwa-robot-runtime
+      path: src/adapters/endpoint/joint_trajectory_pdu_event_reader.cpp
+      revision: 0a9bba3d529c7acc0e62c98569a4443eb736beed
+  runtime_evidence:
+    - description: >
+        Configuration A, adapter headers from mujoco-robots 3d12fc8: 25 of 26
+        translation units compiled; joint_trajectory_pdu_event_reader.cpp failed
+        with "error C2039: 'JointTrajectoryEventReader': is not a member of
+        'hako::robots::pdu::adapter::trajectory_msgs'" followed by C3646, C4430
+        and C2614 on the same file, and no library or executable was produced.
+    - description: >
+        Configuration B, identical in every respect except one line changing the
+        adapter/converter include root to a mujoco-robots 326ff7c7 checkout:
+        26 of 26 translation units compiled, the static library and the link
+        probe were produced, and the build reported zero errors. The single-line
+        difference between the two configurations is what identifies the
+        generation gap as the sole cause.
+    - description: >
+        Verification that the type is genuinely new rather than renamed: the
+        symbol is absent from the local 3d12fc8 adapter header and appears at
+        line 54 of the same file on upstream main 326ff7c7.
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required: []
+  notes:
+    - Verified on Windows 11 x64 on 2026-09-07 by an A/B build differing in one include path.
+    - Only the mujoco-robots dependency was varied. Whether core-pro or pdu-endpoint carry similar minimum-generation requirements was not tested; the checkouts used (dccd99f and b089e0e) happened to be new enough.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog:
+    - hakoniwa-robot-runtime
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      kind: validator
+      path: catalog/tools/validate_catalog.rb
+      mode: detect-only
+      notes:
+        - This is a schema proposal rather than a ready-to-add check. No dependencies.required entry in the catalog carries a version or revision today (88 entries, none), so a validator would first need the schema to define where a minimum generation is recorded. Folding pinned revisions into the existing notes field would work without a schema change.
+
+promotion_rationale:
+  - The dependency list is where a consumer looks first, so the minimum generation belongs there rather than in prose.
+  - Any check would be cheap once the schema says where a minimum generation lives, since the condition is then visible in the catalog files alone without building anything. That schema decision is the maintainers' to make.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Suggested minimal edit: record a minimum revision or version for hakoniwa-mujoco-robots on the component entry, or state the verified dependency generations alongside verification.source_revision the way the Recipes record their evidence.
+    - implementation_status is none because no follow-up issue exists yet. The fix may be a catalog metadata change rather than code, which is a maintainer decision; happy to open an issue if that is the preferred tracking.

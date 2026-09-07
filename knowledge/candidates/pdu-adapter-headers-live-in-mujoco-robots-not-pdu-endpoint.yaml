@@ -1,0 +1,113 @@
+id: pdu-adapter-headers-live-in-mujoco-robots-not-pdu-endpoint
+title: The hakoniwa/pdu/adapter and converter headers are owned by hakoniwa-mujoco-robots despite sitting in the pdu-endpoint namespace, and two more consumer-visible includes are undeclared
+
+status: candidate
+
+knowledge_type:
+  - implementation_fact
+  - known_pitfall
+
+summary: >
+  hakoniwa-robot-runtime includes hakoniwa/pdu/adapter/sensor_msgs/joint_state.hpp,
+  hakoniwa/pdu/adapter/trajectory_msgs/joint_trajectory.hpp and
+  hakoniwa/pdu/converter/std_msgs/float64.hpp. The path prefix suggests
+  hakoniwa-pdu-endpoint, and the catalog reinforces that reading by attributing
+  the Endpoint API to pdu-endpoint and only actuator/physics implementation to
+  mujoco-robots. Those headers exist in neither pdu-endpoint nor the PDU
+  registry; they are shipped by hakoniwa-mujoco-robots under
+  include/hakoniwa/pdu/. Two further includes are absent from the dependency
+  list, though they differ in kind: nlohmann/json.hpp is satisfied deliberately
+  by pdu-endpoint's CMake package, which imports or bundles
+  nlohmann_json::nlohmann_json, so a find_package consumer never notices while
+  one wiring include paths by hand must know where it comes from;
+  physics/physics_impl.hpp has no such provision and lives in the mujoco-robots
+  source tree, exported to no install prefix.
+
+observation:
+  context: >
+    Resolving every external include of hakoniwa-robot-runtime on a host that
+    already had all four declared dependencies built, in order to write the
+    consumer-side CMake composition the repository does not provide.
+  details:
+    - The three adapter/converter headers are absent from hakoniwa-pdu-endpoint on main (4c2e6e82) and on all six of its branches, and from hakoniwa-pdu-registry, hakoniwa-core-pro, hakoniwa-pdu-rpc and hakoniwa-pdu-ros.
+    - An organisation-wide code search resolves them to hakoniwalab/hakoniwa-mujoco-robots at include/hakoniwa/pdu/adapter/... and include/hakoniwa/pdu/converter/..., where a full family of message adapters is maintained.
+    - The catalog's dependency note for mujoco-robots reads "Supplies reusable MuJoCo robot actuator/physics implementation dependencies used by the current MujocoActuatorPlant", which does not tell a consumer that the PDU adapter and converter headers come from there too. The note for pdu-endpoint, "Provides the Endpoint API used by concrete PDU adapters and ManifestFactory composition", reads as though the adapters themselves are its concern.
+    - nlohmann/json.hpp is included by the runtime sources but is not listed in dependencies.required. It is not an accident that it resolves: hakoniwa_pdu_endpointConfig.cmake.in calls find_package(nlohmann_json 3.11.3 CONFIG QUIET) and, failing that, defines nlohmann_json::nlohmann_json against the header it installs. A CMake consumer of that package therefore never notices; one assembling include paths directly, as here, has to discover the provenance.
+    - physics/physics_impl.hpp resolves to hakoniwa-mujoco-robots/src/physics/physics_impl.hpp. It is not present in any install prefix, so a consumer must add the dependency's source tree to its include path; building and installing mujoco-robots is not sufficient.
+    - Practical effect: four of the six external include roots a consumer needs cannot be derived from the catalog's dependency list, and one of them points inside a dependency's source tree rather than at its installed artefacts.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      path: include/hakoniwa/pdu/adapter
+      revision: 326ff7c7ccfa79bf735671c4ba7009cb629a3271
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: catalog/components/hakoniwa-robot-runtime.yaml
+      revision: b5585c6
+  runtime_evidence:
+    - description: >
+        Tree listings of hakoniwa-pdu-endpoint at main and at each of its six
+        branches contain zero paths matching pdu/adapter/ or pdu/converter/;
+        the same query against hakoniwa-pdu-registry, hakoniwa-core-pro,
+        hakoniwa-pdu-rpc and hakoniwa-pdu-ros also returns nothing.
+    - description: >
+        Code search across the organisation for joint_state.hpp and float64.hpp
+        returns hakoniwalab/hakoniwa-mujoco-robots with
+        include/hakoniwa/pdu/adapter/sensor_msgs/joint_state.hpp and
+        include/hakoniwa/pdu/converter/std_msgs/float64.hpp.
+    - description: >
+        The consumer composition that finally built needed six external include
+        roots: core-pro's install include and its pdu subdirectory, pdu-endpoint's
+        install include (which also supplies nlohmann), mujoco-robots' include
+        for the adapters and converters, mujoco-robots' src for
+        physics/physics_impl.hpp, and the MuJoCo headers. Only two of those are
+        install prefixes of the components as the catalog names them.
+
+confidence: high
+
+contradictions:
+  - target: catalog/components/hakoniwa-robot-runtime.yaml
+    existing_claim: >
+      dependencies.required attributes the Endpoint API to hakoniwa-pdu-endpoint
+      and describes hakoniwa-mujoco-robots as supplying MuJoCo actuator/physics
+      implementation dependencies.
+    new_evidence: >
+      The PDU adapter and converter headers under hakoniwa/pdu/ are supplied by
+      mujoco-robots, not pdu-endpoint. Two further includes are unlisted:
+      nlohmann/json.hpp, which pdu-endpoint's CMake package supplies on purpose,
+      and physics/physics_impl.hpp, which nothing provides except the
+      mujoco-robots source tree.
+
+validation:
+  status: verified
+  required: []
+  notes:
+    - Verified on 2026-09-07 by resolving every external include of the pinned revision against the actual repositories, not by reading documentation.
+    - Whether the adapter/converter headers are intended to move to pdu-endpoint eventually is unknown; this candidate records where they are today, not where they should live.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog:
+    - hakoniwa-robot-runtime
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+  executable_guardrails: []
+
+promotion_rationale:
+  - A consumer reads the dependency list to work out what to check out and what to put on the include path, so the ownership of the adapter headers and the two undeclared includes belong there.
+  - No executable guardrail is proposed because the mismatch is between prose and reality rather than a machine-checkable condition, unless the catalog were to start declaring include roots.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - Suggested minimal edit: extend the mujoco-robots dependency note to say it also supplies the hakoniwa/pdu adapter and converter headers, and note that physics/physics_impl.hpp is consumed from the mujoco-robots source tree rather than an install prefix. Whether nlohmann/json belongs in dependencies.required is a judgement call, since pdu-endpoint's package already satisfies it for CMake consumers.
+    - implementation_status is none because no follow-up issue exists yet.
