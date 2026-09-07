@@ -17,6 +17,7 @@ import tarfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
+from tools.workdir import recipe_root as selected_recipe_root
 from typing import Any
 
 RECIPE_ID = "plateau-citygml-mujoco-walls"
@@ -61,7 +62,7 @@ def recipe_python() -> Path:
 
 
 def paths() -> RecipePaths:
-    base = root() / "work" / "recipes" / RECIPE_ID
+    base = selected_recipe_root(root(), RECIPE_ID)
     return RecipePaths(base, base / "config", base / "build", base / "artifacts", base / "validation")
 
 

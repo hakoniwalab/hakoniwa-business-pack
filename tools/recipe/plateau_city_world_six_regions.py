@@ -15,6 +15,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from tools.workdir import recipe_root as selected_recipe_root
 from typing import Any
 
 
@@ -55,7 +56,7 @@ def recipe_path() -> Path:
 
 
 def work_root() -> Path:
-    return repository_root() / "work" / "recipes" / RECIPE_ID
+    return selected_recipe_root(repository_root(), RECIPE_ID)
 
 
 def envsim_root() -> Path:

@@ -14,6 +14,8 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from tools.workdir import recipe_root as selected_recipe_root
+
 import drone_fleet_performance_a as common
 import drone_fleet_performance_b as performance_b
 import drone_fleet_single_host as operator
@@ -49,7 +51,7 @@ class TemporalError(RuntimeError):
 
 
 def workspace_root() -> Path:
-    return ROOT / "work" / "recipes" / RECIPE_ID
+    return selected_recipe_root(ROOT, RECIPE_ID)
 
 
 def load_experiment(path: Path) -> operator.Experiment:

@@ -19,6 +19,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from tools.workdir import recipe_root as selected_recipe_root
+
 import drone_fleet_performance_a as common
 import drone_fleet_single_host as operator
 
@@ -281,7 +283,7 @@ def load_matrix(path: Path) -> tuple[operator.Experiment, list[Workload], int]:
 
 
 def workspace_root() -> Path:
-    return ROOT / "work" / "recipes" / RECIPE_ID
+    return selected_recipe_root(ROOT, RECIPE_ID)
 
 
 def configuration_id(drone_count: int, process_count: int) -> str:

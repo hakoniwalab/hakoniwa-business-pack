@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from tools.workdir import foundation_root, recipe_root as selected_recipe_root
 
 
 RECIPE_ID = "mujoco-turtlebot3-mbody"
@@ -51,8 +52,8 @@ def load_foundation_module():
 
 
 def paths() -> dict[str, Path]:
-    recipe = business_root() / "work" / "recipes" / RECIPE_ID
-    foundation = business_root() / "work" / "foundation"
+    recipe = selected_recipe_root(business_root(), RECIPE_ID)
+    foundation = foundation_root(business_root())
     return {
         "recipe": recipe,
         "build": recipe / "build" / "hakoniwa-mujoco-robots",

@@ -18,9 +18,10 @@ if str(ROOT) not in sys.path:
 
 from tools import result_layout
 from tools.remote_operation import artifact_transfer, result_transfer
+from tools.workdir import remote_runtime
 
 
-DEFAULT_RUNTIME = ROOT / "work" / "remote-operation" / "performance-collect"
+DEFAULT_RUNTIME = remote_runtime(ROOT, "performance-collect")
 DEFAULT_MANIFEST = ROOT / "exp-results" / "collection-manifest.json"
 
 LOCAL_COLLECTIONS = (

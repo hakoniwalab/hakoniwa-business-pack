@@ -15,11 +15,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from tools.recipe import hakoniwa_conductor
+from tools.workdir import foundation_install, recipe_root as selected_recipe_root
 
 
 RECIPE_ID = "hakoniwa-conductor-python-time-sync"
-FOUNDATION_ROOT = hakoniwa_conductor.business_pack_root() / "work" / "foundation" / "install"
-WORK_ROOT = hakoniwa_conductor.business_pack_root() / "work" / "recipes" / RECIPE_ID
+FOUNDATION_ROOT = foundation_install(hakoniwa_conductor.business_pack_root())
+WORK_ROOT = selected_recipe_root(hakoniwa_conductor.business_pack_root(), RECIPE_ID)
 
 
 class TimeSyncError(RuntimeError):
