@@ -1349,6 +1349,10 @@ def component_commands(
     for operation in operations:
         if component_id == "hakoniwa-core-pro":
             command = [python, str(hako), operation]
+            command.extend([
+                "--state-dir",
+                str(paths.foundation_root / "state" / component_id),
+            ])
             if operation in {"doctor", "build", "install"}:
                 assert manifest is not None
                 command.extend(["--config", str(manifest)])
@@ -1388,13 +1392,19 @@ def component_commands(
                 "--install-dir",
                 str(paths.install_prefix),
             ]
-            if component_id == "hakoniwa-pdu-endpoint":
+            if component_id in {
+                "hakoniwa-pdu-endpoint",
+                "hakoniwa-pdu-bridge-core",
+                "hakoniwa-pdu-python",
+                "hakoniwa-pdu-rpc",
+            }:
                 command.extend(
                     [
                         "--state-dir",
                         str(paths.foundation_root / "state" / component_id),
                     ]
                 )
+            if component_id == "hakoniwa-pdu-endpoint":
                 capabilities = (required or {}).get("capabilities", {})
                 core_free = (
                     capabilities.get("core_free_runtime") is True

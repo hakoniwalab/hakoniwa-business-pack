@@ -21,6 +21,35 @@ SPEC.loader.exec_module(foundation)
 
 
 class FoundationWorkspaceTest(unittest.TestCase):
+    def test_selected_components_share_state_across_all_operations(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            components = {
+                "hakoniwa-core-pro": ["doctor", "build", "install"],
+                "hakoniwa-pdu-endpoint": ["prepare", "doctor", "configure", "build", "install"],
+                "hakoniwa-pdu-bridge-core": ["doctor", "configure", "build", "test", "install"],
+                "hakoniwa-pdu-python": ["doctor", "configure", "build", "install", "smoke"],
+                "hakoniwa-pdu-rpc": ["doctor", "configure", "build", "install", "package-test"],
+            }
+            for work in (root / "host", root / "docker"):
+                with mock.patch.dict(os.environ, {"HAKONIWA_WORK_DIR": str(work)}):
+                    paths = foundation.resolve_workspace(root / "bp", "test")
+                for component, operations in components.items():
+                    with self.subTest(work=work, component=component):
+                        source = root / component
+                        (source / "tools").mkdir(parents=True, exist_ok=True)
+                        (source / "tools/hako.py").touch()
+                        if component == "hakoniwa-core-pro":
+                            (source / "hakoniwa-build.yaml").write_text("version: 1\n", encoding="utf-8")
+                        commands = foundation.component_commands(component, source, operations, paths)
+                        self.assertEqual(len(commands), len(operations))
+                        for command in commands:
+                            self.assertEqual(command.count("--state-dir"), 1)
+                            self.assertEqual(
+                                Path(command[command.index("--state-dir") + 1]),
+                                work / "foundation/state" / component,
+                            )
+
     def test_doctor_warns_about_workspace_and_continues(self) -> None:
         inspection = {"status": "SATISFIED", "components": [], "runtime": {}}
         with mock.patch.object(foundation, "warn_if_workspace_invalid") as warning:
