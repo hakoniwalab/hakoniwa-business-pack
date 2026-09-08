@@ -87,7 +87,7 @@ validation:
     - The current default branches were then built as a separate observation and are healthy on Windows (see the last runtime_evidence entry), so the finding is purely about pinning, not about breakage on master.
 
 tracking:
-  implementation_status: resolved
+  implementation_status: open
   issues:
     - repository: hakoniwalab/hakoniwa-business-pack
       number: 180
@@ -133,18 +133,22 @@ resolution:
       and a dirty one is refused rather than rewritten.
     - >-
       resolution.verified is true on the strength of a Windows measurement of
-      the fix against real repositories, in four configurations: a fresh clone
-      landing on the pinned SHA; a clean checkout at another SHA being moved to
-      the requested one; a dirty checkout refused with HEAD unchanged; and a
-      well-formed but nonexistent SHA failing at fetch with HEAD unchanged and
-      no fallback to the default branch. The last two are the controls, since a
-      resolver that silently fell back would pass the first two.
+      the fix against real repositories, in four configurations, each covering
+      a distinct property: a fresh clone landing on the pinned SHA and a clean
+      checkout at another SHA being moved to the requested one show that the
+      requested commit is actually materialized; a dirty checkout refused with
+      HEAD unchanged shows that an unsynchronized working tree is not rewritten;
+      and a well-formed but nonexistent SHA failing at fetch with HEAD unchanged
+      shows that an unresolvable revision is reported rather than quietly
+      replaced by the default branch.
     - >-
       Pre-created sibling checkouts, the workaround this candidate originally
       described, are no longer needed: writing the full SHA in the Recipe now
       materializes it directly.
     - >-
-      What remains is the reporting-only part, tracked as #180: a branch or tag
-      name is still labelled provenance.reproducibility "pinned". The
-      maintainers have separated that from the materialization defect as an
-      internal metadata question.
+      resolution.status is fixed for the materialization defect this candidate
+      reported, while tracking.implementation_status stays open because #180 is
+      open and asks for implementation and regression coverage of the remaining
+      part: a branch or tag name is still labelled provenance.reproducibility
+      "pinned". The maintainers have separated that from the materialization
+      defect as a provenance-reporting question.

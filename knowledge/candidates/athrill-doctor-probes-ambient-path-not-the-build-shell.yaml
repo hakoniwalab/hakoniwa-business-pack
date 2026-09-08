@@ -13,11 +13,15 @@ summary: >
   reachable. The component CLI checks them with shutil.which in the ambient
   shell, but it runs every real command inside VsDevCmd, where the Visual Studio
   copies are on PATH, so the precondition is evaluated in a different
-  environment from the one that executes the work. Whether such a host is in
-  contract is an open question for the maintainers: the catalog lists "CMake and
-  C compiler" as a required tool, which may be intended to mean a standalone
-  installation. Either way the two environments should agree, and the message
-  should distinguish "not installed" from "not on the ambient PATH".
+  environment from the one that executes the work. This candidate originally
+  left open whether such a host was in contract, since the catalog lists "CMake
+  and C compiler" as a required tool without saying what satisfies it; the
+  maintainers have since answered it in
+  toppers/athrill-target-v850e2m#43, where the stated direction is to inspect
+  the Visual Studio-bundled tools in the same environment the build initializes
+  rather than rejecting them for being absent from the ambient PATH. The two
+  environments should agree, and the message should distinguish "not installed"
+  from "not on the ambient PATH".
 
 observation:
   context: >
