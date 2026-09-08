@@ -71,7 +71,7 @@ validation:
       directory; it did not require a different CPU architecture or Viewer.
 
 tracking:
-  implementation_status: in_progress
+  implementation_status: resolved
   issues: []
 
 promotion_targets:
@@ -88,10 +88,10 @@ promotion_rationale:
     through a host bind mount.
 
 resolution:
-  status: implemented
+  status: fixed
   fixed_by:
     - repository: hakoniwa-robot-arm-pack
-      revision: uncommitted
+      revision: d4fb726bb48b3496e4377626264f76135ef49f01
       path: docker/run.bash
   verified: true
   promoted_to: []
