@@ -1095,6 +1095,11 @@ class FoundationInspectorTest(unittest.TestCase):
             self.assertEqual(
                 command[venv_index], str(paths.install_prefix / "python")
             )
+            state_index = command.index("--state-dir") + 1
+            self.assertEqual(
+                command[state_index],
+                str(paths.foundation_root / "state" / "hakoniwa-pdu-endpoint"),
+            )
         manifest = paths.foundation_build / "hakoniwa-pdu-endpoint.yaml"
         content = manifest.read_text(encoding="utf-8")
         self.assertIn(f'hakoniwa_core_root: "{paths.install_prefix}"', content)

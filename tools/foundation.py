@@ -1389,6 +1389,12 @@ def component_commands(
                 str(paths.install_prefix),
             ]
             if component_id == "hakoniwa-pdu-endpoint":
+                command.extend(
+                    [
+                        "--state-dir",
+                        str(paths.foundation_root / "state" / component_id),
+                    ]
+                )
                 capabilities = (required or {}).get("capabilities", {})
                 core_free = (
                     capabilities.get("core_free_runtime") is True
