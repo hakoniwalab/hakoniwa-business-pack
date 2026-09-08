@@ -16,6 +16,7 @@ if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 from workspace_guard import warn_if_workspace_invalid
+from workdir import resolve_work_dir
 
 
 RECIPE_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -107,7 +108,7 @@ def resolve_workspace(
 ) -> WorkspacePaths:
     recipe_id = validate_recipe_id(recipe_id)
     business_pack_root = root.resolve()
-    work_root = business_pack_root / "work"
+    work_root = resolve_work_dir(business_pack_root)
     foundation_root = (
         foundation_root_override.resolve()
         if foundation_root_override is not None
@@ -115,7 +116,7 @@ def resolve_workspace(
     )
     if not foundation_root.is_relative_to(work_root):
         raise FoundationError(
-            "Foundation root must stay under the Business Pack work directory"
+            "Foundation root must stay under the selected work directory"
         )
     recipe_root = work_root / "recipes" / recipe_id
     return WorkspacePaths(
@@ -1348,6 +1349,10 @@ def component_commands(
     for operation in operations:
         if component_id == "hakoniwa-core-pro":
             command = [python, str(hako), operation]
+            command.extend([
+                "--state-dir",
+                str(paths.foundation_root / "state" / component_id),
+            ])
             if operation in {"doctor", "build", "install"}:
                 assert manifest is not None
                 command.extend(["--config", str(manifest)])
@@ -1387,6 +1392,18 @@ def component_commands(
                 "--install-dir",
                 str(paths.install_prefix),
             ]
+            if component_id in {
+                "hakoniwa-pdu-endpoint",
+                "hakoniwa-pdu-bridge-core",
+                "hakoniwa-pdu-python",
+                "hakoniwa-pdu-rpc",
+            }:
+                command.extend(
+                    [
+                        "--state-dir",
+                        str(paths.foundation_root / "state" / component_id),
+                    ]
+                )
             if component_id == "hakoniwa-pdu-endpoint":
                 capabilities = (required or {}).get("capabilities", {})
                 core_free = (
@@ -1652,10 +1669,11 @@ def main(argv: list[str] | None = None) -> int:
             recipe = Path(args.recipe)
             if not recipe.is_absolute():
                 recipe = (Path.cwd() / recipe).resolve()
+            work_root = resolve_work_dir(root)
             prefix = (
                 Path(args.install_dir).resolve()
                 if args.install_dir
-                else root / "work" / "foundation" / "install"
+                else work_root / "foundation" / "install"
             )
             if args.command in {"plan", "build"}:
                 catalog = (
@@ -1684,7 +1702,7 @@ def main(argv: list[str] | None = None) -> int:
                 if prefix.name != "install" or prefix != paths.install_prefix:
                     raise FoundationError(
                         "build install prefix must be "
-                        "<business-pack>/work/<foundation-name>/install"
+                        "<workdir>/<foundation-name>/install"
                     )
                 final = execute_build_plan(result, paths)
                 print_inspection(final, False)

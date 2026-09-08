@@ -13,17 +13,13 @@ from pathlib import Path
 from statistics import mean
 from typing import Any, Callable
 
+from tools.workdir import recipe_root as selected_recipe_root
+
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SUMMARY = (
-    ROOT
-    / "work"
-    / "recipes"
-    / "drone-fleet-single-process-scaling"
-    / "results"
-    / "single-process-scaling"
-    / "summary"
-    / "experiment-a.json"
+    selected_recipe_root(ROOT, "drone-fleet-single-process-scaling")
+    / "results" / "single-process-scaling" / "summary" / "experiment-a.json"
 )
 WIDTH = 1440
 HEIGHT = 940

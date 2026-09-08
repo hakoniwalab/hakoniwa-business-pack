@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import importlib.util
 import io
+import os
 import subprocess
 import sys
 import tempfile
@@ -20,6 +21,35 @@ SPEC.loader.exec_module(foundation)
 
 
 class FoundationWorkspaceTest(unittest.TestCase):
+    def test_selected_components_share_state_across_all_operations(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            components = {
+                "hakoniwa-core-pro": ["doctor", "build", "install"],
+                "hakoniwa-pdu-endpoint": ["prepare", "doctor", "configure", "build", "install"],
+                "hakoniwa-pdu-bridge-core": ["doctor", "configure", "build", "test", "install"],
+                "hakoniwa-pdu-python": ["doctor", "configure", "build", "install", "smoke"],
+                "hakoniwa-pdu-rpc": ["doctor", "configure", "build", "install", "package-test"],
+            }
+            for work in (root / "host", root / "docker"):
+                with mock.patch.dict(os.environ, {"HAKONIWA_WORK_DIR": str(work)}):
+                    paths = foundation.resolve_workspace(root / "bp", "test")
+                for component, operations in components.items():
+                    with self.subTest(work=work, component=component):
+                        source = root / component
+                        (source / "tools").mkdir(parents=True, exist_ok=True)
+                        (source / "tools/hako.py").touch()
+                        if component == "hakoniwa-core-pro":
+                            (source / "hakoniwa-build.yaml").write_text("version: 1\n", encoding="utf-8")
+                        commands = foundation.component_commands(component, source, operations, paths)
+                        self.assertEqual(len(commands), len(operations))
+                        for command in commands:
+                            self.assertEqual(command.count("--state-dir"), 1)
+                            self.assertEqual(
+                                Path(command[command.index("--state-dir") + 1]),
+                                work / "foundation/state" / component,
+                            )
+
     def test_doctor_warns_about_workspace_and_continues(self) -> None:
         inspection = {"status": "SATISFIED", "components": [], "runtime": {}}
         with mock.patch.object(foundation, "warn_if_workspace_invalid") as warning:
@@ -64,6 +94,31 @@ class FoundationWorkspaceTest(unittest.TestCase):
                 self.assertNotIn("/usr/local", value)
                 self.assertNotIn("/etc/hakoniwa", value)
                 self.assertNotIn("/var/lib/hakoniwa", value)
+
+    def test_resolve_workspace_uses_selected_external_workdir(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "business-pack"
+            work = Path(temporary) / "external-work"
+            with mock.patch.dict(os.environ, {"HAKONIWA_WORK_DIR": str(work)}):
+                paths = foundation.resolve_workspace(root, "demo")
+            expected_work = work.resolve()
+            self.assertEqual(paths.work_root, expected_work)
+            self.assertEqual(paths.recipe_root, expected_work / "recipes" / "demo")
+            self.assertEqual(paths.business_pack_root, root.resolve())
+
+    def test_resolve_workspace_accepts_symlinked_workdir_and_override(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "business-pack"
+            real_work = base / "real-work"
+            link_work = base / "linked-work"
+            link_work.symlink_to(real_work, target_is_directory=True)
+            with mock.patch.dict(os.environ, {"HAKONIWA_WORK_DIR": str(link_work)}):
+                paths = foundation.resolve_workspace(root, "demo")
+                override = foundation.resolve_workspace(root, "demo", link_work / "foundation")
+            self.assertEqual(paths.work_root, real_work.resolve())
+            self.assertEqual(override.foundation_root, (real_work / "foundation").resolve())
+            self.assertEqual(override.foundation_root, (real_work / "foundation").resolve())
 
     def test_windows_layout_uses_the_same_relative_contract(self) -> None:
         root = PureWindowsPath("C:/work/hakoniwa-business-pack")
@@ -1068,6 +1123,11 @@ class FoundationInspectorTest(unittest.TestCase):
             venv_index = command.index("--python-venv") + 1
             self.assertEqual(
                 command[venv_index], str(paths.install_prefix / "python")
+            )
+            state_index = command.index("--state-dir") + 1
+            self.assertEqual(
+                command[state_index],
+                str(paths.foundation_root / "state" / "hakoniwa-pdu-endpoint"),
             )
         manifest = paths.foundation_build / "hakoniwa-pdu-endpoint.yaml"
         content = manifest.read_text(encoding="utf-8")

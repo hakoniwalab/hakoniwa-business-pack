@@ -24,7 +24,7 @@ class ShadowHandMenagerieRecipeTest(unittest.TestCase):
 
     def test_headless_launcher_uses_staged_inputs_and_foundation_python(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / "business"
+            root = Path(temporary).resolve() / "business"
             python = root / "work/foundation/install/python/bin/python3"
             python.parent.mkdir(parents=True, exist_ok=True)
             python.write_text("", encoding="utf-8")
@@ -46,7 +46,7 @@ class ShadowHandMenagerieRecipeTest(unittest.TestCase):
 
     def test_windows_build_directory_is_short_and_recipe_owned(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / "business"
+            root = Path(temporary).resolve() / "business"
             with mock.patch.object(recipe.base, "business_root", return_value=root), mock.patch.object(
                 recipe.platform, "system", return_value="Windows"
             ):
@@ -55,7 +55,7 @@ class ShadowHandMenagerieRecipeTest(unittest.TestCase):
 
     def test_viewer_flag_removes_no_viewer_argument(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / "business"
+            root = Path(temporary).resolve() / "business"
             python = root / "work/foundation/install/python/bin/python3"
             python.parent.mkdir(parents=True, exist_ok=True)
             python.write_text("", encoding="utf-8")

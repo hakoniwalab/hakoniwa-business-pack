@@ -18,6 +18,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+from tools.workdir import recipe_root as selected_recipe_root
+
 try:
     from tools.recipe import hakoniwa_conductor as conductor_package
     from tools.recipe import drone_fleet_runtime as fleet_runtime
@@ -49,7 +51,7 @@ DEFAULT_VIEWER_ROOT = ROOT.parent / "hakoniwa-threejs-drone"
 DEFAULT_CONDUCTOR_SCHEMA = (
     ROOT.parent / "hakoniwa-conductor" / "schemas" / "eu-input-v1.schema.json"
 )
-WORK_ROOT = ROOT / "work" / "recipes" / RECIPE_ID
+WORK_ROOT = selected_recipe_root(ROOT, RECIPE_ID)
 LOCAL_SELECTION = ROOT / ".hako" / "recipes" / RECIPE_ID / "local-selection.json"
 
 

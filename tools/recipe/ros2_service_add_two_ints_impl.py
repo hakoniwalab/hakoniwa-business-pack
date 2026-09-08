@@ -20,6 +20,8 @@ import time
 import tomllib
 from pathlib import Path
 
+from tools.workdir import foundation_install, recipe_root
+
 
 RECIPE_ID = "ros2-service-add-two-ints-host-docker"
 IMAGE = "hakoniwa-business-pack/add-two-ints-ros2:local"
@@ -56,11 +58,11 @@ def sibling(name: str) -> Path:
 
 
 def workspace() -> Path:
-    return root() / "work" / "recipes" / RECIPE_ID
+    return recipe_root(root(), RECIPE_ID)
 
 
 def foundation_prefix() -> Path:
-    return root() / "work" / "foundation" / "install"
+    return foundation_install(root())
 
 
 def foundation_python() -> Path:

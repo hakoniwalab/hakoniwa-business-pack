@@ -15,6 +15,12 @@ import zipfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+try:
+    from tools.workdir import recipe_root as selected_recipe_root
+except ModuleNotFoundError:  # direct execution from the recipe directory
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from workdir import recipe_root as selected_recipe_root
+
 
 VERSION = "v1.0.0"
 SUPPORTED_VERSIONS = {"v1.0.0", "v1.1.0"}
@@ -85,7 +91,7 @@ def recipe_id(version: str) -> str:
 
 
 def recipe_root(version: str = VERSION) -> Path:
-    return business_pack_root() / "work" / "recipes" / recipe_id(version)
+    return selected_recipe_root(business_pack_root(), recipe_id(version))
 
 
 def release_base(version: str) -> str:

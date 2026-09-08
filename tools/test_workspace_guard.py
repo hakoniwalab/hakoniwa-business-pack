@@ -21,6 +21,7 @@ def _valid_environment(root: Path) -> dict[str, str]:
     return {
         "HAKONIWA_WORKSPACE_ACTIVE": "1",
         "HAKONIWA_WORKSPACE_ROOT": str(expected["root"]),
+        "HAKONIWA_WORK_DIR": str(expected["work_dir"]),
         "HAKONIWA_HOME": str(expected["home"]),
         "VIRTUAL_ENV": str(expected["virtual_env"]),
         "HAKO_CONFIG_PATH": str(expected["config"]),
@@ -41,6 +42,31 @@ class WorkspaceGuardTest(unittest.TestCase):
             self.assertEqual(guard.validate_workspace(root, environment), [])
             self.assertFalse((root / "work" / "foundation" / "install").exists())
 
+    def test_accepts_external_selected_workdir(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "business-pack"
+            work = Path(temporary) / "external-work"
+            environment = _valid_environment(root)
+            environment["HAKONIWA_WORK_DIR"] = str(work)
+            expected = guard._expected_paths(root, work)
+            environment.update(
+                {
+                    "HAKONIWA_HOME": str(expected["home"]),
+                    "VIRTUAL_ENV": str(expected["virtual_env"]),
+                    "HAKO_CONFIG_PATH": str(expected["config"]),
+                    "HAKO_PDU_ENDPOINT_RUNTIME_DIRS": str(expected["foundation_bin"]),
+                    "PATH": os.pathsep.join((str(expected["python_bin"]), str(expected["foundation_bin"]), "/ambient/bin")),
+                }
+            )
+            self.assertEqual(guard.validate_workspace(root, environment), [])
+
+    def test_legacy_environment_without_workdir_remains_valid(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "business-pack"
+            environment = _valid_environment(root)
+            environment.pop("HAKONIWA_WORK_DIR")
+            self.assertEqual(guard.validate_workspace(root, environment), [])
+
     def test_missing_workspace_reports_a_single_primary_diagnostic(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             errors = guard.validate_workspace(Path(temporary), {})
@@ -53,6 +79,7 @@ class WorkspaceGuardTest(unittest.TestCase):
             base = Path(temporary)
             selected = base / "selected"
             environment = _valid_environment(base / "other")
+            environment.pop("HAKONIWA_WORK_DIR")
 
             errors = guard.validate_workspace(selected, environment)
 

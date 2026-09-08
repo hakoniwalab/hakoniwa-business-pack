@@ -24,7 +24,7 @@ class DualMirrorRecipeTest(unittest.TestCase):
 
     def test_stage_preserves_runtime_relative_layout(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary).resolve()
             source = root / "source"
             destination = root / "business/work/recipes/mujoco-turtlebot3-dual-mirror/assets/runtime-input"
             mbody = root / "mbody"
@@ -54,8 +54,8 @@ class DualMirrorRecipeTest(unittest.TestCase):
 
     def test_materialization_uses_foundation_python_and_recipe_owned_destination(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / "business"
-            mbody = Path(temporary) / "mbody"
+            root = Path(temporary).resolve() / "business"
+            mbody = Path(temporary).resolve() / "mbody"
             python = root / "work/foundation/install/python/bin/python3"
             python.parent.mkdir(parents=True, exist_ok=True)
             python.write_text("", encoding="utf-8")
@@ -79,7 +79,7 @@ class DualMirrorRecipeTest(unittest.TestCase):
 
     def test_launcher_has_one_conductor_owner_and_foundation_python(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / "business"
+            root = Path(temporary).resolve() / "business"
             args = argparse.Namespace(headless=True)
             expected_python = root / "work/foundation/install/python/bin/python3"
             expected_python.parent.mkdir(parents=True, exist_ok=True)
@@ -97,7 +97,7 @@ class DualMirrorRecipeTest(unittest.TestCase):
 
     def test_control_contract_uses_session_file(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / "business"
+            root = Path(temporary).resolve() / "business"
             with mock.patch.object(recipe, "business_root", return_value=root):
                 command = recipe.control_command("terminate")
                 self.assertEqual(command[-2], "terminate")
@@ -105,7 +105,7 @@ class DualMirrorRecipeTest(unittest.TestCase):
 
     def test_gui_launcher_adds_two_lidar_visualizers(self):
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / "business"
+            root = Path(temporary).resolve() / "business"
             python = root / "work/foundation/install/python/bin/python3"
             python.parent.mkdir(parents=True, exist_ok=True)
             python.write_text("", encoding="utf-8")

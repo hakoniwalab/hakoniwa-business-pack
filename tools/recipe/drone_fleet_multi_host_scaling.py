@@ -11,6 +11,8 @@ import statistics
 from pathlib import Path
 from typing import Any
 
+from tools.workdir import recipe_root as selected_recipe_root
+
 try:
     from tools.recipe import drone_fleet_multi_host as multi_host
     from tools.recipe import drone_fleet_single_host as yaml_support
@@ -27,7 +29,7 @@ DEFAULT_EXPERIMENT = (
     / "drone-fleet-performance"
     / "multi-host-scaling.yaml"
 )
-WORK_ROOT = ROOT / "work" / "recipes" / multi_host.RECIPE_ID
+WORK_ROOT = selected_recipe_root(ROOT, multi_host.RECIPE_ID)
 SUMMARY_FIELDS = (
     "configuration_id",
     "drone_count",

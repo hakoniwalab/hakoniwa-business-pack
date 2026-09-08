@@ -32,6 +32,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+# Direct script execution must work without ambient PYTHONPATH.
+BUSINESS_PACK_ROOT = Path(__file__).resolve().parents[2]
+if str(BUSINESS_PACK_ROOT) not in sys.path:
+    sys.path.insert(0, str(BUSINESS_PACK_ROOT))
+
+from tools.workdir import recipe_root as selected_recipe_root, work_dir
+
 try:
     from tools.recipe import drone_fleet_runtime as fleet_runtime
 except ModuleNotFoundError:
@@ -516,7 +523,7 @@ def prepare_native_distribution(
         "https://github.com/toppers/hakoniwa-drone-core/releases/download/"
         f"{PUBLIC_DRONE_RELEASE}/{archive_name}"
     )
-    resolved_cache_root = cache_root or ROOT / "work" / "downloads"
+    resolved_cache_root = cache_root or work_dir(ROOT) / "downloads"
     archive = resolved_cache_root / "hakoniwa-drone-core" / PUBLIC_DRONE_RELEASE / archive_name
     try:
         native_mode = _verified_download(url, archive, expected_sha256)
@@ -2402,14 +2409,7 @@ def open_viewer(
 
 
 def configured_experiment_path() -> Path:
-    return (
-        ROOT
-        / "work"
-        / "recipes"
-        / RECIPE_ID
-        / "config"
-        / "resolved-experiment.yaml"
-    )
+    return selected_recipe_root(ROOT, RECIPE_ID) / "config" / "resolved-experiment.yaml"
 
 
 def configured_drone_root() -> Path | None:
