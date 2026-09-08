@@ -74,7 +74,11 @@ validation:
 
 tracking:
   implementation_status: open
-  issues: []
+  issues:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      number: 181
+      relation: fix
+      status: open
 
 promotion_targets:
   catalog: []
@@ -102,5 +106,7 @@ resolution:
   promoted_to: []
   executable_guardrails: []
   notes:
-    - Workaround used while preparing this contribution: run preflight to confirm validity, then restore catalog/index.yaml with git checkout before committing. Setting core.autocrlf=true also works.
-    - No issue has been filed in this repository yet; say the word and one will be opened, or treat this candidate as the record if the maintainers prefer to track it here.
+    - Workaround used while preparing this contribution: run preflight to confirm validity, then restore catalog/index.yaml with git checkout before committing. Setting core.autocrlf=true also works. Both remain necessary until #181 lands.
+    - >-
+      Tracked upstream as #181. Windows re-verification of the fix is offered by
+      the reporter, who measured both newline configurations on the same host.

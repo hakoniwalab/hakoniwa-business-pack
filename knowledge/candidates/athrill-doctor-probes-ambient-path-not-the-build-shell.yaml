@@ -69,7 +69,7 @@ sources:
         built, install wrote bin/athrill2.exe, CTest reported 3/3 passed, and
         Foundation reported SATISFIED.
 
-confidence: medium
+confidence: high
 
 contradictions:
   - target: recipes/examples/athrill-v850e2m-build.yaml
@@ -84,16 +84,19 @@ contradictions:
       in the Recipe or the catalog entry.
 
 validation:
-  status: partially_verified
-  required:
-    - Confirm whether a Visual Studio-bundled CMake and Ninja are intended to satisfy the component's required tool dependency. If they are not, this is a message and documentation gap rather than a defect, and the title should be narrowed accordingly.
+  status: verified
+  required: []
   notes:
     - Verified on one Windows 11 x64 host on 2026-08-31; the negative and positive shells were both exercised with the same manifest, so the difference is attributable to PATH resolution.
     - Not reproduced on macOS or Linux, where _run does not wrap commands in a developer shell and the ambient probe matches the execution environment.
 
 tracking:
   implementation_status: open
-  issues: []
+  issues:
+    - repository: toppers/athrill-target-v850e2m
+      number: 43
+      relation: fix
+      status: open
 
 promotion_targets:
   catalog:
@@ -123,5 +126,14 @@ resolution:
   promoted_to: []
   executable_guardrails: []
   notes:
-    - Reported from an independent Windows reproduction; no upstream change has been made yet.
-    - No issue has been filed in the owning repository yet, because the contract question above decides which repository should own it.
+    - >-
+      The contract question this candidate raised has been answered by the
+      maintainers: toppers/athrill-target-v850e2m#43 is open, and the stated
+      direction is to inspect the Visual Studio-bundled tools in the same
+      environment the build initializes rather than rejecting them for being
+      absent from the ambient PATH. The finding is therefore a defect after all,
+      not a host that was out of contract.
+    - >-
+      Windows re-verification of the fix is offered by the reporter, whose host
+      is exactly the affected configuration: Visual Studio 2022 with no
+      standalone CMake or Ninja on PATH.

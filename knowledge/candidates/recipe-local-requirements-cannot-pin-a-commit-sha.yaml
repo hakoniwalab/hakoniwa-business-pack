@@ -83,12 +83,16 @@ validation:
   required: []
   notes:
     - The git behaviour was verified locally with a positive control rather than inferred from documentation.
-    - Open maintainer decision, not a verification gap: accept a raw commit ID in source.revision (clone then checkout), tag the verified state, or state explicitly that Recipe evidence is only ever branch-level.
+    - The open question in this note was answered by 6be515bc, which accepts a raw commit ID in source.revision and materializes it by clone-then-checkout.
     - The current default branches were then built as a separate observation and are healthy on Windows (see the last runtime_evidence entry), so the finding is purely about pinning, not about breakage on master.
 
 tracking:
-  implementation_status: open
-  issues: []
+  implementation_status: resolved
+  issues:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      number: 180
+      relation: follow_up
+      status: open
 
 promotion_targets:
   catalog: []
@@ -107,14 +111,40 @@ promotion_targets:
 
 promotion_rationale:
   - The mismatch between recorded evidence and materializable revisions is detectable from the Recipe files alone, so a validator check is the cheapest guard.
+  - Retained after the fix as the historical record of the defect and its workaround, per MAINTAINER.md's instruction to preserve the original observation once a fix lands.
   - No catalog claim is wrong on its own; the gap is in the materialization contract, so this belongs with the Recipe tooling rather than a component entry.
 
 resolution:
-  status: pending
-  fixed_by: []
-  verified: false
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      issue: null
+      pull_request: 178
+      revision: 6be515bcb3f91fbc8d8de2a6f649cc7d600af9ad
+  verified: true
   promoted_to: []
   executable_guardrails: []
   notes:
-    - Pre-created sibling checkouts are a workaround, not a fix; they leave the pinning decision outside the Recipe.
-    - No issue has been filed in this repository yet; the smallest fix may be a tag rather than a code change, which is a maintainer decision.
+    - >-
+      Fixed in 6be515bc (PR #178). A full commit SHA is now materialized with
+      git clone --no-checkout followed by checkout --detach and a recursive
+      submodule update, while branch and tag revisions keep the previous
+      --branch path. An existing clean checkout is moved to the requested SHA,
+      and a dirty one is refused rather than rewritten.
+    - >-
+      resolution.verified is true on the strength of a Windows measurement of
+      the fix against real repositories, in four configurations: a fresh clone
+      landing on the pinned SHA; a clean checkout at another SHA being moved to
+      the requested one; a dirty checkout refused with HEAD unchanged; and a
+      well-formed but nonexistent SHA failing at fetch with HEAD unchanged and
+      no fallback to the default branch. The last two are the controls, since a
+      resolver that silently fell back would pass the first two.
+    - >-
+      Pre-created sibling checkouts, the workaround this candidate originally
+      described, are no longer needed: writing the full SHA in the Recipe now
+      materializes it directly.
+    - >-
+      What remains is the reporting-only part, tracked as #180: a branch or tag
+      name is still labelled provenance.reproducibility "pinned". The
+      maintainers have separated that from the materialization defect as an
+      internal metadata question.
