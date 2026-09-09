@@ -19,6 +19,68 @@ import native_runtime  # noqa: E402
 import native_runtime_platforms  # noqa: E402
 
 
+def write_pe_image(
+    path: Path, imports: tuple[str, ...], magic: int = 0x20B
+) -> None:
+    """Write the smallest PE image that carries a readable import directory.
+
+    Only the fields the adapter reads are filled in, so this is a fixture
+    rather than a loadable executable. Building it here keeps the adapter's
+    tests running on every runner instead of only the Windows one.
+    """
+    optional_size = 240 if magic == 0x20B else 224
+    directories_at = 112 if magic == 0x20B else 96
+    section_rva = 0x1000
+    section_offset = 0x400
+
+    descriptors = bytearray()
+    names = bytearray()
+    names_rva = section_rva + (len(imports) + 1) * 20
+    for index, name in enumerate(imports):
+        name_rva = names_rva + len(names)
+        names += name.encode("ascii") + b"\0"
+        descriptor = bytearray(20)
+        descriptor[0:4] = (section_rva + 0x800 + index * 4).to_bytes(4, "little")
+        descriptor[12:16] = name_rva.to_bytes(4, "little")
+        descriptor[16:20] = (section_rva + 0x900 + index * 4).to_bytes(4, "little")
+        descriptors += descriptor
+    descriptors += bytes(20)
+    section = bytes(descriptors + names)
+
+    dos = bytearray(0x40)
+    dos[0:2] = b"MZ"
+    dos[0x3C:0x40] = (0x40).to_bytes(4, "little")
+
+    coff = bytearray(20)
+    coff[0:2] = (0x8664 if magic == 0x20B else 0x14C).to_bytes(2, "little")
+    coff[2:4] = (1).to_bytes(2, "little")
+    coff[16:18] = optional_size.to_bytes(2, "little")
+
+    optional = bytearray(optional_size)
+    optional[0:2] = magic.to_bytes(2, "little")
+    optional[directories_at - 4 : directories_at] = (16).to_bytes(4, "little")
+    # Data directory entry 1 is the import table; entry 0 is the export table.
+    imports_at = directories_at + 8
+    optional[imports_at : imports_at + 4] = section_rva.to_bytes(4, "little")
+    optional[imports_at + 4 : imports_at + 8] = len(section).to_bytes(4, "little")
+
+    header = bytearray(40)
+    header[0:8] = b".idata\0\0"
+    header[8:12] = len(section).to_bytes(4, "little")
+    header[12:16] = section_rva.to_bytes(4, "little")
+    header[16:20] = len(section).to_bytes(4, "little")
+    header[20:24] = section_offset.to_bytes(4, "little")
+
+    image = bytearray(section_offset)
+    image[0:0x40] = dos
+    image[0x40:0x44] = b"PE\0\0"
+    image[0x44 : 0x44 + 20] = coff
+    image[0x58 : 0x58 + optional_size] = optional
+    table = 0x58 + optional_size
+    image[table : table + 40] = header
+    path.write_bytes(bytes(image) + section)
+
+
 class FakeAdapter:
     platform_id = "linux"
     inspector_id = "elf"
@@ -217,12 +279,82 @@ profiles:
                 (str(missing_glfw),),
             )
 
+    def test_pe_adapter_resolves_imports_by_policy_not_by_loader(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            beside = root / "bin"
+            beside.mkdir()
+            on_path = root / "runtime"
+            on_path.mkdir()
+            working_directory = root / "cwd"
+            working_directory.mkdir()
+
+            binary = beside / "win-main_hako_drone_service.exe"
+            write_pe_image(
+                binary,
+                (
+                    "KERNEL32.dll",
+                    "api-ms-win-crt-runtime-l1-1-0.dll",
+                    "mujoco.dll",
+                    "VCRUNTIME140.dll",
+                    "glfw3.dll",
+                    "delayed_only.dll",
+                ),
+            )
+            (beside / "mujoco.dll").touch()
+            (on_path / "VCRUNTIME140.dll").touch()
+            # The loader would find this; this adapter deliberately does not.
+            (working_directory / "glfw3.dll").touch()
+
+            inspection = native_runtime_platforms.PeDependencyAdapter().inspect(
+                binary, {"PATH": str(on_path)}
+            )
+
+        self.assertEqual(
+            inspection.dependencies,
+            (
+                "KERNEL32.dll",
+                "api-ms-win-crt-runtime-l1-1-0.dll",
+                "mujoco.dll",
+                "VCRUNTIME140.dll",
+                "glfw3.dll",
+                "delayed_only.dll",
+            ),
+        )
+        # KERNEL32 by the system approximation, api-ms-win-* by prefix,
+        # mujoco.dll from the binary's own directory, VCRUNTIME140.dll from
+        # PATH. glfw3.dll sits only in the working directory, which is not
+        # searched, and nothing supplies delayed_only.dll at all.
+        self.assertEqual(inspection.missing, ("glfw3.dll", "delayed_only.dll"))
+
+    def test_pe_adapter_reads_a_32_bit_optional_header(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            binary = Path(temporary) / "win-32bit.exe"
+            write_pe_image(binary, ("mujoco.dll",), magic=0x10B)
+            inspection = native_runtime_platforms.PeDependencyAdapter().inspect(
+                binary, {"PATH": ""}
+            )
+        self.assertEqual(inspection.dependencies, ("mujoco.dll",))
+        self.assertEqual(inspection.missing, ("mujoco.dll",))
+
+    def test_pe_adapter_refuses_a_file_that_is_not_a_pe_image(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            binary = Path(temporary) / "not-a-pe.exe"
+            binary.write_bytes(b"#!/bin/sh\necho hello\n")
+            with self.assertRaises(
+                native_runtime_platforms.DependencyInspectionError
+            ):
+                native_runtime_platforms.PeDependencyAdapter().inspect(binary, {})
+
     def test_platform_adapter_selection_is_outside_recipe_code(self) -> None:
         self.assertEqual(
             native_runtime_platforms.adapter_for("Linux").inspector_id, "elf"
         )
         self.assertEqual(
             native_runtime_platforms.adapter_for("Darwin").inspector_id, "macho"
+        )
+        self.assertEqual(
+            native_runtime_platforms.adapter_for("Windows").inspector_id, "pe"
         )
 
 

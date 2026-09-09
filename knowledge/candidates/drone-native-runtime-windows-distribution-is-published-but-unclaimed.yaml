@@ -17,8 +17,11 @@ summary: >
   the archive ships 7 of the 8 executables its siblings ship, and the PE import
   tables give a concrete Windows dependency set that maps one-to-one onto the
   existing linux and macos fields. Two questions stay open and are recorded as
-  such, not guessed at. Exactly one upstream packaging gap blocks the profile, and it is not
-  the PE dependency inspector the Runtime Primer already anticipates.
+  such, not guessed at. Exactly one upstream gap blocks the profile, and it is not
+  the PE dependency inspector the Runtime Primer already anticipates. The
+  component owner has since identified that gap as Windows buildability rather
+  than packaging: drone_visual_state_publisher does not currently compile on
+  Windows, so its absence from the archive is a consequence, not an omission.
 
 observation:
   context: >
@@ -124,8 +127,8 @@ contradictions:
     new_evidence: >
       A Windows native distribution is already published for the pinned release
       v4.0.0 and 7 of its 8 sibling executables are present, so the absent
-      windows profile reflects one packaging gap plus undeclared metadata
-      rather than an absent distribution.
+      windows profile reflects one Windows buildability gap plus undeclared
+      metadata rather than an absent distribution.
   - target: docs/hakoniwa-runtime-primer.md
     existing_claim: >
       Dependency discovery is delegated to "an ELF, Mach-O, or future PE
@@ -178,8 +181,16 @@ promotion_targets:
 
 promotion_rationale:
   - The Catalog already claims Windows support, so the absent windows profile is an internal inconsistency in a component-owned contract rather than a gap in coverage.
-  - The one missing artifact is packaging work owned by the component, and identifying it is more actionable than reporting that the PE adapter is unimplemented, which the Runtime Primer already records as future work.
-  - The measured Windows dependency set maps directly onto the fields the existing linux and macos profiles use, so the profile can be authored from evidence rather than from inference once the packaging gap closes.
+  - >-
+    The one missing artifact is component-owned work, and identifying it is more
+    actionable than reporting that the PE adapter is unimplemented, which the
+    Runtime Primer already records as future work. The owner has since placed it
+    a step earlier than packaging: the executable does not build on Windows yet.
+  - >-
+    The measured Windows dependency set maps directly onto the fields the
+    existing linux and macos profiles use, so the profile can be authored from
+    evidence rather than from inference once the buildability and distribution
+    gaps close.
 
 resolution:
   status: pending
@@ -188,4 +199,23 @@ resolution:
   promoted_to: []
   executable_guardrails: []
   notes:
-    - Reported from Windows validation only. No change to Recipe or validator code is proposed here.
+    - >-
+      Reported from Windows validation only. No change to Recipe or validator
+      code was proposed in the pull request that carried this candidate.
+    - >-
+      Follow-up, 2026-09-09. The component owner replied on that pull request
+      that the missing executable is blocked on Windows buildability rather than
+      on packaging, and gave the ordering: make drone_visual_state_publisher
+      build on Windows, include it in the Windows distribution, add a Windows
+      contract to the component's NATIVE_RUNTIME_REQUIREMENTS.yaml, enable the
+      Windows native profile in the Business Pack, and validate DLL
+      dependencies with a PE adapter. The wording in this candidate has been
+      moved off "packaging gap" accordingly.
+    - >-
+      The same reply asked for the PE adapter as a follow-up, independent of the
+      buildability work. It is implemented in the pull request that carries this
+      edit, following the design recorded in promotion_targets. Its output was
+      checked against the distribution this candidate measured: on
+      win-main_hako_drone_service.exe it reports the same 18 imports and, with
+      the host PATH of a machine that has the Visual C++ redistributable
+      installed, the same two unresolved entries, glfw3.dll and mujoco.dll.
