@@ -1,0 +1,146 @@
+id: recipe-loader-decodes-the-ruby-exporter-with-the-locale-codec
+title: tools/recipe.py decodes the Ruby Recipe exporter with the host locale codec, so on a cp932 host 23 of 36 Recipes fail to load and one loads with corrupted text
+
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+
+summary: >
+  load_recipe shells out to recipes/tools/export_recipe_json.rb with
+  subprocess.run(capture_output=True, text=True) and no explicit encoding, so the
+  exporter's UTF-8 JSON is decoded with the host's locale codec. Measured on a
+  cp932 host against the current main, 24 of the 36 Recipes under recipes/ export
+  non-ASCII, and the outcome splits in two: 23 raise and the command dies, while
+  one decodes successfully and yields corrupted text. In the failing case the
+  decode error is raised inside a subprocess reader thread and does not
+  propagate, so what the user sees is an unrelated TypeError about the JSON
+  object not being a str.
+
+observation:
+  context: >
+    Running the documented entry command for a Foundation Recipe on Windows 11
+    with a Japanese system locale.
+  details:
+    - >-
+      The failing call is in tools/recipe.py, in load_recipe. It runs
+      ["ruby", str(exporter), str(recipe)] with capture_output=True and
+      text=True. With no encoding= argument, Python decodes the child's stdout
+      using the locale encoding, which is cp932 here.
+    - >-
+      Verbatim run of the first command in the Recipe workflow, plan on a Recipe
+      whose prose is Japanese, ends in
+      "UnicodeDecodeError: 'cp932' codec can't decode byte 0x87 in position 210".
+      That traceback is printed from threading, not from the caller, because it
+      happens in subprocess's _readerthread. The exception does not propagate, so
+      result.stdout is None and json.loads then raises
+      "TypeError: the JSON object must be str, bytes or bytearray, not NoneType".
+      A reader who sees only the last line has nothing pointing at encoding.
+    - >-
+      Setting PYTHONUTF8=1 makes the same command succeed unchanged, which is
+      what identifies the locale codec as the cause rather than the Recipe
+      content.
+    - >-
+      Blast radius, measured rather than estimated. Running the exporter over
+      every Recipe under recipes/ and decoding its output as cp932 gives 24
+      exports carrying non-ASCII, of which 23 raise UnicodeDecodeError. The
+      remaining one, recipes/examples/mujoco-turtlebot3-wall-follower.yaml,
+      decodes without error and parses as JSON, so that Recipe loads with
+      corrupted text rather than failing. Twelve exports are pure ASCII and are
+      unaffected. Counting non-ASCII in the Recipe sources instead would give 25,
+      because recipes/experiments/drone-fleet-single-host-mvp.yaml carries its
+      Japanese only in YAML comments, which the exporter drops.
+    - >-
+      Nothing here is specific to Windows beyond the locale. What was measured is
+      cp932; any locale codec that cannot round-trip the exporter's bytes would
+      behave the same way, and Windows with PYTHONUTF8=1 does not reproduce it.
+      It stays invisible on macOS and Linux because their default is UTF-8. The
+      reader-thread symptom is CPython behaviour, not a project defect.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/recipe.py
+      revision: fb5d80c9a2dfee54da17104d7011dcb5e61de4e7
+  runtime_evidence:
+    - description: >
+        External contributor's Windows verification environment
+        (Windows 11 x86_64, native, os Windows, locale cp932, Python 3.12.7,
+        Ruby 3.2.11, measured 2026-09-09). python tools/recipe.py plan --recipe
+        <a Recipe with Japanese prose> exits 1 with
+        "UnicodeDecodeError: 'cp932' codec can't decode byte 0x87 in position 210"
+        printed from a subprocess reader thread, followed by
+        "TypeError: the JSON object must be str, bytes or bytearray, not NoneType"
+        from the caller. The same command with PYTHONUTF8=1 prints the plan
+        normally.
+    - description: >
+        Exporter survey on the same host. For each of the 36 Recipes under
+        recipes/ (excluding schema.yaml), ruby recipes/tools/export_recipe_json.rb
+        was run, its stdout was tested for non-ASCII bytes and then decoded as
+        cp932. 24 outputs contain non-ASCII; 23 of those raise UnicodeDecodeError
+        and one (mujoco-turtlebot3-wall-follower) decodes into corrupted text.
+        12 are pure ASCII. The two athrill Recipes are in the ASCII set, which is
+        consistent with an earlier Windows run of this workspace that used them
+        and never saw this failure.
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - >-
+      Whether the intended remedy is encoding="utf-8" on this call site alone or
+      a project-wide convention is a maintainer decision. This candidate
+      deliberately does not claim that every subprocess call in tools/ has the
+      same defect. At this revision there are six text=True calls outside the
+      tests, three in tools/recipe.py and one each in tools/foundation.py,
+      tools/workspace.py and tools/native_runtime_platforms.py, and none passes
+      encoding=; that is exposure rather than six measured failures, and a
+      blanket change could break a call whose child really does emit
+      locale-encoded text.
+  notes:
+    - Verified on one Windows 11 host on 2026-09-09, with cp932 as the locale encoding.
+    - >-
+      Only the plan and configure paths were exercised. Other subcommands that
+      call load_recipe would fail the same way by construction, but that was not
+      run for each of them.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: true
+  component_asset_guide: false
+  recipes: []
+  executable_guardrails: []
+
+promotion_rationale:
+  - >-
+    base_ecosystem_guide is the right layer because this is a property of the
+    shared Recipe tooling that every Recipe on such a host runs into, not
+    something specific to one component or Recipe.
+  - >-
+    No guardrail is proposed. A doctor check for the host encoding would report a
+    condition the tooling could simply handle instead.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - >-
+      Smallest change that would fix the measured failure is to decode the
+      exporter's output as UTF-8 explicitly, since the producer is a Ruby script
+      in this repository emitting JSON and its encoding is known.
+    - >-
+      A second, independent improvement would be to surface the real error. The
+      decode failure is swallowed by the reader thread today, so the user-facing
+      message points at JSON rather than at encoding.
+    - implementation_status is none because no follow-up issue exists yet.
