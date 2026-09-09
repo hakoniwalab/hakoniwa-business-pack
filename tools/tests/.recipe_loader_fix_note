@@ -1,1 +1,0 @@
-This branch makes Recipe exporter JSON ASCII-safe so host locale decoding cannot corrupt UTF-8 content.
