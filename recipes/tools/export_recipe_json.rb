@@ -28,4 +28,7 @@ unless data.is_a?(Hash)
   exit 2
 end
 
-puts JSON.generate(data)
+# Keep the subprocess protocol locale-independent. tools/recipe.py currently
+# reads this JSON in text mode, so escaping non-ASCII characters guarantees the
+# byte stream is valid under ASCII-compatible host codecs such as Windows cp932.
+puts JSON.generate(data, ascii_only: true)
