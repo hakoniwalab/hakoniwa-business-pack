@@ -41,19 +41,26 @@ candidate_paths.each do |path|
     next
   end
 
-  # observation.details holds prose. A plain scalar containing a colon and a
-  # space is a mapping in YAML, so such a sentence silently stops being a
-  # string and anything that reads it as text sees a one-key hash instead.
-  # Prose that needs a colon belongs in a folded block scalar.
-  details = data.dig("observation", "details")
-  if details.is_a?(Array)
-    details.each_with_index do |entry, index|
-      next if entry.is_a?(String)
+  # observation.details entries are prose, so each one must be a String. An
+  # unquoted plain scalar containing a colon followed by a space parses as a
+  # mapping instead, which is how prose stops being a string without anyone
+  # noticing. A block scalar or a quoted scalar keeps it a string.
+  observation = data["observation"]
+  if observation.is_a?(Hash)
+    details = observation["details"]
+    if details.is_a?(Array)
+      details.each_with_index do |entry, index|
+        next if entry.is_a?(String)
 
-      errors << "#{label}: observation.details[#{index}] must be prose but parsed " \
-                "as #{entry.class}; a plain scalar containing ': ' becomes a mapping, " \
-                "so write it as a '- >-' block scalar"
+        errors << "#{label}: observation.details[#{index}] must be a String but is " \
+                  "#{entry.class}; if the prose contains ': ', write the entry as a " \
+                  "'- >-' block scalar or quote it"
+      end
+    elsif !details.nil?
+      errors << "#{label}: observation.details must be a sequence but is #{details.class}"
     end
+  elsif !observation.nil?
+    errors << "#{label}: observation must be a mapping but is #{observation.class}"
   end
 
   # Every candidate must be valid YAML. Lifecycle field validation remains
