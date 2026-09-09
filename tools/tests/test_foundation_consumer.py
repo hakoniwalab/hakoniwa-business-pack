@@ -77,6 +77,34 @@ class FoundationConsumerContextTest(unittest.TestCase):
             {"VCPKG_TARGET_TRIPLET": "x64-windows"},
         )
 
+    def test_windows_context_renders_direct_cmake_arguments(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths = self.make_paths(root)
+            vcpkg = self.configure_fake_vcpkg(paths, root)
+
+            args = consumer.cmake_consumer_args(
+                paths,
+                platform_name="win32",
+                architecture="x64",
+            )
+
+        self.assertEqual(
+            args,
+            [
+                "-DCMAKE_PREFIX_PATH="
+                + ";".join(
+                    [
+                        str(paths.install_prefix),
+                        str(vcpkg / "installed" / "x64-windows"),
+                    ]
+                ),
+                "-DCMAKE_TOOLCHAIN_FILE="
+                + str(vcpkg / "scripts" / "buildsystems" / "vcpkg.cmake"),
+                "-DVCPKG_TARGET_TRIPLET=x64-windows",
+            ],
+        )
+
     def test_windows_without_foundation_toolchain_needs_no_vcpkg_guessing(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             paths = self.make_paths(Path(temporary))
