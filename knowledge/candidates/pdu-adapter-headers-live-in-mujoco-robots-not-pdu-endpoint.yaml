@@ -32,10 +32,19 @@ observation:
     - The three adapter/converter headers are absent from hakoniwa-pdu-endpoint on main (4c2e6e82) and on all six of its branches, and from hakoniwa-pdu-registry, hakoniwa-core-pro, hakoniwa-pdu-rpc and hakoniwa-pdu-ros.
     - An organisation-wide code search resolves them to hakoniwalab/hakoniwa-mujoco-robots at include/hakoniwa/pdu/adapter/... and include/hakoniwa/pdu/converter/..., where a full family of message adapters is maintained.
     - The catalog's dependency note for mujoco-robots reads "Supplies reusable MuJoCo robot actuator/physics implementation dependencies used by the current MujocoActuatorPlant", which does not tell a consumer that the PDU adapter and converter headers come from there too. The note for pdu-endpoint, "Provides the Endpoint API used by concrete PDU adapters and ManifestFactory composition", reads as though the adapters themselves are its concern.
-    - nlohmann/json.hpp is included by the runtime sources but is not listed in dependencies.required. It is not an accident that it resolves: hakoniwa_pdu_endpointConfig.cmake.in calls find_package(nlohmann_json 3.11.3 CONFIG QUIET) and, failing that, defines nlohmann_json::nlohmann_json against the header it installs. A CMake consumer of that package therefore never notices; one assembling include paths directly, as here, has to discover the provenance.
+    - >-
+      nlohmann/json.hpp is included by the runtime sources but is not listed in
+      dependencies.required. It is not an accident that it resolves:
+      hakoniwa_pdu_endpointConfig.cmake.in calls find_package(nlohmann_json 3.11.3
+      CONFIG QUIET) and, failing that, defines nlohmann_json::nlohmann_json against
+      the header it installs. A CMake consumer of that package therefore never
+      notices; one assembling include paths directly, as here, has to discover the
+      provenance.
     - physics/physics_impl.hpp resolves to hakoniwa-mujoco-robots/src/physics/physics_impl.hpp. It is not present in any install prefix, so a consumer must add the dependency's source tree to its include path; building and installing mujoco-robots is not sufficient.
-    - Practical effect: four of the six external include roots a consumer needs cannot be derived from the catalog's dependency list, and one of them points inside a dependency's source tree rather than at its installed artefacts.
-
+    - >-
+      Practical effect: four of the six external include roots a consumer needs
+      cannot be derived from the catalog's dependency list, and one of them points
+      inside a dependency's source tree rather than at its installed artefacts.
 sources:
   repositories:
     - repository: hakoniwalab/hakoniwa-mujoco-robots

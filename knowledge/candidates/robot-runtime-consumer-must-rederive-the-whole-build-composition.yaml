@@ -25,10 +25,24 @@ observation:
     out to be reconstructing a build system rather than running one.
   details:
     - The pinned tree has 62 files, of which the only non-source entries are .gitignore, LICENSE, README.md and docs/design.md. There is no CMakeLists.txt, no Makefile, no script of any kind, no test directory and no CI workflow.
-    - docs/design.md section 13 states the intent plainly: the repository owns the sources and public headers while top-level CMake composition is performed by the consumer. The catalog mirrors it, with operations.build, operations.test and operations.run all carrying empty command lists and a known_gaps entry saying repository-local top-level CMake/build/test ownership has not yet been introduced.
+    - >-
+      docs/design.md section 13 states the intent plainly: the repository owns the
+      sources and public headers while top-level CMake composition is performed by
+      the consumer. The catalog mirrors it, with operations.build, operations.test
+      and operations.run all carrying empty command lists and a known_gaps entry
+      saying repository-local top-level CMake/build/test ownership has not yet been
+      introduced.
     - The parent implements exactly that. teras-project/hakoniwa-robot-arm resolves the runtime through HAKONIWA_ROBOT_RUNTIME_ROOT, defaulting to a sibling checkout at ../hakoniwa-robot-runtime, and fails configuration with an explicit message if src/runtime/actuator_runtime.cpp or include/hakoniwa/robot_runtime/runner/runner.hpp is missing.
-    - Where the derived composition and the parent agree: include/ and src/ are both include roots; cxx_std_20 is required; hakoniwa-mujoco-robots supplies the PDU adapter and converter headers and is likewise consumed as a sibling checkout.
-    - Where they differ: the parent splits the runtime across several targets rather than one library, and its hako-robot-arm-runtime target compiles 11 of the 26 sources, with the MuJoCo plant and the endpoint adapters built as separate targets. It also takes Core and PDU Endpoint from a Hakoniwa Foundation install prefix rather than from separate install trees.
+    - >-
+      Where the derived composition and the parent agree: include/ and src/ are both
+      include roots; cxx_std_20 is required; hakoniwa-mujoco-robots supplies the PDU
+      adapter and converter headers and is likewise consumed as a sibling checkout.
+    - >-
+      Where they differ: the parent splits the runtime across several targets rather
+      than one library, and its hako-robot-arm-runtime target compiles 11 of the 26
+      sources, with the MuJoCo plant and the endpoint adapters built as separate
+      targets. It also takes Core and PDU Endpoint from a Hakoniwa Foundation
+      install prefix rather than from separate install trees.
     - .gitignore nonetheless anticipates a build system that does not exist, ignoring build/, CMakeFiles/, CMakeCache.txt and cmake_install.cmake.
     - The runtime's catalog entry still refers to consuming Robot Packs generically and names none, so the published parent has to be found by other means; nothing in the business-pack catalog points at teras-project/hakoniwa-robot-arm.
     - >-
@@ -40,8 +54,12 @@ observation:
       std::span. And the six external include roots, two of which are not the
       install prefixes of the declared dependencies. All of these are now
       confirmed by the parent's own CMakeLists.
-    - None of this is a defect in the sources, and the ownership split works as intended now that the parent is available. What remains useful is the correspondence itself: an independently derived composition and the official one agree, which is evidence that the runtime's implicit build contract is discoverable from the sources.
-
+    - >-
+      None of this is a defect in the sources, and the ownership split works as
+      intended now that the parent is available. What remains useful is the
+      correspondence itself: an independently derived composition and the official
+      one agree, which is evidence that the runtime's implicit build contract is
+      discoverable from the sources.
 sources:
   repositories:
     - repository: hakoniwalab/hakoniwa-robot-runtime
