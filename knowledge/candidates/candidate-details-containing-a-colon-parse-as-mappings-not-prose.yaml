@@ -1,5 +1,5 @@
 id: candidate-details-containing-a-colon-parse-as-mappings-not-prose
-title: An observation.details entry written as an unquoted plain scalar containing a colon parses as a mapping, and 16 entries in 11 of 68 candidates on main are currently in that state
+title: An observation.details entry written as an unquoted plain scalar containing a colon parses as a mapping, and 16 entries in 11 of 68 candidates on main at fb5d80c were in that state
 
 status: candidate
 
@@ -10,24 +10,25 @@ summary: >
   observation.details entries are prose. In YAML an unquoted plain scalar that
   contains a colon followed by a space is a mapping, so a sentence written that
   way becomes a one-key hash rather than a string. Parsing every candidate on
-  main and testing the type of each entry finds 16 such entries in 11 of the 68
-  files. The candidate validator does not test the type, so the condition passes
-  the gate. A block scalar, or quoting the whole scalar, keeps the entry a
-  string.
+  main at fb5d80c and testing the type of each entry found 16 such entries in 11
+  of the 68 files. The candidate validator at that revision did not test the
+  type, so the condition passed the gate. A block scalar, or quoting the whole
+  scalar, keeps the entry a string.
 
 observation:
   context: >
     Found while type-checking this workspace's own candidates before submitting
-    new ones, then confirmed against main.
+    new ones, then confirmed against main at fb5d80c.
   details:
     - >-
       YAML reads an unquoted "A: B" as a mapping whether or not prose was
       intended. Nothing about the surrounding sequence changes that, so an entry
       meant as a sentence becomes {"A" => "B"} with no error.
     - >-
-      Loading every candidate on main and testing isinstance(entry, str) finds 16
-      entries in 11 of the 68 files. They come from several authors, so this
-      reads as a property of the format rather than of any one contribution.
+      Loading every candidate on main at fb5d80c and testing isinstance(entry,
+      str) found 16 entries in 11 of the 68 files. They come from several
+      authors, so this reads as a property of the format rather than of any one
+      contribution.
     - >-
       The validator does not test the type. knowledge/tools/validate_candidates.rb
       checks tracking, issue and resolution fields, and prints
