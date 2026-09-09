@@ -1,5 +1,5 @@
 id: robot-runtime-consumer-must-rederive-the-whole-build-composition
-title: With no repository-local build target, a hakoniwa-robot-runtime consumer must derive the source list and include roots by hand, with no reachable example to copy
+title: The published parent repository confirms how hakoniwa-robot-runtime is meant to be composed, and an independently derived Windows composition agrees with it
 
 status: candidate
 
@@ -8,15 +8,16 @@ knowledge_type:
   - implementation_fact
 
 summary: >
-  hakoniwa-robot-runtime currently leaves top-level CMake composition to the
-  consumer, and the catalog records that as a known gap. Working through it once
-  on Windows meant deriving 26 source files, two internal include roots and six
-  external include roots, none of which are stated in the repository or the
-  catalog. No worked example was available to copy: the catalog's separate
-  hakoniwa-robot-arm-pack entry is marked private and unreadable, and lists no
-  build commands of its own. The composition that did build is recorded here so
-  the next consumer has a starting point rather than a sequence of compiler
-  errors.
+  hakoniwa-robot-runtime owns no top-level build target by design; composition
+  belongs to the parent that consumes it. That parent is now public as
+  teras-project/hakoniwa-robot-arm, whose CMakeLists consumes the runtime as a
+  sibling checkout. Before it was available, this workspace derived a
+  composition from the sources alone in order to reach a compiler on Windows,
+  and the two agree on every structural point that could have gone wrong: the
+  same two include roots, the same C++20 requirement, and mujoco-robots as the
+  provider of the PDU adapter headers. The differences are in packaging rather
+  than in substance, and they are worth recording because they say which
+  translation units the parent actually compiles.
 
 observation:
   context: >
@@ -25,10 +26,21 @@ observation:
   details:
     - The pinned tree has 62 files, of which the only non-source entries are .gitignore, LICENSE, README.md and docs/design.md. There is no CMakeLists.txt, no Makefile, no script of any kind, no test directory and no CI workflow.
     - docs/design.md section 13 states the intent plainly: the repository owns the sources and public headers while top-level CMake composition is performed by the consumer. The catalog mirrors it, with operations.build, operations.test and operations.run all carrying empty command lists and a known_gaps entry saying repository-local top-level CMake/build/test ownership has not yet been introduced.
+    - The parent implements exactly that. teras-project/hakoniwa-robot-arm resolves the runtime through HAKONIWA_ROBOT_RUNTIME_ROOT, defaulting to a sibling checkout at ../hakoniwa-robot-runtime, and fails configuration with an explicit message if src/runtime/actuator_runtime.cpp or include/hakoniwa/robot_runtime/runner/runner.hpp is missing.
+    - Where the derived composition and the parent agree: include/ and src/ are both include roots; cxx_std_20 is required; hakoniwa-mujoco-robots supplies the PDU adapter and converter headers and is likewise consumed as a sibling checkout.
+    - Where they differ: the parent splits the runtime across several targets rather than one library, and its hako-robot-arm-runtime target compiles 11 of the 26 sources, with the MuJoCo plant and the endpoint adapters built as separate targets. It also takes Core and PDU Endpoint from a Hakoniwa Foundation install prefix rather than from separate install trees.
     - .gitignore nonetheless anticipates a build system that does not exist, ignoring build/, CMakeFiles/, CMakeCache.txt and cmake_install.cmake.
-    - The runtime's catalog entry refers to consuming Robot Packs generically and names none. A separate catalog entry, hakoniwa-robot-arm-pack, is marked visibility: private and is not readable, and its own operations.build.commands is empty with the note that build details are maintained with the implementation Recipes. Either way there is no reachable example composition to copy.
-    - Composition facts a consumer must discover for itself, all of which had to be derived by reading includes and searching repositories: the 26 translation units under src/; that src/ itself is an include root because sources include their internal headers as "runtime/..." and "runner/..." rather than by relative path; that C++20 is mandatory because adapters take std::span; and the six external include roots, two of which are not the install prefixes of the declared dependencies.
-    - None of this is a defect in the sources. It is the cost of the ownership split; it was paid once here, and the same derivation would face any consumer starting without an example.
+    - The runtime's catalog entry still refers to consuming Robot Packs generically and names none, so the published parent has to be found by other means; nothing in the business-pack catalog points at teras-project/hakoniwa-robot-arm.
+    - >-
+      Composition facts that had to be derived by reading includes and
+      searching repositories, before the parent was published. The translation
+      units under src/. That src/ is itself an include root, because sources
+      include their internal headers as "runtime/..." and "runner/..." rather
+      than by relative path. That C++20 is mandatory, because adapters take
+      std::span. And the six external include roots, two of which are not the
+      install prefixes of the declared dependencies. All of these are now
+      confirmed by the parent's own CMakeLists.
+    - None of this is a defect in the sources, and the ownership split works as intended now that the parent is available. What remains useful is the correspondence itself: an independently derived composition and the official one agree, which is evidence that the runtime's implicit build contract is discoverable from the sources.
 
 sources:
   repositories:
@@ -53,10 +65,13 @@ sources:
         hakoniwa_pdu_endpoint, mujoco-common and mujoco. This produced
         robot_runtime.lib and an executable linking ManifestFactory::create.
     - description: >
-        gh api on hakoniwalab/hakoniwa-robot-arm-pack returns 404 with the
-        current token, and its catalog entry's operations.build.commands is an
-        empty list with the note that build details are maintained with the
-        implementation Recipes.
+        teras-project/hakoniwa-robot-arm, Apache-2.0 and public, carries the
+        composition on its work branch (19a39730; main holds an initial commit
+        only). Its top-level CMakeLists sets HAKONIWA_ROBOT_RUNTIME_ROOT to
+        ../hakoniwa-robot-runtime by default, declares
+        target_compile_features(... cxx_std_20), and lists the runtime's
+        include/ and src/ directories as include roots — the same structure
+        this workspace had derived from the sources.
 
 confidence: high
 
@@ -66,8 +81,8 @@ validation:
   status: verified
   required: []
   notes:
-    - The composition above is verified on Windows only, with one consumer. Nothing is claimed about other platforms or about what a different consumer would need.
-    - This candidate documents a consequence of the current ownership split, not a defect. docs/design.md describes the arrangement as the present state and points at a future where it may change, so no permanent intent is imputed to it here.
+    - The derived composition was exercised on Windows only. The parent's own composition has not yet been built here; its documented host-only path targets macOS and Ubuntu, and whether it runs on Windows is the subject of separate work.
+    - This candidate documents how the ownership split resolves in practice, not a defect. It was originally written as a cost report when no public parent existed; with teras-project/hakoniwa-robot-arm published, the useful content is the correspondence between the official composition and one derived from the sources.
 
 tracking:
   implementation_status: none
@@ -93,6 +108,10 @@ resolution:
   promoted_to: []
   executable_guardrails: []
   notes:
-    - Two ways to close it, both cheaper than each consumer rediscovering the composition: publish an interface CMake target (sources plus include roots, no top-level policy), which would preserve the consumer-owned composition while removing the guesswork; or record the source list and include roots in the catalog entry as build metadata.
-    - The composition above is offered as a starting point if a reference example is wanted; say the word and it can be contributed in whichever shape the maintainers prefer.
+    - >-
+      The one thing still missing is a pointer: the business-pack catalog entry
+      for hakoniwa-robot-runtime names no consumer, so a reader there cannot
+      find teras-project/hakoniwa-robot-arm. Adding it to the component entry
+      would make the intended composition discoverable from the catalog, which
+      is where a consumer looks first.
     - implementation_status is none because no follow-up issue exists yet.

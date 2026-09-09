@@ -29,6 +29,13 @@ observation:
     - The link step resolved against prebuilt dependency libraries (core-pro assets/conductor/hako/shakoc, hakoniwa_pdu_endpoint, mujoco-common, mujoco), which is what distinguishes this from a compile-only check. It exercised the symbol-bearing dependencies; the PDU adapter/converter layer was deliberately taken from a different mujoco-robots revision than the prebuilt mujoco-common.lib, and the link still succeeded, which is itself the evidence that that layer is header-only.
     - Warnings totalled 26 and all originated in dependency headers, none in robot-runtime sources. Eighteen were C4819 on core-pro's pdu_primitive_ctypes.h and pdu-endpoint's endpoint_types.h and comm.hpp, which carry UTF-8 without a BOM and are therefore read in the host's default code page on a Japanese Windows install; eight were C4267 raised inside the MSVC standard library.
     - The Runtime was not executed. Instantiating it requires a manifest and a MuJoCo model, which upstream assigns to the Robot Pack layer, so this candidate deliberately claims compile and link only.
+    - >-
+      The composition used here is not the official one. The parent that
+      composes this runtime, teras-project/hakoniwa-robot-arm, is public and
+      carries its own CMakeLists; the composition used for this measurement was
+      derived from the sources beforehand and agrees with it structurally. The
+      parent's documented host-only build targets macOS and Ubuntu, so building
+      the runtime through the parent on Windows is separate work.
 
 sources:
   repositories:
