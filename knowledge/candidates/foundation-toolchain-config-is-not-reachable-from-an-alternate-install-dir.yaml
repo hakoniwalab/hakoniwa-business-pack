@@ -24,8 +24,10 @@ observation:
     - foundation_toolchain_path returns paths.foundation_config / "toolchain.json", and paths are derived from the foundation root, which --install-dir overrides.
     - load_foundation_toolchain returns an empty mapping when that file is absent, so no vcpkg root reaches the generated component manifest.
     - The component doctor then prints NG vcpkg and exits 1, which aborts the Recipe before any compilation, with no message connecting the failure to the alternate prefix.
-    - An unrelated constraint compounds it: a prefix outside <repo>/work is rejected with "Foundation root must stay under the Business Pack work directory", so the alternate prefix must live inside the repository's work directory.
-
+    - >-
+      An unrelated constraint compounds it: a prefix outside <repo>/work is rejected
+      with "Foundation root must stay under the Business Pack work directory", so
+      the alternate prefix must live inside the repository's work directory.
 sources:
   repositories:
     - repository: hakoniwalab/hakoniwa-business-pack

@@ -32,8 +32,11 @@ observation:
     - Because create_build_plan runs doctor first, a non-zero doctor aborts the whole Recipe before any build attempt, so the rejection is fatal rather than cosmetic.
     - The same doctor invocation returns all OK when it is run inside the VsDevCmd shell that _run uses, which isolates the cause to the environment mismatch rather than to a missing tool.
     - The catalog component lists "CMake and C compiler" as a required tool dependency. If that is meant to require a standalone installation, this host was out of contract and the finding reduces to a message and documentation gap rather than a build defect; neither the catalog entry nor the Recipe states which is intended, and the Recipe's platform note assigns Visual Studio initialization to the component-owned CLI.
-    - The repository's own managed workspace does not close the gap: inside "tools/workspace.py run --", shutil.which returns None for both tools and the component doctor still exits 1, so this is not a case of ignoring the recommended entry path.
-
+    - >-
+      The repository's own managed workspace does not close the gap: inside
+      "tools/workspace.py run --", shutil.which returns None for both tools and the
+      component doctor still exits 1, so this is not a case of ignoring the
+      recommended entry path.
 sources:
   repositories:
     - repository: toppers/athrill-target-v850e2m

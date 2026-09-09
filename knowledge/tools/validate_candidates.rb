@@ -41,6 +41,28 @@ candidate_paths.each do |path|
     next
   end
 
+  # observation.details entries are prose, so each one must be a String. An
+  # unquoted plain scalar containing a colon followed by a space parses as a
+  # mapping instead, which is how prose stops being a string without anyone
+  # noticing. A block scalar or a quoted scalar keeps it a string.
+  observation = data["observation"]
+  if observation.is_a?(Hash)
+    details = observation["details"]
+    if details.is_a?(Array)
+      details.each_with_index do |entry, index|
+        next if entry.is_a?(String)
+
+        errors << "#{label}: observation.details[#{index}] must be a String but is " \
+                  "#{entry.class}; if the prose contains ': ', write the entry as a " \
+                  "'- >-' block scalar or quote it"
+      end
+    elsif !details.nil?
+      errors << "#{label}: observation.details must be a sequence but is #{details.class}"
+    end
+  elsif !observation.nil?
+    errors << "#{label}: observation must be a mapping but is #{observation.class}"
+  end
+
   # Every candidate must be valid YAML. Lifecycle field validation remains
   # opt-in for backward compatibility until an older record adopts `tracking:`.
   next unless raw.match?(/^tracking:\s*$/)

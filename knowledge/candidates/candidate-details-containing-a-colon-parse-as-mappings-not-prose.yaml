@@ -1,0 +1,143 @@
+id: candidate-details-containing-a-colon-parse-as-mappings-not-prose
+title: An observation.details entry written as an unquoted plain scalar containing a colon parses as a mapping, and 16 entries in 11 of 68 candidates on main are currently in that state
+
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+
+summary: >
+  observation.details entries are prose. In YAML an unquoted plain scalar that
+  contains a colon followed by a space is a mapping, so a sentence written that
+  way becomes a one-key hash rather than a string. Parsing every candidate on
+  main and testing the type of each entry finds 16 such entries in 11 of the 68
+  files. The candidate validator does not test the type, so the condition passes
+  the gate. A block scalar, or quoting the whole scalar, keeps the entry a
+  string.
+
+observation:
+  context: >
+    Found while type-checking this workspace's own candidates before submitting
+    new ones, then confirmed against main.
+  details:
+    - >-
+      YAML reads an unquoted "A: B" as a mapping whether or not prose was
+      intended. Nothing about the surrounding sequence changes that, so an entry
+      meant as a sentence becomes {"A" => "B"} with no error.
+    - >-
+      Loading every candidate on main and testing isinstance(entry, str) finds 16
+      entries in 11 of the 68 files. They come from several authors, so this
+      reads as a property of the format rather than of any one contribution.
+    - >-
+      The validator does not test the type. knowledge/tools/validate_candidates.rb
+      checks tracking, issue and resolution fields, and prints
+      "knowledge candidates valid: candidates=68, tracked=57, warnings=0" on
+      exactly the tree that contains those 16 entries.
+    - >-
+      The consequence is a type mismatch rather than a measured breakage. Any
+      consumer that expects a string from a details entry gets a hash from these
+      16; whether a given consumer notices was not exercised here. The prose is
+      still recoverable by joining key and value.
+    - >-
+      Two shapes keep an entry a string. A folded block scalar written as "- >-"
+      followed by indented lines, or a quoted scalar. Both accept any punctuation
+      the prose needs.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: knowledge/tools/validate_candidates.rb
+      revision: fb5d80c9a2dfee54da17104d7011dcb5e61de4e7
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: knowledge/candidates
+      revision: fb5d80c9a2dfee54da17104d7011dcb5e61de4e7
+  runtime_evidence:
+    - description: >
+        External contributor's Windows verification environment
+        (Windows 11 x86_64, native, os Windows, measured 2026-09-09). Parsing
+        knowledge/candidates at fb5d80c and counting entries of
+        observation.details that are not strings gives 16 entries in 11 of 68
+        files: athrill-doctor-probes-ambient-path-not-the-build-shell,
+        athrill-windows-smoke-covers-exdev-shared-library-load,
+        catalog-index-generation-rewrites-every-line-on-windows,
+        envsim-plateau-citygml-to-mujoco-pipeline,
+        foundation-toolchain-config-is-not-reachable-from-an-alternate-install-dir,
+        mujoco-first-actuator-sensor-validation-sequence,
+        mujoco-viewer-runtime-config-must-be-semantically-aligned,
+        named-actuator-command-space-for-tendon-coupled-mujoco-models,
+        offline-artifact-generation-and-foundation-runtime-must-be-separate-recipes,
+        primitive-collision-overlays-must-match-visual-scale-and-contact-height and
+        recipe-local-requirements-cannot-pin-a-commit-sha.
+    - description: >
+        ruby knowledge/tools/validate_candidates.rb on that same tree prints
+        "knowledge candidates valid: candidates=68, tracked=57, warnings=0".
+    - description: >
+        Converting the affected entries to folded block scalars and reparsing
+        returns the same prose as strings. Each rewritten entry was reconstructed
+        from its mapping as "key: value" and compared to the reparsed result, one
+        by one, so the conversion is verified rather than assumed.
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - >-
+      Whether observation.details should be strings only, or whether a mapping is
+      meaningful somewhere, is a maintainer decision. The count above assumes
+      prose was intended in all 16, which is how each of them reads.
+  notes:
+    - Measured against main at fb5d80c on 2026-09-09.
+    - >-
+      Only observation.details was surveyed. promotion_rationale and the various
+      notes lists can take the same shape and were not counted.
+    - >-
+      A type check catches more than accidental colons. Integers, booleans, dates
+      and nulls in a details entry are rejected too, which is correct under a
+      string contract but is a different cause than the one this candidate
+      describes.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+  executable_guardrails:
+    - knowledge/tools/validate_candidates.rb
+
+promotion_rationale:
+  - >-
+    A guardrail is the whole remedy here. The condition is mechanically
+    detectable, the validator already runs in CI, and no author has to learn a
+    YAML rule if the tool states it.
+  - >-
+    No guide layer is proposed, because there is nothing a reader needs to know
+    that the check cannot say at the moment it matters.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - >-
+      The pull request carrying this candidate also carries the proposed fix. It
+      adds the type check to validate_candidates.rb and converts the 16 entries
+      so the check passes. The check was added first and reported exactly those
+      16 entries and nothing else, which is what shows it detects the condition
+      rather than merely passing afterwards.
+    - >-
+      The check guards its parent types, so a candidate whose observation or
+      details is not of the expected shape produces an ordinary validation error
+      and the remaining candidates are still checked.
+    - >-
+      implementation_status is none because no follow-up issue exists; the
+      proposed change lives in the pull request rather than in an issue.

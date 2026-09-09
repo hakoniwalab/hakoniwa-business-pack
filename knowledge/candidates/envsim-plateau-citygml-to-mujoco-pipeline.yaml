@@ -29,12 +29,16 @@ observation:
     - The downloaded object SHA-256 and actual byte count are recorded in download-manifest.json.
     - The default waste threshold 1.0 emits one compact OBB per building; lowering it selectively emits the original exterior and interior boundary edges as wall boxes.
     - Adjacent municipality datasets can publish the same mesh and building IDs; identical geometry is deduplicated and conflicting geometry fails closed.
-    - The API r: rectangle response omitted an intermediate third-level mesh in the verified Shibuya range; Envsim therefore enumerates every intersecting third-level mesh and queries them explicitly with m:.
+    - >-
+      The API r: rectangle response omitted an intermediate third-level mesh in the
+      verified Shibuya range; Envsim therefore enumerates every intersecting
+      third-level mesh and queries them explicitly with m:.
     - The Map Viewer Shibuya origin is 35.6625,139.70625 and must not be replaced by Drone Core simulation.location longitude 139.69375.
     - A pinned historical rebuild reproduced all 4266 building geoms in the Drone Core Shibuya XML with zero numeric error.
     - Direct GLB output uses Three.js-native X=East, Y=Up, Z=-North coordinates aligned with the same origin and altitude offset as the MuJoCo asset.
-    - Texture acquisition is selective: only images referenced by selected LOD2 surfaces are downloaded, hashed, and embedded in the GLB.
-
+    - >-
+      Texture acquisition is selective: only images referenced by selected LOD2
+      surfaces are downloaded, hashed, and embedded in the GLB.
 sources:
   repositories:
     - repository: local/hakoniwa-envsim

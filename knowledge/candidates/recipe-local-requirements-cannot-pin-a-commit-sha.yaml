@@ -25,7 +25,9 @@ observation:
     its validation evidence.
   details:
     - tools/recipe.py::_clone_repository builds "git clone --recurse-submodules [--branch <revision> --single-branch] <url> <target>", so revision is passed to --branch.
-    - git accepts only a branch or tag name for --branch; a full commit SHA fails with "fatal: Remote branch <sha> not found in upstream origin".
+    - >-
+      git accepts only a branch or tag name for --branch; a full commit SHA fails
+      with "fatal: Remote branch <sha> not found in upstream origin".
     - recipes/examples/athrill-v850e2m-build.yaml declares recipe_local_requirements.athrill.source.revision as master, and catalog/foundation-components.json registers athrill-target-v850e2m with no revision key, so neither dependency is pinned.
     - The same Recipe records validation evidence at athrill 9b3190a0509310c5e02ba88fa47aa6a3fc58462f and athrill-target-v850e2m 1c2cea9dd518dfad1388ef91c2c3068815702fc3.
     - _resolve_source_requirement reports provenance.reproducibility as pinned whenever a revision string is present, so a branch name such as master is labelled pinned even though it is a moving target.

@@ -23,8 +23,11 @@ observation:
     - The downstream Tracer Twist demo does execute all of those runtime facilities and requires Foundation Python 3.12 with matching SOABI evidence.
     - One Recipe previously described both stages, retained /usr/local/hakoniwa metadata, and could not truthfully be classified as Foundation-required or not-required.
     - Splitting the Recipe removed one legacy Foundation warning without imposing Core installation on the offline conversion workflow.
-    - A managed hakopy runtime is identified by the Core Receipt, not by a guessed filename: binding_mode must be soabi, SOABI must match the Foundation interpreter, and exactly the declared tagged artifact may exist; legacy hakopy.so or hakopy.pyd fallback hides ABI incompatibility and is rejected.
-
+    - >-
+      A managed hakopy runtime is identified by the Core Receipt, not by a guessed
+      filename: binding_mode must be soabi, SOABI must match the Foundation
+      interpreter, and exactly the declared tagged artifact may exist; legacy
+      hakopy.so or hakopy.pyd fallback hides ABI incompatibility and is rejected.
 sources:
   repositories:
     - repository: hakoniwalab/hakoniwa-business-pack
