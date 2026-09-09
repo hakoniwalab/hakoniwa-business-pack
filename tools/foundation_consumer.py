@@ -67,3 +67,48 @@ def cmake_consumer_context(
     context["toolchain_file"] = str(toolchain_file)
     context["cache_variables"] = {"VCPKG_TARGET_TRIPLET": triplet}
     return context
+
+
+def cmake_consumer_args(
+    paths: _foundation.WorkspacePaths,
+    *,
+    platform_name: str | None = None,
+    architecture: str | None = None,
+) -> list[str]:
+    """Render the Foundation-owned consumer context as CMake cache arguments."""
+
+    context = cmake_consumer_context(
+        paths,
+        platform_name=platform_name,
+        architecture=architecture,
+    )
+    prefix_paths = context["prefix_paths"]
+    if not isinstance(prefix_paths, list) or not all(
+        isinstance(item, str) and item for item in prefix_paths
+    ):
+        raise _foundation.FoundationError(
+            "Foundation consumer context contains invalid prefix_paths"
+        )
+
+    args = [f"-DCMAKE_PREFIX_PATH={';'.join(prefix_paths)}"]
+    toolchain_file = context["toolchain_file"]
+    if toolchain_file is not None:
+        if not isinstance(toolchain_file, str) or not toolchain_file:
+            raise _foundation.FoundationError(
+                "Foundation consumer context contains an invalid toolchain_file"
+            )
+        args.append(f"-DCMAKE_TOOLCHAIN_FILE={toolchain_file}")
+
+    cache_variables = context["cache_variables"]
+    if not isinstance(cache_variables, dict):
+        raise _foundation.FoundationError(
+            "Foundation consumer context contains invalid cache_variables"
+        )
+    for name in sorted(cache_variables):
+        value = cache_variables[name]
+        if not isinstance(name, str) or not name or not isinstance(value, str):
+            raise _foundation.FoundationError(
+                "Foundation consumer context contains an invalid cache variable"
+            )
+        args.append(f"-D{name}={value}")
+    return args
