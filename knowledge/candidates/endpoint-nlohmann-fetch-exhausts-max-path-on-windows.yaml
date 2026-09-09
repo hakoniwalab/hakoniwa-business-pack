@@ -1,0 +1,143 @@
+id: endpoint-nlohmann-fetch-exhausts-max-path-on-windows
+title: The pdu-endpoint FetchContent of nlohmann/json leaves only 52 characters for the checkout root before git hits MAX_PATH on Windows
+
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+
+summary: >
+  hakoniwa-pdu-endpoint fetches nlohmann/json v3.11.3 as a full git clone during
+  Foundation configure. That repository contains paths up to 127 characters, and
+  the Foundation build tree adds a fixed 80 characters below the checkout root,
+  so the root itself may be at most 52 characters before git refuses to write the
+  working tree on Windows. The documented layout fits with three characters to
+  spare. This is a setup constraint rather than a defect, but it is invisible
+  until it fires, and the failure surfaces as an MSBuild error rather than as a
+  path-length message.
+
+observation:
+  context: >
+    Building the Foundation for a Recipe on Windows, from a checkout root deeper
+    than the one the documentation suggests.
+  details:
+    - >-
+      hakoniwa-pdu-endpoint/src/CMakeLists.txt declares nlohmann_json with
+      FetchContent_Declare at GIT_TAG v3.11.3 and populates it under the
+      Foundation build tree unless HAKO_LOCAL_NLOHMANN_JSON_ROOT is set.
+    - >-
+      On Windows the populate step fails with repeated
+      "error : unable to create file
+      tests/reports/2016-09-09-nativejson_benchmark/performance_...png:
+      Filename too long", then
+      "error MSB8066: ... nlohmann_json-populate.vcxproj", then
+      "-- Configuring incomplete, errors occurred!" and finally
+      "error: hakoniwa-pdu-endpoint command failed with exit code 1".
+      Nothing in that chain names a path-length limit.
+    - >-
+      The arithmetic. The longest path inside nlohmann/json v3.11.3 is 127
+      characters (git ls-tree -r --name-only). The fixed middle from the checkout
+      root down to the populated source directory is 80 characters. With MAX_PATH
+      at 260 that leaves 52 characters for the checkout root.
+    - >-
+      The boundary was measured rather than asserted. Cloning nlohmann/json
+      v3.11.3 twice with core.longpaths=false into destinations that differ by one
+      character, sized so the longest file lands at exactly 259 and 260
+      characters, gives rc=0 with all 8 report files created at 259 and rc=128
+      with 7 of 8 created at 260, ending in "fatal: unable to checkout working
+      tree".
+    - >-
+      Enabling LongPathsEnabled in the Windows registry is not sufficient. This
+      host has it set to 1, yet git enforces MAX_PATH because core.longpaths is
+      unset in both --system and --global. Setting core.longpaths=true for the
+      build (here injected per-process through GIT_CONFIG_COUNT so no user
+      configuration was touched) makes the same configure run reach
+      "Foundation: SATISFIED".
+    - >-
+      Responsibility is shared rather than located in one place. git enforces the
+      limit, pdu-endpoint chose a full git fetch of a repository that carries
+      127-character paths, and the Foundation layout contributes the 80-character
+      middle. pdu-endpoint already offers HAKO_LOCAL_NLOHMANN_JSON_ROOT as an
+      escape hatch.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      path: src/CMakeLists.txt
+      revision: 3e06ca5f4bd8
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/foundation.py
+      revision: fb5d80c9a2dfee54da17104d7011dcb5e61de4e7
+  runtime_evidence:
+    - description: >
+        External contributor's Windows verification environment
+        (Windows 11 x86_64, native, os Windows, git 2.49.0, measured 2026-09-09).
+        A checkout root of 64 characters fails as described; the documented
+        HOME-based layout of 49 characters would total 256 and pass.
+    - description: >
+        Boundary experiment on the same host, two clones with
+        core.longpaths=false differing by one character in the destination name:
+        destination length 131 gives a longest path of 259 and rc=0 with 8 of 8
+        report files created; destination length 132 gives 260 and rc=128 with 7
+        of 8 created.
+    - description: >
+        Same configure run repeated with only core.longpaths=true added reaches
+        Foundation SATISFIED for all four components, with the PDU Python smoke
+        reporting hakoniwa-pdu 1.6.9.
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - >-
+      Whether anything should change upstream is a maintainer call. The
+      documented layout fits today, and the local-headers override already
+      exists. If a change is wanted, the cheapest options are a shallow or
+      sparse fetch of nlohmann/json, or preferring an installed nlohmann_json
+      package before falling back to the git fetch.
+  notes:
+    - >-
+      Measured on one Windows 11 host on 2026-09-09. The numbers are properties
+      of nlohmann/json v3.11.3 and of the Foundation layout, so they move if
+      either changes.
+    - >-
+      No claim is made that a particular username or home directory overflows the
+      budget. Home and checkout locations vary, so only the checkout root length
+      is a usable predictor.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog:
+    - hakoniwa-pdu-endpoint
+  runtime_primer: false
+  base_ecosystem_guide: true
+  component_asset_guide: false
+  recipes: []
+  executable_guardrails: []
+
+promotion_rationale:
+  - >-
+    base_ecosystem_guide because the constraint is on where a user puts the
+    checkout, which is setup guidance rather than component behaviour.
+  - >-
+    The component entry is listed as a secondary target because the fetch that
+    consumes the budget belongs to pdu-endpoint.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - >-
+      Documentation would be enough on its own. A sentence in the Windows setup
+      path saying to keep the checkout root short and to set core.longpaths=true
+      would have saved the whole investigation.
+    - implementation_status is none because no follow-up issue exists yet.
