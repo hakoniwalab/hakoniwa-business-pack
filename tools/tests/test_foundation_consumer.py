@@ -7,7 +7,12 @@ import unittest
 from pathlib import Path
 
 
-SCRIPT = Path(__file__).resolve().parents[1] / "foundation_consumer.py"
+SCRIPT = (
+    Path(__file__).resolve().parents[2]
+    / "foundation"
+    / "python"
+    / "hakoniwa_foundation_consumer.py"
+)
 SPEC = importlib.util.spec_from_file_location("business_pack_foundation_consumer", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 consumer = importlib.util.module_from_spec(SPEC)
