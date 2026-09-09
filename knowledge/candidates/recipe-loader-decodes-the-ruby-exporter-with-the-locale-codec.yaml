@@ -10,7 +10,7 @@ summary: >
   load_recipe shells out to recipes/tools/export_recipe_json.rb with
   subprocess.run(capture_output=True, text=True) and no explicit encoding, so the
   exporter's UTF-8 JSON is decoded with the host's locale codec. Measured on a
-  cp932 host against the current main, 24 of the 36 Recipes under recipes/ export
+  cp932 host against main at fb5d80c, 24 of the 36 Recipes under recipes/ export
   non-ASCII, and the outcome splits in two: 23 raise and the command dies, while
   one decodes successfully and yields corrupted text. In the failing case the
   decode error is raised inside a subprocess reader thread and does not
