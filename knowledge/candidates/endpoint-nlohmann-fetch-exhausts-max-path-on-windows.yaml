@@ -1,5 +1,5 @@
 id: endpoint-nlohmann-fetch-exhausts-max-path-on-windows
-title: The pdu-endpoint FetchContent of nlohmann/json leaves only 52 characters for the checkout root before git hits MAX_PATH on Windows
+title: When it falls back to fetching nlohmann/json, pdu-endpoint leaves the checkout root only 52 characters in the layout measured here before git hits MAX_PATH on Windows
 
 status: candidate
 
@@ -7,14 +7,14 @@ knowledge_type:
   - known_pitfall
 
 summary: >
-  hakoniwa-pdu-endpoint fetches nlohmann/json v3.11.3 as a full git clone during
-  Foundation configure. That repository contains paths up to 127 characters, and
-  the Foundation build tree adds a fixed 80 characters below the checkout root,
-  so the root itself may be at most 52 characters before git refuses to write the
-  working tree on Windows. The documented layout fits with three characters to
-  spare. This is a setup constraint rather than a defect, but it is invisible
-  until it fires, and the failure surfaces as an MSBuild error rather than as a
-  path-length message.
+  When no installed nlohmann_json package is found, hakoniwa-pdu-endpoint
+  fetches nlohmann/json v3.11.3 as a git clone during Foundation configure. That
+  repository contains paths up to 127 characters. In the layout used here the
+  Foundation build tree adds 80 characters below the checkout root, which leaves
+  the root at most 52 characters before git refuses to write the working tree on
+  Windows. Both numbers depend on the layout, so they are a worked example rather
+  than a constant. This is a setup constraint rather than a defect, but it is
+  worth writing down because the arithmetic is invisible until it fires.
 
 observation:
   context: >
@@ -32,13 +32,17 @@ observation:
       Filename too long", then
       "error MSB8066: ... nlohmann_json-populate.vcxproj", then
       "-- Configuring incomplete, errors occurred!" and finally
-      "error: hakoniwa-pdu-endpoint command failed with exit code 1".
-      Nothing in that chain names a path-length limit.
+      "error: hakoniwa-pdu-endpoint command failed with exit code 1". The first
+      line does name the cause, but it is one of five repeated file errors inside
+      an MSBuild custom-build step, and the three lines that follow it are the
+      ones the Recipe surfaces.
     - >-
-      The arithmetic. The longest path inside nlohmann/json v3.11.3 is 127
-      characters (git ls-tree -r --name-only). The fixed middle from the checkout
-      root down to the populated source directory is 80 characters. With MAX_PATH
-      at 260 that leaves 52 characters for the checkout root.
+      The arithmetic, for the layout used here. The longest path inside
+      nlohmann/json v3.11.3 is 127 characters (git ls-tree -r --name-only). The
+      middle from the checkout root down to the populated source directory is 80
+      characters, of which the work directory name is chosen by the user. With
+      MAX_PATH at 260 that leaves 52 characters for the checkout root. A different
+      work directory name moves the budget.
     - >-
       The boundary was measured rather than asserted. Cloning nlohmann/json
       v3.11.3 twice with core.longpaths=false into destinations that differ by one
@@ -55,10 +59,11 @@ observation:
       "Foundation: SATISFIED".
     - >-
       Responsibility is shared rather than located in one place. git enforces the
-      limit, pdu-endpoint chose a full git fetch of a repository that carries
-      127-character paths, and the Foundation layout contributes the 80-character
-      middle. pdu-endpoint already offers HAKO_LOCAL_NLOHMANN_JSON_ROOT as an
-      escape hatch.
+      limit, pdu-endpoint falls back to a git fetch of a repository that carries
+      127-character paths, and the layout contributes the 80-character middle.
+      pdu-endpoint already tries an installed nlohmann_json package first
+      (src/CMakeLists.txt:67) and already offers HAKO_LOCAL_NLOHMANN_JSON_ROOT, so
+      two ways out exist before this is reached.
 
 sources:
   repositories:
@@ -72,8 +77,10 @@ sources:
     - description: >
         External contributor's Windows verification environment
         (Windows 11 x86_64, native, os Windows, git 2.49.0, measured 2026-09-09).
-        A checkout root of 64 characters fails as described; the documented
-        HOME-based layout of 49 characters would total 256 and pass.
+        A checkout root of 64 characters fails as described. The HOME-based layout
+        in the arm pack's own setup guide expands to 49 characters for this
+        account, which totals 256 and would pass; a longer home path or work
+        directory name would not.
     - description: >
         Boundary experiment on the same host, two clones with
         core.longpaths=false differing by one character in the destination name:
@@ -93,16 +100,18 @@ validation:
   status: verified
   required:
     - >-
-      Whether anything should change upstream is a maintainer call. The
-      documented layout fits today, and the local-headers override already
-      exists. If a change is wanted, the cheapest options are a shallow or
-      sparse fetch of nlohmann/json, or preferring an installed nlohmann_json
-      package before falling back to the git fetch.
+      Whether anything should change upstream is a maintainer call. Both
+      existing escape hatches, the installed-package path and
+      HAKO_LOCAL_NLOHMANN_JSON_ROOT, already avoid this, so documentation may be
+      the whole answer. No fetch change is proposed here: a shallow clone reduces
+      history rather than path length, and the boundary experiment below used
+      --depth 1 and still failed.
   notes:
     - >-
       Measured on one Windows 11 host on 2026-09-09. The numbers are properties
-      of nlohmann/json v3.11.3 and of the Foundation layout, so they move if
-      either changes.
+      of nlohmann/json v3.11.3 and of the layout used, so they move if either
+      changes. The layout itself comes from the arm pack's setup guide, not from
+      this repository.
     - >-
       No claim is made that a particular username or home directory overflows the
       budget. Home and checkout locations vary, so only the checkout root length
@@ -137,7 +146,7 @@ resolution:
   executable_guardrails: []
   notes:
     - >-
-      Documentation would be enough on its own. A sentence in the Windows setup
-      path saying to keep the checkout root short and to set core.longpaths=true
-      would have saved the whole investigation.
+      Documentation would be enough on its own. A sentence in a Windows setup
+      note saying to keep the checkout root short and to set core.longpaths=true
+      would let the next person recognise the failure immediately.
     - implementation_status is none because no follow-up issue exists yet.

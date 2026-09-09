@@ -9,17 +9,17 @@ knowledge_type:
 summary: >
   When find_package(hakoniwa_pdu_endpoint CONFIG QUIET) fails,
   hakoniwa-mujoco-robots aborts with a message saying the package config was not
-  found and that cmake --install should be run first. Both statements can be
-  false at the same time. The config file is installed and sits at the very
+  found and that cmake --install should be run first. In the case observed here
+  neither statement holds. The config file is installed and sits at the very
   prefix the message prints; what actually failed is the find_dependency(Boost)
   inside that config, which QUIET suppressed. The message sends the reader to
   re-install a component that is already installed.
 
 observation:
   context: >
-    Building a Recipe on Windows, where the Foundation installs
-    hakoniwa-pdu-endpoint through vcpkg and the consumer build is invoked
-    without that toolchain.
+    Building a Recipe on Windows, where the Foundation builds
+    hakoniwa-pdu-endpoint with the vcpkg toolchain and the consumer build is
+    invoked without it.
   details:
     - >-
       src/CMakeLists.txt calls find_package(hakoniwa-core CONFIG QUIET) and
@@ -34,9 +34,10 @@ observation:
       at the prefix printed in the message. hakoniwa-core, from the same prefix,
       was found in the same run.
     - >-
-      Isolated with a twelve-line CMake probe that adds the same prefix and calls
-      the same three find_package invocations. With no toolchain file
-      Boost_FOUND is FALSE and hakoniwa_pdu_endpoint_FOUND is 0. With the vcpkg
+      Isolated with a ten-line CMake probe that adds the same prefix and then
+      calls find_package for Boost, hakoniwa-core and hakoniwa_pdu_endpoint. With
+      no toolchain file Boost_FOUND is FALSE and hakoniwa_pdu_endpoint_FOUND is
+      0, while hakoniwa-core is found from that same prefix. With the vcpkg
       toolchain file both are true. With no toolchain file but the vcpkg
       installed tree added to CMAKE_PREFIX_PATH, both are also true. So the
       determining condition is whether Boost is discoverable, not whether the
@@ -50,8 +51,10 @@ observation:
     - >-
       Not intrinsically a Windows issue. Any host where Boost lives in a prefix
       CMake does not search reproduces it. What makes it easy to hit on Windows
-      is that the Foundation build itself introduces the vcpkg prefix, which the
-      Recipe build then does not inherit.
+      is that the Foundation builds the endpoint with the vcpkg toolchain and
+      takes Boost from there, and the Recipe build that consumes the result is
+      invoked without that toolchain. Boost is used header-only here, so only
+      discovery is at stake.
 
 sources:
   repositories:
@@ -68,7 +71,7 @@ sources:
         Visual Studio 17 2022, measured 2026-09-09). The FATAL_ERROR fired while
         the named config file was present at the printed prefix.
     - description: >
-        Probe results on the same host, three configurations of the same twelve
+        Probe results on the same host, three configurations of the same ten
         lines. Without a toolchain, Boost_FOUND=FALSE, hakoniwa-core_FOUND=1,
         hakoniwa_pdu_endpoint_FOUND=0. With
         -DCMAKE_TOOLCHAIN_FILE=<vcpkg>/scripts/buildsystems/vcpkg.cmake, all
@@ -118,10 +121,11 @@ resolution:
   executable_guardrails: []
   notes:
     - >-
-      A cheap improvement is to retry without QUIET before aborting, so the
-      message can name the dependency that failed instead of asserting the config
-      is absent. Dropping QUIET does not make discovery succeed; it makes the
-      diagnosis true.
+      A cheap improvement is to surface the failure that find_package already
+      saw, for instance by retrying without QUIET before aborting, so the message
+      can name the dependency rather than asserting the config is absent. That
+      does not make discovery succeed; it makes the diagnosis point at the right
+      thing.
     - >-
       Checking whether the config file exists at the searched prefixes before
       claiming it was not found would also stop the message from sending readers

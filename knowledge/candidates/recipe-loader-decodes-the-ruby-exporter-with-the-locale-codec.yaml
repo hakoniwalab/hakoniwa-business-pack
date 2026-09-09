@@ -1,5 +1,5 @@
 id: recipe-loader-decodes-the-ruby-exporter-with-the-locale-codec
-title: tools/recipe.py decodes the Ruby Recipe exporter with the host locale codec, so 24 of 36 Recipes cannot be loaded at all on a non-UTF-8 host
+title: tools/recipe.py decodes the Ruby Recipe exporter with the host locale codec, so on a cp932 host 23 of 36 Recipes fail to load and one loads with corrupted text
 
 status: candidate
 
@@ -9,12 +9,13 @@ knowledge_type:
 summary: >
   load_recipe shells out to recipes/tools/export_recipe_json.rb with
   subprocess.run(capture_output=True, text=True) and no explicit encoding, so the
-  exporter's UTF-8 JSON is decoded with the host's locale codec. On a Japanese
-  Windows host (cp932) every Recipe whose exported JSON contains non-ASCII fails
-  at the very first documented command. Measured on the current main, that is 24
-  of the 36 Recipes under recipes/. The decode error is raised inside a
-  subprocess reader thread and does not propagate, so what the user sees is an
-  unrelated TypeError about the JSON object not being a str.
+  exporter's UTF-8 JSON is decoded with the host's locale codec. Measured on a
+  cp932 host against the current main, 24 of the 36 Recipes under recipes/ export
+  non-ASCII, and the outcome splits in two: 23 raise and the command dies, while
+  one decodes successfully and yields corrupted text. In the failing case the
+  decode error is raised inside a subprocess reader thread and does not
+  propagate, so what the user sees is an unrelated TypeError about the JSON
+  object not being a str.
 
 observation:
   context: >
@@ -41,15 +42,19 @@ observation:
       content.
     - >-
       Blast radius, measured rather than estimated. Running the exporter over
-      every Recipe under recipes/ and counting non-ASCII bytes in the JSON it
-      produces gives 24 of 36 affected and 12 clean. Counting non-ASCII in the
-      Recipe sources instead would give 25, one too many, because
-      recipes/experiments/drone-fleet-single-host-mvp.yaml carries its Japanese
-      only in YAML comments, which the exporter drops.
+      every Recipe under recipes/ and decoding its output as cp932 gives 24
+      exports carrying non-ASCII, of which 23 raise UnicodeDecodeError. The
+      remaining one, recipes/examples/mujoco-turtlebot3-wall-follower.yaml,
+      decodes without error and parses as JSON, so that Recipe loads with
+      corrupted text rather than failing. Twelve exports are pure ASCII and are
+      unaffected. Counting non-ASCII in the Recipe sources instead would give 25,
+      because recipes/experiments/drone-fleet-single-host-mvp.yaml carries its
+      Japanese only in YAML comments, which the exporter drops.
     - >-
-      This is not Windows-specific in principle. Any host whose locale encoding
-      is not UTF-8 hits it, and Windows with PYTHONUTF8=1 does not. It stays
-      invisible on macOS and Linux because their default is UTF-8. The
+      Nothing here is specific to Windows beyond the locale. What was measured is
+      cp932; any locale codec that cannot round-trip the exporter's bytes would
+      behave the same way, and Windows with PYTHONUTF8=1 does not reproduce it.
+      It stays invisible on macOS and Linux because their default is UTF-8. The
       reader-thread symptom is CPython behaviour, not a project defect.
 
 sources:
@@ -62,16 +67,21 @@ sources:
         External contributor's Windows verification environment
         (Windows 11 x86_64, native, os Windows, locale cp932, Python 3.12.7,
         Ruby 3.2.11, measured 2026-09-09). python tools/recipe.py plan --recipe
-        <a Recipe with Japanese prose> exits 1 with the TypeError above; the same
-        command with PYTHONUTF8=1 prints the plan normally.
+        <a Recipe with Japanese prose> exits 1 with
+        "UnicodeDecodeError: 'cp932' codec can't decode byte 0x87 in position 210"
+        printed from a subprocess reader thread, followed by
+        "TypeError: the JSON object must be str, bytes or bytearray, not NoneType"
+        from the caller. The same command with PYTHONUTF8=1 prints the plan
+        normally.
     - description: >
         Exporter survey on the same host. For each of the 36 Recipes under
         recipes/ (excluding schema.yaml), ruby recipes/tools/export_recipe_json.rb
-        was run and the non-ASCII byte count of its stdout recorded. 24 outputs
-        contain non-ASCII and therefore cannot be decoded as cp932; 12 are pure
-        ASCII. The two athrill Recipes are in the ASCII set, which is consistent
-        with an earlier Windows run of this workspace that used them and never
-        saw this failure.
+        was run, its stdout was tested for non-ASCII bytes and then decoded as
+        cp932. 24 outputs contain non-ASCII; 23 of those raise UnicodeDecodeError
+        and one (mujoco-turtlebot3-wall-follower) decodes into corrupted text.
+        12 are pure ASCII. The two athrill Recipes are in the ASCII set, which is
+        consistent with an earlier Windows run of this workspace that used them
+        and never saw this failure.
 
 confidence: high
 
@@ -84,9 +94,10 @@ validation:
       Whether the intended remedy is encoding="utf-8" on this call site alone or
       a project-wide convention is a maintainer decision. This candidate
       deliberately does not claim that every subprocess call in tools/ has the
-      same defect. There are 11 text=True calls across
-      tools/{recipe,foundation,workspace,native_runtime_platforms}.py and none
-      passes encoding=, but that is exposure, not 11 measured failures, and a
+      same defect. At this revision there are six text=True calls outside the
+      tests, three in tools/recipe.py and one each in tools/foundation.py,
+      tools/workspace.py and tools/native_runtime_platforms.py, and none passes
+      encoding=; that is exposure rather than six measured failures, and a
       blanket change could break a call whose child really does emit
       locale-encoded text.
   notes:
