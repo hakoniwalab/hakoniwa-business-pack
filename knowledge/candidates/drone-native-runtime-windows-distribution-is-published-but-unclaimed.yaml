@@ -17,11 +17,13 @@ summary: >
   the archive ships 7 of the 8 executables its siblings ship, and the PE import
   tables give a concrete Windows dependency set that maps one-to-one onto the
   existing linux and macos fields. Two questions stay open and are recorded as
-  such, not guessed at. Exactly one upstream gap blocks the profile, and it is not
-  the PE dependency inspector the Runtime Primer already anticipates. The
-  component owner has since identified that gap as Windows buildability rather
-  than packaging: drone_visual_state_publisher does not currently compile on
-  Windows, so its absence from the archive is a consequence, not an omission.
+  such, not guessed at. The blocker is not the PE dependency inspector the
+  Runtime Primer already anticipates. The component owner has since identified
+  it as Windows buildability rather than packaging: drone_visual_state_publisher
+  does not currently compile on Windows, so its absence from the archive is a
+  consequence, not an omission. Whether the profile then ships that binary or
+  declares a reduced set of binary roles is the owner's call, and both remain
+  open.
 
 observation:
   context: >
@@ -114,7 +116,18 @@ sources:
         VCRUNTIME140_1.dll all resolve from System32. glfw3.dll and mujoco.dll
         resolve from nowhere: not from the extracted archive directory, not
         from System32, not from PATH.
-  expert_input: []
+  expert_input:
+    - >-
+      Component owner, on the pull request that carried this candidate
+      (hakoniwalab/hakoniwa-business-pack#138, 2026-08-17). The absent
+      executable is blocked on Windows buildability rather than packaging:
+      drone_visual_state_publisher does not compile on Windows today. The
+      ordering given was to make it build, include it in the Windows
+      distribution, add a Windows contract to the component's
+      NATIVE_RUNTIME_REQUIREMENTS.yaml, enable the Windows native profile in
+      the Business Pack, and validate DLL dependencies with a PE adapter. The
+      same reply asked for the PE adapter as a follow-up, noting it can proceed
+      independently of the buildability work.
 
 confidence: high
 
@@ -135,10 +148,12 @@ contradictions:
       adapter", implying the PE inspector is the outstanding Windows work.
     new_evidence: >
       The PE inspector is necessary but not first. A Windows profile cannot be
-      declared at all until win.zip ships drone_visual_state_publisher, because
-      that binary is a required binary_role in both existing profiles, and the
+      declared while drone_visual_state_publisher is both a required
+      binary_role in the two existing profiles and absent from win.zip, and the
       component-owned NATIVE_RUNTIME_REQUIREMENTS.yaml has no windows block for
-      the Catalog to conform to.
+      the Catalog to conform to. Two ways out exist and the owner has said
+      either is acceptable: ship the binary once it builds on Windows, or let
+      the Windows profile declare fewer binary roles.
 
 validation:
   status: partially_verified
@@ -214,8 +229,15 @@ resolution:
     - >-
       The same reply asked for the PE adapter as a follow-up, independent of the
       buildability work. It is implemented in the pull request that carries this
-      edit, following the design recorded in promotion_targets. Its output was
-      checked against the distribution this candidate measured: on
+      edit, following the design recorded in promotion_targets, with two
+      additions that design did not settle: a pathname import is reduced to its
+      bare name so that resolution and the contract comparison use the same
+      identity, and DLL identities are folded for comparison because Windows
+      does not distinguish VCRUNTIME140.dll from vcruntime140.dll. Its output
+      was checked against the distribution this candidate measured: on
       win-main_hako_drone_service.exe it reports the same 18 imports and, with
       the host PATH of a machine that has the Visual C++ redistributable
       installed, the same two unresolved entries, glfw3.dll and mujoco.dll.
+      That reproduces this candidate's measurement; it does not establish a
+      clean-runner result or an enabled Windows profile, both of which remain
+      open above.
