@@ -1,0 +1,142 @@
+id: candidate-details-containing-a-colon-parse-as-mappings-not-prose
+title: A knowledge candidate detail written as a plain scalar containing a colon parses as a mapping, and the validator accepts it, so 11 of 68 candidates on main currently hold structured data where prose was intended
+
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+
+summary: >
+  observation.details entries are prose written as plain YAML scalars. A plain
+  scalar that contains a colon followed by a space is a mapping, not a string, so
+  a sentence like "Practical effect: four of the six include roots ..." silently
+  becomes a one-key hash. Nothing catches it. knowledge/tools/validate_candidates.rb
+  reports no warnings, because it never checks the type of a details entry.
+  Measured on upstream main, 11 of 68 candidates carry 16 such entries, written
+  by several different authors, so this is a property of the format rather than
+  of one contributor. A one-line type check in the validator would end it.
+
+observation:
+  context: >
+    Found while type-checking this workspace's own candidates before submitting
+    new ones, then confirmed against upstream main.
+  details:
+    - >-
+      YAML reads "A: B" as a mapping whether or not prose was intended. In
+      observation.details the entry is expected to be a string, so an author who
+      writes a colon mid-sentence gets {"A" => "B"} and no error. Two colons in
+      the same folded entry produce a parse error instead, which is loud and gets
+      fixed; a single colon is silent and survives review.
+    - >-
+      Loading every candidate on upstream main with a plain YAML parser and
+      checking isinstance(entry, str) finds 16 affected entries in 11 of the 68
+      files. Six of the affected files are maintainer-authored and five come from
+      this workspace, which is the reason to treat it as a format problem rather
+      than a review lapse.
+    - >-
+      The validator does not look. knowledge/tools/validate_candidates.rb checks
+      identifiers, statuses, issue relations and tracking consistency, and prints
+      "knowledge candidates valid; warnings=0" on exactly the tree that contains
+      those 16 entries.
+    - >-
+      What breaks downstream is anything that reads details as text. Concatenation,
+      grep, search indexing and rendering all see a mapping. The sentence is still
+      recoverable by joining key and value, but only by code that expects the
+      damage.
+    - >-
+      The fix at authoring time is a folded block scalar. An entry written as
+      "- >-" followed by indented lines cannot be reinterpreted as a mapping no
+      matter what punctuation the prose contains.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: knowledge/tools/validate_candidates.rb
+      revision: fb5d80c9a2dfee54da17104d7011dcb5e61de4e7
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: knowledge/candidates
+      revision: fb5d80c9a2dfee54da17104d7011dcb5e61de4e7
+  runtime_evidence:
+    - description: >
+        External contributor's Windows verification environment
+        (Windows 11 x86_64, native, os Windows, measured 2026-09-09). Parsing
+        knowledge/candidates on upstream main and counting entries of
+        observation.details that are not strings gives 16 entries across 11 of 68
+        files. The affected files are athrill-doctor-probes-ambient-path-not-the-build-shell,
+        athrill-windows-smoke-covers-exdev-shared-library-load,
+        catalog-index-generation-rewrites-every-line-on-windows,
+        envsim-plateau-citygml-to-mujoco-pipeline,
+        foundation-toolchain-config-is-not-reachable-from-an-alternate-install-dir,
+        mujoco-first-actuator-sensor-validation-sequence,
+        mujoco-viewer-runtime-config-must-be-semantically-aligned,
+        named-actuator-command-space-for-tendon-coupled-mujoco-models,
+        offline-artifact-generation-and-foundation-runtime-must-be-separate-recipes,
+        primitive-collision-overlays-must-match-visual-scale-and-contact-height and
+        recipe-local-requirements-cannot-pin-a-commit-sha.
+    - description: >
+        ruby knowledge/tools/validate_candidates.rb on the same tree prints
+        "knowledge candidates valid: candidates=66, tracked=55, warnings=0", so
+        the condition is invisible to the gate that exists.
+    - description: >
+        Converting the affected entries to folded block scalars and reparsing
+        returns the same prose as strings, confirming that no content is lost by
+        the change and that block scalars are immune to the reinterpretation.
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - >-
+      Whether to enforce strings only in observation.details, or to accept
+      mappings as a deliberate structure somewhere, is a maintainer decision. The
+      count above assumes prose was intended in every case, which is how each of
+      the 16 reads.
+  notes:
+    - Measured against upstream main on 2026-09-09.
+    - >-
+      Only observation.details was surveyed. Other list-of-prose fields such as
+      promotion_rationale and the notes lists can take the same damage, and were
+      not counted.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+  executable_guardrails:
+    - knowledge/tools/validate_candidates.rb
+
+promotion_rationale:
+  - >-
+    This is the rare case where a guardrail is the whole remedy. The condition is
+    mechanically detectable, has no false positives while prose is the intended
+    type, and the validator already runs in CI.
+  - >-
+    No guide layer is proposed. Authors do not need to learn a YAML rule if the
+    validator states it for them.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - >-
+      Suggested guardrail is one check in validate_candidates.rb, that every
+      element of observation.details is a String, with the offending index and
+      file in the message. Extending it to the other prose lists is optional.
+    - >-
+      The 16 existing entries would need converting to folded block scalars in
+      the same change, otherwise the new check fails the tree it is added to.
+      This workspace has already converted the five it authored and can supply
+      the rest as a mechanical patch if that is wanted.
+    - implementation_status is none because no follow-up issue exists yet.

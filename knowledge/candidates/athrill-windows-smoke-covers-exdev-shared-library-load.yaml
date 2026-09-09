@@ -21,12 +21,19 @@ observation:
   details:
     - The Windows smoke step runs "ctest --test-dir <build> -C Release --output-on-failure" and executes athrill2-usage, athrill-argument-parser, and athrill-exdev-shared-library.
     - athrill-exdev-shared-library is registered in the component CMakeLists.txt and builds an athrill-shared-library-test executable, so the EXDEV loading path is compiled and executed on Windows rather than only compiled.
-    - The test does more than load: it opens athrill-exdev-test-device.dll, resolves the athrill_ex_device symbol, checks the descriptor's magic number, version and memory_size, calls devinit, supply_clock and cleanup, verifies the callbacks actually ran through the device's data pointer, and requires an error to be reported for a missing symbol.
+    - >-
+      The test does more than load: it opens athrill-exdev-test-device.dll, resolves
+      the athrill_ex_device symbol, checks the descriptor's magic number, version
+      and memory_size, calls devinit, supply_clock and cleanup, verifies the
+      callbacks actually ran through the device's data pointer, and requires an
+      error to be reported for a missing symbol.
     - Both the test target and the device library are gated on ATHRILL_ENABLE_EXDEV, so the case disappears from the smoke set when the capability is off, which makes the test set itself an observable signal of the capability.
     - The generated component manifest carried exdev true, and the configure line shows -DATHRILL_ENABLE_EXDEV=ON, so the passing test corresponds to the capability the Recipe requires.
     - The installed Receipt reports capabilities.exdev true, platform.os windows, architecture x64, toolchain msvc, and artifacts bin/athrill2.exe, and Foundation reported the component SATISFIED.
-    - What remains uncovered is the behavioural layer the Recipe itself names: no target ELF or memory configuration is run, so simulated timing and live Hakoniwa time/PDU exchange are still untested.
-
+    - >-
+      What remains uncovered is the behavioural layer the Recipe itself names: no
+      target ELF or memory configuration is run, so simulated timing and live
+      Hakoniwa time/PDU exchange are still untested.
 sources:
   repositories:
     - repository: hakoniwalab/hakoniwa-business-pack

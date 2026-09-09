@@ -41,6 +41,21 @@ candidate_paths.each do |path|
     next
   end
 
+  # observation.details holds prose. A plain scalar containing a colon and a
+  # space is a mapping in YAML, so such a sentence silently stops being a
+  # string and anything that reads it as text sees a one-key hash instead.
+  # Prose that needs a colon belongs in a folded block scalar.
+  details = data.dig("observation", "details")
+  if details.is_a?(Array)
+    details.each_with_index do |entry, index|
+      next if entry.is_a?(String)
+
+      errors << "#{label}: observation.details[#{index}] must be prose but parsed " \
+                "as #{entry.class}; a plain scalar containing ': ' becomes a mapping, " \
+                "so write it as a '- >-' block scalar"
+    end
+  end
+
   # Every candidate must be valid YAML. Lifecycle field validation remains
   # opt-in for backward compatibility until an older record adopts `tracking:`.
   next unless raw.match?(/^tracking:\s*$/)

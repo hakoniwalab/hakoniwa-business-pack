@@ -24,7 +24,10 @@ observation:
     - The joint actuator tutorial starts with a MuJoCo-only executable that loads a model, loads JSON actuator configs, creates JointActuatorImpl instances, and directly applies SetTarget() into MuJoCo ctrl[].
     - The joint actuator Hakoniwa example reuses the same model/config pattern, then adds Endpoint, Hakoniwa lifecycle, Float64 command PDUs, and JointState output.
     - The Python actuator sender is a separate controller asset, so PDU behavior is validated after the MuJoCo actuator behavior is already visible.
-    - The ultrasonic tutorial follows the same sequence: first bind a sensor to an MJCF site and verify deterministic measurements and viewer ray visualization, then publish sensor_msgs/Range as a Hakoniwa PDU, then read it from Python.
+    - >-
+      The ultrasonic tutorial follows the same sequence: first bind a sensor to an
+      MJCF site and verify deterministic measurements and viewer ray visualization,
+      then publish sensor_msgs/Range as a Hakoniwa PDU, then read it from Python.
     - The color camera tutorial also separates MuJoCo camera capture from Hakoniwa image PDU publication and Python consumption.
     - This staged structure cleanly separates physics/contact/model defects from Hakoniwa Endpoint/PDU integration defects.
     - For AgileX Tracer, this implies a first sample with a ground plane, freejoint, left/right wheel velocity actuators, passive caster joints as generated, and keyboard or scripted Twist-like velocity targets before building a generic rover Hakoniwa asset.
@@ -32,9 +35,23 @@ observation:
     - The runtime order was plant asset executable starts conductor and registers RoverTwistAsset, Python sender registers RoverTwistSender, then hako-cmd start transitions both from WAIT START into simulation.
     - To preserve source reproducibility, Tracer actuator, collision, contact, and world additions should be expressed as tool-chain inputs such as actuators.yaml, collision_primitives.yaml, contact_excludes.yaml, and mujoco_world.yaml, not as a hand-maintained fork of the generated MJCF.
     - This was partially executed for Tracer by adding MBody tool-chain configs, generating tracer_v1.actuated.xml, tracer_v1.actuated.collision.xml, tracer_v1.actuated.collision.contact.xml, and tracer_v1.minimal_world.xml, and running a MuJoCo-only C++ --check smoke in hakoniwa-mujoco-robots.
-    - As-is mesh contact was not sufficient for Tracer drive validation: internal base/caster contacts appeared and wheel-driven translation was poor. Adding primitive wheel/caster collision geoms and contact excludes produced stable headless forward displacement.
-    - Viewer inspection later showed that passing headless displacement is not enough: the initial Tracer drive-wheel collision primitive radius of 0.082m was visibly larger than the visual wheel mesh radius of about 0.0605m and could contribute to tilt. The primitive radius was then reduced to 0.0605m and the initial base height was lowered to z=0.1425. Primitive overlays must be checked for visual scale, stance, and contact height together.
-    - The same staged approach was applied to Unitree Go1 from MuJoCo Menagerie: first vendor and license-check the MJCF assets, then load scene.xml in MuJoCo, then add a MuJoCo-only C++ joint I/O smoke sample before designing any Hakoniwa joint PDU or walking-controller adapter.
+    - >-
+      As-is mesh contact was not sufficient for Tracer drive validation: internal
+      base/caster contacts appeared and wheel-driven translation was poor. Adding
+      primitive wheel/caster collision geoms and contact excludes produced stable
+      headless forward displacement.
+    - >-
+      Viewer inspection later showed that passing headless displacement is not
+      enough: the initial Tracer drive-wheel collision primitive radius of 0.082m
+      was visibly larger than the visual wheel mesh radius of about 0.0605m and
+      could contribute to tilt. The primitive radius was then reduced to 0.0605m and
+      the initial base height was lowered to z=0.1425. Primitive overlays must be
+      checked for visual scale, stance, and contact height together.
+    - >-
+      The same staged approach was applied to Unitree Go1 from MuJoCo Menagerie:
+      first vendor and license-check the MJCF assets, then load scene.xml in MuJoCo,
+      then add a MuJoCo-only C++ joint I/O smoke sample before designing any
+      Hakoniwa joint PDU or walking-controller adapter.
     - For Go1, the first executable sample binds the 12 MJCF position actuators by stable names, resets to the Menagerie home keyframe, applies home ctrl values, and verifies a small +0.12 rad perturbation on FR_thigh and RL_thigh in --check mode.
     - Go1 confirms that quadruped readiness should be claimed first as joint I/O readiness, not walking readiness. Walking requires a separate controller contract and behavior validation.
     - Go1 then proceeded to the Hakoniwa PDU stage with a plant asset, Python sender, std_msgs/Float64MultiArray joint command, and sensor_msgs/JointState readback. This preserved the same joint order and perturbation behavior from the MuJoCo-only sample.

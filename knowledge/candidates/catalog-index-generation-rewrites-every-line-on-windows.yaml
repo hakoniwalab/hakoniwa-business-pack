@@ -30,7 +30,10 @@ observation:
     - The abort message instructs the contributor to commit catalog/index.yaml, which on Windows would commit 864 line-ending-only changes and defeat the freshness signal for reviewers.
     - Running preflight also leaves the working tree dirty, so a contributor who does not notice may include the churn in an unrelated pull request.
     - The gate is enforced in CI on ubuntu-latest only, where the generator produces LF and the check passes, so the failing configuration is invisible upstream.
-    - The outcome depends on git's newline configuration rather than on Windows alone: with core.autocrlf=true the same regeneration passes preflight, because git's clean filter normalizes CRLF back to LF before the diff.
+    - >-
+      The outcome depends on git's newline configuration rather than on Windows
+      alone: with core.autocrlf=true the same regeneration passes preflight, because
+      git's clean filter normalizes CRLF back to LF before the diff.
     - The repository contains no .gitattributes, so neither the text nor the eol attribute pins the index file, and each contributor's core.autocrlf decides whether the gate is usable.
 
 sources:
