@@ -167,14 +167,44 @@ foundation_requirements:
       hakoniwa_core: true
       core_callback: true
 
+recipe_local_requirements_schema_version: 1
 recipe_local_requirements:
   hakoniwa-mbody-registry:
-    role: generated-physics-artifact-source
-  hakoniwa-mujoco-robots:
-    build_entrypoint: source CMake configured by the Recipe runner
+    root:
+      default_path: ../hakoniwa-mbody-registry
+      override_env: HAKONIWA_MBODY_REGISTRY_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/hakoniwa-mbody-registry.git
+      revision: main
     required_artifacts:
-      - tb3_sim_waffle
-      - tb3_obstacle_avoider.py
+      - path: tools/fetch.py
+        kind: file
+      - path: sources
+        kind: directory
+      - path: bodies
+        kind: directory
+  hakoniwa-mujoco-robots:
+    root:
+      default_path: ../hakoniwa-mujoco-robots
+      override_env: HAKONIWA_MUJOCO_ROBOTS_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/hakoniwa-mujoco-robots.git
+      revision: main
+    required_artifacts:
+      - path: src/CMakeLists.txt
+        kind: file
+      - path: config/tb3-pdudef-compact.json
+        kind: file
+      - path: config/endpoint/tb3_sim_endpoint.json
+        kind: file
+      - path: python/tb3_obstacle_avoider.py
+        kind: file
+      - path: python/lidar_visualizer.py
+        kind: file
 
 runtime_dependencies:
   python:
