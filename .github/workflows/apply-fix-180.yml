@@ -1,0 +1,121 @@
+name: Apply provenance classification fix
+
+on:
+  push:
+    branches:
+      - fix/provenance-pinning-180
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'chore: apply provenance classification fix'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/provenance-pinning-180
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Apply minimal fix and regression tests
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('tools/recipe.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''            "reproducibility": (\n                "pinned"\n                if revision\n                else "local"\n                if source_type == "local"\n                else "unpinned"\n            ),'''
+          new = '''            "reproducibility": (\n                "pinned"\n                if revision and GIT_FULL_SHA1_PATTERN.fullmatch(revision)\n                else "local"\n                if source_type == "local"\n                else "unpinned"\n            ),'''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one provenance block, found {text.count(old)}')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+
+          test = Path('tools/tests/test_recipe_source_reproducibility.py')
+          test.write_text(r'''#!/usr/bin/env python3
+from __future__ import annotations
+
+import importlib.util
+import tempfile
+import unittest
+from pathlib import Path
+
+SCRIPT = Path(__file__).resolve().parents[1] / "recipe.py"
+SPEC = importlib.util.spec_from_file_location("business_pack_recipe_provenance", SCRIPT)
+assert SPEC is not None and SPEC.loader is not None
+guide = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(guide)
+
+
+class RecipeSourceReproducibilityTest(unittest.TestCase):
+    def _source(self, revision: str | None, *, source_type: str = "git") -> dict:
+        with tempfile.TemporaryDirectory() as temporary:
+            boundary = Path(temporary)
+            return guide._resolve_source_requirement(
+                source_id="dependency",
+                kind="recipe",
+                target=boundary / "dependency",
+                source_type=source_type,
+                repository=(
+                    "https://example.invalid/dependency.git"
+                    if source_type == "git"
+                    else None
+                ),
+                revision=revision,
+                required_artifacts=[{"path": "README.md", "kind": "file"}],
+                clone_boundary=boundary,
+            )
+
+    def test_full_commit_sha_is_pinned(self) -> None:
+        revision = "a" * 40
+        source = self._source(revision)
+        self.assertEqual(source["action"], "clone")
+        self.assertEqual(source["provenance"]["requested_revision"], revision)
+        self.assertEqual(source["provenance"]["reproducibility"], "pinned")
+
+    def test_branch_name_is_not_reported_as_pinned(self) -> None:
+        source = self._source("main")
+        self.assertEqual(source["action"], "clone")
+        self.assertEqual(source["revision"], "main")
+        self.assertEqual(source["provenance"]["requested_revision"], "main")
+        self.assertEqual(source["provenance"]["reproducibility"], "unpinned")
+
+    def test_tag_name_is_not_reported_as_pinned(self) -> None:
+        source = self._source("v1.0.0")
+        self.assertEqual(source["action"], "clone")
+        self.assertEqual(source["revision"], "v1.0.0")
+        self.assertEqual(source["provenance"]["requested_revision"], "v1.0.0")
+        self.assertEqual(source["provenance"]["reproducibility"], "unpinned")
+
+    def test_git_without_revision_is_unpinned(self) -> None:
+        source = self._source(None)
+        self.assertEqual(source["provenance"]["reproducibility"], "unpinned")
+
+    def test_local_source_remains_local(self) -> None:
+        source = self._source(None, source_type="local")
+        self.assertEqual(source["action"], "provide-local")
+        self.assertEqual(source["provenance"]["reproducibility"], "local")
+
+
+if __name__ == "__main__":
+    unittest.main()
+''', encoding='utf-8')
+
+          Path('.github/workflows/apply-fix-180.yml').unlink()
+          PY
+
+          git diff --check
+          python -m unittest tools/tests/test_recipe_source_reproducibility.py -v
+
+      - name: Commit fix
+        shell: bash
+        run: |
+          git config user.name "tmori"
+          git config user.email "164193+tmori@users.noreply.github.com"
+          git add tools/recipe.py tools/tests/test_recipe_source_reproducibility.py .github/workflows/apply-fix-180.yml
+          git commit -m "fix: distinguish pinned SHA from named git refs"
+          git push origin HEAD:fix/provenance-pinning-180
