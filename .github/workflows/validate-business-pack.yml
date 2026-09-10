@@ -100,6 +100,9 @@ jobs:
           tools/test_workspace_guard.py
           -v
 
+      - name: Test Foundation path portability
+        run: python -m unittest tools/test_foundation.py -v
+
       - name: Test Recipe-specific tools
         run: >-
           python -m unittest discover
