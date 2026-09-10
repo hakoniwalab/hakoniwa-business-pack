@@ -1,21 +1,23 @@
 id: pdu-rpc-action-has-no-client-implementation
-title: The PDU-RPC Action API has headers and a server skeleton but no client implementation and no C API, so no goal can be originated from Python
+title: At hakoniwa-pdu-rpc 4f5471d the Action API originally had headers and a server skeleton but no client implementation and no C API, so no goal could be originated from Python (resolved upstream since)
 status: candidate
 
 knowledge_type:
   - known_pitfall
 
 summary: >
-  hakoniwa-pdu-rpc ships a complete-looking Action surface -- six headers covering
-  client and server endpoints, services client and server, types, and a C API -- plus
-  eleven design documents. The implementation behind it is two source files:
-  action_configuration.cpp and action_server_endpoint_impl.cpp. There is no
+  Historical finding, recorded at hakoniwa-pdu-rpc revision 4f5471d (2026-08-03) and
+  resolved upstream since; the resolution section records what closed it. As of that
+  revision, hakoniwa-pdu-rpc shipped a complete-looking Action surface -- six headers
+  covering client and server endpoints, services client and server, types, and a C API
+  -- plus eleven design documents. The implementation behind it was two source files:
+  action_configuration.cpp and action_server_endpoint_impl.cpp. There was no
   implementation for action_client_endpoint.hpp and no C source for c_action.h.
   Because the Python CFFI binding reaches the library only through the C API, there
-  is no path from Python to originate a goal, and therefore no way to drive an Action
-  from a ROS 2 bridge or from a test harness today. The three Action contract tests
-  that pass on Windows exercise configuration parsing, server initialization, and
-  packet codec -- all server-side or pure-data concerns -- so a green test run does
+  was no path from Python to originate a goal, and therefore no way to drive an Action
+  from a ROS 2 bridge or from a test harness at that time. The three Action contract
+  tests that passed on Windows exercised configuration parsing, server initialization,
+  and packet codec -- all server-side or pure-data concerns -- so a green test run did
   not contradict any of this.
 
 observation:
