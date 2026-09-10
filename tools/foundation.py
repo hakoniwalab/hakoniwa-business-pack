@@ -1505,10 +1505,21 @@ def execute_build_plan(plan: dict, paths: WorkspacePaths) -> dict:
             print(f"> {subprocess.list2cmdline(command)}", flush=True)
             result = subprocess.run(command, cwd=source, check=False)
             if result.returncode != 0:
-                raise FoundationError(
+                message = (
                     f"{action['component']} command failed "
                     f"with exit code {result.returncode}"
                 )
+                toolchain_path = foundation_toolchain_path(paths)
+                if platform.system() == "Windows" and not toolchain_path.is_file():
+                    message += (
+                        f". Foundation toolchain config for install prefix "
+                        f"{paths.install_prefix} was not found at {toolchain_path}. "
+                        "If this component needs vcpkg, configure this prefix with: "
+                        f"python tools/foundation.py toolchain --recipe-id "
+                        f"{Path(plan['recipe']).stem} --install-dir "
+                        f"{paths.install_prefix} --vcpkg-root <vcpkg-root>"
+                    )
+                raise FoundationError(message)
             if action["component"] == "hakoniwa-core-pro":
                 normalize_core_config_for_windows(
                     paths.foundation_config / "cpp_core_config.json",
@@ -1627,6 +1638,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="persist explicit host toolchain selection under work/foundation/config",
     )
     toolchain.add_argument("--recipe-id", required=True)
+    toolchain.add_argument("--install-dir", default=None)
     toolchain.add_argument("--vcpkg-root", required=True)
 
     doctor = subparsers.add_parser(
@@ -1710,7 +1722,17 @@ def main(argv: list[str] | None = None) -> int:
             result = inspect_foundation(recipe, prefix, validate_core_config=True)
             print_inspection(result, args.json_output)
             return 0 if result["status"] == "SATISFIED" else 1
-        paths = resolve_workspace(repository_root(), args.recipe_id)
+        root = repository_root()
+        if args.command == "toolchain" and args.install_dir:
+            prefix = Path(args.install_dir).resolve()
+            paths = resolve_workspace(root, args.recipe_id, prefix.parent)
+            if prefix.name != "install" or prefix != paths.install_prefix:
+                raise FoundationError(
+                    "toolchain install prefix must be "
+                    "<workdir>/<foundation-name>/install"
+                )
+        else:
+            paths = resolve_workspace(root, args.recipe_id)
         if args.command == "toolchain":
             output = configure_foundation_toolchain(paths, Path(args.vcpkg_root))
             print(f"Foundation toolchain: {output}")
