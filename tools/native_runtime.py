@@ -387,7 +387,16 @@ def validate_contract(
                 str(runtime.library),
             )
         )
-    declared = set(contract.shared_libraries)
+    # Windows compares DLL names without regard to case, so a contract that
+    # declares vcruntime140.dll must match an import spelled VCRUNTIME140.dll.
+    # The adapter says whether its platform works that way; ELF and Mach-O do
+    # not set the flag and keep byte identity.
+    fold = (
+        str.casefold
+        if getattr(adapter, "case_insensitive_identity", False)
+        else (lambda name: name)
+    )
+    declared = {fold(library) for library in contract.shared_libraries}
     for role in active_roles:
         binary = contract.binaries.get(role)
         label = role.replace("_", " ")
@@ -416,7 +425,7 @@ def validate_contract(
             library = Path(install_name).name
             declaration = (
                 "declared by native runtime contract"
-                if library in declared
+                if fold(library) in declared
                 else "not declared by native runtime contract"
             )
             details.append(f"{install_name} ({declaration}; required by {binary})")
