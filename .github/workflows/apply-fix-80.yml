@@ -1,0 +1,33 @@
+name: Apply workspace fail-closed fix
+
+on:
+  push:
+    branches:
+      - fix/workspace-fail-closed-80
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/workspace-fail-closed-80
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply fix and tests
+        run: python .github/scripts/apply_fix_80.py
+      - name: Validate
+        run: |
+          git diff --check
+          python -m unittest tools/test_workspace.py -v
+      - name: Commit fix
+        run: |
+          git config user.name "tmori"
+          git config user.email "164193+tmori@users.noreply.github.com"
+          git add tools/workspace.py tools/test_workspace.py docs/getting-started-ja.md
+          git commit -m "fix: fail closed when workspace runtime is unavailable"
+          git push origin HEAD:fix/workspace-fail-closed-80
