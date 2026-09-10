@@ -13,17 +13,13 @@ from pathlib import Path
 from statistics import mean
 from typing import Any, Callable
 
+from tools.workdir import recipe_root as selected_recipe_root
+
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SUMMARY = (
-    ROOT
-    / "work"
-    / "recipes"
-    / "drone-fleet-single-process-scaling"
-    / "results"
-    / "single-process-scaling"
-    / "summary"
-    / "experiment-a.json"
+    selected_recipe_root(ROOT, "drone-fleet-single-process-scaling")
+    / "results" / "single-process-scaling" / "summary" / "experiment-a.json"
 )
 WIDTH = 1440
 HEIGHT = 940
@@ -110,6 +106,30 @@ def aggregate(
             item[f"{field}_max"] = max(values) if values else None
         aggregated.append(item)
     return aggregated, rejected
+
+
+def select_workload(
+    rows: list[dict[str, Any]], x_field: str, drone_count: int | None
+) -> list[dict[str, Any]]:
+    if drone_count is not None:
+        selected = [row for row in rows if row.get("drone_count") == drone_count]
+        if not selected:
+            raise PlotError(f"summary has no results for drone_count={drone_count}")
+        return selected
+    if x_field == "process_count":
+        drone_counts = sorted(
+            {
+                int(value)
+                for row in rows
+                if (value := finite_number(row.get("drone_count"))) is not None
+            }
+        )
+        if len(drone_counts) > 1:
+            raise PlotError(
+                "process-count plots require --drone-count when the summary "
+                f"contains multiple UAV workloads: {drone_counts}"
+            )
+    return rows
 
 
 def esc(value: Any) -> str:
@@ -412,6 +432,11 @@ def parser() -> argparse.ArgumentParser:
         choices=["drone_count", "process_count"],
         default="drone_count",
     )
+    result.add_argument(
+        "--drone-count",
+        type=int,
+        help="select one UAV workload from a multi-workload Experiment B summary",
+    )
     return result
 
 
@@ -419,7 +444,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
         summary = args.summary.resolve()
-        rows, rejected = aggregate(load_summary(summary), args.x_field)
+        selected_rows = select_workload(
+            load_summary(summary), args.x_field, args.drone_count
+        )
+        rows, rejected = aggregate(selected_rows, args.x_field)
         output = (
             args.output.resolve()
             if args.output is not None

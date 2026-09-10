@@ -69,6 +69,13 @@ class DroneFleetPerformancePlotTest(unittest.TestCase):
         self.assertIn("Drone Fleet Multi-process Scaling", svg)
         self.assertNotIn("Drone Fleet Single-process Scaling", svg)
 
+    def test_multi_workload_process_plot_requires_drone_count_selection(self) -> None:
+        rows = [row(32, 2.0), row(64, 1.0)]
+        with self.assertRaisesRegex(plot.PlotError, "--drone-count"):
+            plot.select_workload(rows, "process_count", None)
+        selected = plot.select_workload(rows, "process_count", 64)
+        self.assertEqual([item["drone_count"] for item in selected], [64])
+
     def test_main_writes_default_plot_beside_summary(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

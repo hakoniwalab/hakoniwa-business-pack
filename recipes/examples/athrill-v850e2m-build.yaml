@@ -1,0 +1,173 @@
+id: athrill-v850e2m-build
+title: Athrill V850E2M Portable Build
+recipe_version: 0.2
+goal:
+  user_request: Rebuild and reproducibly validate the Athrill V850E2M emulator on a supported host.
+  description: >
+    Materialize the Athrill common source, then build, smoke-test, and install
+    athrill2 through the component-owned cross-platform hako.py lifecycle while
+    preserving a Component Receipt for later inspection.
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - The component-owned CLI selects the host CMake flow for macOS, Linux, or native Windows.
+    - Native Windows x64 and macOS arm64 Foundation builds passed, and Linux is covered by component CI.
+validation:
+  status: verified
+  summary: Native Windows x64 and macOS arm64 configure, build, CTest smoke, install, and Foundation Receipt evaluation passed on 2026-08-20; Linux CMake build and smoke passed in component CI.
+  steps:
+    - id: windows_foundation_build
+      status: verified
+      evidence:
+        - repository: toppers/athrill-target-v850e2m
+          path: tools/hako.py
+          revision: 1c2cea9dd518dfad1388ef91c2c3068815702fc3
+    - id: macos_foundation_build
+      status: verified
+      evidence:
+        - repository: toppers/athrill-target-v850e2m
+          path: tools/hako.py
+          revision: 542b612e63f9e6ec1c31a6f71763b1a724befc48
+    - id: linux_component_ci
+      status: verified
+      evidence:
+        - repository: toppers/athrill-target-v850e2m
+          path: .github/workflows/build.yml
+          revision: 1c2cea9dd518dfad1388ef91c2c3068815702fc3
+    - id: foundation_receipt
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-business-pack
+          path: tools/foundation.py
+          revision: 67ff5575a2171ce717862bebc8e4ca68f96baea4
+constraints:
+  - supported-host-cmake-toolchain
+  - native-windows-requires-vcpkg
+  - exdev-enabled-mros-vdev-disabled
+target_environment:
+  required_for: build-and-smoke
+  status: specified
+  os: macOS | Linux | Windows
+  os_version: current-supported-host
+  architecture: x64 | arm64
+  execution_mode: native
+  runtimes:
+    - name: Python
+      required: true
+      version: "3"
+      path: host
+  hakoniwa:
+    install_prefix: work/foundation/install
+    components_built:
+      - athrill-target-v850e2m
+execution_environment:
+  workspace:
+    mode: managed
+  required_for: build-and-smoke
+  status: specified
+  os: macOS | Linux | Windows
+  os_version: current-supported-host
+  architecture: x64 | arm64
+  execution_mode: native
+  gui:
+    required: false
+    status: disabled
+  shared_memory:
+    required: false
+    access: not-used
+  hakoniwa:
+    install_prefix: work/foundation/install
+    hako_cmd_access: not-required
+foundation_contract:
+  mode: required
+  reason: Foundation owns the resolved manifest, install prefix, Component Receipt, and compatibility inspection.
+foundation_requirements:
+  athrill-target-v850e2m:
+    version:
+      min: 1.0.2
+    capabilities:
+      target_v850e2m: true
+      usage_smoke: true
+      exdev: true
+      mros: false
+      vdev: false
+recipe_local_requirements_schema_version: 1
+recipe_local_requirements:
+  athrill:
+    root:
+      default_path: ../athrill
+      override_env: ATHRILL_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/toppers/athrill.git
+      revision: master
+    required_artifacts:
+      - path: cmake/AthrillCore.cmake
+        kind: file
+components:
+  - id: athrill-target-v850e2m
+    roles:
+      - simulation_core
+connections: []
+data_flow:
+  - Foundation requirement -> resolved component manifest -> host CMake build -> athrill2 executable and Component Receipt
+time_model:
+  mode: instruction-emulation
+  notes:
+    - The build smoke does not run a target ELF and therefore does not validate simulated timing.
+artifact_sets: {}
+artifacts:
+  - id: athrill2_posix
+    kind: executable
+    path: work/foundation/install/bin/athrill2
+    platforms: [macos, linux]
+  - id: athrill2_windows
+    kind: executable
+    path: work/foundation/install/bin/athrill2.exe
+    platforms: [windows]
+platform_notes:
+  windows:
+    - Select an explicit vcpkg root with tools/foundation.py toolchain before configure.
+    - The component-owned CLI initializes Visual Studio and handles WSL UNC workspaces.
+  macos:
+    - Uses the host AppleClang toolchain and does not require vcpkg.
+  linux:
+    - Uses the host GCC or Clang toolchain and does not require vcpkg.
+missing_pieces:
+  - A reviewed V850E2M ELF/config fixture is still needed for behavioral emulation smoke coverage.
+demo:
+  prerequisites:
+    - id: windows_select_vcpkg
+      command: python tools/foundation.py toolchain --recipe-id athrill-v850e2m-build --vcpkg-root C:\project\vcpkg
+      expected: Windows only; persist the explicit vcpkg root under the managed Foundation configuration. Skip this step on macOS and Linux.
+  steps:
+    - id: inspect_plan
+      command: python tools/recipe.py plan --recipe recipes/examples/athrill-v850e2m-build.yaml
+      expected: Show the target Foundation component and the Athrill common source in one materialization plan.
+    - id: build_foundation
+      command: python tools/recipe.py configure --recipe recipes/examples/athrill-v850e2m-build.yaml
+      expected: Materialize Athrill, then build, install, smoke-test, and verify the target Receipt with the host toolchain.
+    - id: inspect_install
+      command: python tools/recipe.py doctor --recipe recipes/examples/athrill-v850e2m-build.yaml
+      expected: Report athrill-target-v850e2m and the Athrill source dependency as SATISFIED.
+  cleanup:
+    expected_behavior:
+      - No background process is left by the build or usage smoke test.
+    verification_checks:
+      - Confirm no athrill2 process remains after CTest.
+      - Preserve work/foundation/install and its Receipt for inspection.
+    cautions:
+      - Removing work/foundation discards the managed install and build evidence.
+expected_result: >
+  The platform-native athrill2 executable exists under work/foundation/install/bin,
+  the usage smoke passes, and Foundation reports the installed
+  athrill-target-v850e2m Receipt as SATISFIED.
+source_catalogs:
+  - component_id: athrill-target-v850e2m
+source_artifacts:
+  - repository: toppers/athrill
+    path: cmake/AthrillCore.cmake
+    revision: 9b3190a0509310c5e02ba88fa47aa6a3fc58462f
+    description: Portable Athrill common-source CMake contract consumed by the target.

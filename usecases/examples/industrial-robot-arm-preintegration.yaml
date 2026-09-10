@@ -1,6 +1,6 @@
 id: industrial-robot-arm-preintegration
 title: 産業用ロボットアーム導入前の指令・状態統合検証
-usecase_version: 0.1
+usecase_version: 0.2
 
 audience:
   primary:
@@ -8,37 +8,38 @@ audience:
     - robot-system-integrator
     - robot-control-developer
   notes:
-    - The current reference implementation is FAIRINO FR5 and uses a commercial private pack.
+    - Current verified reference models include FAIRINO FR5, DOBOT Nova5, and SO-101 follower with different verification coverage per ROS 2 distribution.
 
 situation: >
-  A team is considering an industrial robot arm and wants to examine how trajectory
-  commands, simulated joint motion, and joint-state feedback fit into its software
-  integration path before physical-system integration.
+  A team is considering or integrating an articulated robot arm and wants to examine
+  trajectory commands, simulated joint motion, joint-state feedback, and ROS 2 integration
+  before physical-system integration.
 
 problem: >
-  Robot-specific models, actuator settings, command contracts, and state-output paths
-  must be aligned. Discovering these integration gaps only after hardware preparation
-  makes the software integration phase harder to isolate and review.
+  Robot-specific models, actuator settings, command contracts, bridge configuration,
+  and state-output paths must be aligned. Discovering these integration gaps only after
+  hardware preparation makes the software integration phase harder to isolate and review.
 
 desired_outcome: >
   Run a robot-arm model in MuJoCo as a Hakoniwa asset, send JointTrajectory-compatible
-  PDU commands, observe JointState-compatible output, and identify robot-specific
-  modeling or integration gaps before planning physical-system connection.
+  commands, observe JointState-compatible output, and where verified connect ROS 2 through
+  the Hakoniwa TCP/PDU bridge path before planning physical-system connection.
 
 status:
   feasibility: feasible
   validation: partially_verified
   confidence: high
   rationale:
-    - The Hakoniwa Robot Arm Pack catalog records a locally executed FAIRINO FR5 reference integration.
-    - JointTrajectory command handling, simulated joint motion, and JointState output are supported by source evidence.
-    - No public Business Pack Recipe currently captures the complete FR5 runtime and validation path.
+    - FR5, Nova5, and SO-101 are recorded as verified for MuJoCo Viewer and headless runtime execution.
+    - Nova5 is recorded as ROS 2 E2E verified on Humble and Jazzy; SO-101 is recorded as verified on Jazzy.
+    - FR5 ROS 2 Docker E2E is not currently recorded as verified and should not be inferred from configuration availability.
+    - JointTrajectory command handling and JointState output are supported by the common arm runtime and bridge architecture.
 
 realized_by: []
 
 supported_by:
   - component_id: hakoniwa-robot-arm-pack
-    role: Provide the private robot-specific manifest, model, configuration, reference Recipe, and validated FR5 integration.
+    role: Provide robot-specific models and manifests, the common arm runtime, per-model Recipes, and the verified integration paths.
   - component_id: hakoniwa-mujoco-robots
     role: Provide the public MuJoCo and Hakoniwa robot simulation runtime.
   - component_id: hakoniwa-mbody-registry
@@ -47,31 +48,37 @@ supported_by:
     role: Provide command reception, state publication, and PDU runtime infrastructure.
   - component_id: hakoniwa-core-pro
     role: Provide Hakoniwa asset lifecycle and simulation synchronization.
+  - component_id: hakoniwa-pdu-ros
+    role: Convert ROS 2 JointTrajectory and JointState data across the TCP/PDU integration boundary.
   - component_id: hakoniwa-pdu-python
-    role: Provide the Python reference trajectory sender and PDU conversion path.
+    role: Provide Python reference command senders and PDU conversion paths.
 
 communication_notes:
   safe_statements:
-    - A FAIRINO FR5 reference integration has been executed locally.
-    - The reference path accepts JointTrajectory-compatible PDU commands and publishes JointState-compatible data.
-    - Additional robot arms require onboarding and validation.
+    - FR5, Nova5, and SO-101 have verified MuJoCo simulation paths.
+    - Nova5 has verified ROS 2 Humble and Jazzy E2E paths; SO-101 has a verified Jazzy E2E path.
+    - The integration path accepts JointTrajectory-compatible commands and publishes JointState-compatible data.
+    - Additional robot models can be onboarded but require robot-specific model and validation work.
   avoid_statements:
     - Every industrial robot arm is supported without robot-specific work.
+    - Every provided ROS 2 profile is E2E verified for every robot.
+    - MoveIt integration is verified unless a separate end-to-end verification is added.
+    - Windows or native Ubuntu execution is verified based only on the presence of configuration or source code.
     - Simulation results prove physical performance or safety.
-    - The commercial pack or private assets are publicly downloadable.
 
 limitations:
-  - Commercial access approval is required for the private robot-arm pack and robot-specific assets.
-  - The currently verified robot is FAIRINO FR5; other robots require model onboarding and validation.
+  - Access approval is required for the private robot-arm integration assets.
+  - Verification coverage differs by robot, ROS 2 distribution, execution mode, and host platform.
   - Model fidelity, actuator behavior, collision parameters, payloads, and acceptance criteria require human review.
+  - Current host verification is recorded on Docker Desktop for macOS arm64; other host environments require separate verification.
   - Simulation output must not be connected to physical hardware without an explicit approval and safety gate.
-  - The absence of a public Recipe limits independent reproduction from this repository alone.
+  - The absence of a public executable Business Pack Recipe limits independent reproduction from this repository alone.
 
 next_steps:
-  - Add a public metadata-only Recipe for the FR5 reference path without exposing private assets or commands.
-  - Define repeatable onboarding and acceptance criteria for additional robot arms.
-  - Add explicit human decisions for model fidelity and physical-system integration approval.
-  - Link publication-approved screenshots or video evidence when available.
+  - Add or update public metadata-only Recipes for verified reference paths without exposing private implementation assets.
+  - Complete ROS 2 E2E verification for FR5 and remaining model/distribution combinations where needed.
+  - Verify additional host environments separately from the current macOS arm64 Docker path.
+  - Define repeatable model-fidelity and actuator-validation criteria for additional robot arms.
 
 tags:
   - robot-arm
@@ -79,5 +86,7 @@ tags:
   - joint-trajectory
   - joint-state
   - mujoco
+  - ros2
+  - tcp
   - commercial
   - preintegration

@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Hakoniwa Business Pack remote artifact transfer message",
+  "description": "A chunked and checksummed artifact transfer message carried on a PDU Endpoint channel separate from remote-operation control messages.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "type",
+    "session_id",
+    "transfer_id",
+    "sequence",
+    "source_host"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "type": {
+      "enum": ["OFFER", "ACCEPT", "CHUNK", "COMPLETE", "VERIFIED", "REJECTED"]
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "transfer_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "sequence": {"type": "integer", "minimum": 1},
+    "source_host": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 63,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "artifact_name": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.zip$"
+    },
+    "media_type": {"const": "application/zip"},
+    "size_bytes": {"type": "integer", "minimum": 1},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "chunk_size": {"type": "integer", "minimum": 1024, "maximum": 49152},
+    "chunk_count": {"type": "integer", "minimum": 1},
+    "chunk_index": {"type": "integer", "minimum": 0},
+    "data_base64": {"type": "string", "minLength": 1},
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "message": {"type": "string", "minLength": 1, "maxLength": 2048}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"type": {"const": "OFFER"}}, "required": ["type"]},
+      "then": {
+        "required": ["artifact_name", "media_type", "size_bytes", "sha256", "chunk_size", "chunk_count"]
+      },
+      "else": {
+        "not": {
+          "anyOf": [
+            {"required": ["artifact_name"]},
+            {"required": ["media_type"]},
+            {"required": ["chunk_size"]},
+            {"required": ["chunk_count"]}
+          ]
+        }
+      }
+    },
+    {
+      "if": {"properties": {"type": {"const": "CHUNK"}}, "required": ["type"]},
+      "then": {"required": ["chunk_index", "data_base64"]},
+      "else": {
+        "not": {
+          "anyOf": [
+            {"required": ["chunk_index"]},
+            {"required": ["data_base64"]}
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"type": {"enum": ["COMPLETE", "VERIFIED"]}},
+        "required": ["type"]
+      },
+      "then": {"required": ["size_bytes", "sha256"]},
+      "else": {
+        "not": {
+          "anyOf": [
+            {"required": ["size_bytes"]},
+            {"required": ["sha256"]}
+          ]
+        }
+      }
+    },
+    {
+      "if": {"properties": {"type": {"const": "REJECTED"}}, "required": ["type"]},
+      "then": {"required": ["error"]},
+      "else": {"not": {"required": ["error"]}}
+    }
+  ]
+}

@@ -10,8 +10,8 @@ distribution:
   notes:
     - Private commercial Hakoniwa component.
 verification:
-  verified_at: 2026-07-27
-  source_revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
+  verified_at: 2026-08-30
+  source_revision: 8976a6de3188beb2fc7ae3588b5a4721e04e5033
   source_ref: main
 summary: Lightweight conductor for coordinating dynamically joining and leaving assets under a shared virtual time.
 category:
@@ -28,7 +28,7 @@ status:
   notes:
     - Cataloged from the product README, QuickStart, public API/design documentation, cross-platform tooling, tests, and CI evidence.
     - Designed as a lighter conductor than the pro/RD stack.
-    - The fully verified PR #5 tree was merged through cross-platform CI PR #4 into main revision d4d1543161f6e5e1cf07452fbb90aae03211c30b.
+    - Current main adds a manifest-selected build contract, bilingual operator and maintainer documentation, delivery metadata tooling, and refreshed cross-platform validation while preserving the Light runtime boundary.
 
 capabilities:
   - name: Shared virtual-time coordination
@@ -62,14 +62,26 @@ capabilities:
         path: docs/QuickStart.md
         revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
   - name: Cross-platform build, test, and smoke entry point
-    description: tools/hako.py provides the same doctor, build, test, smoke auto, and smoke manual workflow across Linux, macOS, and Windows.
+    description: tools/hako.py resolves hakoniwa-build.yaml or an explicit manifest and provides the same doctor, configure, build, test, smoke auto, and smoke manual workflow across Linux, macOS, and Windows.
     evidence:
       - repository: hakoniwalab/hakoniwa-conductor-light
         path: tools/hako.py
-        revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
+        revision: 8976a6de3188beb2fc7ae3588b5a4721e04e5033
+      - repository: hakoniwalab/hakoniwa-conductor-light
+        path: hakoniwa-build.yaml
+        revision: 8976a6de3188beb2fc7ae3588b5a4721e04e5033
       - repository: hakoniwalab/hakoniwa-conductor-light
         path: .github/workflows/cross-platform.yml
-        revision: d4d1543161f6e5e1cf07452fbb90aae03211c30b
+        revision: 8976a6de3188beb2fc7ae3588b5a4721e04e5033
+  - name: Explicit core-only build profile
+    description: Provides a repository-owned core-only manifest that disables RPC-dependent components without requiring users to reconstruct the corresponding CMake options manually.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-conductor-light
+        path: config/manifests/core-only.yaml
+        revision: 8976a6de3188beb2fc7ae3588b5a4721e04e5033
+      - repository: hakoniwalab/hakoniwa-conductor-light
+        path: README.md
+        revision: 8976a6de3188beb2fc7ae3588b5a4721e04e5033
 
 limitations:
   - Does not aim to cover the full RD functionality of Hakoniwa Conductor.

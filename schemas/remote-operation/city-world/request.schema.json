@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hakoniwa.dev/schemas/remote-operation/city-world/request.schema.json",
+  "title": "Hakoniwa City World generation request",
+  "description": "A bounded, path-free request for inspecting or generating one PLATEAU City World.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "selection", "profile", "year"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["center", "half_extent_m"],
+      "properties": {
+        "center": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["latitude", "longitude"],
+          "properties": {
+            "latitude": {"type": "number", "minimum": -90, "maximum": 90},
+            "longitude": {"type": "number", "minimum": -180, "maximum": 180}
+          }
+        },
+        "half_extent_m": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["north_south", "east_west"],
+          "properties": {
+            "north_south": {"type": "number", "minimum": 10, "maximum": 1000},
+            "east_west": {"type": "number", "minimum": 10, "maximum": 1000}
+          }
+        }
+      }
+    },
+    "profile": {"const": "visual-physics-v1"},
+    "year": {"const": "latest"},
+    "options": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["building_physics_level"],
+      "properties": {
+        "building_physics_level": {"type": "integer", "minimum": 0, "maximum": 3, "default": 3},
+        "building_collider_reduction": {"enum": ["safe", "coplanar-union", "convex-decompose", "tolerant-planar"], "default": "safe"},
+        "terrain_uncovered_policy": {"enum": ["error", "constant"], "default": "error"},
+        "terrain_uncovered_elevation_m": {"type": "number", "minimum": -1000, "maximum": 10000, "default": 0}
+      }
+    }
+  }
+}

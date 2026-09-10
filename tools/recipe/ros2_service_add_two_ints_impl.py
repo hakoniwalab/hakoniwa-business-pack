@@ -20,6 +20,9 @@ import time
 import tomllib
 from pathlib import Path
 
+from process_liveness import pid_alive
+from tools.workdir import foundation_install, recipe_root
+
 
 RECIPE_ID = "ros2-service-add-two-ints-host-docker"
 IMAGE = "hakoniwa-business-pack/add-two-ints-ros2:local"
@@ -56,11 +59,11 @@ def sibling(name: str) -> Path:
 
 
 def workspace() -> Path:
-    return root() / "work" / "recipes" / RECIPE_ID
+    return recipe_root(root(), RECIPE_ID)
 
 
 def foundation_prefix() -> Path:
-    return root() / "work" / "foundation" / "install"
+    return foundation_install(root())
 
 
 def foundation_python() -> Path:
@@ -572,16 +575,6 @@ def doctor(_args: argparse.Namespace) -> int:
         print(f"[{'OK' if ok else 'NG'}] {name}: {detail}")
         failed = failed or not ok
     return 1 if failed else 0
-
-
-def pid_alive(pid: object) -> bool:
-    if not isinstance(pid, int) or pid <= 0:
-        return False
-    try:
-        os.kill(pid, 0)
-    except (OSError, ValueError):
-        return False
-    return True
 
 
 def managed_host_alive(session: dict, host_session_path: Path) -> bool:

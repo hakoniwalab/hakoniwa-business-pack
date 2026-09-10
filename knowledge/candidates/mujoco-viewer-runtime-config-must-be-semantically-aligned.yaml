@@ -22,7 +22,10 @@ observation:
     Validating the Business Pack Drone Gamepad Exhibition Recipe on macOS after
     Launcher background lifecycle support and pygame installation had been fixed.
   details:
-    - The generated Launcher passed structural tests and started the Drone service with `--mujoco-viewer`, but selected `config/drone/fleets/api-current.json`, whose type used `physicsEquation: BodyFrame`.
+    - >-
+      The generated Launcher passed structural tests and started the Drone service
+      with `--mujoco-viewer`, but selected `config/drone/fleets/api-current.json`,
+      whose type used `physicsEquation: BodyFrame`.
     - The native Drone service crashed on the main thread with SIGSEGV in `mj_name2id()` during viewer initialization because no compatible MuJoCo model had been created for that configuration.
     - The same generated topology used robot name `Drone-1`, while `rc-custom.py` defaults to robot name `Drone`.
     - Aligning the topology on `config/drone/mujoco`, `config/pdudef/drone-pdudef-1.json`, `visual_state_publisher-1.json`, and `--real-sleep-msec 1` allowed all Launcher assets to stabilize and kept the session RUNNING.

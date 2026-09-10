@@ -173,7 +173,8 @@ foundation_requirements:
 
 # Optional versioned contract for non-Foundation repositories or local inputs.
 # Generic `tools/recipe.py doctor` validates these paths and artifacts.
-# `tools/recipe.py configure` clones only missing git sources into a sibling
+# `tools/recipe.py plan` normalizes these and required Foundation repositories
+# into one source plan. `configure` clones only missing git sources into a sibling
 # repository path; it never overwrites an existing or environment-selected path.
 recipe_local_requirements_schema_version: 1
 recipe_local_requirements:

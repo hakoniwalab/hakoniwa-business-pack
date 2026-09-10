@@ -19,16 +19,23 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Validate catalog
-        run: ruby catalog/tools/validate_catalog.rb
+      - name: Catalog preflight
+        run: ruby catalog/tools/preflight.rb
 
-      - name: Check catalog/index.yaml is up to date
-        run: |
-          ruby catalog/tools/generate_index.rb
-          git diff --exit-code catalog/index.yaml
+      - name: Test catalog freshness checker
+        run: ruby catalog/tools/test_check_freshness.rb
+
+      - name: Test catalog index line endings
+        run: ruby catalog/tools/test_generate_index.rb
 
       - name: Validate recipes
         run: ruby recipes/tools/validate_recipes.rb
+
+      - name: Test shared native runtime schema
+        run: ruby schemas/test_native_runtime_validation.rb
+
+      - name: Test Drone Fleet performance experiment schema
+        run: ruby schemas/recipes/drone-fleet-performance/test_experiment_validation.rb
 
       - name: Test Foundation schemas
         run: ruby foundation/tools/test_validation.rb
@@ -74,15 +81,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      - name: Test catalog index line endings
+        run: ruby catalog/tools/test_generate_index.rb
 
       - name: Test Workspace Environment
         run: >-
           python -m unittest
           tools/test_workspace.py
           tools/test_workspace_enter.py
+          tools/test_workspace_guard.py
+          -v
+
+      - name: Test Foundation path portability
+        run: python -m unittest tools/test_foundation.py -v
+
+      - name: Test Recipe-specific tools
+        run: >-
+          python -m unittest discover
+          -s tools/recipe
+          -p "test_*.py"
           -v
 
       - name: Test shared tools helpers

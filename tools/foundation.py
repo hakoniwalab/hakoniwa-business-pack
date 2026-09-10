@@ -11,6 +11,14 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 
+TOOLS_DIR = Path(__file__).absolute().parent
+if str(TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(TOOLS_DIR))
+
+from workspace_guard import warn_if_workspace_invalid
+from workdir import resolve_work_dir
+
+
 RECIPE_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 RECEIPT_REQUIRED_FIELDS = {
     "schema_version",
@@ -24,6 +32,12 @@ RECEIPT_REQUIRED_FIELDS = {
     "resolved_manifest",
 }
 ARTIFACT_PROBES = {
+    "athrill-target-v850e2m": ("bin/athrill2", "bin/athrill2.exe"),
+    "athrill-device": (
+        "lib/libhakotime.so",
+        "lib/libhakotime.dylib",
+        "bin/hakotime.dll",
+    ),
     "hakoniwa-core-pro": ("bin/hako-cmd", "bin/hako-cmd.exe"),
     "hakoniwa-pdu-endpoint": ("lib/cmake/hakoniwa_pdu_endpoint",),
     "hakoniwa-pdu-rpc": ("lib/cmake/hakoniwa_pdu_rpc",),
@@ -94,7 +108,7 @@ def resolve_workspace(
 ) -> WorkspacePaths:
     recipe_id = validate_recipe_id(recipe_id)
     business_pack_root = root.resolve()
-    work_root = business_pack_root / "work"
+    work_root = resolve_work_dir(business_pack_root)
     foundation_root = (
         foundation_root_override.resolve()
         if foundation_root_override is not None
@@ -102,7 +116,7 @@ def resolve_workspace(
     )
     if not foundation_root.is_relative_to(work_root):
         raise FoundationError(
-            "Foundation root must stay under the Business Pack work directory"
+            "Foundation root must stay under the selected work directory"
         )
     recipe_root = work_root / "recipes" / recipe_id
     return WorkspacePaths(
@@ -654,7 +668,12 @@ def evaluate_component(
                 _reason(f"capabilities.{capability}", enabled, installed)
             )
     for limit, constraint in required.get("build_limits", {}).items():
-        minimum = constraint.get("min")
+        minimum = constraint.get("min") if isinstance(constraint, dict) else None
+        if not isinstance(minimum, int):
+            raise FoundationError(
+                f"foundation requirement build_limits.{limit}.min must be an integer; "
+                "use the nested YAML form with 'min:' on the following indented line"
+            )
         installed = receipt.get("build_limits", {}).get(limit)
         if not isinstance(installed, int) or installed < minimum:
             reasons.append(
@@ -881,6 +900,7 @@ def load_build_catalog(path: Path) -> dict[str, dict]:
         )
     components = data["components"]
     known_operations = {
+        "prepare",
         "doctor",
         "configure",
         "build",
@@ -893,6 +913,7 @@ def load_build_catalog(path: Path) -> dict[str, dict]:
             raise FoundationError(f"{component_id}: catalog entry must be a mapping")
         source = component.get("source")
         repository = component.get("repository")
+        revision = component.get("revision")
         dependencies = component.get("dependencies")
         operations = component.get("operations")
         if not isinstance(source, str) or not source:
@@ -901,6 +922,12 @@ def load_build_catalog(path: Path) -> dict[str, dict]:
             not isinstance(repository, str) or not repository
         ):
             raise FoundationError(f"{component_id}: repository must be a URL")
+        if revision is not None and (
+            not isinstance(revision, str) or not revision.strip()
+        ):
+            raise FoundationError(
+                f"{component_id}: revision must be a non-empty string"
+            )
         if (
             not isinstance(dependencies, list)
             or not all(isinstance(item, str) for item in dependencies)
@@ -1102,14 +1129,11 @@ def _yaml_string(value: Path | str) -> str:
     return json.dumps(str(value))
 
 
-def _core_foundation_manifest(source_manifest: Path) -> str:
-    if not source_manifest.is_file():
-        raise FoundationError(
-            f"hakoniwa-core-pro build manifest not found: {source_manifest}"
-        )
-    lines = source_manifest.read_text(encoding="utf-8").splitlines()
-    python_index: int | None = None
-    soabi_index: int | None = None
+def _set_manifest_boolean(
+    lines: list[str], section: str, key: str, value: bool
+) -> list[str]:
+    section_index: int | None = None
+    key_index: int | None = None
     active_section: str | None = None
     for index, line in enumerate(lines):
         stripped = line.strip()
@@ -1117,20 +1141,34 @@ def _core_foundation_manifest(source_manifest: Path) -> str:
             continue
         if not line.startswith((" ", "\t")) and stripped.endswith(":"):
             active_section = stripped[:-1]
-            if active_section == "python":
-                python_index = index
+            if active_section == section:
+                section_index = index
             continue
-        if active_section == "python" and re.match(r"^\s+soabi\s*:", line):
-            soabi_index = index
-    if soabi_index is not None:
-        indentation = lines[soabi_index][: len(lines[soabi_index]) - len(lines[soabi_index].lstrip())]
-        lines[soabi_index] = f"{indentation}soabi: true"
-    elif python_index is not None:
-        lines.insert(python_index + 1, "  soabi: true")
+        if active_section == section and re.match(rf"^\s+{re.escape(key)}\s*:", line):
+            key_index = index
+    rendered = str(value).lower()
+    if key_index is not None:
+        indentation = lines[key_index][
+            : len(lines[key_index]) - len(lines[key_index].lstrip())
+        ]
+        lines[key_index] = f"{indentation}{key}: {rendered}"
+    elif section_index is not None:
+        lines.insert(section_index + 1, f"  {key}: {rendered}")
     else:
         if lines and lines[-1] != "":
             lines.append("")
-        lines.extend(["python:", "  soabi: true"])
+        lines.extend([f"{section}:", f"  {key}: {rendered}"])
+    return lines
+
+
+def _core_foundation_manifest(source_manifest: Path) -> str:
+    if not source_manifest.is_file():
+        raise FoundationError(
+            f"hakoniwa-core-pro build manifest not found: {source_manifest}"
+        )
+    lines = source_manifest.read_text(encoding="utf-8").splitlines()
+    lines = _set_manifest_boolean(lines, "python", "soabi", True)
+    lines = _set_manifest_boolean(lines, "validation", "tests", False)
     return "\n".join(lines) + "\n"
 
 
@@ -1143,7 +1181,17 @@ def write_component_manifest(
     build_dir = paths.foundation_build / component_id
     manifest = paths.foundation_build / f"{component_id}.yaml"
     prefix = paths.install_prefix
-    toolchain = load_foundation_toolchain(paths)
+    vcpkg_components = {
+        "hakoniwa-pdu-endpoint",
+        "hakoniwa-pdu-rpc",
+        "hakoniwa-pdu-bridge-core",
+        "athrill-target-v850e2m",
+    }
+    toolchain = (
+        load_foundation_toolchain(paths)
+        if component_id in vcpkg_components
+        else {}
+    )
     vcpkg_root = toolchain.get("vcpkg_root", "")
     required_capabilities = (required or {}).get("capabilities", {})
     if component_id == "hakoniwa-core-pro":
@@ -1230,6 +1278,51 @@ build:
 paths:
   hakoniwa_core_root: {_yaml_string(prefix)}
 """
+    elif component_id == "athrill-target-v850e2m":
+        athrill_source = source.parent / "athrill"
+        exdev_enabled = required_capabilities.get("exdev", True) is True
+        content = f"""version: 1
+
+build:
+  type: Release
+  dir: {_yaml_string(build_dir)}
+  parallel: 0
+
+features:
+  exdev: {str(exdev_enabled).lower()}
+  mros: false
+  vdev: false
+
+validation:
+  tests: true
+
+paths:
+  athrill_root: {_yaml_string(athrill_source)}
+  vcpkg_root: {_yaml_string(vcpkg_root)}
+"""
+    elif component_id == "athrill-device":
+        athrill_source = source.parent / "athrill"
+        capabilities = required_capabilities
+        hakotime_enabled = capabilities.get("hakotime_shared", True) is True
+        hakopdu_enabled = capabilities.get("hakopdu_ev3", True) is True
+        content = f"""version: 1
+
+build:
+  type: Release
+  dir: {_yaml_string(build_dir)}
+  parallel: 0
+
+components:
+  hakotime: {str(hakotime_enabled).lower()}
+  hakopdu_ev3: {str(hakopdu_enabled).lower()}
+
+validation:
+  tests: true
+
+paths:
+  athrill_root: {_yaml_string(athrill_source)}
+  hakoniwa_core_root: {_yaml_string(prefix)}
+"""
     else:
         raise FoundationError(
             f"no Foundation manifest adapter for {component_id}"
@@ -1256,6 +1349,10 @@ def component_commands(
     for operation in operations:
         if component_id == "hakoniwa-core-pro":
             command = [python, str(hako), operation]
+            command.extend([
+                "--state-dir",
+                str(paths.foundation_root / "state" / component_id),
+            ])
             if operation in {"doctor", "build", "install"}:
                 assert manifest is not None
                 command.extend(["--config", str(manifest)])
@@ -1295,6 +1392,18 @@ def component_commands(
                 "--install-dir",
                 str(paths.install_prefix),
             ]
+            if component_id in {
+                "hakoniwa-pdu-endpoint",
+                "hakoniwa-pdu-bridge-core",
+                "hakoniwa-pdu-python",
+                "hakoniwa-pdu-rpc",
+            }:
+                command.extend(
+                    [
+                        "--state-dir",
+                        str(paths.foundation_root / "state" / component_id),
+                    ]
+                )
             if component_id == "hakoniwa-pdu-endpoint":
                 capabilities = (required or {}).get("capabilities", {})
                 core_free = (
@@ -1369,6 +1478,7 @@ def execute_build_plan(plan: dict, paths: WorkspacePaths) -> dict:
             "Foundation plan is blocked by UNKNOWN components: "
             + ", ".join(plan["blocked"])
         )
+    validate_build_plan_sources(plan)
     python, python_contract = ensure_foundation_python(
         paths, Path(plan["recipe"])
     )
@@ -1395,10 +1505,21 @@ def execute_build_plan(plan: dict, paths: WorkspacePaths) -> dict:
             print(f"> {subprocess.list2cmdline(command)}", flush=True)
             result = subprocess.run(command, cwd=source, check=False)
             if result.returncode != 0:
-                raise FoundationError(
+                message = (
                     f"{action['component']} command failed "
                     f"with exit code {result.returncode}"
                 )
+                toolchain_path = foundation_toolchain_path(paths)
+                if platform.system() == "Windows" and not toolchain_path.is_file():
+                    message += (
+                        f". Foundation toolchain config for install prefix "
+                        f"{paths.install_prefix} was not found at {toolchain_path}. "
+                        "If this component needs vcpkg, configure this prefix with: "
+                        f"python tools/foundation.py toolchain --recipe-id "
+                        f"{Path(plan['recipe']).stem} --install-dir "
+                        f"{paths.install_prefix} --vcpkg-root <vcpkg-root>"
+                    )
+                raise FoundationError(message)
             if action["component"] == "hakoniwa-core-pro":
                 normalize_core_config_for_windows(
                     paths.foundation_config / "cpp_core_config.json",
@@ -1412,6 +1533,32 @@ def execute_build_plan(plan: dict, paths: WorkspacePaths) -> dict:
             f"Foundation remains {final['status']} after build/install"
         )
     return final
+
+
+def validate_build_plan_sources(plan: dict) -> None:
+    invalid: list[str] = []
+    for action in plan["actions"]:
+        source = Path(action["source"])
+        if not source.is_dir():
+            invalid.append(
+                f"{action['component']}: source directory is missing: {source}"
+            )
+            continue
+        hako = source / "tools" / "hako.py"
+        if not hako.is_file():
+            invalid.append(
+                f"{action['component']}: component tool is missing: {hako}"
+            )
+    if not invalid:
+        return
+    recipe = Path(plan["recipe"])
+    details = "\n".join(f"  - {message}" for message in invalid)
+    raise FoundationError(
+        "Foundation source is missing or invalid:\n"
+        f"{details}\n\n"
+        "Materialize the selected Recipe first:\n"
+        f"  python tools/recipe.py configure --recipe {recipe}"
+    )
 
 
 def print_build_plan(plan: dict, json_output: bool) -> None:
@@ -1491,6 +1638,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="persist explicit host toolchain selection under work/foundation/config",
     )
     toolchain.add_argument("--recipe-id", required=True)
+    toolchain.add_argument("--install-dir", default=None)
     toolchain.add_argument("--vcpkg-root", required=True)
 
     doctor = subparsers.add_parser(
@@ -1525,16 +1673,19 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command in {"toolchain", "doctor", "plan", "build"}:
+        warn_if_workspace_invalid(repository_root())
     try:
         if args.command in {"doctor", "plan", "build"}:
             root = repository_root()
             recipe = Path(args.recipe)
             if not recipe.is_absolute():
                 recipe = (Path.cwd() / recipe).resolve()
+            work_root = resolve_work_dir(root)
             prefix = (
                 Path(args.install_dir).resolve()
                 if args.install_dir
-                else root / "work" / "foundation" / "install"
+                else work_root / "foundation" / "install"
             )
             if args.command in {"plan", "build"}:
                 catalog = (
@@ -1550,6 +1701,8 @@ def main(argv: list[str] | None = None) -> int:
                     root,
                     set(args.force),
                 )
+                if args.command == "plan":
+                    validate_build_plan_sources(result)
                 print_build_plan(result, getattr(args, "json_output", False))
                 if args.command == "plan":
                     return 2 if result["blocked"] else 0
@@ -1561,7 +1714,7 @@ def main(argv: list[str] | None = None) -> int:
                 if prefix.name != "install" or prefix != paths.install_prefix:
                     raise FoundationError(
                         "build install prefix must be "
-                        "<business-pack>/work/<foundation-name>/install"
+                        "<workdir>/<foundation-name>/install"
                     )
                 final = execute_build_plan(result, paths)
                 print_inspection(final, False)
@@ -1569,7 +1722,17 @@ def main(argv: list[str] | None = None) -> int:
             result = inspect_foundation(recipe, prefix, validate_core_config=True)
             print_inspection(result, args.json_output)
             return 0 if result["status"] == "SATISFIED" else 1
-        paths = resolve_workspace(repository_root(), args.recipe_id)
+        root = repository_root()
+        if args.command == "toolchain" and args.install_dir:
+            prefix = Path(args.install_dir).resolve()
+            paths = resolve_workspace(root, args.recipe_id, prefix.parent)
+            if prefix.name != "install" or prefix != paths.install_prefix:
+                raise FoundationError(
+                    "toolchain install prefix must be "
+                    "<workdir>/<foundation-name>/install"
+                )
+        else:
+            paths = resolve_workspace(root, args.recipe_id)
         if args.command == "toolchain":
             output = configure_foundation_toolchain(paths, Path(args.vcpkg_root))
             print(f"Foundation toolchain: {output}")

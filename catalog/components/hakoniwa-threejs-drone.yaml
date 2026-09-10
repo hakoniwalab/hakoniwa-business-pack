@@ -10,8 +10,8 @@ distribution:
   notes:
     - Public OSS component distributed under the MIT license.
 verification:
-  verified_at: 2026-07-20
-  source_revision: 9bec1fd968c129970401c0d8748b5fc51427205d
+  verified_at: 2026-08-30
+  source_revision: 36203964b91e8e1d12717553f102792b80e224be
   source_ref: main
 summary: Three.js-based browser viewer for Hakoniwa Drone that receives drone state over WebSocket and visualizes single- or multi-drone fleets with configurable scenes, dynamic spawning, follow cameras, and fleet-oriented display settings.
 category:
@@ -24,47 +24,105 @@ status:
   maturity: active
   catalog_confidence: high
   notes:
-    - Cataloged from the public README and MIT license.
+    - Cataloged from the public README, configuration contracts, static contract tests, and MIT license.
+    - The viewer now exposes a public browser API, optional FPV-course presentation, attached-camera presentation modes, and browser-side wind / rotor-fault inputs while remaining a visualization client rather than a physics runtime.
 capabilities:
   - name: Browser-based 3D drone visualization
     description: Visualizes Hakoniwa Drone state in a web browser using Three.js.
     evidence:
       - repository: hakoniwalab/hakoniwa-threejs-drone
         path: README.md
-        revision: 9bec1fd968c129970401c0d8748b5fc51427205d
+        revision: 36203964b91e8e1d12717553f102792b80e224be
   - name: WebSocket PDU state input
     description: Connects to a WebSocket endpoint and consumes compact PDU definitions and viewer configuration for drone state visualization.
     evidence:
       - repository: hakoniwalab/hakoniwa-threejs-drone
         path: README.md
-        revision: 9bec1fd968c129970401c0d8748b5fc51427205d
+        revision: 36203964b91e8e1d12717553f102792b80e224be
   - name: Legacy and fleet state modes
     description: Supports both legacy single-style state input and fleet-oriented input selected through viewer_config.
     evidence:
       - repository: hakoniwalab/hakoniwa-threejs-drone
         path: README.md
-        revision: 9bec1fd968c129970401c0d8748b5fc51427205d
+        revision: 36203964b91e8e1d12717553f102792b80e224be
   - name: Dynamic fleet spawning
     description: Can dynamically create drone visual instances from fleet state input with configurable template and maximum drone count.
     evidence:
       - repository: hakoniwalab/hakoniwa-threejs-drone
         path: README.md
-        revision: 9bec1fd968c129970401c0d8748b5fc51427205d
+        revision: 36203964b91e8e1d12717553f102792b80e224be
   - name: Large-fleet browser visualization
     description: Documents fleet-oriented settings for 100-drone visualization, including attached-camera reduction and v2 wire format.
     evidence:
       - repository: hakoniwalab/hakoniwa-threejs-drone
         path: README.md
-        revision: 9bec1fd968c129970401c0d8748b5fc51427205d
+        revision: 36203964b91e8e1d12717553f102792b80e224be
+  - name: Embeddable public viewer API
+    description: Exposes createDroneViewer() as a browser module so another web UI can configure, initialize, connect, and embed the Three.js drone viewer without owning its internal rendering implementation.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-threejs-drone
+        path: src/public/drone_viewer.js
+        revision: 36203964b91e8e1d12717553f102792b80e224be
+      - repository: hakoniwalab/hakoniwa-threejs-drone
+        path: README.md
+        revision: 36203964b91e8e1d12717553f102792b80e224be
+  - name: Browser-side wind and rotor-fault inputs
+    description: Provides UI paths that send wind settings and per-rotor output multipliers through the configured Hakoniwa PDU bridge path while simulation behavior remains owned by the receiving runtime.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-threejs-drone
+        path: README.md
+        revision: 36203964b91e8e1d12717553f102792b80e224be
+      - repository: hakoniwalab/hakoniwa-threejs-drone
+        path: src/app.js
+        revision: 36203964b91e8e1d12717553f102792b80e224be
+  - name: Optional FPV course presentation
+    description: Loads an explicitly configured fpv-course environment generated as primitive course JSON and supports optional whole-aircraft visual scaling without changing the PDU world position.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-threejs-drone
+        path: src/fpv_course.js
+        revision: 36203964b91e8e1d12717553f102792b80e224be
+      - repository: hakoniwalab/hakoniwa-threejs-drone
+        path: config/schema/scene-config.schema.json
+        revision: 36203964b91e8e1d12717553f102792b80e224be
+      - repository: hakoniwalab/hakoniwa-threejs-drone
+        path: README.md
+        revision: 36203964b91e8e1d12717553f102792b80e224be
+  - name: Attached-camera main and overlay presentation
+    description: Supports the legacy attached-camera overlay and an optional main-camera presentation with Orbit camera PiP and runtime swapping / visibility controls.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-threejs-drone
+        path: src/audience_camera.js
+        revision: 36203964b91e8e1d12717553f102792b80e224be
+      - repository: hakoniwalab/hakoniwa-threejs-drone
+        path: docs/viewer-config-spec.md
+        revision: 36203964b91e8e1d12717553f102792b80e224be
+  - name: Static viewer contract validation
+    description: Provides hako.py doctor, test, and smoke operations that validate prerequisites, static viewer contracts, and HTTP retrieval of the viewer and PDU modules without claiming browser-rendering or simulation E2E coverage.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-threejs-drone
+        path: tools/hako.py
+        revision: 36203964b91e8e1d12717553f102792b80e224be
+      - repository: hakoniwalab/hakoniwa-threejs-drone
+        path: tests/test_static_contract.py
+        revision: 36203964b91e8e1d12717553f102792b80e224be
+      - repository: hakoniwalab/hakoniwa-threejs-drone
+        path: .github/workflows/validate.yml
+        revision: 36203964b91e8e1d12717553f102792b80e224be
 limitations:
   - This component is a Hakoniwa Drone-oriented visualization client, not a general-purpose Three.js simulation runtime.
   - It requires a compatible WebSocket bridge and PDU/state publisher path; it does not directly run drone physics.
   - Large-fleet performance depends on browser, GPU, scene complexity, camera settings, and incoming update rate.
+  - FPV-course objects and aircraft scaling are presentation features; collision response, flight dynamics, and physical scale remain responsibilities of the simulation runtime and physical model.
+  - Wind and rotor-fault UI actions only send inputs; this component does not define or validate the physical response to those inputs.
+  - Static smoke validation verifies HTTP retrieval and configuration/module contracts, not browser rendering, WebSocket E2E behavior, or drone flight.
 interfaces:
   inputs:
     - name: Viewer configuration
       kind: config
-      description: Selects scene configuration, PDU definition, WebSocket URI, state input mode, dynamic spawning, and UI behavior.
+      description: Selects scene configuration, PDU definition, WebSocket URI, state input mode, dynamic spawning, attached-camera presentation, and UI behavior.
+    - name: Scene configuration
+      kind: config
+      description: Defines drone visual instances, environments, optional fpv-course presentation, and visual scaling.
     - name: Compact PDU definition
       kind: config
       description: Defines the compact PDU layout used by fleet-oriented state input.
@@ -74,7 +132,10 @@ interfaces:
   outputs:
     - name: Browser 3D visualization
       kind: api
-      description: Interactive Three.js scene rendered in the browser with follow-camera and selection controls.
+      description: Interactive Three.js scene rendered in the browser with follow-camera, attached-camera presentation, selection, and embedding controls.
+    - name: Wind and rotor-fault command PDUs
+      kind: pdu
+      description: Optional browser-originated input values sent through the configured bridge path to a compatible Hakoniwa runtime.
   protocols:
     - name: WebSocket
       role: client
@@ -84,6 +145,10 @@ interfaces:
       description: Default legacy viewer configuration.
     - path: config/viewer-config-fleets.json
       description: Fleet-oriented viewer configuration with compact PDU support.
+    - path: config/schema/viewer-config.schema.json
+      description: Viewer configuration schema including attached-camera presentation options.
+    - path: config/schema/scene-config.schema.json
+      description: Scene configuration schema including optional fpv-course environments and visual scale.
 dependencies:
   required:
     - name: Browser with WebGL support
@@ -96,33 +161,49 @@ dependencies:
     - name: Hakoniwa Drone
       type: repository
       notes: Provides drone simulation state and visual-state publishing in the documented E2E configuration.
+    - name: hakoniwa-fpv-drone
+      type: repository
+      notes: Can generate the primitive FPV course JSON consumed by the optional fpv-course environment presentation.
 platforms:
   supported:
     - Browser
   notes:
     - Static files can be served by any suitable HTTP server; README examples use Python http.server.
+    - tools/hako.py doctor/test/smoke require Python 3.9 or later for the documented validation workflow.
 connects_to:
   - component_id: hakoniwa-pdu-bridge-core
     direction: uses
     interface: WebSocket / compact PDU state stream
-    notes: The viewer connects to the bridge WebSocket endpoint to receive drone visual state.
+    notes: The viewer connects to the bridge WebSocket endpoint to receive drone visual state and can send compatible UI-originated inputs.
   - component_id: hakoniwa-drone-core
     direction: related
     interface: drone visual state / fleet state
     notes: Hakoniwa Drone can provide the simulation and visual-state publishing side of the documented E2E composition.
 data_contracts:
   - name: viewer_config contract
-    description: Controls scene, PDU, WebSocket, state-input mode, dynamic-spawn behavior, and UI options.
+    description: Controls scene, PDU, WebSocket, state-input mode, dynamic-spawn behavior, attached-camera presentation, and UI options.
     source:
       - repository: hakoniwalab/hakoniwa-threejs-drone
         path: docs/viewer-config-spec.md
-        revision: 9bec1fd968c129970401c0d8748b5fc51427205d
+        revision: 36203964b91e8e1d12717553f102792b80e224be
+  - name: Scene presentation contract
+    description: Scene configuration can opt into fpv-course environments and optional aircraft visual scale while preserving PDU world coordinates.
+    source:
+      - repository: hakoniwalab/hakoniwa-threejs-drone
+        path: config/schema/scene-config.schema.json
+        revision: 36203964b91e8e1d12717553f102792b80e224be
   - name: Fleet visual-state contract
     description: Fleet-oriented drone visual state is consumed through compact PDU definitions over the WebSocket bridge.
     source:
       - repository: hakoniwalab/hakoniwa-threejs-drone
         path: README.md
-        revision: 9bec1fd968c129970401c0d8748b5fc51427205d
+        revision: 36203964b91e8e1d12717553f102792b80e224be
+  - name: Public viewer API contract
+    description: createDroneViewer() provides the supported embedding boundary for another browser UI to configure and drive viewer initialization and PDU connection.
+    source:
+      - repository: hakoniwalab/hakoniwa-threejs-drone
+        path: src/public/drone_viewer.js
+        revision: 36203964b91e8e1d12717553f102792b80e224be
 recipe_roles:
   - role: visualizer
     description: Renders Hakoniwa Drone state as an interactive browser-based Three.js scene.
@@ -133,10 +214,13 @@ typical_usecases:
   - Display dynamically changing multi-drone fleets without predefining every visual instance.
   - Build lightweight demos where users only need a browser to observe simulated drone motion.
   - Visualize large drone fleets with reduced attached-camera rendering and fleet-oriented wire settings.
+  - Embed the Drone Viewer into another browser application through createDroneViewer().
+  - Present an FPV course and attached-camera main view while the simulation runtime remains the physics source of truth.
 anti_usecases:
   - Running drone dynamics or flight-controller simulation by itself.
   - General-purpose robot visualization without Hakoniwa Drone-compatible scene and state contracts.
   - Direct shared-memory PDU access from the browser without a WebSocket bridge.
+  - Treating FPV-course rendering or model scale as physical collision or dynamics validation.
 demo_candidates:
   - name: Hakoniwa Drone fleet browser viewer
     description: Run Hakoniwa Drone visual-state publishing, bridge PDU state through hakoniwa-pdu-bridge-core, and render fleet motion in the Three.js browser viewer.
@@ -147,30 +231,69 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-threejs-drone
         path: README.md
-        revision: 9bec1fd968c129970401c0d8748b5fc51427205d
+        revision: 36203964b91e8e1d12717553f102792b80e224be
 operations:
   build:
     commands: []
-    notes: No native build is required for the basic viewer workflow.
+    notes: No native build or install step is defined for the static viewer workflow.
   test:
-    commands: []
-    notes: Validate by connecting to the WebSocket bridge and observing drone position and attitude updates in the browser.
+    commands:
+      - python tools/hako.py test
+    notes:
+      - Validates viewer configuration contracts, the public API, the PDU JavaScript submodule, and documented static operation contracts.
   run:
     commands:
       - python -m http.server 8000
     notes:
       - Open index.html with the appropriate viewerConfigPath and wsUri query parameters.
+  smoke:
+    commands:
+      - python tools/hako.py smoke
+    notes:
+      - Starts a temporary HTTP server and retrieves the HTML, configuration, public Viewer module, and PDU module; it is not a browser/WebSocket/flight E2E test.
+runtime_checks:
+  - id: static-viewer-readiness
+    kind: doctor
+    platforms: [macos, linux, windows]
+    command: [python, tools/hako.py, doctor]
+    working_directory: repository
+    output: text
+  - id: static-contract-tests
+    kind: test
+    platforms: [macos, linux, windows]
+    command: [python, tools/hako.py, test]
+    working_directory: repository
+    output: text
+  - id: static-http-smoke
+    kind: smoke-test
+    platforms: [macos, linux, windows]
+    command: [python, tools/hako.py, smoke]
+    working_directory: repository
+    output: text
 known_gaps:
   - Exact large-fleet performance limits should be measured per browser, machine, scene, and update rate.
   - The documented E2E path references Hakoniwa Drone visual-state publisher behavior; recipe-level runtime verification should record the exact compatible Drone revision and bridge configuration.
+  - Static contract tests do not establish browser rendering fidelity or FPV sim-to-real accuracy.
 source_refs:
   - repository: hakoniwalab/hakoniwa-threejs-drone
     path: README.md
-    revision: 9bec1fd968c129970401c0d8748b5fc51427205d
-    description: Main overview, quick start, viewer configuration, fleet mode, dynamic spawning, 100-drone settings, and E2E composition.
+    revision: 36203964b91e8e1d12717553f102792b80e224be
+    description: Main overview, public viewer API, viewer configuration, fleet mode, browser inputs, FPV presentation, validation workflow, and E2E composition.
+  - repository: hakoniwalab/hakoniwa-threejs-drone
+    path: docs/viewer-config-spec.md
+    revision: 36203964b91e8e1d12717553f102792b80e224be
+    description: Viewer configuration contract including state input and attached-camera presentation.
+  - repository: hakoniwalab/hakoniwa-threejs-drone
+    path: src/public/drone_viewer.js
+    revision: 36203964b91e8e1d12717553f102792b80e224be
+    description: Supported browser embedding API.
+  - repository: hakoniwalab/hakoniwa-threejs-drone
+    path: tools/hako.py
+    revision: 36203964b91e8e1d12717553f102792b80e224be
+    description: Static component doctor, test, and smoke entry point.
   - repository: hakoniwalab/hakoniwa-threejs-drone
     path: LICENSE
-    revision: 9bec1fd968c129970401c0d8748b5fc51427205d
+    revision: 36203964b91e8e1d12717553f102792b80e224be
     description: MIT license.
 tags:
   - hakoniwa

@@ -51,9 +51,9 @@ def payload(process_count: int) -> dict:
 
 
 class DroneFleetTemporalBTest(unittest.TestCase):
-    def test_temporal_contract_uses_endpoint_process_counts(self) -> None:
+    def test_temporal_contract_uses_declared_max_process_count(self) -> None:
         base = temporal_b.load_experiment(EXPERIMENT)
-        self.assertEqual(temporal_b.PROCESS_COUNTS, [2, 15])
+        self.assertEqual(temporal_b.load_process_counts(EXPERIMENT), [15])
         self.assertEqual(base.drone_count, 128)
         assert base.measurement is not None
         self.assertEqual(base.measurement.mode, "temporal")
@@ -102,11 +102,11 @@ class DroneFleetTemporalBTest(unittest.TestCase):
             ), mock.patch.object(
                 temporal_b, "summary_paths", return_value=(json_path, csv_path)
             ):
-                self.assertEqual(temporal_b.summarize(base), 0)
+                self.assertEqual(temporal_b.summarize(base, [15]), 0)
             report = json.loads(json_path.read_text(encoding="utf-8"))
         self.assertTrue(report["complete"])
         self.assertEqual(
-            [row["process_count"] for row in report["results"]], [2, 15]
+            [row["process_count"] for row in report["results"]], [15]
         )
 
 

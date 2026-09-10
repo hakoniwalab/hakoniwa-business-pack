@@ -1,0 +1,203 @@
+id: pdu-ros-action-client-bridge-cancel-broke-tcp-session
+title: "Cancelling a goal through the pdu-ros action-client bridge killed the TCP session on a real Windows-WSL2 boundary (4/4); tmori's endpoint#65 + pdu-rpc#78 fix resolved it, confirmed by this workspace's own A/B retest"
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - runtime_rule
+
+summary: >
+  Sending a Cancel through hakoniwa-pdu-ros's action-client bridge
+  (hakoniwalab/hakoniwa-pdu-ros f17e1cc) over a real TCP boundary between a
+  Windows host and a WSL2 Ubuntu-24.04 peer reliably destroyed the underlying
+  TCP session: every Feedback/Result send attempted after the Cancel failed with
+  INVALID_STATE (8), the goal was left stuck in FINISHING, and its slot could
+  not be reused for a subsequent Goal. This reproduced 4/4 on real cross-OS TCP
+  and did not reproduce on loopback with the same revision using the raw
+  ActionClient/ActionServer classes directly (bypassing the ROS bridge), which
+  is what pointed the investigation at the bridge's TCP handling rather than the
+  core Action protocol. This was filed as hakoniwa-pdu-ros#20, tmori shipped two
+  fixes (hakoniwa-pdu-endpoint#65 / commit b089e0e and hakoniwa-pdu-rpc#78 /
+  commit 7ed378b), and this workspace's own A/B retest on the fixed revisions
+  confirmed the session survives Cancel and the slot is correctly reused, 4/4.
+
+observation:
+  context: >
+    Bringing up an Action-based ROS 2 bridge scenario across the Windows
+    host / WSL2 Ubuntu-24.04 boundary (real TCP, not loopback), 2026-08-09
+    through 2026-08-12, using hakoniwa-pdu-ros's action-client bridge to drive
+    an Action Server across the boundary and issuing Cancel mid-goal.
+  details:
+    - "Failure signature, first reproduction (pdu-ros f17e1cc). Sending Cancel
+      through the action-client bridge produced a session that looked healthy
+      up to the Cancel request, then every subsequent Feedback/Result publish
+      attempt failed with INVALID_STATE (8). The goal never transitioned out of
+      FINISHING, and the Action Server's slot for that goal could not be
+      reclaimed for a new Goal -- a fresh Goal request against the same slot was
+      rejected."
+    - "Reproduced 4/4 on the real Windows-host/WSL2 TCP boundary, and did not
+      reproduce on loopback using the raw ActionClient/ActionServer classes
+      directly at the same pdu-ros revision. That split was the key diagnostic
+      signal: the Action protocol's Cancel handling itself was fine over
+      loopback, so the defect had to be specific to either the bridge's TCP
+      session management or to real cross-OS TCP behavior (or both)."
+    - "Filed as hakoniwa-pdu-ros#20 with the above reproduction. tmori's first
+      response was a fix in a different repository than the one the issue was
+      filed against: hakoniwa-pdu-endpoint#65 (commit b089e0e), changing how
+      Windows blocking TCP handles WSAETIMEDOUT -- it is no longer treated as an
+      ordinary would-block condition, and a connection that has already timed
+      out is no longer silently reused, with improved disconnect diagnostic
+      logging alongside it."
+    - "The second half of the fix, hakoniwa-pdu-rpc#78 (commit 7ed378b),
+      tightened the slot-release contract: an Action Server slot is now
+      released deterministically on transport disconnect rather than being left
+      in an ambiguous state that a subsequent Goal request could collide with."
+    - "This workspace's own A/B retest at the fixed revisions (pdu-endpoint
+      b089e0e, pdu-rpc 7ed378b), 2026-08-12, on the same Windows-host/WSL2 real
+      TCP boundary and the same action-client bridge: with read_timeout_ms=0
+      (this configuration's effective value, see the companion candidate on
+      empty options meaning no read timeout), Cancel now completes as REJECT,
+      Feedback continues to be delivered afterward, Result is delivered, and
+      the next Goal successfully reuses the slot -- 4/4 green. This is the
+      re-verification that closed hakoniwa-pdu-ros#20."
+    - "Cause of the original failure, as understood from the fix content rather
+      than from independently instrumenting the pre-fix binary: on Windows, a
+      blocking TCP read that hit a timeout was being treated as transient
+      (would-block) and the connection kept in use past the point where the
+      peer had actually dropped it; subsequent writes on that stale connection
+      then failed, and because the slot-release contract did not tie slot
+      reclamation to a clean disconnect signal, the slot stayed stuck. This
+      reading is consistent with both fixes' descriptions but was not verified
+      by this workspace against the pre-fix source in isolation."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      path: hakoniwa_pdu_ros/action_client_node.py
+      revision: f17e1cc
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      path: src/comm_tcp.cpp
+      revision: b089e0e
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      path: src/action_services_server.cpp
+      revision: 7ed378b
+  runtime_evidence:
+    - description: >-
+        This workspace's own reproduction and re-verification, Windows 11 Pro
+        x64 host to WSL2 Ubuntu-24.04, real TCP boundary, 2026-08-09 through
+        2026-08-12. Pre-fix: 4/4 reproductions of INVALID_STATE (8) after
+        Cancel, stuck FINISHING state, blocked slot reuse. Post-fix (pdu-rpc
+        7ed378b / pdu-endpoint b089e0e), A/B retest with read_timeout_ms=0:
+        4/4 clean Cancel REJECT -> continued Feedback -> Result -> successful
+        next-Goal slot reuse.
+  expert_input:
+    - source: tmori (hakoniwa-pdu-rpc / hakoniwa-pdu-endpoint maintainer), hakoniwa-pdu-ros#20
+      statement: >-
+        Fixed via hakoniwa-pdu-endpoint#65 (Windows blocking-TCP WSAETIMEDOUT
+        handling and disconnect diagnostics) and hakoniwa-pdu-rpc#78 (Action
+        Server slot-release contract on transport disconnect). Requested A/B
+        confirmation from this workspace on the real cross-OS TCP boundary
+        where the defect was originally found.
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - Not measured with read_timeout_ms set to a nonzero value in the post-fix
+      configuration; this candidate's A/B retest used read_timeout_ms=0 only,
+      matching the original configuration's effective value. See the companion
+      candidate on empty TCP options meaning no read timeout for why that
+      matters.
+    - Not measured on a Windows-to-Windows or WSL2-to-WSL2 boundary; this is
+      specific to the Windows-host/WSL2-peer real TCP path where the defect was
+      originally found.
+  notes:
+    - >-
+      Marked verified, not merely documented as fixed, because this workspace
+      independently reproduced the pre-fix failure (4/4) and then re-ran the
+      identical scenario against the fixed revisions and observed the failure
+      gone and the intended behavior present (4/4), rather than relying on the
+      upstream issue's closure alone. Per MAINTAINER.md, closing an issue is not
+      by itself sufficient evidence for resolution.verified: true; the A/B
+      retest performed in this workspace is the evidence that satisfies it.
+
+tracking:
+  implementation_status: resolved
+  issues:
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      number: 20
+      relation: fix
+      status: closed
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      number: 65
+      relation: fix
+      status: closed
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      number: 78
+      relation: fix
+      status: closed
+
+promotion_targets:
+  catalog:
+    - hakoniwa-pdu-ros
+    - hakoniwa-pdu-endpoint
+  runtime_primer: true
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      kind: test
+      path: test/native/test_native_action_client_node.py
+      mode: detect-only
+      notes:
+        - >-
+          If this repository's native integration suite gains a cross-boundary
+          (non-loopback) Cancel scenario, it would be the natural home for a
+          regression guardrail for this exact defect; this candidate does not
+          author one, only flags where it belongs.
+
+promotion_rationale:
+  - >-
+    Anyone bridging Action over a real Windows-WSL2 TCP boundary needs to know
+    that Cancel was a known session-killing path before pdu-endpoint b089e0e /
+    pdu-rpc 7ed378b, and that pinning read_timeout_ms=0 was part of what made
+    the fixed behavior reproducible in this workspace's retest. That is
+    runtime-primer-level guidance, not a single component's catalog fact, since
+    it spans two repositories' fixes acting together.
+  - >-
+    No new executable guardrail is authored here. The fix already lives in two
+    upstream repositories' own source; a regression test belongs in
+    hakoniwa-pdu-ros's own native suite if and when it adds cross-boundary
+    coverage, not as a workspace-side check.
+
+resolution:
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      issue: 65
+      pull_request: null
+      revision: b089e0e
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      issue: 78
+      pull_request: null
+      revision: 7ed378b
+  verified: true
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - >-
+      Full cycle completed in this workspace: reproduced (4/4) -> filed as
+      hakoniwa-pdu-ros#20 -> tmori shipped hakoniwa-pdu-endpoint#65 and
+      hakoniwa-pdu-rpc#78 -> this workspace re-tested A/B on the same real
+      Windows-host/WSL2 TCP boundary where the defect was found -> confirmed
+      resolved (4/4) -> issue closed as COMPLETED.
+    - >-
+      The A/B retest used read_timeout_ms=0, which this configuration's
+      "options": {} resolves to by default (see the companion
+      pdu-endpoint-tcp-options-empty-means-no-read-timeout candidate). This is
+      recorded explicitly because a reader who instead sets a short nonzero
+      read_timeout_ms should not assume this retest covers that configuration.

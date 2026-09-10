@@ -9,6 +9,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from tools.recipe.path_test_support import path_endswith
+
 
 SCRIPT = Path(__file__).with_name("drone_fleet_single_host.py")
 SPEC = importlib.util.spec_from_file_location("drone_fleet_performance_base_test", SCRIPT)
@@ -34,9 +36,22 @@ EXPERIMENT = (
     / "drone-fleet-performance"
     / "single-process-scaling.yaml"
 )
+RECIPE_MANIFEST = (
+    Path(__file__).resolve().parents[2]
+    / "recipes"
+    / "examples"
+    / "drone-fleet-single-process-scaling.yaml"
+)
 
 
 class DroneFleetPerformanceTest(unittest.TestCase):
+    def test_recipe_declares_drone_native_runtime_contract(self) -> None:
+        manifest = RECIPE_MANIFEST.read_text(encoding="utf-8")
+        self.assertIn("native_runtime_requirements:\n  schema_version: 1", manifest)
+        self.assertIn("    hakoniwa-drone-core:\n      profile: public-v4.0.0", manifest)
+        self.assertIn('      required_roles: ["drone_service"]', manifest)
+        self.assertIn('      optional_roles: ["visual_state_publisher"]', manifest)
+
     def test_preflight_contract_resolves_scalable_headless_processes(self) -> None:
         experiment = recipe.resolve_experiment(EXPERIMENT)
         self.assertGreaterEqual(experiment.drone_count, 1)
@@ -101,7 +116,13 @@ class DroneFleetPerformanceTest(unittest.TestCase):
             self.assertTrue(show["args"][0].endswith("drone_fleet_performance_runner.py"))
             self.assertIn("HAKO_PERFORMANCE_CONFIG", show["env"]["set"])
             summary_index = show["args"].index("--summary-json") + 1
-            self.assertIn("attempt-01/execution-summary.json", show["args"][summary_index])
+            self.assertTrue(
+                path_endswith(
+                    show["args"][summary_index],
+                    "attempt-01",
+                    "execution-summary.json",
+                )
+            )
             service = next(
                 asset for asset in launcher["assets"] if asset["name"] == "drone-service-1"
             )

@@ -1,0 +1,21 @@
+{
+  "robots": [
+    {
+      "name": "hako_city_world_job",
+      "rpc_pdu_readers": [],
+      "rpc_pdu_writers": [],
+      "shm_pdu_readers": [
+        {
+          "type": "hako_msgs/CityWorldJobJson",
+          "org_name": "message",
+          "name": "hako_city_world_job_message",
+          "channel_id": 1,
+          "pdu_size": 16384,
+          "write_cycle": 1,
+          "method_type": "SHM"
+        }
+      ],
+      "shm_pdu_writers": []
+    }
+  ]
+}

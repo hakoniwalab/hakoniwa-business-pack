@@ -1,0 +1,324 @@
+id: hakoniwa-drone-show
+name: Hakoniwa Drone Show
+repository:
+  owner: hakoniwalab
+  name: hakoniwa-drone-show
+  url: https://github.com/hakoniwalab/hakoniwa-drone-show
+  visibility: private
+
+distribution:
+  channel: commercial
+  notes:
+    - Commercial virtual drone-show planning, production, preview, and execution component maintained by Hakoniwa Lab.
+    - The implementation repository is private; access and licensing require approval from Hakoniwa Lab.
+    - Fleet simulation uses the commercial Hakoniwa Drone PRO path while public Hakoniwa visualization and environment components are integrated where applicable.
+
+verification:
+  verified_at: 2026-08-28
+  source_revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+  source_ref: main
+
+summary: >-
+  Commercial virtual drone-show toolchain for Hakoniwa. It owns show files and resolved
+  show plans, formation generation, drone assignment, transition planning, LED direction,
+  show start/status control, audience preview including mobile AR, and reproducible wind
+  scenario evaluation while delegating fleet dynamics, city generation, and generic
+  visualization runtimes to their owning Hakoniwa components.
+
+category:
+  primary: tool
+  secondary:
+    - commercial
+    - control-plane
+    - visualization
+    - integration
+
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - A 128-drone, 6-process PLATEAU City show baseline was reproduced after migration into this repository.
+    - The baseline records successful configure, doctor, MuJoCo reload, Launcher lifecycle, Map Viewer HTTP response, Show Runner registration, and TakeOff completion for all 128 drones.
+    - Wind scenario, live weather, AR preview, audience presentation, and collision-evaluation functions are implemented, but they do not establish real-flight safety or operational approval.
+
+capabilities:
+  - name: Show file and resolved show-plan pipeline
+    description: Defines reusable show-file, Show IR, formation, and resolved show-plan contracts for turning show intent into executable fleet choreography.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-drone-show
+        path: docs/show-file-v1.md
+        revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+      - repository: hakoniwalab/hakoniwa-drone-show
+        path: docs/show-ir-v0.1.md
+        revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+      - repository: hakoniwalab/hakoniwa-drone-show
+        path: docs/show-plan-v0.1.md
+        revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+
+  - name: Formation generation and drone assignment
+    description: Builds formation point sets for a requested fleet size and resolves drone assignment and transition planning between formations.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-drone-show
+        path: docs/formation-v0.1.md
+        revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+      - repository: hakoniwalab/hakoniwa-drone-show
+        path: README.md
+        revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+
+  - name: Virtual show execution and lifecycle control
+    description: Configures and runs virtual drone shows through a dedicated Recipe/operator path with explicit configure, doctor, start, status, viewer, and stop lifecycle operations.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-drone-show
+        path: README.md
+        revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+      - repository: hakoniwalab/hakoniwa-drone-show
+        path: docs/task0-baseline.md
+        revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+
+  - name: Large-fleet City show composition
+    description: Resolves fleet partitioning, MuJoCo models, Show IR, Launcher configuration, City World placement, and altitude policy for PLATEAU-based virtual shows.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-drone-show
+        path: docs/task0-baseline.md
+        revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+      - repository: hakoniwalab/hakoniwa-drone-show
+        path: docs/virtual-drone-show-city-config.md
+        revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+
+  - name: Browser show control and audience preview
+    description: Provides a show-specific browser surface for start readiness, show state, audience camera positioning, venue presentation, and show visualization without replacing the generic Hakoniwa viewer runtimes.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-drone-show
+        path: docs/show-control-protocol.md
+        revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+      - repository: hakoniwalab/hakoniwa-drone-show
+        path: README.md
+        revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+
+  - name: Mobile camera-overlay AR preview
+    description: Provides an iPhone and Android camera-overlay AR preview using a transparent Three.js overlay, venue-relative ENU positioning, device-location initialization, and optional device orientation.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-drone-show
+        path: docs/ar-preview.md
+        revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+      - repository: hakoniwalab/hakoniwa-drone-show
+        path: docs/ar-porting-procedure.md
+        revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+
+  - name: Reproducible wind scenario evaluation
+    description: Applies file-driven wind scenarios against Hakoniwa virtual time, supports per-drone wind-speed variation, and records execution and contact-count evidence for repeatable comparison runs.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-drone-show
+        path: README.md
+        revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+      - repository: hakoniwalab/hakoniwa-drone-show
+        path: examples/wind-scenarios/osaka-gust-east.json
+        revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+
+  - name: Live weather wind preview
+    description: Can acquire venue wind from Open-Meteo for simulation display and convert meteorological wind direction into the simulation wind-vector convention.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-drone-show
+        path: docs/open-meteo-live-wind-provider-spec.md
+        revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+
+limitations:
+  - The implementation repository and show-specific assets are private and require commercial access approval.
+  - Hakoniwa Drone PRO is required for the intended commercial fleet-simulation path; this component does not own drone dynamics or flight-control implementation.
+  - PLATEAU City World generation and generic environment modeling are owned by hakoniwa-envsim rather than this component.
+  - Generic browser map and Three.js drone rendering are owned by hakoniwa-map-viewer and hakoniwa-threejs-drone.
+  - Open-Meteo live wind is weather-model data for simulation display; it is not aviation weather, a flight authorization source, or a real-flight safety input.
+  - Recorded collision counts are MuJoCo contact-geom-pair observations and must not be interpreted directly as accident counts or building-only impacts.
+  - Virtual show simulation, route-clearance calculation, wind evaluation, and AR preview do not establish real-world flight safety, regulatory compliance, or operational approval.
+
+interfaces:
+  inputs:
+    - name: Show file
+      kind: file
+      description: File-driven show definition containing formations, transitions, timing, presentation, and related show intent.
+    - name: Show configuration
+      kind: config
+      description: Experiment configuration for fleet scale, environment mode, City World, altitude policy, wind, viewer, and show presentation.
+    - name: PLATEAU City World receipt
+      kind: file
+      description: Optional City World input used to place and resolve a show against generated city collision geometry.
+    - name: Wind Scenario v1
+      kind: file
+      description: Reproducible virtual-time wind sequence used for controlled evaluation runs.
+  outputs:
+    - name: Resolved show plan
+      kind: file
+      description: Executable show plan resolving formations, assignments, transitions, altitude, scale, and runtime placement.
+    - name: Show IR
+      kind: file
+      description: Runtime-oriented intermediate representation used by the show execution path.
+    - name: Show status
+      kind: pdu
+      description: Show readiness and execution status exchanged through the existing Hakoniwa WebBridge/PDU path.
+    - name: Execution summary
+      kind: file
+      description: Recorded execution evidence including wind scenario context and collision-evaluation observations where enabled.
+    - name: AR preview
+      kind: api
+      description: Local HTTPS/WSS browser preview that overlays the simulated show on a mobile camera view.
+  protocols:
+    - name: Hakoniwa PDU
+      role: pubsub
+      notes: Used for show-control/status integration and underlying fleet state exchange.
+    - name: HTTP and WebSocket
+      role: server
+      notes: Used by local browser and mobile preview surfaces through the configured viewer and gateway paths.
+  configuration:
+    - path: recipes/experiments
+      description: Show-specific experiment definitions, including fleet scale, environment, wind, and presentation settings.
+    - path: docs/virtual-drone-show-city-config.md
+      description: Human-readable configuration and regeneration contract for City and flat virtual shows.
+
+dependencies:
+  required:
+    - name: Hakoniwa Drone PRO
+      type: repository
+      notes: Commercial fleet dynamics and runtime used by virtual shows.
+    - name: hakoniwa-business-pack
+      type: repository
+      notes: Provides the generic fleet Recipe workspace and integration foundation reused by the show-specific operator.
+    - name: hakoniwa-threejs-drone
+      type: repository
+      notes: Generic Three.js drone visualization used by show viewer surfaces.
+  optional:
+    - name: hakoniwa-envsim
+      type: repository
+      notes: Generates PLATEAU City Worlds and environmental context for City show modes.
+    - name: hakoniwa-map-viewer
+      type: repository
+      notes: Provides generic browser map/viewer integration used by City visualization paths.
+    - name: Open-Meteo
+      type: runtime
+      notes: External weather-model service used only by optional live wind preview.
+
+platforms:
+  supported:
+    - macOS
+  notes:
+    - The recorded 128-drone City baseline and local lifecycle verification were performed on macOS.
+    - Mobile AR preview targets iPhone Safari and Android Chrome, but device/browser support should be validated for the intended deployment.
+    - Other host platforms are not claimed as verified by this catalog entry.
+
+connects_to:
+  - component_id: hakoniwa-drone-core
+    direction: uses
+    interface: commercial Drone PRO fleet runtime path
+    notes: The cataloged Drone core/codebase provides the underlying drone simulation technology; Drone Show requires its commercial PRO path for intended operation.
+  - component_id: hakoniwa-envsim
+    direction: uses
+    interface: PLATEAU City World and environment context
+    notes: City shows consume generated city and environment assets rather than implementing CityGML conversion here.
+  - component_id: hakoniwa-threejs-drone
+    direction: uses
+    interface: browser drone visualization
+    notes: Generic drone rendering remains owned by the Three.js component.
+  - component_id: hakoniwa-map-viewer
+    direction: uses
+    interface: map and City viewer integration
+    notes: Generic map visualization remains owned by Map Viewer.
+
+data_contracts:
+  - name: Show File v1
+    description: Human-authored show definition contract owned by the Drone Show repository.
+    source:
+      - repository: hakoniwalab/hakoniwa-drone-show
+        path: docs/show-file-v1.md
+        revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+  - name: Show IR v0.1
+    description: Intermediate show representation consumed by planning and runtime materialization.
+    source:
+      - repository: hakoniwalab/hakoniwa-drone-show
+        path: docs/show-ir-v0.1.md
+        revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+  - name: Show Plan v0.1
+    description: Resolved formation, assignment, transition, and execution-plan contract.
+    source:
+      - repository: hakoniwalab/hakoniwa-drone-show
+        path: docs/show-plan-v0.1.md
+        revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+  - name: Show control protocol
+    description: Browser-to-show start/readiness/status protocol carried through the existing WebBridge path.
+    source:
+      - repository: hakoniwalab/hakoniwa-drone-show
+        path: docs/show-control-protocol.md
+        revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+
+recipe_roles:
+  - role: control_plane
+    description: Owns virtual-show planning, start readiness, status, progression, and show-specific lifecycle behavior.
+  - role: integration_boundary
+    description: Composes fleet runtime, City World, browser viewer, wind scenario, and show-plan contracts without duplicating owner implementations.
+  - role: visualizer
+    description: Adds show-specific audience and AR presentation on top of generic Hakoniwa rendering components.
+  - role: commercial_pack
+    description: Provides the private commercial show-planning and execution layer required for Hakoniwa virtual drone shows.
+
+typical_usecases:
+  - Create a formation-based virtual drone show from a file-driven show definition.
+  - Resolve formation point sets and assignments for a selected drone count.
+  - Rehearse a show in a PLATEAU-derived City World before using the city as a visual or operational venue reference.
+  - Compare the same show plan under deterministic wind scenarios.
+  - Preview audience viewpoints and LED presentation in the browser.
+  - Preview the virtual show through a mobile camera-overlay AR view.
+  - Run large-fleet show demonstrations such as the recorded 128-drone, 6-process City baseline.
+
+anti_usecases:
+  - Real-world flight authorization or proof of regulatory compliance.
+  - Treating simulation contacts as certified collision-risk probabilities or accident counts.
+  - Treating Open-Meteo live values as aviation-grade weather input.
+  - Replacing the underlying Drone PRO physics/control runtime, PLATEAU City generator, or generic viewer implementations.
+
+demo_candidates:
+  - name: 128-drone PLATEAU City show
+    description: Configure a PLATEAU City World show for 128 drones across six MuJoCo processes, start the Show Runner, verify all drones complete TakeOff, and hold the final formation until operator stop.
+    required_components:
+      - hakoniwa-drone-show
+      - hakoniwa-drone-core
+      - hakoniwa-envsim
+      - hakoniwa-threejs-drone
+      - hakoniwa-map-viewer
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-drone-show
+        path: docs/task0-baseline.md
+        revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+  - name: Reproducible gust comparison
+    description: Run the same show with a pinned Wind Scenario v1 input and retain execution evidence for comparison with another plan or condition.
+    required_components:
+      - hakoniwa-drone-show
+      - hakoniwa-drone-core
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-drone-show
+        path: examples/wind-scenarios/osaka-gust-east.json
+        revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+
+known_gaps:
+  - Add a Business Pack Use Case that frames virtual drone-show rehearsal and plan comparison without implying real-flight certification.
+  - Add or expose a metadata-only Business Pack Recipe reference if commercial Recipe discovery should be possible without duplicating the private implementation.
+  - Continue separating show-planning evidence, simulation-contact evidence, and real-world operational claims.
+
+source_refs:
+  - repository: hakoniwalab/hakoniwa-drone-show
+    path: README.md
+    revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+    description: Repository ownership boundary, operator workflow, City/flat environment modes, AR preview, wind controls, and show lifecycle.
+  - repository: hakoniwalab/hakoniwa-drone-show
+    path: docs/task0-baseline.md
+    revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+    description: Recorded migration baseline and 128-drone City execution evidence.
+  - repository: hakoniwalab/hakoniwa-drone-show
+    path: docs/show-plan-v0.1.md
+    revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+    description: Resolved show-plan contract.
+  - repository: hakoniwalab/hakoniwa-drone-show
+    path: docs/ar-preview.md
+    revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+    description: Mobile camera-overlay AR preview contract.
+  - repository: hakoniwalab/hakoniwa-drone-show
+    path: docs/open-meteo-live-wind-provider-spec.md
+    revision: ccc55d398a540210acc298ed9964bd63e4b8011e
+    description: Optional Open-Meteo live wind integration contract.

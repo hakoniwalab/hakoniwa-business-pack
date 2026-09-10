@@ -12,6 +12,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from tools.recipe.path_test_support import contains_path
+
 
 SCRIPT = Path(__file__).with_name("shadow_hand_foxglove.py")
 SPEC = importlib.util.spec_from_file_location("shadow_hand_foxglove_recipe", SCRIPT)
@@ -88,8 +90,8 @@ class ShadowHandFoxgloveTest(unittest.TestCase):
                 assets["foxglove_jointstate_publisher"]["command"],
                 str(runtime.foundation_python),
             )
-            self.assertIn(str(paths.recipe_root), json.dumps(data))
-            self.assertIn(str(paths.install_prefix), json.dumps(data))
+            self.assertTrue(contains_path(data, paths.recipe_root))
+            self.assertTrue(contains_path(data, paths.install_prefix))
             self.assertNotIn("/usr/local/hakoniwa", json.dumps(data))
             self.assertNotIn("endpoint-core-free", json.dumps(data))
 

@@ -1,0 +1,56 @@
+id: athrill-device-core-pro-exdev-split
+title: Athrill time-only and EV3 PDU EXDEV split over Core Pro
+status: promoted
+knowledge_type: [architectural_principle, interface_contract, usage_pattern]
+summary: Standalone targets need a loadable hakotime library while the EV3 composite must statically embed the same time core; both use Core Pro polling APIs rather than a private Unity connection.
+observation:
+  context: Rebuilding Athrill EXDEV support for native Windows and Business Pack use.
+  details:
+    - hakotime builds as static and shared libraries.
+    - hakopdu_ev3 links the static time core and exposes one EXDEV descriptor.
+    - Core Pro polling APIs own asset lifecycle, time, and PDU exchange.
+sources:
+  repositories:
+    - repository: toppers/athrill-device
+      path: device/hako-exdev
+      revision: 016b3765305d8ccdbcff15cd9238967b892c978c
+  runtime_evidence:
+    - description: Linux and Windows Release builds and four CTest cases passed; dependency inspection confirmed hakopdu_ev3 has no dynamic hakotime dependency.
+  expert_input:
+    - source: project developer
+      statement: RH850 needs the standalone hakotime library, while hakopdu_ev3 should embed the static time implementation.
+confidence: high
+contradictions: []
+validation:
+  status: partially_verified
+  required: [Run an Athrill target ELF against live Hakoniwa time and EV3 PDU traffic.]
+  notes: [Build, ABI, unit, and shared-library loading are verified; end-to-end runtime behavior is not.]
+tracking:
+  implementation_status: resolved
+  issues: []
+promotion_targets:
+  catalog: [athrill-device]
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: [athrill-device-core-pro-build]
+  executable_guardrails:
+    - repository: toppers/athrill-device
+      kind: test
+      path: device/hako-exdev/test
+      mode: detect-only
+      notes: [Unit and real shared-library load tests guard the split and exported EXDEV ABI.]
+promotion_rationale:
+  - The split is component-specific architecture and belongs in the component Catalog.
+  - The build composition belongs in a Recipe; live timing rules should wait for end-to-end evidence.
+resolution:
+  status: documented
+  fixed_by:
+    - repository: toppers/athrill-device
+      issue: null
+      pull_request: null
+      revision: 016b3765305d8ccdbcff15cd9238967b892c978c
+  verified: true
+  promoted_to: [catalog/components/athrill-device.yaml, recipes/examples/athrill-device-core-pro-build.yaml]
+  executable_guardrails: [toppers/athrill-device/device/hako-exdev/test]
+  notes: [End-to-end runtime validation remains a separate follow-up.]

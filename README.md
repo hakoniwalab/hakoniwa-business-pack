@@ -13,6 +13,8 @@
 実行と評価から得られた知見を Catalog、Recipe、Use Case へ継続的に還流し、
 接続の選択肢と実現できる価値を育てていきます。
 
+> 初めて利用する方は [`docs/getting-started-ja.md`](docs/getting-started-ja.md) から始めてください。環境構築から最初の Recipe 実行までを説明しています。
+
 ## AI Bootstrap Prompt
 
 If you are an AI agent, do not summarize this repository after reading only this
@@ -94,10 +96,38 @@ python tools/recipe.py plan --recipe <recipe.yaml>
 python tools/recipe.py configure --recipe <recipe.yaml>
 ```
 
-`recipe.py` delegates Receipt inspection and component build/install to the
-Foundation engine, while also handling declared sibling repositories and Recipe
-Python requirements. Direct `foundation.py` commands are retained for component,
-CI, and Foundation-maintainer work.
+`recipe.py` resolves Foundation component repositories and Recipe-local
+repositories through one source contract. `plan` reports `clone`, `reuse`, or a
+required local input together with available revision provenance. `configure`
+clones only missing, cloneable sibling repositories and never updates, resets, or
+replaces an existing checkout. It then delegates Receipt inspection and component
+build/install to the Foundation engine and installs Recipe Python requirements.
+
+When an operator resolves experiment-specific Foundation capabilities before the
+Foundation exists, pass that generated requirement file through the same flow:
+
+```bash
+python tools/recipe.py plan --recipe <recipe.yaml> \
+  --foundation-requirements <generated-foundation-requirements.yaml>
+python tools/recipe.py configure --recipe <recipe.yaml> \
+  --foundation-requirements <generated-foundation-requirements.yaml>
+```
+
+The static Recipe remains the composition and source authority; only its
+Foundation requirement input is replaced by the generated profile. `doctor`,
+`plan`, `configure`, and guide status inspect the same selected requirements.
+
+Distributed native binaries use the shared contract in
+`schemas/native-runtime.yaml`. A component Catalog entry declares versioned
+runtime profiles, managed runtimes, binary roles, and platform libraries. A
+Recipe selects a profile and roles without naming `ldd`, `otool`, or an OS
+package command. The common validator chooses the platform adapter, checks the
+component-owned source contract for Catalog drift, and reports both declared
+and undeclared unresolved libraries before launch.
+
+Direct `foundation.py` commands are retained for component, CI, and
+Foundation-maintainer work. They assume source trees have already been resolved;
+a missing build source fails early and points back to `recipe.py configure`.
 
 Recipes with a generated Launcher are started through the same entry point:
 

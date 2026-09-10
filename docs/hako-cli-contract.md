@@ -166,6 +166,57 @@ A repository MAY expose only a very small manifest surface. The component roll-o
 
 This diversity is intentional. A cross-repository contract is successful when it removes caller-side platform/config-selection knowledge without forcing unrelated component internals into one schema.
 
+## Source dependency ownership
+
+When a component is built from source together with another repository, the
+component and the source orchestrator have different responsibilities.
+
+The component-owned manifest and `hako.py`:
+
+- SHOULD accept dependency roots through repository-owned manifest fields such
+  as `paths.<dependency>_root`;
+- SHOULD validate the resolved root, required source artifacts, repository
+  identity, revision, and dirty state when those facts affect the build;
+- SHOULD pass the resolved root to CMake or the repository's native build
+  system without copying the dependency into the component repository;
+- SHOULD record the resolved root and revision in inspectable build provenance;
+- MUST NOT silently replace, reset, update, or repair an existing dependency
+  checkout;
+- SHOULD NOT clone or download a source dependency as an implicit side effect of
+  `doctor`, `configure`, `build`, `test`, `install`, or `smoke`.
+
+The caller or source orchestrator—such as Business Pack Recipe configuration,
+Foundation source resolution, CI, or an explicit user setup step—owns:
+
+- repository URL and access policy;
+- requested revision;
+- clone or checkout placement;
+- materialization before component build operations begin.
+
+This gives the standard flow a visible repository boundary:
+
+```text
+Business Pack / CI / user setup
+  -> materialize dependency source
+  -> select component manifest
+  -> component hako.py resolves paths.<dependency>_root
+  -> component doctor / configure / build / install
+```
+
+A repository MAY document a sibling checkout as its default dependency root.
+It MAY also provide a separate, explicitly invoked bootstrap or download
+extension when standalone onboarding requires one. Such an extension is not an
+implicit standard-operation behavior and MUST disclose its network and mutation
+effects.
+
+Runtime packages and product-owned managed runtimes are separate from source
+repository dependencies. Their owner may provide explicit download/install
+operations and a version authority when the runtime contract requires it.
+
+The intent is not to forbid all downloads. It is to keep source acquisition
+visible and orchestrator-owned, while keeping component-specific build
+knowledge component-owned.
+
 ## `--dry-run` and repository-owned options
 
 `--dry-run` is not a seventh standard operation and does not acquire one universal behavior in v1.1.

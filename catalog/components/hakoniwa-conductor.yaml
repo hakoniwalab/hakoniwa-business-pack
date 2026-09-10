@@ -12,9 +12,9 @@ distribution:
     - Commercial use and source distribution require a separate Hakoniwa Conductor PRO agreement.
     - Public repository visibility does not grant OSS or commercial-use rights.
 verification:
-  verified_at: 2026-08-09
-  source_revision: 0df3765ef5572eaca9ec568c4b890aadad96c38d
-  source_ref: v1.0.0
+  verified_at: 2026-08-17
+  source_revision: df3721042770d94fce837267b7765eda5a0b8584
+  source_ref: v1.1.0
 summary: Distributed Hakoniwa control-plane binaries and configuration generators for coordinating execution responsibility, simulation time, and Runtime Delegation across server/client nodes.
 category:
   primary: simulation-core
@@ -29,7 +29,7 @@ status:
   maturity: experimental
   catalog_confidence: high
   notes:
-    - v1.0.0 publishes Linux x86_64 and macOS arm64 binary packages with checksums and build-contract metadata.
+    - v1.1.0 publishes Linux x86_64 and macOS arm64 binary packages with checksums and build-contract metadata.
     - The public repository owns user documentation, release distribution, and issue intake; implementation source remains private.
     - A public generated configuration fixture and Business Pack time-synchronization Recipe provide a no-RD first smoke.
 
@@ -59,24 +59,24 @@ capabilities:
         path: docs/configuration-ja.md
         revision: 0df3765ef5572eaca9ec568c4b890aadad96c38d
   - name: Cross-platform binary distribution
-    description: v1.0.0 provides Ubuntu 24.04 x86_64 and macOS arm64 ZIP packages with SHA-256 files.
+    description: v1.1.0 provides Ubuntu 24.04 x86_64 and macOS arm64 ZIP packages with SHA-256 files.
     evidence:
       - repository: hakoniwalab/hakoniwa-conductor
-        path: docs/releases/v1.0.0-ja.md
-        revision: 0df3765ef5572eaca9ec568c4b890aadad96c38d
+        path: docs/releases/v1.1.0-ja.md
+        revision: df3721042770d94fce837267b7765eda5a0b8584
 
 limitations:
   - The free edition is binary-only and is not an open-source distribution.
-  - The v1.0.0 ZIP does not bundle Foundation shared libraries or user configuration.
+  - The v1.1.0 ZIP does not bundle Foundation shared libraries or user configuration.
   - Extracting the ZIP alone does not create a runnable topology; use the public sample fixture through the Business Pack runtime Recipe.
-  - v1.0.0 is verified only for Ubuntu 24.04 x86_64 and macOS arm64.
+  - v1.1.0 is verified only for Ubuntu 24.04 x86_64 and macOS arm64.
   - Time differences are available through diagnostic logs; a UI or graph visualization is not provided.
 
 interfaces:
   inputs:
     - name: User-facing Conductor configuration
       kind: config
-      description: Public contract intended to describe topology and policy before detailed runtime configuration is generated; the v1.0.0 public schema is a follow-up.
+      description: Public contract intended to describe topology and policy before detailed runtime configuration is generated.
     - name: Generated runtime configuration
       kind: config
       description: Conductor, RD, Remote API, Bridge, Endpoint, RPC, and PDU configuration consumed by the release binaries.
@@ -103,7 +103,7 @@ interfaces:
     - path: docs/binary-package-ja.md
       description: Release filenames, package contents, and sample-execution boundary.
     - path: docs/compatibility-ja.md
-      description: v1.0.0 Foundation and platform compatibility contract.
+      description: v1.1.0 Foundation and platform compatibility contract.
 
 dependencies:
   required:
@@ -132,7 +132,7 @@ platforms:
     - Ubuntu 24.04 x86_64
     - macOS arm64
   notes:
-    - Platform claims are limited to the published v1.0.0 binary packages.
+    - Platform claims are limited to the published v1.1.0 binary packages.
 
 connects_to:
   - component_id: hakoniwa-core-pro
@@ -162,19 +162,19 @@ data_contracts:
     source:
       - repository: hakoniwalab/hakoniwa-conductor
         path: docs/compatibility-ja.md
-        revision: 0df3765ef5572eaca9ec568c4b890aadad96c38d
+        revision: df3721042770d94fce837267b7765eda5a0b8584
   - name: Binary package names
-    description: v1.0.0 uses hakoniwa-conductor-v1.0.0-linux-x86_64.zip and hakoniwa-conductor-v1.0.0-macos-arm64.zip with corresponding .sha256 files.
+    description: v1.1.0 uses hakoniwa-conductor-v1.1.0-linux-x86_64.zip and hakoniwa-conductor-v1.1.0-macos-arm64.zip with corresponding .sha256 files.
     source:
       - repository: hakoniwalab/hakoniwa-conductor
         path: docs/binary-package-ja.md
-        revision: 0df3765ef5572eaca9ec568c4b890aadad96c38d
+        revision: df3721042770d94fce837267b7765eda5a0b8584
   - name: Foundation compatibility
     description: Foundation libraries are not bundled; the Business Pack must satisfy the revisions and versions recorded by the release build contract.
     source:
       - repository: hakoniwalab/hakoniwa-conductor
         path: docs/compatibility-ja.md
-        revision: 0df3765ef5572eaca9ec568c4b890aadad96c38d
+        revision: df3721042770d94fce837267b7765eda5a0b8584
 
 recipe_roles:
   - role: simulation_core
@@ -199,13 +199,13 @@ anti_usecases:
   - Running a topology from the ZIP without the corresponding generated configuration.
 
 demo_candidates:
-  - name: v1.0.0 binary-package setup
+  - name: v1.1.0 binary-package setup
     description: Download the platform ZIP into the Business Pack work area, verify SHA-256 and package structure, and expose its installed path for a future runtime Recipe.
     required_components:
       - hakoniwa-conductor
     source_examples:
       - repository: hakoniwalab/hakoniwa-business-pack
-        path: recipes/examples/hakoniwa-conductor-v1-0-0-binary-package.yaml
+        path: recipes/examples/drone-fleet-multi-host.yaml
         revision: main
   - name: Distributed RD smoke
     description: Start the Conductor server/client topology, observe Runtime Delegation, and terminate normally after public sample configuration becomes available.
@@ -239,19 +239,19 @@ demo_candidates:
 operations:
   install:
     commands:
-      - python tools/recipe/hakoniwa_conductor.py configure --accept-license
-      - python tools/recipe/hakoniwa_conductor.py doctor
+      - python tools/recipe/hakoniwa_conductor.py configure --version v1.1.0 --accept-license
+      - python tools/recipe/hakoniwa_conductor.py doctor --version v1.1.0
     notes:
-      - Assets are installed under work/recipes/hakoniwa-conductor-v1-0-0-binary-package rather than a system directory.
+      - Assets are installed under work/recipes/hakoniwa-conductor-v1-1-0-binary-package rather than a system directory.
       - --accept-license records an explicit operator acknowledgement; an AI must not infer acceptance.
   run:
     commands:
-      - python tools/recipe/hakoniwa_conductor.py status
+      - python tools/recipe/hakoniwa_conductor.py status --version v1.1.0
       - python tools/recipe/hakoniwa_conductor_time_sync.py configure
       - python tools/recipe/hakoniwa_conductor_time_sync.py doctor
       - python tools/recipe/hakoniwa_conductor_time_sync.py smoke
     notes:
-      - v1.0.0 package setup does not start a Conductor topology.
+      - v1.1.0 package setup does not start a Conductor topology.
       - The time-sync smoke owns its processes, verifies behavior, and performs bounded normal cleanup.
 
 known_gaps:
@@ -272,8 +272,8 @@ source_refs:
     revision: 0df3765ef5572eaca9ec568c4b890aadad96c38d
     description: Implemented semantic scope and Conductor Light distinction.
   - repository: hakoniwalab/hakoniwa-conductor
-    path: docs/releases/v1.0.0-ja.md
-    revision: 0df3765ef5572eaca9ec568c4b890aadad96c38d
+    path: docs/releases/v1.1.0-ja.md
+    revision: df3721042770d94fce837267b7765eda5a0b8584
     description: Published artifacts, platform targets, and Foundation build contract.
 
 tags:

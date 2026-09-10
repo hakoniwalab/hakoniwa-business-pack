@@ -10,8 +10,8 @@ distribution:
   notes:
     - Public OSS Hakoniwa component.
 verification:
-  verified_at: 2026-07-26
-  source_revision: e2454b15c22466336df565af09db9f43d2066da7
+  verified_at: 2026-08-30
+  source_revision: e5c567948b42512abc36a8cea2b4d8a151f6c145
   source_ref: main
 summary: Logical PDU transfer layer that controls when data flows between endpoints while delegating transport I/O to hakoniwa-pdu-endpoint.
 category:
@@ -29,6 +29,7 @@ status:
     - The component is a timing and routing layer, not a transport implementation.
     - Core-free Bridge library, standalone daemon, and monitor builds are separated from the optional Hakoniwa-integrated application path.
     - Installed-package composability is validated with external CMake consumers rather than inferred from in-repository builds.
+    - Current main restores the standalone build/install contract and validates manifest parsing and command resolution through component-owned tests.
 
 capabilities:
   - name: Logical PDU flow declaration
@@ -56,14 +57,17 @@ capabilities:
         path: README.md
         revision: e2454b15c22466336df565af09db9f43d2066da7
   - name: Manifest-driven cross-platform build
-    description: Separates user-facing component intent from OS-specific dependency and CMake resolution, with Core-free manifest builds validated on Ubuntu, macOS, and Windows.
+    description: Separates user-facing component intent from OS-specific dependency and CMake resolution, with doctor, configure, build, and test commands for Core-free manifest builds on Ubuntu, macOS, and Windows.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-bridge-core
         path: hakoniwa-build.yaml
-        revision: e2454b15c22466336df565af09db9f43d2066da7
+        revision: e5c567948b42512abc36a8cea2b4d8a151f6c145
       - repository: hakoniwalab/hakoniwa-pdu-bridge-core
-        path: docs/build-architecture.md
-        revision: e2454b15c22466336df565af09db9f43d2066da7
+        path: tools/hako.py
+        revision: e5c567948b42512abc36a8cea2b4d8a151f6c145
+      - repository: hakoniwalab/hakoniwa-pdu-bridge-core
+        path: tools/test_hako.py
+        revision: e5c567948b42512abc36a8cea2b4d8a151f6c145
   - name: Installed CMake package contract
     description: Exports hakoniwa_pdu_bridge::bridge for new consumers while preserving hakoniwa_pdu_bridge::hakoniwa_pdu_bridge_lib as a compatibility target; external consumers are built in CI.
     evidence:

@@ -1,0 +1,33 @@
+version: 1
+
+experiment:
+  id: drone-fleet-single-host-ci
+
+scale:
+  # Smallest practical headless profile for clean-environment onboarding CI.
+  # This is a Workspace/Recipe/Foundation regression, not a scalability run.
+  drone_count: 1
+  drones_per_process: auto
+  process_count: 1
+
+runtime:
+  mode: native
+  visualization: false
+  show_runner_real_time_sync: false
+
+scenario:
+  type: hakoniwa-word
+  word: HAKONIWA
+  letter_width_m: 2.0
+  letter_height_m: 4.0
+  letter_gap_m: 0.9
+  altitude_m: 1.0
+  duration_sec: 0.2
+  hold_sec: 0.0
+  speed_m_s: 5.0
+  timeout_sec: 60.0
+  land: false
+
+results:
+  enabled: false
+  directory: results

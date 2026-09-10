@@ -76,6 +76,7 @@ controlled_fields:
       - command
       - config
       - file
+      - log
       - protocol
       - pdu
   interfaces.protocols.role:
@@ -122,6 +123,7 @@ controlled_fields:
       - environment_model
       - integration_boundary
       - language_binding
+      - measurement
       - monitor
       - physics_runtime
       - rd_runtime
@@ -189,3 +191,4 @@ authoring_rules:
   - Keep `runtime_checks` optional. Absence means runtime readiness is unknown, not that the component failed.
   - Runtime checks must be owned by the component repository; do not duplicate component-specific diagnostic logic in Business Pack.
   - Prefer non-destructive detection and remediation guidance over automatic installation, download, or repair in doctor-style checks.
+  - Declare native binary runtime profiles under native_runtime using ../schemas/native-runtime.yaml; Recipes select those profiles instead of duplicating OS-specific libraries or inspection commands.

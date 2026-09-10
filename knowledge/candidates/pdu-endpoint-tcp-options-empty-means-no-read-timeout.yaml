@@ -1,0 +1,190 @@
+id: pdu-endpoint-tcp-options-empty-means-no-read-timeout
+title: '"options": {} in a TCP transport config is not "use the sample''s timeout" -- it resolves to read_timeout_ms = 0, no receive timeout at all, and copying upstream''s sample value of 1000 instead can self-disconnect an idle Action Client'
+status: candidate
+
+knowledge_type:
+  - implementation_fact
+  - known_pitfall
+  - runtime_rule
+
+summary: >
+  hakoniwa-pdu-endpoint's TCP comm layer defaults read_timeout_ms to 0 (comm_tcp.hpp:51,
+  int read_timeout_ms = 0;), meaning a transport config that writes "options": {}
+  gets no receive timeout at all. hakoniwa-pdu-rpc's own sample/test configs
+  (test/configs/action_tcp_e2e/) instead write read_timeout_ms: 1000, so a
+  workspace that copies the sample's value "to be safe" changes the effective
+  behavior. On a real Server whose Feedback cadence is roughly 1Hz, setting
+  read_timeout_ms=1000 caused the Client to self-disconnect during idle gaps
+  around a Cancel round trip, 4/4, with a native error 10060 / mapped TIMEOUT
+  diagnostic; leaving it at the 0 default (empty options) was 4/4 green in the
+  same scenario. Since hakoniwa-pdu-endpoint b089e0e, a read timeout is now
+  fatal to the connection rather than silently retried, so picking too short a
+  value changed from "masked by retry" to "the session drops" -- exactly the
+  failure mode this candidate documents.
+
+observation:
+  context: >
+    Diagnosing the cross-boundary Cancel/session-loss defect described in the
+    companion candidate pdu-ros-action-client-bridge-cancel-broke-tcp-session,
+    2026-08-10 through 2026-08-12, Windows host to WSL2 Ubuntu-24.04, real TCP.
+    While re-testing at the fixed pdu-endpoint/pdu-rpc revisions, varying
+    read_timeout_ms was what isolated a second, independent contributor to
+    disconnects beyond the slot-release defect itself.
+  details:
+    - "Default, read from source. hakoniwa-pdu-endpoint's
+      include/hakoniwa/pdu/comm/comm_tcp.hpp:51 declares
+      `int read_timeout_ms = 0;` as the struct default. An empty options object
+      in a transport config (\"options\": {}) leaves this field unset by the
+      config and it resolves to that C++ default: 0, meaning no receive
+      timeout -- reads block indefinitely for data rather than expiring."
+    - "Upstream's own sample and test configs do not use the default.
+      hakoniwa-pdu-rpc/test/configs/action_tcp_e2e/ writes
+      read_timeout_ms: 1000 explicitly. A workspace copying that sample's
+      transport config verbatim, or copying its options block into a new
+      config while leaving other fields at \"empty means default\", ends up
+      with a materially different read_timeout_ms than an actually-empty
+      options block would give."
+    - "Measured effect with a ~1Hz Feedback cadence. With read_timeout_ms=1000
+      and a real Action Server feeding Feedback at roughly 1 message per
+      second, the idle gaps that occur around a Cancel request/response round
+      trip were long enough to trip the 1000ms read timeout 4/4 times, and the
+      Client disconnected itself. With read_timeout_ms left at 0 (equivalent to
+      an actually-empty options block), the same scenario was 4/4 green with no
+      self-disconnect."
+    - "Diagnostic signature of the failure. The disconnect was accompanied by a
+      logged native_error=10060 (Windows WSAETIMEDOUT) and a
+      mapped_error=TIMEOUT timeout_ms=1000 line, which is what made the
+      read_timeout_ms setting -- not the slot-release defect from the companion
+      candidate -- identifiable as a second, independent cause once the
+      slot-release fix (pdu-rpc 7ed378b) was already in place and the failure
+      still recurred at read_timeout_ms=1000."
+    - "Why this got worse, not better, after the endpoint fix. Before
+      hakoniwa-pdu-endpoint b089e0e, a read timeout on Windows was treated as an
+      ordinary would-block condition and effectively retried, which could mask
+      an overly aggressive read_timeout_ms value by continuing to use the
+      connection anyway. Since b089e0e, WSAETIMEDOUT is no longer treated as
+      would-block and a timed-out connection is not silently reused, so the
+      same short timeout value that used to be quietly tolerated now ends the
+      session. Choosing read_timeout_ms therefore matters more, not less, after
+      that fix."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      path: include/hakoniwa/pdu/comm/comm_tcp.hpp
+      revision: b089e0e
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      path: test/configs/action_tcp_e2e/
+      revision: 501ce5a
+  runtime_evidence:
+    - description: >-
+        This workspace's own A/B measurement, Windows 11 Pro x64 host to WSL2
+        Ubuntu-24.04, real TCP, 2026-08-10 through 2026-08-12, against a real
+        Action Server with ~1Hz Feedback cadence. read_timeout_ms=1000:
+        self-disconnect 4/4 around the Cancel round trip, native_error=10060 /
+        mapped_error=TIMEOUT timeout_ms=1000 logged each time. read_timeout_ms=0
+        (empty options default): 4/4 green, no self-disconnect.
+  expert_input: []
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - Not measured against Feedback cadences other than roughly 1Hz; a faster
+      cadence would likely tolerate a shorter read_timeout_ms, and this
+      candidate's numbers should not be read as a universal safe threshold.
+    - Not measured on a non-Windows Client; the native_error=10060 mapping is
+      Windows-specific (WSAETIMEDOUT), though the general empty-options-means-0
+      default and the read_timeout_ms-versus-Feedback-cadence tradeoff are
+      platform-neutral facts read from cross-platform source.
+  notes:
+    - Verified by direct source reading of the struct default plus a controlled
+      A/B measurement in this workspace toggling only read_timeout_ms between
+      0 and upstream's sample value of 1000, holding the rest of the
+      configuration and scenario fixed.
+    - >-
+      Lifecycle updated 2026-08-31 after maintainer review.
+      hakoniwa-pdu-endpoint#65 is closed and docs/tcp-runtime-contract-ja.md
+      now carries the contract in writing. This workspace read that document
+      directly rather than taking the status second-hand. It states that
+      read_timeout_ms and write_timeout_ms take millisecond values of 0 or
+      more, that long-running simulation connections without an explicit
+      inactivity deadline should use a read timeout and write timeout of 0,
+      and that choosing a positive timeout means the current connection ends
+      when the deadline is reached. That is exactly the tradeoff this
+      candidate measured, now documented upstream.
+
+tracking:
+  implementation_status: resolved
+  issues:
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      number: 65
+      relation: documentation
+      status: closed
+
+promotion_targets:
+  catalog:
+    - hakoniwa-pdu-endpoint
+  runtime_primer: true
+  base_ecosystem_guide: false
+  component_asset_guide: true
+  recipes: []
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      kind: doctor
+      mode: detect-and-suggest-remediation
+      notes:
+        - >-
+          A config doctor could warn when a TCP transport config's
+          read_timeout_ms is set below a small multiple of the configured or
+          observed Feedback cadence, since that is exactly the condition that
+          produced a 4/4 self-disconnect here. Not authored in this candidate;
+          the owning repository would need to decide where cadence is knowable
+          at config-validation time.
+
+promotion_rationale:
+  - >-
+    This is a config-authoring trap that looks like a safe, conservative choice
+    ("use the same timeout the sample uses") but actually changes behavior from
+    "no timeout" to "a timeout that can trigger under normal idle gaps". It
+    belongs in the runtime primer so config authors do not have to rediscover
+    the struct default by reading C++ source.
+  - >-
+    Also promoted to component_asset_guide because this is specifically about
+    how to configure a hakoniwa-pdu-endpoint TCP transport correctly for an
+    Action-style workload, not a general ecosystem positioning statement.
+  - >-
+    An executable guardrail is plausible in principle (a doctor could flag an
+    implausibly short read_timeout_ms relative to expected traffic cadence) but
+    is not authored here because cadence is workload-specific and not always
+    knowable from the config alone; flagged as a suggestion for the owning
+    repository rather than built here.
+
+resolution:
+  status: documented
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      issue: 65
+      pull_request: null
+      revision: null
+  verified: true
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - >-
+      This is not a defect to fix; both read_timeout_ms=0 and
+      read_timeout_ms=1000 behave exactly as configured. The candidate exists
+      to document that "options": {} is not equivalent to copying upstream's
+      sample value, and that the effective default (0, no timeout) is
+      unintuitive from the sample alone.
+    - >-
+      The documentation gap this candidate pointed at is closed:
+      hakoniwa-pdu-endpoint#65 is closed and
+      docs/tcp-runtime-contract-ja.md states the contract, including the
+      recommendation to use 0 for long-running simulation connections and the
+      consequence of choosing a positive timeout. resolution.verified is true
+      on the basis of reading that document at its current revision; the
+      measured A/B behavior in this candidate agrees with it.

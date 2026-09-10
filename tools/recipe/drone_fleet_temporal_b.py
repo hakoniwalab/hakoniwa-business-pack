@@ -14,6 +14,8 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from tools.workdir import recipe_root as selected_recipe_root
+
 import drone_fleet_performance_a as common
 import drone_fleet_performance_b as performance_b
 import drone_fleet_single_host as operator
@@ -29,7 +31,6 @@ DEFAULT_EXPERIMENT = (
     / "drone-fleet-performance"
     / "single-host-temporal-validation.yaml"
 )
-PROCESS_COUNTS = [2, 15]
 ATTEMPT = 1
 SUMMARY_FIELDS = (
     "process_count",
@@ -50,7 +51,7 @@ class TemporalError(RuntimeError):
 
 
 def workspace_root() -> Path:
-    return ROOT / "work" / "recipes" / RECIPE_ID
+    return selected_recipe_root(ROOT, RECIPE_ID)
 
 
 def load_experiment(path: Path) -> operator.Experiment:
@@ -65,6 +66,29 @@ def load_experiment(path: Path) -> operator.Experiment:
     if measurement.conductor_implementation != "embedded":
         raise TemporalError("single-host Temporal Validation requires embedded Conductor")
     return base
+
+
+def load_process_counts(path: Path) -> list[int]:
+    raw = operator.load_simple_yaml(path)
+    matrix = raw.get("matrix")
+    if not isinstance(matrix, dict):
+        raise TemporalError("single-host Temporal Validation requires matrix")
+    unknown = sorted(set(matrix) - {"process_count", "attempts"})
+    if unknown:
+        raise TemporalError(f"unknown matrix fields: {', '.join(unknown)}")
+    values = matrix.get("process_count")
+    if not isinstance(values, list) or not values:
+        raise TemporalError("matrix.process_count must be a non-empty list")
+    if any(
+        isinstance(value, bool) or not isinstance(value, int) or value < 1
+        for value in values
+    ):
+        raise TemporalError("matrix.process_count values must be integers >= 1")
+    if values != sorted(set(values)):
+        raise TemporalError("matrix.process_count must be sorted without duplicates")
+    if matrix.get("attempts") != ATTEMPT:
+        raise TemporalError(f"matrix.attempts must be {ATTEMPT}")
+    return values
 
 
 def configuration_id(process_count: int) -> str:
@@ -193,10 +217,10 @@ def summary_paths(base: operator.Experiment) -> tuple[Path, Path]:
     return root / "temporal-b.json", root / "temporal-b.csv"
 
 
-def summarize(base: operator.Experiment) -> int:
+def summarize(base: operator.Experiment, process_counts: list[int]) -> int:
     rows = []
     missing = []
-    for process_count in PROCESS_COUNTS:
+    for process_count in process_counts:
         path = result_path(base, process_count)
         if not path.is_file():
             missing.append(str(path))
@@ -225,7 +249,7 @@ def summarize(base: operator.Experiment) -> int:
     report = {
         "validation": "single-host-temporal-b",
         "fixed_drone_count": 128,
-        "process_counts": PROCESS_COUNTS,
+        "process_counts": process_counts,
         "complete": not missing,
         "missing_results": missing,
         "results": rows,
@@ -237,18 +261,18 @@ def summarize(base: operator.Experiment) -> int:
         writer.writerows(rows)
     print(f"Temporal summary JSON: {json_path}")
     print(f"Temporal summary CSV : {csv_path}")
-    print(f"Recorded             : {len(rows)}/{len(PROCESS_COUNTS)}")
+    print(f"Recorded             : {len(rows)}/{len(process_counts)}")
     return 0 if not missing else 1
 
 
-def plan(base: operator.Experiment) -> int:
-    print("Temporal Validation B: 128 UAV single-host endpoints")
+def plan(base: operator.Experiment, process_counts: list[int]) -> int:
+    print("Temporal Validation B-max: 128 UAV single-host maximum process count")
     assert base.measurement is not None
     print(
         "Observer interval    : "
         f"{base.measurement.temporal_sampling_interval_usec} usec virtual time"
     )
-    for process_count in PROCESS_COUNTS:
+    for process_count in process_counts:
         path = result_path(base, process_count)
         print(
             f"  [{'RECORDED' if path.is_file() else 'PENDING'}] "
@@ -257,10 +281,10 @@ def plan(base: operator.Experiment) -> int:
     return 0
 
 
-def run(base: operator.Experiment, *, resume: bool) -> int:
+def run(base: operator.Experiment, process_counts: list[int], *, resume: bool) -> int:
     existing = [
         result_path(base, process_count)
-        for process_count in PROCESS_COUNTS
+        for process_count in process_counts
         if result_path(base, process_count).is_file()
     ]
     if existing and not resume:
@@ -268,7 +292,7 @@ def run(base: operator.Experiment, *, resume: bool) -> int:
             "temporal results already exist; use --resume to skip them: "
             + ", ".join(map(str, existing))
         )
-    for process_count in PROCESS_COUNTS:
+    for process_count in process_counts:
         result = result_path(base, process_count)
         if result.is_file():
             print(f"[SKIP] {result}")
@@ -297,7 +321,7 @@ def run(base: operator.Experiment, *, resume: bool) -> int:
             raise TemporalError(f"temporal result is missing: {result}")
         validate_result(common.load_result(result), process_count)
         print(f"[PASS] {result}")
-    return summarize(base)
+    return summarize(base, process_counts)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -312,13 +336,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
         base = load_experiment(args.experiment.resolve())
+        process_counts = load_process_counts(args.experiment.resolve())
         if args.command == "plan":
-            return plan(base)
+            return plan(base, process_counts)
         if args.command == "summarize":
-            return summarize(base)
+            return summarize(base, process_counts)
         if args.command in {"status", "stop"}:
             return run_operator(args.command, args.experiment.resolve())
-        return run(base, resume=args.resume)
+        return run(base, process_counts, resume=args.resume)
     except (TemporalError, common.MatrixError, performance_b.MatrixError, operator.RecipeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

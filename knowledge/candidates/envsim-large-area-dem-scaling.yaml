@@ -1,0 +1,123 @@
+id: envsim-large-area-dem-scaling
+title: Large-area PLATEAU DEM generation must remain bounded and observable
+status: validating
+
+knowledge_type:
+  - known_pitfall
+  - runtime_rule
+  - validation_rule
+
+summary: >
+  A geographically small query can resolve very large municipality-level DEM
+  CityGML objects. DEM conversion must validate the XML contract without
+  constructing unrelated XML elements, scan only TIN posList payloads, bound
+  gap-fill search, parallelize only independent work with an explicit worker
+  limit, and continue reporting progress while a component tool is busy.
+
+observation:
+  context: >
+    A two-kilometer-square Yokohama/Kawasaki City World selection remained in
+    GENERATING until the browser reported no status for 30 minutes.
+  details:
+    - The last component phase was terrain and dem2hfield.py had not produced terrain.xml.
+    - Five selected DEM files occupied about 1.3 GiB although catalog file sizes were reported as zero.
+    - A 2 m grid for the selection contains 1001 by 1001 samples.
+    - The former gap-fill implementation sorted every valid grid sample for every missing sample.
+    - The reproduced selection contained 647783 initially missing samples and 621110 samples beyond the permitted 20 m fill distance.
+    - The bounded implementation reached the explicit uncovered-samples result in about 37 seconds on Apple M2 Pro instead of remaining silent for 30 minutes.
+    - File-level parallelism can remain at N-1/N when one intersecting DEM object is hundreds of megabytes and all other source envelopes are out of range.
+    - On a Kanazawa selection, one relevant 684 MB DEM object contained about 1.7 million posList records; generic ElementTree traversal dominated extraction time.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-envsim
+      path: src/city_pipeline/dem2hfield.py
+      revision: 92066b0
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/remote_operation/city_world/generation.py
+      revision: working-tree
+  runtime_evidence:
+    - description: >
+        Job kanagawa-14100-multi-lat35.456-lon139.677 stopped emitting status
+        after terrain started; its generation.log ended at the dem2hfield.py command.
+    - description: >
+        Re-running the same DEM input with two extraction workers completed the
+        bounded calculation in 37.11 seconds and reported 621110 uncovered samples.
+    - description: >
+        For the Kanazawa selection at 36.562919, 136.655029, replacing full
+        ElementTree traversal with validated-envelope plus namespace-aware
+        posList scanning reduced DEM generation from 21.79 to 5.92 seconds.
+        Both runs produced 7464 selected triangles, a 173 by 155 hfield, and
+        altitude range 17.566 to 26.051 m.
+  expert_input:
+    - source: user
+      statement: Independent City World generation work should use parallel execution where safe.
+
+confidence: high
+
+contradictions:
+  - target: recipes/examples/plateau-citygml-mujoco-walls.yaml
+    existing_claim: The verified 200 m Recipe did not characterize large-area DEM scaling.
+    new_evidence: Source object granularity, grid density, and missing coverage dominate large-area behavior.
+
+validation:
+  status: verified
+  required: []
+  notes:
+    - Envsim unit tests cover bounded fill and out-of-range envelope skipping.
+    - Envsim tests cover multiline posList input with a nonstandard GML namespace prefix; the complete suite passes 74 tests with 3 optional MuJoCo skips.
+    - Business Pack tests cover detailed DEM progress and monotonic progress reporting.
+    - A 200 m Hiroshima offline build completed the parallel component schedule, Composer, and Dataset Validator in 17.19 seconds and produced 490 MuJoCo geoms.
+    - The large selection now terminates with explicit uncovered-samples evidence; adding a derived water or missing-terrain fallback is a separate policy decision.
+
+tracking:
+  implementation_status: resolved
+  issues:
+    - repository: hakoniwalab/hakoniwa-envsim
+      number: 11
+      relation: fix
+      status: closed
+    - repository: hakoniwalab/hakoniwa-business-pack
+      number: 148
+      relation: fix
+      status: closed
+
+promotion_targets:
+  catalog:
+    - hakoniwa-envsim
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - plateau-citygml-mujoco-walls
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-envsim
+      kind: test
+      path: tests/test_dem2hfield.py
+      mode: detect-only
+      notes:
+        - Preserve the bounded gap-fill and source-envelope filtering contracts.
+
+promotion_rationale:
+  - DEM scaling is a component constraint and a Recipe operational rule.
+  - Missing DEM beyond the declared interpolation distance must remain detectable rather than silently synthesized.
+
+resolution:
+  status: documented
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-envsim
+      issue: 11
+      pull_request: null
+      revision: 92066b0
+    - repository: hakoniwalab/hakoniwa-business-pack
+      issue: 148
+      pull_request: null
+      revision: working-tree-2026-08-24
+  verified: true
+  promoted_to:
+    - docs/city-world-generation-protocol-ja.md
+  executable_guardrails:
+    - hakoniwalab/hakoniwa-envsim/tests/test_dem2hfield.py
+  notes:
+    - Envsim revision 92066b0 contains the bounded DEM algorithm, fast posList scan, arbitrary bbox grid, parallel schedule, tests, and configuration reference.
+    - The Business Pack revision containing this candidate adds Worker heartbeat, detailed monotonic progress, and Leaflet resize event separation.

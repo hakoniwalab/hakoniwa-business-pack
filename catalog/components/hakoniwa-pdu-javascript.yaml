@@ -10,8 +10,8 @@ distribution:
   notes:
     - Public OSS Hakoniwa component.
 verification:
-  verified_at: 2026-07-19
-  source_revision: 3da0b5344504da3478733eef314d1ca0dc72a3ef
+  verified_at: 2026-08-14
+  source_revision: 8582a5575d3310c0746f06936540f4681189cdaf
   source_ref: main
 summary: JavaScript library for reading, writing, and converting Hakoniwa PDU data over WebSocket from browser or Node.js applications.
 category:
@@ -52,6 +52,15 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-pdu-javascript
         path: README.md
         revision: 3da0b5344504da3478733eef314d1ca0dc72a3ef
+  - name: ROS byte and char uint8 conversion
+    description: Encodes and decodes ROS byte and char as numeric uint8 values across scalar and array paths, including generated std_msgs/Char data.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-javascript
+        path: src/pdu_msgs/pdu_utils.js
+        revision: 8582a5575d3310c0746f06936540f4681189cdaf
+      - repository: hakoniwalab/hakoniwa-pdu-javascript
+        path: tests/PrimitiveTypeContract.test.js
+        revision: 8582a5575d3310c0746f06936540f4681189cdaf
   - name: RPC helper managers
     description: Provides RemotePduServiceClientManager and RemotePduServiceServerManager for RPC PDU workflows.
     evidence:
@@ -149,6 +158,12 @@ data_contracts:
       - repository: hakoniwalab/hakoniwa-pdu-javascript
         path: README.md
         revision: 3da0b5344504da3478733eef314d1ca0dc72a3ef
+  - name: ROS byte and char representation
+    description: ROS byte and char are JavaScript numbers in the range 0 through 255; arrays preserve the same unsigned numeric contract.
+    source:
+      - repository: hakoniwalab/hakoniwa-pdu-javascript
+        path: tests/PrimitiveTypeContract.test.js
+        revision: 8582a5575d3310c0746f06936540f4681189cdaf
 
 recipe_roles:
   - role: language_binding
@@ -160,6 +175,7 @@ recipe_roles:
 
 typical_usecases:
   - Build readonly browser monitors for robot or drone state.
+  - Read and write byte and char scalar or array fields without signed-byte or string coercion.
   - Visualize simulation state with Three.js.
   - Integrate Scratch or other external tools with Hakoniwa PDU/RPC.
   - Read PDU state through WebSocket bridge from Node.js.
@@ -223,4 +239,3 @@ tags:
   - pdu
   - cdr
   - visualization
-

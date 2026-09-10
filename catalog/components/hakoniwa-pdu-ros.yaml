@@ -10,8 +10,8 @@ distribution:
   notes:
     - Public OSS Hakoniwa component for ROS 2 Topic, Service, and Action integration.
 verification:
-  verified_at: 2026-08-08
-  source_revision: f17e1cc20b8ba52e36dc76376cf91093d7f8bd80
+  verified_at: 2026-08-30
+  source_revision: 70b86150aa5642e8f4742f17c150b36f618d052d
   source_ref: main
 summary: >-
   Configuration-driven ROS 2 integration for bidirectional Topic mapping plus
@@ -35,6 +35,7 @@ status:
     - Action Server and Action Client bridge directions are implemented and real-TCP tested with Fibonacci.
     - Native integration CI runs on relevant pull requests and pushes to main.
     - Business Pack orchestration recipes still need to be normalized for all four Service/Action directions.
+    - Topic subscription setup detects ROS 2 event-callback support at runtime so the same bridge source works on Humble and Jazzy.
 capabilities:
   - name: Configuration-driven ROS 2 Topic Bridge
     description: Maps generated Hakoniwa PDU values and ROS 2 messages bidirectionally without per-message bridge code for supported mappings.
@@ -47,7 +48,7 @@ capabilities:
         revision: f17e1cc20b8ba52e36dc76376cf91093d7f8bd80
 
   - name: Runtime Topic type mapping and QoS
-    description: Resolves generated PDU types, recursively maps standard ROS messages, supports binding-level QoS, and reports incompatibility.
+    description: Resolves generated PDU types, recursively maps standard ROS messages, supports binding-level QoS, and reports incompatibility when the ROS 2 runtime exposes subscription event callbacks; Humble falls back without that optional callback argument.
     evidence:
       - repository: hakoniwalab/hakoniwa-pdu-ros
         path: hakoniwa_pdu_ros/config_loader.py
@@ -55,6 +56,9 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-pdu-ros
         path: test/native/test_native_qos.py
         revision: f17e1cc20b8ba52e36dc76376cf91093d7f8bd80
+      - repository: hakoniwalab/hakoniwa-pdu-ros
+        path: test/test_bridge_qos.py
+        revision: 70b86150aa5642e8f4742f17c150b36f618d052d
 
   - name: ROS 2 Service Server Bridge
     description: Exposes a ROS 2 Service Server backed by typed Hakoniwa RPC clients, so ROS callers invoke Hakoniwa Service implementations.

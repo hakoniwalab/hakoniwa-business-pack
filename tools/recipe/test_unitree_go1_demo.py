@@ -12,6 +12,8 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
+from tools.recipe.path_test_support import contains_path
+
 
 SCRIPT = Path(__file__).with_name("unitree_go1_demo.py")
 SPEC = importlib.util.spec_from_file_location("unitree_go1_demo_recipe", SCRIPT)
@@ -79,8 +81,8 @@ class UnitreeGo1DemoTest(unittest.TestCase):
             self.assertEqual(list(assets), ["go1-plant", "go1-pose-bounce-sender"])
             self.assertEqual(assets["go1-pose-bounce-sender"]["command"], str(runtime.foundation_python))
             self.assertEqual(assets["go1-pose-bounce-sender"]["args"][-2:], ["--cycles", "300"])
-            self.assertIn(str(paths.recipe_root), json.dumps(data))
-            self.assertIn(str(paths.install_prefix), json.dumps(data))
+            self.assertTrue(contains_path(data, paths.recipe_root))
+            self.assertTrue(contains_path(data, paths.install_prefix))
             self.assertNotIn("/usr/local/hakoniwa", json.dumps(data))
 
     def test_all_profiles_keep_the_same_plant_and_pdu_contract(self) -> None:

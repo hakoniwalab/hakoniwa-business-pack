@@ -1,0 +1,370 @@
+id: plateau-citygml-mujoco-walls
+title: PLATEAU CityGML to MuJoCo and GLB City World
+recipe_version: 0.2
+
+goal:
+  user_request: 緯度・経度と範囲からPLATEAU CityGMLを取得し、地形・道路・実路面標示・建物を統合したMuJoCo/GLB City Worldを生成したい
+  description: >
+    Materialize hakoniwa-envsim, download current PLATEAU bldg/tran/dem/frn
+    CityGML for a configured geographic range, generate terrain, roads, actual
+    road markings, and buildings independently under one world-frame contract,
+    and compose aligned MuJoCo and GLB City World assets. Dataset validation
+    reports selected LODs, fallbacks, unavailable features, and resulting
+    capabilities without inferring missing markings. A separate pinned regression rebuilds the historical
+    600-meter Shibuya selection and compares every building geom with the
+    integrated Hakoniwa Drone Core reference world.
+
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - hakoniwa-envsim owns the manifest-driven PLATEAU API and CityGML-to-City-World lifecycle.
+    - A shared world-frame keeps terrain, roads, road markings, and buildings aligned.
+    - Dataset validation makes LOD fallback and unavailable visual features explicit.
+    - The historical Envsim source archive and final intermediate geometry remain addressable by immutable Git revisions.
+    - Hakoniwa Drone Core owns the integrated Shibuya MuJoCo reference world.
+
+validation:
+  status: verified
+  summary: >
+    On macOS, a 200-meter Numazu selection produced an aligned DEM hfield,
+    semantic road surfaces, source-derived road markings, building collision
+    geometry, and a composed GLB. The generated MJCF loaded in MuJoCo 3.9.0.
+    The pinned historical Shibuya path remains available as a separate building
+    conversion regression. Cross-platform Recipe execution remains pending.
+  steps:
+    - id: map_origin_contract
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-map-viewer
+          path: src/client/src/ui.js
+          revision: main
+      notes:
+        - Use 35.6625, 139.70625; do not use Drone Core simulation.location longitude 139.69375.
+    - id: legacy_reference_contract
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-envsim
+          path: plateau-work/gml/shibuya_2km_obb.json
+          revision: b95c54f7f39961ff86be99a078fc40e27db6971b
+        - repository: toppers/hakoniwa-drone-core
+          path: config/drone/mujoco-shibuya-api-1/drone.xml
+          revision: 5fcf18d2998f8024c1094324e2960352af499f00
+      notes:
+        - The final historical extraction used 300m half extents, so its actual comparison area is 600m by 600m despite the old shibuya_2km working name.
+        - All 4266 historical wall records are present in the Drone Core integrated XML.
+        - The Business Pack-owned adapter materialized the pinned historical converter and matched all 4266 reference geoms with maximum numeric error 0.0 on macOS.
+    - id: current_numazu_city_world_build
+      status: verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-envsim
+          path: tools/hako.py
+          revision: 11e47f2349fe869b948fe8b9cbecc77a19f99929
+      notes:
+        - The validation center is 35.0988, 138.8587 with 100m north/south and east/west half extents.
+        - The prototype selected 79 buildings, generated a 101 by 101 DEM hfield, and composed terrain, roads, road markings, and buildings.
+        - Actual CityFurniture data provided crosswalks, stop lines, center lines, lane boundaries, road-edge lines, and other regulatory markings.
+        - All 5194 selected road-marking polygons used PLATEAU X3DMaterial colors with zero material fallback.
+
+constraints:
+  - external-plateau-api-used-only-by-explicit-build
+  - configured-selection-origin-is-authoritative
+  - missing-lod3-road-markings-are-omitted-not-inferred
+  - lod-fallback-and-capabilities-must-be-reported
+  - current-build-and-pinned-regression-are-separate
+  - generated-data-remains-under-work
+  - source-url-size-and-sha256-provenance-required
+
+target_environment:
+  required_for: asset-generation
+  status: specified
+  os: macOS | Linux | Windows
+  os_version: current-supported-host
+  architecture: host-native
+  execution_mode: native
+  runtimes:
+    - name: Python
+      required: true
+      version: "3.10+"
+      path: host
+
+execution_environment:
+  required_for: asset-generation
+  status: specified
+  os: macOS | Linux | Windows
+  os_version: current-supported-host
+  architecture: host-native
+  execution_mode: native
+  gui:
+    required: false
+    status: disabled
+  shared_memory:
+    required: false
+    access: not-used
+
+foundation_contract:
+  mode: not_required
+  reason: This Recipe generates files with component-owned Python tools and does not start Hakoniwa Core.
+
+recipe_local_requirements_schema_version: 1
+recipe_local_requirements:
+  hakoniwa-envsim:
+    root:
+      default_path: ../hakoniwa-envsim
+      override_env: HAKONIWA_ENVSIM_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/hakoniwa-envsim.git
+      revision: main
+    required_artifacts:
+      - path: tools/hako.py
+        kind: file
+      - path: src/city_pipeline/gml_lod1_extract.py
+        kind: file
+      - path: src/city_pipeline/citygml2glb.py
+        kind: file
+      - path: src/city_pipeline/dem2hfield.py
+        kind: file
+      - path: src/city_pipeline/road_terrain_probe.py
+        kind: file
+      - path: src/city_pipeline/city_furniture2glb.py
+        kind: file
+      - path: src/city_pipeline/city_world_composer.py
+        kind: file
+      - path: src/city_pipeline/city_dataset_validator.py
+        kind: file
+  hakoniwa-map-viewer:
+    root:
+      default_path: ../hakoniwa-map-viewer
+      override_env: HAKONIWA_MAP_VIEWER_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/hakoniwa-map-viewer.git
+      revision: main
+    required_artifacts:
+      - path: src/client/src/ui.js
+        kind: file
+  hakoniwa-drone-core:
+    root:
+      default_path: ../hakoniwa-drone-core
+      override_env: HAKONIWA_DRONE_CORE_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/toppers/hakoniwa-drone-core.git
+      revision: main
+    required_artifacts:
+      - path: config/drone/mujoco-shibuya-api-1/drone.xml
+        kind: file
+      - path: config/drone/mujoco-shibuya-api-1/drone_config_0.json
+        kind: file
+
+plateau_citygml:
+  source:
+    api_base_url: https://api.plateauview.mlit.go.jp
+    feature_type: bldg
+    feature_types:
+      bldg: true
+      tran: true
+      dem: true
+      frn: true
+    year: latest
+  selection:
+    center_contract: recipe-configured-numazu-road-marking-validation-origin
+    center:
+      latitude: 35.0988
+      longitude: 138.8587
+    half_extent_m:
+      north_south: 100
+      east_west: 100
+  acceptance:
+    minimum_buildings: 50
+    center_half_extent_m: 50
+    minimum_center_buildings: 5
+  geometry:
+    base_epsilon_m: 0.2
+    # Use boundary walls when more than 10% of the OBB would be empty space.
+    waste_threshold: 0.1
+    wall_thickness_m: 0.1
+    roof_collision_thickness_m: 0.02
+  mjcf:
+    model_name: plateau_numazu_city_world_200m
+    collision: all
+    floor: false
+    building_physics_level: 3
+  glb:
+    enabled: true
+    lod_policy: highest_available
+    texture_mode: flat
+  city_world:
+    enabled: true
+    terrain_spacing_m: 2
+    marking_vertical_offset_m: 0.055
+  regression:
+    source_archive_revision: f01b7fc35f94ccf0cab2e94b3803e99beddfe019
+    source_archive_path: plateau-work/gml/shibuya_2km.tar.gz
+    final_contract_revision: b95c54f7f39961ff86be99a078fc40e27db6971b
+    final_contract_path: plateau-work/gml/shibuya_2km_obb.json
+    legacy_pipeline:
+      lod1_extract: plateau-work/gml/gml_lod1_extract.py
+      wall_convert: plateau-work/gml/gml2obb.py
+      mjcf_convert: plateau-work/gml/obb2mjcf.py
+    half_extent_m:
+      north_south: 300
+      east_west: 300
+    reference_drone_xml: config/drone/mujoco-shibuya-api-1/drone.xml
+    expected_building_geoms: 4266
+    numeric_tolerance: 0.00001
+
+components:
+  - id: hakoniwa-envsim
+    roles: [asset_generator, environment_model]
+    purpose: Resolve PLATEAU source data and compose terrain, roads, actual road markings, and buildings into one City World.
+  - id: hakoniwa-map-viewer
+    roles: [visualizer, visualization_asset_source]
+    purpose: Supply the historical Shibuya geographic origin used only by the pinned regression.
+  - id: hakoniwa-drone-core
+    roles: [physics_runtime]
+    purpose: Supply the integrated historical Shibuya MuJoCo world used only as regression evidence.
+
+connections:
+  - from: hakoniwa-map-viewer
+    to: hakoniwa-envsim
+    interface: historical-regression-geographic-origin
+    data: [latitude, longitude]
+    contract:
+      status: verified
+      requires: [preserve 35.6625 and 139.70625]
+  - from: hakoniwa-envsim
+    to: hakoniwa-drone-core
+    interface: MuJoCo MJCF building geoms
+    data: [box position, half-size, yaw, height, collision mask]
+    contract:
+      status: verified
+      requires: [all historical geom_bldg records match within the declared tolerance]
+
+data_flow:
+  - Recipe selection -> generated Envsim manifest -> PLATEAU API -> bldg/tran/dem/frn CityGML with per-file provenance
+  - DEM -> shared world-frame and MuJoCo hfield; transportation -> semantic road surfaces; CityFurniture LOD3 -> actual road markings; buildings -> collision MJCF and display GLB
+  - Independent component outputs -> City World composer -> city-world.xml and city-world.glb
+  - Component receipts -> Dataset Validator -> LOD fallback, unavailable feature, and capability report
+  - Pinned historical CityGML -> pinned legacy conversion adapter -> building geom comparison -> Drone Core integrated Shibuya XML
+
+time_model:
+  mode: none
+  notes:
+    - This is an offline data-generation Recipe and does not execute simulation time.
+
+artifact_sets:
+  physics_artifacts:
+    status: partially_verified
+    artifacts:
+      - work/recipes/plateau-citygml-mujoco-walls/artifacts/city-world/city-world.xml
+  visualization_artifacts:
+    status: partially_verified
+    artifacts:
+      - work/recipes/plateau-citygml-mujoco-walls/artifacts/city-world/city-world.glb
+  provenance_artifacts:
+    status: partially_verified
+    artifacts:
+      - work/recipes/plateau-citygml-mujoco-walls/artifacts/download-manifest.json
+      - work/recipes/plateau-citygml-mujoco-walls/artifacts/build-receipt.json
+      - work/recipes/plateau-citygml-mujoco-walls/artifacts/city-world/city-world-receipt.json
+  validation_artifacts:
+    status: partially_verified
+    artifacts:
+      - work/recipes/plateau-citygml-mujoco-walls/validation/shibuya-regression.json
+      - work/recipes/plateau-citygml-mujoco-walls/artifacts/city-world/dataset-validation.json
+      - work/recipes/plateau-citygml-mujoco-walls/artifacts/city-world/dataset-validation.txt
+
+artifacts:
+  - id: plateau_city_world_mjcf
+    kind: file
+    path: work/recipes/plateau-citygml-mujoco-walls/artifacts/city-world/city-world.xml
+  - id: plateau_city_world_glb
+    kind: file
+    path: work/recipes/plateau-citygml-mujoco-walls/artifacts/city-world/city-world.glb
+  - id: plateau_city_world_receipt
+    kind: file
+    path: work/recipes/plateau-citygml-mujoco-walls/artifacts/city-world/city-world-receipt.json
+  - id: plateau_dataset_validation
+    kind: file
+    path: work/recipes/plateau-citygml-mujoco-walls/artifacts/city-world/dataset-validation.json
+  - id: plateau_dataset_validation_text
+    kind: file
+    path: work/recipes/plateau-citygml-mujoco-walls/artifacts/city-world/dataset-validation.txt
+  - id: plateau_download_manifest
+    kind: file
+    path: work/recipes/plateau-citygml-mujoco-walls/artifacts/download-manifest.json
+  - id: plateau_build_receipt
+    kind: file
+    path: work/recipes/plateau-citygml-mujoco-walls/artifacts/build-receipt.json
+  - id: shibuya_reference_regression
+    kind: file
+    path: work/recipes/plateau-citygml-mujoco-walls/validation/shibuya-regression.json
+
+missing_pieces:
+  - Verify the current Numazu City World build and the pinned historical regression on Linux and Windows.
+  - Promote artifact-set status to verified only after the Recipe evidence is reproduced from a clean checkout.
+
+demo:
+  steps:
+    - id: materialize_sources
+      command: python tools/recipe.py configure --recipe recipes/examples/plateau-citygml-mujoco-walls.yaml
+      expected: Clone or reuse Envsim, Map Viewer, and Drone Core sources and validate their required artifacts.
+    - id: generate_manifest
+      command: python tools/recipe/plateau_citygml_mujoco_walls.py configure
+      expected: Create the managed Recipe Python environment and write a Recipe-local Envsim City World manifest for the configured Numazu origin.
+    - id: inspect
+      command: python tools/recipe/plateau_citygml_mujoco_walls.py doctor
+      expected: Confirm the configured selection, all component-owned conversion tools, and Envsim readiness.
+    - id: build_current
+      command: python tools/recipe/plateau_citygml_mujoco_walls.py build
+      expected: Download current bldg/tran/dem/frn data for 200 square meters and publish independent components, composed City World assets, provenance, and dataset validation.
+    - id: rebuild_offline
+      command: python tools/recipe/plateau_citygml_mujoco_walls.py build --offline
+      expected: Rebuild from previously acquired CityGML without accessing the external API.
+    - id: regression
+      command: python tools/recipe/plateau_citygml_mujoco_walls.py regression
+      expected: Rebuild the pinned historical 600m Shibuya selection and match every integrated Drone Core building geom.
+  cleanup:
+    expected_behavior:
+      - No background process is started.
+      - Downloaded and generated data remain under work/recipes/plateau-citygml-mujoco-walls.
+    verification_checks:
+      - Confirm the current build receipt and download manifest exist.
+      - Confirm the City World receipt matches generated MJCF/GLB hashes and the shared world-frame contract.
+      - Confirm at least 50 buildings are selected and at least 5 building centroids lie within the center +/-50m square.
+      - Review dataset-validation.json for LOD fallback and unavailable-feature diagnostics.
+      - Confirm shibuya-regression.json reports MATCHED.
+    cautions:
+      - PLATEAU latest data can change; do not compare current dataset IDs directly with the pinned historical reference.
+
+expected_result: >
+  An aligned 200-meter Numazu MuJoCo and Three.js City World containing terrain,
+  road surfaces, available source-derived road markings, and buildings is generated
+  directly from current PLATEAU data. Missing LOD3 road markings are omitted and
+  reported rather than inferred, while a separate immutable historical regression
+  proves that the conversion contract reproduces the 4266 building geoms
+  integrated into Hakoniwa Drone Core.
+
+source_catalogs:
+  - component_id: hakoniwa-envsim
+  - component_id: hakoniwa-map-viewer
+  - component_id: hakoniwa-drone-core
+
+source_artifacts:
+  - repository: hakoniwalab/hakoniwa-map-viewer
+    path: src/client/src/ui.js
+    revision: main
+    description: Authoritative Shibuya PLATEAU geographic origin.
+  - repository: hakoniwalab/hakoniwa-envsim
+    path: plateau-work/gml/shibuya_2km.tar.gz
+    revision: f01b7fc35f94ccf0cab2e94b3803e99beddfe019
+    description: Historical CityGML source archive retained in Git history for the regression only.
+  - repository: toppers/hakoniwa-drone-core
+    path: config/drone/mujoco-shibuya-api-1/drone.xml
+    revision: 5fcf18d2998f8024c1094324e2960352af499f00
+    description: Integrated historical Shibuya MuJoCo reference world.

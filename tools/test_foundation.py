@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import importlib.util
+import io
+import os
 import subprocess
 import sys
 import tempfile
@@ -19,6 +21,56 @@ SPEC.loader.exec_module(foundation)
 
 
 class FoundationWorkspaceTest(unittest.TestCase):
+    def test_selected_components_share_state_across_all_operations(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            components = {
+                "hakoniwa-core-pro": ["doctor", "build", "install"],
+                "hakoniwa-pdu-endpoint": ["prepare", "doctor", "configure", "build", "install"],
+                "hakoniwa-pdu-bridge-core": ["doctor", "configure", "build", "test", "install"],
+                "hakoniwa-pdu-python": ["doctor", "configure", "build", "install", "smoke"],
+                "hakoniwa-pdu-rpc": ["doctor", "configure", "build", "install", "package-test"],
+            }
+            for work in (root / "host", root / "docker"):
+                with mock.patch.dict(os.environ, {"HAKONIWA_WORK_DIR": str(work)}):
+                    paths = foundation.resolve_workspace(root / "bp", "test")
+                for component, operations in components.items():
+                    with self.subTest(work=work, component=component):
+                        source = root / component
+                        (source / "tools").mkdir(parents=True, exist_ok=True)
+                        (source / "tools/hako.py").touch()
+                        if component == "hakoniwa-core-pro":
+                            (source / "hakoniwa-build.yaml").write_text("version: 1\n", encoding="utf-8")
+                        commands = foundation.component_commands(component, source, operations, paths)
+                        self.assertEqual(len(commands), len(operations))
+                        for command in commands:
+                            self.assertEqual(command.count("--state-dir"), 1)
+                            self.assertEqual(
+                                Path(command[command.index("--state-dir") + 1]),
+                                work / "foundation/state" / component,
+                            )
+
+    def test_doctor_warns_about_workspace_and_continues(self) -> None:
+        inspection = {"status": "SATISFIED", "components": [], "runtime": {}}
+        with mock.patch.object(foundation, "warn_if_workspace_invalid") as warning:
+            with mock.patch.object(
+                foundation, "inspect_foundation", return_value=inspection
+            ):
+                with mock.patch.object(foundation, "print_inspection"):
+                    result = foundation.main(["doctor", "--recipe", "recipe.yaml"])
+
+        self.assertEqual(result, 0)
+        warning.assert_called_once_with(foundation.repository_root())
+
+    def test_prepare_does_not_warn_about_workspace(self) -> None:
+        with mock.patch.object(foundation, "warn_if_workspace_invalid") as warning:
+            with mock.patch.object(foundation, "prepare_workspace"):
+                with mock.patch.object(foundation, "print_paths"):
+                    result = foundation.main(["prepare", "--recipe-id", "test"])
+
+        self.assertEqual(result, 0)
+        warning.assert_not_called()
+
     def test_resolve_workspace_stays_under_business_pack_work(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "business-pack"
@@ -42,6 +94,31 @@ class FoundationWorkspaceTest(unittest.TestCase):
                 self.assertNotIn("/usr/local", value)
                 self.assertNotIn("/etc/hakoniwa", value)
                 self.assertNotIn("/var/lib/hakoniwa", value)
+
+    def test_resolve_workspace_uses_selected_external_workdir(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "business-pack"
+            work = Path(temporary) / "external-work"
+            with mock.patch.dict(os.environ, {"HAKONIWA_WORK_DIR": str(work)}):
+                paths = foundation.resolve_workspace(root, "demo")
+            expected_work = work.resolve()
+            self.assertEqual(paths.work_root, expected_work)
+            self.assertEqual(paths.recipe_root, expected_work / "recipes" / "demo")
+            self.assertEqual(paths.business_pack_root, root.resolve())
+
+    def test_resolve_workspace_accepts_symlinked_workdir_and_override(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "business-pack"
+            real_work = base / "real-work"
+            link_work = base / "linked-work"
+            link_work.symlink_to(real_work, target_is_directory=True)
+            with mock.patch.dict(os.environ, {"HAKONIWA_WORK_DIR": str(link_work)}):
+                paths = foundation.resolve_workspace(root, "demo")
+                override = foundation.resolve_workspace(root, "demo", link_work / "foundation")
+            self.assertEqual(paths.work_root, real_work.resolve())
+            self.assertEqual(override.foundation_root, (real_work / "foundation").resolve())
+            self.assertEqual(override.foundation_root, (real_work / "foundation").resolve())
 
     def test_windows_layout_uses_the_same_relative_contract(self) -> None:
         root = PureWindowsPath("C:/work/hakoniwa-business-pack")
@@ -111,11 +188,9 @@ class FoundationWorkspaceTest(unittest.TestCase):
         )
         data = json.loads(result.stdout)
 
-        self.assertTrue(data["foundation_root"].endswith("work/foundation"))
-        self.assertTrue(
-            data["foundation_python"].endswith("work/foundation/install/python")
-        )
-        self.assertTrue(data["recipe_root"].endswith("work/recipes/drone-threejs"))
+        self.assertEqual(Path(data["foundation_root"]), foundation.repository_root() / "work" / "foundation")
+        self.assertEqual(Path(data["foundation_python"]), foundation.repository_root() / "work" / "foundation" / "install" / "python")
+        self.assertEqual(Path(data["recipe_root"]), foundation.repository_root() / "work" / "recipes" / "drone-threejs")
 
 
 class FoundationPythonContractTest(unittest.TestCase):
@@ -234,6 +309,45 @@ class FoundationPythonContractTest(unittest.TestCase):
             self.assertEqual(output, paths.foundation_config / "toolchain.json")
             self.assertEqual(foundation.load_foundation_toolchain(paths)["vcpkg_root"], str(vcpkg.resolve()))
 
+    def test_toolchain_cli_can_target_alternate_install_prefix(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            vcpkg = root / "external" / "vcpkg"
+            vcpkg.mkdir(parents=True)
+            (vcpkg / ("vcpkg.exe" if sys.platform == "win32" else "vcpkg")).write_text("test\n", encoding="utf-8")
+            cmake = vcpkg / "scripts" / "buildsystems" / "vcpkg.cmake"
+            cmake.parent.mkdir(parents=True)
+            cmake.write_text("# test\n", encoding="utf-8")
+            alt_install = root / "work" / "alt-prefix" / "install"
+            with mock.patch.object(foundation, "repository_root", return_value=root), mock.patch.object(foundation, "warn_if_workspace_invalid"):
+                result = foundation.main([
+                    "toolchain", "--recipe-id", "test-recipe",
+                    "--install-dir", str(alt_install),
+                    "--vcpkg-root", str(vcpkg),
+                ])
+            self.assertEqual(result, 0)
+            alt_paths = foundation.resolve_workspace(root, "test-recipe", alt_install.parent)
+            self.assertEqual(foundation.load_foundation_toolchain(alt_paths)["vcpkg_root"], str(vcpkg.resolve()))
+            default_paths = foundation.resolve_workspace(root, "test-recipe")
+            self.assertFalse(foundation.foundation_toolchain_path(default_paths).exists())
+            source = root / "athrill-target-v850e2m"
+            source.mkdir()
+            manifest = foundation.write_component_manifest("athrill-target-v850e2m", source, alt_paths, {})
+            self.assertIsNotNone(manifest)
+            self.assertIn(json.dumps(str(vcpkg.resolve())), manifest.read_text(encoding="utf-8"))
+
+    def test_toolchain_cli_rejects_install_prefix_outside_selected_workdir(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            outside = root / "outside" / "install"
+            with mock.patch.object(foundation, "repository_root", return_value=root), mock.patch.object(foundation, "warn_if_workspace_invalid"):
+                result = foundation.main([
+                    "toolchain", "--recipe-id", "test-recipe",
+                    "--install-dir", str(outside),
+                    "--vcpkg-root", str(root / "missing-vcpkg"),
+                ])
+            self.assertEqual(result, 2)
+
 
 class FoundationInspectorTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -318,7 +432,7 @@ class FoundationInspectorTest(unittest.TestCase):
             f'  architecture: "{architecture}"\n'
             '  toolchain: "test"\n'
             "install:\n"
-            f'  prefix: "{self.prefix}"\n'
+            f"  prefix: {json.dumps(str(self.prefix))}\n"
             "capabilities:\n"
             f"{capabilities}"
             f"build_limits: {build_limits}\n"
@@ -488,6 +602,20 @@ class FoundationInspectorTest(unittest.TestCase):
         self.assertIn("build_limits.asset_num.min", fields)
         self.assertIn("platform.os", fields)
         self.assertIn("artifacts.lib/component.marker", fields)
+
+    def test_build_limit_without_nested_integer_min_is_actionable(self) -> None:
+        self.write_recipe(
+            "  component-a:\n"
+            "    build_limits:\n"
+            "      asset_num: {min: 16}\n"
+        )
+        self.write_receipt("component-a", build_limits="\n  asset_num: 16")
+
+        with self.assertRaisesRegex(
+            foundation.FoundationError,
+            "build_limits.asset_num.min must be an integer",
+        ):
+            foundation.inspect_foundation(self.recipe, self.prefix)
 
     def test_core_receipt_soabi_must_match_foundation_python(self) -> None:
         self.write_recipe(
@@ -815,7 +943,8 @@ class FoundationInspectorTest(unittest.TestCase):
         hako.parent.mkdir(parents=True)
         hako.write_text("# test\n", encoding="utf-8")
         (source / "hakoniwa-build.yaml").write_text(
-            "version: 1\nlimits:\n  asset_num: 16\npython:\n  soabi: false\n",
+            "version: 1\nlimits:\n  asset_num: 16\npython:\n  soabi: false\n"
+            "validation:\n  tests: true\n",
             encoding="utf-8",
         )
 
@@ -836,6 +965,114 @@ class FoundationInspectorTest(unittest.TestCase):
         manifest_index = command.index("--config") + 1
         manifest = Path(command[manifest_index])
         self.assertIn("  soabi: true", manifest.read_text(encoding="utf-8"))
+        self.assertIn("  tests: false", manifest.read_text(encoding="utf-8"))
+
+    def test_build_stops_after_failed_component_doctor(self) -> None:
+        paths = foundation.resolve_workspace(self.root, "test")
+        source = self.root / "hakoniwa-core-pro"
+        hako = source / "tools" / "hako.py"
+        hako.parent.mkdir(parents=True)
+        hako.write_text("# test\n", encoding="utf-8")
+        foundation_python = foundation.foundation_python_executable(
+            paths.foundation_python
+        )
+        doctor = [str(foundation_python), "tools/hako.py", "doctor"]
+        build = [str(foundation_python), "tools/hako.py", "build"]
+        plan = {
+            "blocked": [],
+            "recipe": str(self.recipe),
+            "actions": [
+                {
+                    "component": "hakoniwa-core-pro",
+                    "source": str(self.root / "hakoniwa-core-pro"),
+                    "operations": ["doctor", "build"],
+                    "requirements": {},
+                }
+            ],
+        }
+        python_contract = {
+            "version": "3.12.0",
+            "soabi": "cpython-312-test",
+        }
+
+        with mock.patch.object(
+            foundation,
+            "ensure_foundation_python",
+            return_value=(foundation_python, python_contract),
+        ), mock.patch.object(
+            foundation, "prepare_workspace"
+        ), mock.patch.object(
+            foundation, "component_commands", return_value=[doctor, build]
+        ), mock.patch.object(
+            foundation.subprocess,
+            "run",
+            return_value=subprocess.CompletedProcess(doctor, 1),
+        ) as run:
+            with self.assertRaisesRegex(
+                foundation.FoundationError,
+                "hakoniwa-core-pro command failed with exit code 1",
+            ):
+                foundation.execute_build_plan(plan, paths)
+
+        run.assert_called_once_with(
+            doctor,
+            cwd=source,
+            check=False,
+        )
+
+    def test_build_source_validation_fails_before_bootstrap_with_recipe_hint(self) -> None:
+        paths = foundation.resolve_workspace(self.root, "test")
+        source = self.root / "missing-core"
+        plan = {
+            "blocked": [],
+            "recipe": str(self.recipe),
+            "actions": [
+                {
+                    "component": "hakoniwa-core-pro",
+                    "source": str(source),
+                    "operations": ["doctor", "build", "install"],
+                    "requirements": {},
+                }
+            ],
+        }
+
+        with mock.patch.object(foundation, "ensure_foundation_python") as bootstrap:
+            with self.assertRaisesRegex(
+                foundation.FoundationError, "Foundation source is missing"
+            ) as raised:
+                foundation.execute_build_plan(plan, paths)
+
+        bootstrap.assert_not_called()
+        self.assertIn("recipe.py configure", str(raised.exception))
+
+    def test_direct_foundation_plan_rejects_missing_source(self) -> None:
+        source = self.root / "missing-core"
+        plan = {
+            "blocked": [],
+            "recipe": str(self.recipe),
+            "actions": [
+                {
+                    "component": "hakoniwa-core-pro",
+                    "source": str(source),
+                    "operations": ["build"],
+                    "requirements": {},
+                }
+            ],
+        }
+        stderr = io.StringIO()
+
+        with mock.patch.object(foundation, "warn_if_workspace_invalid"):
+            with mock.patch.object(foundation, "load_build_catalog", return_value={}):
+                with mock.patch.object(
+                    foundation, "create_build_plan", return_value=plan
+                ):
+                    with mock.patch.object(foundation.sys, "stderr", stderr):
+                        result = foundation.main(
+                            ["plan", "--recipe", str(self.recipe)]
+                        )
+
+        self.assertEqual(result, 2)
+        self.assertIn("recipe.py configure", stderr.getvalue())
 
     def test_normalize_core_config_repairs_unescaped_windows_path(self) -> None:
         paths = foundation.resolve_workspace(self.root, "test")
@@ -924,9 +1161,14 @@ class FoundationInspectorTest(unittest.TestCase):
             self.assertEqual(
                 command[venv_index], str(paths.install_prefix / "python")
             )
+            state_index = command.index("--state-dir") + 1
+            self.assertEqual(
+                command[state_index],
+                str(paths.foundation_root / "state" / "hakoniwa-pdu-endpoint"),
+            )
         manifest = paths.foundation_build / "hakoniwa-pdu-endpoint.yaml"
         content = manifest.read_text(encoding="utf-8")
-        self.assertIn(f'hakoniwa_core_root: "{paths.install_prefix}"', content)
+        self.assertIn(f"hakoniwa_core_root: {json.dumps(str(paths.install_prefix))}", content)
         self.assertIn("  python: true", content)
 
     def test_core_free_endpoint_manifest_disables_core_and_python(self) -> None:
@@ -973,6 +1215,75 @@ class FoundationInspectorTest(unittest.TestCase):
         for command in commands:
             index = command.index("--python-venv") + 1
             self.assertEqual(command[index], str(paths.foundation_python))
+
+    def test_athrill_manifest_enables_required_exdev_on_windows(self) -> None:
+        paths = foundation.resolve_workspace(self.root, "test")
+        source = self.root / "athrill-target-v850e2m"
+        source.mkdir()
+
+        with mock.patch.object(
+            foundation, "load_foundation_toolchain",
+            return_value={"vcpkg_root": "C:/project/vcpkg"},
+        ):
+            manifest = foundation.write_component_manifest(
+                "athrill-target-v850e2m",
+                source,
+                paths,
+                {
+                    "capabilities": {
+                        "exdev": True,
+                        "mros": False,
+                        "vdev": False,
+                    }
+                },
+            )
+
+        self.assertIsNotNone(manifest)
+        content = manifest.read_text(encoding="utf-8")
+        self.assertIn("  exdev: true", content)
+        self.assertIn("  mros: false", content)
+        self.assertIn("  vdev: false", content)
+
+    def test_athrill_device_manifest_resolves_core_and_component_split(self) -> None:
+        paths = foundation.resolve_workspace(self.root, "test")
+        source = self.root / "athrill-device"
+        source.mkdir()
+
+        manifest = foundation.write_component_manifest(
+            "athrill-device",
+            source,
+            paths,
+            {
+                "capabilities": {
+                    "hakotime_static": True,
+                    "hakotime_shared": False,
+                    "hakopdu_ev3": True,
+                }
+            },
+        )
+
+        self.assertIsNotNone(manifest)
+        content = manifest.read_text(encoding="utf-8")
+        self.assertIn("  hakotime: false", content)
+        self.assertIn("  hakopdu_ev3: true", content)
+        self.assertIn(f"  hakoniwa_core_root: {json.dumps(str(paths.install_prefix))}", content)
+        self.assertIn(f"  athrill_root: {json.dumps(str(source.parent / 'athrill'))}", content)
+
+    def test_athrill_device_does_not_require_saved_vcpkg_toolchain(self) -> None:
+        paths = foundation.resolve_workspace(self.root, "test")
+        source = self.root / "athrill-device"
+        source.mkdir()
+
+        with mock.patch.object(
+            foundation,
+            "load_foundation_toolchain",
+            side_effect=AssertionError("vcpkg must not be inspected"),
+        ):
+            manifest = foundation.write_component_manifest(
+                "athrill-device", source, paths, {}
+            )
+
+        self.assertIsNotNone(manifest)
 
 
 if __name__ == "__main__":

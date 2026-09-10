@@ -143,6 +143,14 @@ been initialized. Component-owned launch wrappers should use the Foundation
 interpreter and fail before starting assets when the required modules cannot be
 imported.
 
+Native binary dependencies follow the shared `schemas/native-runtime.yaml`
+contract. Catalog profiles declare the distribution release, managed runtimes,
+binary roles, and required libraries for each platform. Recipes select a profile
+and active roles; they do not choose an OS inspection command. The common
+validator delegates only binary dependency discovery and resolution to an ELF,
+Mach-O, or future PE adapter, then reports declared and undeclared unresolved
+libraries through one platform-independent result contract.
+
 ## Assets
 
 An asset is a runtime participant managed by Hakoniwa conventions. It may be a

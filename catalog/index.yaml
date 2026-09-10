@@ -2,6 +2,53 @@ index_version: 0.1
 generated_by: catalog/tools/generate_index.rb
 description: Lightweight search index for Hakoniwa component catalogs.
 components:
+- id: athrill-device
+  name: Athrill Hakoniwa External Devices
+  category: communication
+  secondary_categories:
+  - integration
+  - time-sync
+  - binary-contract
+  maturity: experimental
+  distribution: oss
+  summary: Portable Athrill EXDEV libraries that synchronize emulator time and exchange
+    EV3 PDUs through Hakoniwa Core Pro.
+  recipe_roles:
+  - integration_boundary
+  - time_sync
+  - communication_infrastructure
+  connects_to:
+  - hakoniwa-core-pro
+  - athrill-target-v850e2m
+  tags:
+  - athrill
+  - exdev
+  - ev3
+  - pdu
+  - time-sync
+  - core-pro
+  - msvc
+  catalog_path: components/athrill-device.yaml
+- id: athrill-target-v850e2m
+  name: Athrill V850E2M Target
+  category: simulation-core
+  secondary_categories:
+  - simulator
+  - integration
+  maturity: active
+  distribution: oss
+  summary: V850E2M instruction-set and device target that builds the athrill2 ECU
+    emulator from the common Athrill sources.
+  recipe_roles:
+  - simulation_core
+  connects_to: []
+  tags:
+  - athrill
+  - v850e2m
+  - ecu
+  - emulator
+  - msvc
+  catalog_path: components/athrill-target-v850e2m.yaml
 - id: hakoniwa-conductor-light
   name: Hakoniwa Conductor Light
   category: simulation-core
@@ -74,13 +121,14 @@ components:
   maturity: active
   distribution: oss
   summary: Hakoniwa core runtime extension layer built on hakoniwa-core-cpp, providing
-    shared-memory simulation hub integration, asset APIs, commands, events, and RPC
-    services.
+    shared-memory simulation hub integration, asset APIs, commands, events, RPC services,
+    and reusable Python measurement support for simulation runs.
   recipe_roles:
   - simulation_core
   - communication_infrastructure
   - control_plane
   - time_sync
+  - measurement
   connects_to:
   - hakoniwa-pdu-endpoint
   - hakoniwa-pdu-bridge-core
@@ -98,6 +146,7 @@ components:
   - asset
   - time-sync
   - hako-cmd
+  - measurement
   catalog_path: components/hakoniwa-core-pro.yaml
 - id: hakoniwa-drone-core
   name: Hakoniwa Drone
@@ -137,6 +186,33 @@ components:
   - control-link
   - scenario-link
   catalog_path: components/hakoniwa-drone-core.yaml
+- id: hakoniwa-drone-show
+  name: Hakoniwa Drone Show
+  category: tool
+  secondary_categories:
+  - commercial
+  - control-plane
+  - visualization
+  - integration
+  maturity: active
+  distribution: commercial
+  summary: Commercial virtual drone-show toolchain for Hakoniwa. It owns show files
+    and resolved show plans, formation generation, drone assignment, transition planning,
+    LED direction, show start/status control, audience preview including mobile AR,
+    and reproducible wind scenario evaluation while delegating fleet dynamics, city
+    generation, and generic visualization runtimes to their owning Hakoniwa components.
+  recipe_roles:
+  - control_plane
+  - integration_boundary
+  - visualizer
+  - commercial_pack
+  connects_to:
+  - hakoniwa-drone-core
+  - hakoniwa-envsim
+  - hakoniwa-threejs-drone
+  - hakoniwa-map-viewer
+  tags: []
+  catalog_path: components/hakoniwa-drone-show.yaml
 - id: hakoniwa-envsim
   name: Hakoniwa Envsim
   category: physics-environment
@@ -146,25 +222,78 @@ components:
   - integration
   maturity: active
   distribution: oss
-  summary: Environment modeling toolkit for creating, visualizing, refining, and querying
-    environmental factors such as wind, temperature, pressure, GPS strength, and boundaries.
+  summary: Environment modeling and PLATEAU City World generation toolkit. It models
+    runtime environmental fields and converts PLATEAU CityGML into aligned GLB visual
+    assets and MuJoCo physics assets for terrain, roads, buildings, available road
+    markings, and optional bridges.
   recipe_roles:
   - environment_model
-  - data_model
+  - asset_generator
   - visualizer
+  - integration_boundary
   connects_to:
-  - hakoniwa-mujoco-robots
   - hakoniwa-core-pro
   - hakoniwa-pdu-registry
+  - hakoniwa-drone-core
+  - hakoniwa-mujoco-robots
   tags:
   - hakoniwa
   - environment
-  - wind
-  - gps
-  - temperature
-  - fastsearch
-  - json-schema
+  - plateau
+  - citygml
+  - city-world
+  - mujoco
+  - glb
+  - terrain
+  - road
+  - building
+  - bridge
+  - collision
+  - physics
+  - simulation
   catalog_path: components/hakoniwa-envsim.yaml
+- id: hakoniwa-fpv-drone
+  name: Hakoniwa FPV Drone
+  category: tool
+  secondary_categories:
+  - asset-generation
+  - code-generation
+  - simulator
+  - integration
+  maturity: experimental
+  distribution: oss
+  summary: Catalog-driven FPV drone design pack that resolves selected frame, motor,
+    propeller, battery, camera, and controller parts into a traceable MuJoCo/Hakoniwa
+    vehicle package, composes reusable physical FPV courses, and optionally materializes
+    a Three.js FPV viewer while keeping MuJoCo as the source of truth for vehicle
+    physics and collision.
+  recipe_roles:
+  - asset_generator
+  - code_generator
+  - integration_boundary
+  - visualizer
+  connects_to:
+  - hakoniwa-drone-core
+  - hakoniwa-core-pro
+  - hakoniwa-pdu-python
+  - hakoniwa-threejs-drone
+  - hakoniwa-pdu-bridge-core
+  tags:
+  - hakoniwa
+  - fpv
+  - drone
+  - component-catalog
+  - vehicle-recipe
+  - mujoco
+  - angle-control
+  - pid-tuning
+  - ps5
+  - fpv-course
+  - threejs
+  - simulation
+  - oss
+  - mit
+  catalog_path: components/hakoniwa-fpv-drone.yaml
 - id: hakoniwa-godot
   name: Hakoniwa Godot
   category: visualization
@@ -272,6 +401,8 @@ components:
   - pdu
   - asset-generation
   - source-materialization
+  - ackermann
+  - hunter-v2
   catalog_path: components/hakoniwa-mbody-registry.yaml
 - id: hakoniwa-mujoco-robots
   name: Hakoniwa MuJoCo Robots
@@ -305,6 +436,9 @@ components:
   - actuator
   - forklift
   - pdu
+  - ackermann
+  - hunter-v2
+  - gamepad
   catalog_path: components/hakoniwa-mujoco-robots.yaml
 - id: hakoniwa-pdu-bridge-core
   name: Hakoniwa PDU Bridge Core
@@ -590,13 +724,15 @@ components:
   - commercial
   maturity: active
   distribution: commercial
-  summary: Manifest-driven Hakoniwa and MuJoCo integration pack for industrial robot
-    arms, accepting JointTrajectory commands and publishing JointState through Hakoniwa
-    PDU. A FAIRINO FR5 reference integration has been executed locally.
+  summary: Manifest- and Recipe-driven Hakoniwa/MuJoCo integration pack for articulated
+    robots and construction machines. FR5, Nova5, and SO-101 share a common arm runtime,
+    while MathScavator9000 combines a dedicated articulated-arm and mobile-base runtime
+    with manual and automatic control paths.
   recipe_roles:
   - physics_runtime
   - simulation_core
   - integration_boundary
+  - environment_model
   - commercial_pack
   connects_to:
   - hakoniwa-mujoco-robots
@@ -604,20 +740,64 @@ components:
   - hakoniwa-pdu-endpoint
   - hakoniwa-core-pro
   - hakoniwa-pdu-python
+  - hakoniwa-pdu-ros
   tags:
   - hakoniwa
   - robot-arm
   - industrial-robot
+  - construction-machine
+  - excavator
   - mujoco
   - joint-trajectory
   - joint-state
+  - ros2
+  - tcp
+  - pdu
+  - ps5
+  - digging
+  - collision
+  - simulation
+  catalog_path: components/hakoniwa-robot-arm-pack.yaml
+- id: hakoniwa-robot-runtime
+  name: Hakoniwa Robot Runtime
+  category: simulation-core
+  secondary_categories:
+  - simulator
+  - physics-runtime
+  - integration
+  - robot-arm
+  maturity: active
+  distribution: oss
+  summary: Common actuator-oriented robot execution runtime for Hakoniwa that composes
+    command sources, controllers, arbitration, a physical Plant, state publishing,
+    Hakoniwa PDU Endpoint adapters, MuJoCo integration, and Hakoniwa Asset lifecycle
+    without owning robot-specific models or Recipes.
+  recipe_roles:
+  - simulation_core
+  - physics_runtime
+  - integration_boundary
+  connects_to:
+  - hakoniwa-core-pro
+  - hakoniwa-pdu-endpoint
+  - hakoniwa-mujoco-robots
+  - hakoniwa-mbody-registry
+  - hakoniwa-pdu-bridge-core
+  tags:
+  - hakoniwa
+  - robot-runtime
+  - actuator
+  - runtime
+  - mujoco
+  - joint-trajectory
+  - joint-state
+  - gamepad
+  - arbitration
   - pdu
   - endpoint
   - simulation
-  - integration
-  - commercial
-  - private
-  catalog_path: components/hakoniwa-robot-arm-pack.yaml
+  - oss
+  - mit
+  catalog_path: components/hakoniwa-robot-runtime.yaml
 - id: hakoniwa-scratch
   name: Hakoniwa Scratch
   category: language-binding
@@ -722,4 +902,3 @@ components:
   - integration
   - dual-license
   catalog_path: components/tobas.yaml
-

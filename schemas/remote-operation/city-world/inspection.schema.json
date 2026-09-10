@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hakoniwa.dev/schemas/remote-operation/city-world/inspection.schema.json",
+  "title": "Hakoniwa City World selection inspection",
+  "description": "A normalized, bounded summary of PLATEAU catalog coverage for one requested extent.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "request_sha256",
+    "bbox",
+    "catalog_snapshot",
+    "municipalities",
+    "capabilities",
+    "source_file_count",
+    "estimated_download_bytes",
+    "warnings"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "status": {"enum": ["available", "unavailable"]},
+    "request_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "bbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["west", "south", "east", "north"],
+      "properties": {
+        "west": {"type": "number", "minimum": -180, "maximum": 180},
+        "south": {"type": "number", "minimum": -90, "maximum": 90},
+        "east": {"type": "number", "minimum": -180, "maximum": 180},
+        "north": {"type": "number", "minimum": -90, "maximum": 90}
+      }
+    },
+    "query_meshes": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "bbox"],
+        "properties": {
+          "code": {"type": "string", "pattern": "^[0-9]{8}$"},
+          "bbox": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["west", "south", "east", "north"],
+            "properties": {
+              "west": {"type": "number", "minimum": -180, "maximum": 180},
+              "south": {"type": "number", "minimum": -90, "maximum": 90},
+              "east": {"type": "number", "minimum": -180, "maximum": 180},
+              "north": {"type": "number", "minimum": -90, "maximum": 90}
+            }
+          }
+        }
+      }
+    },
+    "catalog_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["api_base_url", "fetched_at", "response_sha256"],
+      "properties": {
+        "api_base_url": {"const": "https://api.plateauview.mlit.go.jp"},
+        "fetched_at": {"type": "string", "format": "date-time"},
+        "response_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "municipalities": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["city_code", "city", "year", "spec"],
+        "properties": {
+          "city_code": {"type": "string", "pattern": "^[0-9]{5}$"},
+          "city": {"type": "string", "minLength": 1, "maxLength": 128},
+          "year": {"type": "integer", "minimum": 2000, "maximum": 2100},
+          "spec": {"type": "string", "minLength": 1, "maxLength": 32}
+        }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["building", "terrain", "road", "road_markings", "bridge"],
+      "properties": {
+        "building": {"$ref": "#/$defs/capability"},
+        "terrain": {"$ref": "#/$defs/capability"},
+        "road": {"$ref": "#/$defs/capability"},
+        "road_markings": {"$ref": "#/$defs/capability"},
+        "bridge": {"$ref": "#/$defs/capability"}
+      }
+    },
+    "source_file_count": {"type": "integer", "minimum": 0},
+    "estimated_download_bytes": {"type": "integer", "minimum": 0},
+    "reason": {"type": ["string", "null"], "minLength": 1, "maxLength": 512},
+    "warnings": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {"type": "string", "minLength": 1, "maxLength": 512}
+    }
+  },
+  "$defs": {
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dataset_status", "generation_status", "max_lod", "source_file_count", "reason"],
+      "properties": {
+        "dataset_status": {"enum": ["available", "not_available"]},
+        "generation_status": {"enum": ["candidate", "limited", "scoped_out"]},
+        "max_lod": {"type": ["integer", "null"], "minimum": 0, "maximum": 4},
+        "source_file_count": {"type": "integer", "minimum": 0},
+        "reason": {"type": ["string", "null"], "minLength": 1, "maxLength": 512}
+      }
+    }
+  }
+}

@@ -1,0 +1,91 @@
+id: fpv-drone-prebuild-validation
+title: FPVドローン組立前の機体設計・操縦事前検証
+usecase_version: 0.1
+
+audience:
+  primary:
+    - robot-development-team
+    - control-software-developer
+    - technical-sales
+  notes:
+    - Intended for teams or builders who want to compare and validate an FPV aircraft configuration in simulation before committing to physical assembly and flight testing.
+
+situation: >
+  A user is selecting a frame, motors, propellers, battery, camera, and controller
+  configuration for an FPV drone and wants to understand how the resulting aircraft
+  behaves before purchasing, assembling, tuning, and flying the physical machine.
+
+problem: >
+  Component specifications alone do not show the combined aircraft mass properties,
+  thrust-to-weight balance, controller behavior, or handling in a flight course.
+  Discovering an unsuitable combination only after physical assembly increases the
+  amount of hardware rework and repeated tuning needed before useful flight testing.
+
+desired_outcome: >
+  Build a traceable virtual FPV aircraft from selected components, inspect the resolved
+  physical model, tune the simulated controller where the licensed tuning path is
+  available, and evaluate interactive handling with a game controller in a reusable
+  collision-enabled FPV course before moving to physical assembly and flight testing.
+
+status:
+  feasibility: feasible
+  validation: partially_verified
+  confidence: high
+  rationale:
+    - Hakoniwa FPV Drone resolves selected component definitions into a traceable MuJoCo/Hakoniwa vehicle package.
+    - The current implementation provides reusable FPV World generation with physical course obstacles and an optional Three.js FPV viewer while MuJoCo remains the physics and collision source of truth.
+    - A verified generic 5-inch Angle-mode configuration records successful simulation tuning gates and PS5 controller flight confirmation on macOS.
+    - The evidence is simulation-specific and does not validate direct transfer of generated controller values or handling characteristics to a physical aircraft.
+
+realized_by: []
+
+supported_by:
+  - component_id: hakoniwa-fpv-drone
+    role: Resolve selected FPV components into a traceable virtual aircraft, generate reusable FPV course assets, and provide the FPV-oriented simulation workflow.
+  - component_id: hakoniwa-drone-core
+    role: Provide drone dynamics, rotor and mixer behavior, radio-controller input, Angle control, and the commercial Drone PRO runtime and tuning path where required.
+  - component_id: hakoniwa-core-pro
+    role: Provide Hakoniwa lifecycle, shared-memory PDU exchange, and simulation-time coordination for the generated aircraft runtime.
+  - component_id: hakoniwa-threejs-drone
+    role: Provide the optional browser-based visual aircraft representation used by the FPV viewer path.
+
+communication_notes:
+  safe_statements:
+    - The current FPV workflow can generate a traceable virtual quad-X aircraft from selected component definitions and run it in MuJoCo/Hakoniwa simulation.
+    - A reusable FPV World can include collision-enabled gates, pylons, boxes, and ground independently from the vehicle configuration.
+    - A verified generic 5-inch configuration has completed the recorded simulation tuning gates and PS5 Angle-mode flight confirmation on macOS.
+    - Commercial evaluation, licensed Drone PRO functions, and product access can be discussed with Hakoniwa Lab.
+  avoid_statements:
+    - Simulation proves that the selected physical parts will produce a safe or airworthy real aircraft.
+    - Simulation-generated PID values should be copied directly to a real flight controller without physical validation.
+    - The generic component catalog contains measured specifications for specific commercial products.
+    - The simulated FPV course proves real-world flight safety or pilot competency.
+
+limitations:
+  - The current generator supports quad-X aircraft with four motors only.
+  - Included component records are generic examples unless separately backed by evidence; they are not presented as measured commercial-product specifications.
+  - Frame geometry and some inertia calculations use documented approximations rather than product CAD and complete measured mass-property data.
+  - The currently verified interactive path is Angle mode; generated Rate configuration does not by itself establish an equivalent verified runtime path.
+  - Simulation controller values and auto-tuned values are not recommendations for direct use on a physical aircraft.
+  - The Three.js aircraft appearance is a visualization representation; MuJoCo owns the physical model and collision behavior.
+  - Real-aircraft assembly, flight-controller integration, airworthiness, regulatory compliance, and pilot training remain outside the validation scope.
+  - Commercial Drone PRO capabilities, licensed tuning functions, and related evaluation or access should be discussed with Hakoniwa Lab.
+
+next_steps:
+  - Validate additional FPV aircraft sizes and component combinations beyond the recorded generic 5-inch configuration.
+  - Extend verified interactive coverage to Rate/Acro handling when the corresponding runtime path is established.
+  - Compare simulated handling and tuning results with measured real-aircraft data before making any sim-to-real accuracy claim.
+  - Add evidence-backed commercial component records only when source specifications and provenance can be maintained.
+
+tags:
+  - fpv
+  - drone
+  - prebuild
+  - vehicle-design
+  - component-selection
+  - mujoco
+  - ps5
+  - angle-control
+  - pid-tuning
+  - collision-course
+  - simulation

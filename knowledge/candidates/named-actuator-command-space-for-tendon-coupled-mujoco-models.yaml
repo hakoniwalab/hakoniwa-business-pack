@@ -25,7 +25,9 @@ observation:
     - Shadow Hand scene_right.xml loads with nu=20, njnt=25, and ntendon=4.
     - The hand command space has 20 named position actuators.
     - The observed hand joint space has 24 named hand joints; the scene also includes an unnamed freejoint for the free object that should not be part of the hand JointState contract.
-    - Four position actuators target fixed tendons: rh_A_FFJ0, rh_A_MFJ0, rh_A_RFJ0, and rh_A_LFJ0.
+    - >-
+      Four position actuators target fixed tendons: rh_A_FFJ0, rh_A_MFJ0, rh_A_RFJ0,
+      and rh_A_LFJ0.
     - Each fixed tendon couples two distal finger joints with coefficient 1, for example rh_FFJ0 couples rh_FFJ2 and rh_FFJ1.
     - Treating command count as observed joint count would create invalid independent commands for tendon-coupled joints.
     - A stable Hakoniwa contract was defined as std_msgs/Float64MultiArray[20] in explicit actuator-name order.

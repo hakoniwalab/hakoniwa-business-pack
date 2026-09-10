@@ -1,0 +1,112 @@
+id: generated-runtime-config-and-binary-identity-are-experiment-evidence
+title: Generated runtime configuration and binary identity are experiment evidence
+status: validating
+
+knowledge_type:
+  - runtime_rule
+  - known_pitfall
+  - validation_rule
+  - interface_contract
+
+summary: >
+  Experiment input and result metadata prove declared intent, not effective
+  runtime behavior. Generated role configuration must be checked against the
+  input, and launch must pin the same executable identity that doctor validated,
+  before a performance result can be attributed to a timing profile.
+
+observation:
+  context: >
+    Reviewing the first 64-UAV multi-host scaling result after successful
+    server/client execution on macOS and WSL2.
+  details:
+    - The Recipe input declared a 1 ms Conductor step, 10 ms real sleep, and 10 ms delta-boundary SimTime publication.
+    - The private generator forwarded delta_time_usec and max_delay_time_usec but silently omitted real_sleep_msec, simtime_publish_mode, and simtime_publish_interval_usec from both role configurations.
+    - Result metadata retained the requested values, so it could label a successful run with a timing profile the runtime did not actually receive.
+    - Generator and launcher wrapper lookup preferred an installed prefix over the active checkout, allowing an older binary to shadow the source revision under test.
+    - The corrected generator propagates all five timing fields to server and client, configure validates the generated values, and the Recipe pins and checks the checkout executable.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-rd-core
+      path: src/generators/conductor/conductor_config_gen.cpp
+      revision: working-tree-after-2eefa886c7dea859b7d665b735b6be0db5f66fb2
+    - repository: hakoniwalab/hakoniwa-conductor-pro
+      path: tools/hako.py
+      revision: working-tree-after-b21a05fa8a846e8edd6e085e9ade648f97df9c92
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/recipe/drone_fleet_multi_host.py
+      revision: working-tree-after-3cb14d2d05d981806ff5084f25252b30d4d0d08a
+  runtime_evidence:
+    - description: >
+        The pre-fix 64-UAV run completed on both hosts, while inspection showed
+        its generated role JSON omitted the three requested timing fields.
+    - description: >
+        Post-fix macOS configure generated identical five-field timing policy in
+        srv-01.json and cli-01.json, and Business Pack doctor passed the timing
+        and checkout-binary contracts.
+    - description: >
+        Conductor PRO Python tests, its 46-test CTest suite, the focused
+        generator test, and 23 Business Pack multi-host tests pass locally.
+  expert_input:
+    - source: Hakoniwa maintainer
+      statement: >
+        The server must honor simtime_publish_interval_usec as well as the
+        client; discovering the missing propagation before performance adoption
+        is important.
+
+confidence: high
+
+contradictions:
+  - target: Multi-host scaling result metadata
+    existing_claim: A recorded requested timing profile is sufficient to classify the run.
+    new_evidence: The generator can omit requested fields and runtime defaults can differ while metadata remains unchanged.
+
+validation:
+  status: partially_verified
+  required:
+    - Rebuild or update Conductor PRO on WSL2 and configure the same scaling condition on both hosts.
+    - Re-run the 64-UAV multi-host condition and retain generated role configs and executable provenance with the results.
+    - Confirm the paired summary is produced only from post-fix evidence.
+  notes:
+    - Local generation and guardrails are verified; a post-fix two-host runtime run remains outstanding.
+
+tracking:
+  implementation_status: in_progress
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - drone-fleet-multi-host
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-conductor-pro
+      kind: validator
+      path: tools/hako.py
+      mode: detect-only
+      notes:
+        - Reject generated server or client timing that differs from eu-input conductor_defaults.
+    - repository: hakoniwalab/hakoniwa-business-pack
+      kind: doctor
+      path: tools/recipe/drone_fleet_multi_host.py
+      mode: detect-only
+      notes:
+        - Validate effective timing and pin the checkout binary used for launch.
+
+promotion_rationale:
+  - The rule applies to any generated performance configuration, not only the current UAV-count matrix.
+  - Generator-level and Recipe-level checks cover distinct trust boundaries and prevent metadata-only validation.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to:
+    - docs/drone-fleet-multi-host-configuration.md
+  executable_guardrails:
+    - hakoniwa-conductor-pro/tools/hako.py
+    - tools/recipe/drone_fleet_multi_host.py
+  notes:
+    - Do not adopt the pre-fix 64-UAV RTF as target-profile performance evidence.

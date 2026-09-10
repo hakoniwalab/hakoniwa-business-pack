@@ -1,0 +1,154 @@
+id: pdu-rpc-emits-error-prefixed-diagnostic-on-normal-close
+title: "pdu-rpc's Action Server logs an ERROR-prefixed line on a normal client close, not a failure; a zero-tolerance log scanner needs one anchored allowlist entry, not a blanket 'error' exemption"
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - validation_rule
+
+summary: >
+  Since hakoniwa-pdu-rpc 7ed378b (the slot-release contract change described in
+  the companion candidate on the Cancel/session-loss fix), an Action Server logs
+  "ERROR: Action Server transport disconnected for Action '<name>'; packet
+  bindings and slot ownership were released." whenever a Client closes its
+  connection normally, not only on an actual failure. The message is an
+  intentional diagnostic -- part of #78's slot-release contract, so operators can
+  see that a disconnect was noticed and handled -- but its ERROR: prefix means a
+  verify harness that treats any "error" or "ERROR" substring on stderr/stdout
+  as fatal will FAIL on a functionally successful run. This is the same class of
+  problem as the existing core-asset-start-state-check-toctou-double-read
+  candidate: an upstream component prints an alarming word during entirely
+  normal operation. The fix on this workspace's side is a single full-line
+  anchored allowlist entry for exactly this message, not a general exemption for
+  the word "error".
+
+observation:
+  context: >
+    Re-running the Action-based verify harness for configs/action-fibonacci-win/
+    after adopting hakoniwa-pdu-rpc 7ed378b as part of validating the
+    Cancel/session-loss fix, 2026-08-11/08-12, Windows host, both loopback and
+    the Windows-WSL2 boundary.
+  details:
+    - "Exact message and trigger. On any Client transport close that is not
+      preceded by an accepted Hakoniwa-side Cancel and is not itself an error
+      condition -- i.e. the ordinary end of a completed exchange, or a Client
+      process exiting cleanly -- the Action Server emits
+      'ERROR: Action Server transport disconnected for Action '<name>'; packet
+      bindings and slot ownership were released.' This is the same code path
+      that #78 hardened so slot ownership is released deterministically on
+      disconnect (see the companion Cancel/session-loss candidate); the log
+      line is that contract becoming visible."
+    - "Verify-harness impact, measured directly. configs/action-fibonacci-win/
+      verify.ps1 previously treated any line containing 'error' (case
+      insensitive) on stdout or stderr as an automatic FAIL. With pdu-rpc
+      7ed378b in place, every run that completed successfully -- goal accepted,
+      Feedback delivered, Result delivered, Client exits -- still FAILed the
+      verify script purely because of this one diagnostic line, even though the
+      functional outcome (case-by-case Result correctness, clean process exit
+      codes) was correct in every run."
+    - "Chosen remediation: a single, full-line, anchored allowlist pattern
+      matching exactly this message (Action name treated as a wildcard
+      segment), added to configs/action-fibonacci-win/verify.ps1's log scanner.
+      A blanket allowlist for the substring 'error' was deliberately rejected,
+      since that would also hide a real Action Server error under this same
+      scan."
+    - "Classification: this is the same shape of problem as the existing
+      candidate core-asset-start-state-check-toctou-double-read (an
+      Error-labelled line that is emitted during correct, expected operation,
+      and needs to be told apart from genuine failures by exact text rather
+      than by keyword). That candidate's core lesson -- pin the tolerance to
+      the exact string, not to the presence of the alarming word -- applies
+      here unchanged and was reused rather than re-derived."
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      path: src/action_services_server.cpp
+      revision: 7ed378b
+  runtime_evidence:
+    - description: >-
+        This workspace's configs/action-fibonacci-win/verify.ps1, Windows 11
+        Pro x64, both loopback and Windows-host/WSL2-peer real TCP, 2026-08-11
+        through 2026-08-12. Before the anchored allowlist entry: FAIL on every
+        successful run once pdu-rpc 7ed378b was adopted, solely due to the
+        ERROR-prefixed disconnect line. After adding a full-line anchored
+        allowlist entry for exactly this message: PASS on the same successful
+        runs, with the scanner still failing runs that contain any other
+        error-like line.
+  expert_input: []
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - >-
+      Confirm whether upstream intends to keep the ERROR: prefix on this
+      specific, expected-on-normal-close message, or would consider
+      downgrading it to an INFO/DIAGNOSTIC-level line the way
+      core-asset-start-state-check-toctou-double-read's fix downgraded its
+      transitional-state message.
+  notes:
+    - Verified by directly observing both the FAIL-before and PASS-after states
+      of the same verify harness against the same successful runs, changing
+      only the allowlist pattern.
+
+tracking:
+  implementation_status: open
+  issues:
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      number: 79
+      relation: fix
+      status: open
+
+promotion_targets:
+  catalog:
+    - hakoniwa-pdu-rpc
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: true
+  recipes: []
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      kind: validator
+      path: configs/action-fibonacci-win/verify.ps1
+      mode: detect-only
+      notes:
+        - >-
+          The anchored allowlist entry already added to this workspace's
+          verify.ps1 is a consuming-side workaround, kept until
+          hakoniwa-pdu-rpc#79 changes the diagnostic severity upstream. It is
+          not the permanent answer: once #79 lands, the allowlist entry should
+          be removed and the run re-verified without it.
+
+promotion_rationale:
+  - >-
+    This is a config/verify-authoring pitfall specific to using
+    hakoniwa-pdu-rpc's Action Server: any zero-tolerance log scanner built
+    against it needs to know this exact line is benign. component_asset_guide
+    is the right layer because the guidance is "how to write a verify harness
+    against this component", not ecosystem-wide positioning or a Recipe.
+  - >-
+    The maintainers have classified the ERROR-prefixed line on a normal close
+    as a diagnostic severity and observability problem in hakoniwa-pdu-rpc, not
+    as intended permanent behavior, and opened #79 for it. The consuming-side
+    allowlist in this workspace's verify script is therefore an interim measure
+    rather than the resolution.
+
+resolution:
+  status: documented
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails:
+    - configs/action-fibonacci-win/verify.ps1
+  notes:
+    - >-
+      Worked around on this workspace's side by the anchored allowlist entry in
+      configs/action-fibonacci-win/verify.ps1, pending the upstream fix in
+      hakoniwa-pdu-rpc#79. resolution.verified is false
+      because this reflects a workspace-side documentation/tooling
+      accommodation, not an upstream fix that has itself been re-verified
+      against an upstream issue.

@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import ros2_service_add_two_ints as common
+from tools.workdir import recipe_root as selected_recipe_root
 
 
 IMAGE = "hakoniwa-business-pack/ros2-bridge-examples:local"
@@ -54,7 +55,7 @@ def profile(name: str) -> Profile:
 
 
 def paths(item: Profile) -> dict[str, Path]:
-    base = common.root() / "work" / "recipes" / item.recipe_id
+    base = selected_recipe_root(common.root(), item.recipe_id)
     config = base / "config" / item.kind
     runtime = base / "runtime"
     return {

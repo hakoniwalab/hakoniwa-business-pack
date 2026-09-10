@@ -17,10 +17,12 @@ import json
 import math
 import os
 import platform
+import re
 import shutil
 import socket
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 import urllib.error
@@ -30,9 +32,22 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+# Direct script execution must work without ambient PYTHONPATH.
+BUSINESS_PACK_ROOT = Path(__file__).resolve().parents[2]
+if str(BUSINESS_PACK_ROOT) not in sys.path:
+    sys.path.insert(0, str(BUSINESS_PACK_ROOT))
+
+from tools.workdir import recipe_root as selected_recipe_root, work_dir
+
+try:
+    from tools.recipe import drone_fleet_runtime as fleet_runtime
+except ModuleNotFoundError:
+    import drone_fleet_runtime as fleet_runtime
+
 
 RECIPE_ID = "drone-fleet-single-host"
 OPERATOR_NAME = "drone_fleet_single_host.py"
+OPERATOR_COMMAND = f"python tools/recipe/{OPERATOR_NAME}"
 TOOLS_DIR = Path(__file__).absolute().parents[1]
 ROOT = Path(__file__).absolute().parents[2]
 DEFAULT_EXPERIMENT = (
@@ -42,6 +57,11 @@ VIEWER_URL_BASE = (
     "http://127.0.0.1:8000/index.html"
     "?viewerConfigPath=/config/viewer-config-fleets.json"
     "&wsUri=ws://127.0.0.1:8765&wireVersion=v2"
+)
+MAP_VIEWER_URL_BASE = (
+    "http://127.0.0.1:8000/src/client/index.html"
+    "?threejsRoot=/thirdparty/hakoniwa-threejs-drone"
+    "&viewerConfigName=viewer-config-fleets.json"
 )
 HAKONIWA_STROKE_COUNT = 26
 RECOMMENDED_DRONES_PER_STROKE = 2
@@ -53,6 +73,9 @@ RECOMMENDED_DRONES_PER_STROKE = 2
 GENERAL_USER_MAX_DRONES = 200
 PUBLIC_DRONE_RELEASE = "v4.0.0"
 PUBLIC_DRONE_REPOSITORY = "https://github.com/toppers/hakoniwa-drone-core.git"
+PUBLIC_DRONE_REPOSITORY_ID = "toppers/hakoniwa-drone-core"
+DRONE_COMPONENT_ID = "hakoniwa-drone-core"
+DRONE_CATALOG = ROOT / "catalog" / "components" / f"{DRONE_COMPONENT_ID}.yaml"
 THREEJS_VIEWER_REPOSITORY = "https://github.com/hakoniwalab/hakoniwa-threejs-drone.git"
 PUBLIC_DRONE_ARCHIVES = {
     "Darwin": (
@@ -63,11 +86,9 @@ PUBLIC_DRONE_ARCHIVES = {
         "lnx.zip",
         "d8ef1418e8754dcb4048d808a700568f21dd9b328966ae2806f70285e273fc60",
     ),
-    "Windows": (
-        "win.zip",
-        "2931cb7844dbe74ec3dd5f4be5bb49f28757d268774010c90ea18e8266e59ac0",
-    ),
 }
+SUPPORTED_NATIVE_SYSTEMS = ("Darwin", "Linux")
+MUJOCO_RELEASE_BASE = "https://github.com/google-deepmind/mujoco/releases/download"
 
 
 class RecipeError(RuntimeError):
@@ -128,7 +149,7 @@ class Experiment:
 
 
 def operator_command(command: str) -> str:
-    return f"python tools/recipe/{OPERATOR_NAME} {command}"
+    return f"{OPERATOR_COMMAND} {command}"
 
 
 def load_foundation_module():
@@ -142,6 +163,14 @@ def load_foundation_module():
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def load_native_runtime_module():
+    if str(TOOLS_DIR) not in sys.path:
+        sys.path.insert(0, str(TOOLS_DIR))
+    import native_runtime
+
+    return native_runtime
 
 
 def default_source(name: str) -> Path:
@@ -164,12 +193,84 @@ def _safe_extract(archive: Path, destination: Path) -> None:
         package.extractall(destination)
 
 
-def prepare_native_distribution(drone_root: Path, system_name: str) -> int:
-    """Explicitly materialize the public Drone source and native distribution."""
-    profile = PUBLIC_DRONE_ARCHIVES.get(system_name)
-    if profile is None:
-        raise RecipeError(f"unsupported native operating system: {system_name}")
+def _atomic_json(path: Path, value: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(path)
 
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        while chunk := source.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _download(url: str, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_suffix(destination.suffix + ".tmp")
+    try:
+        with urllib.request.urlopen(url) as response:
+            with temporary.open("wb") as output:
+                while chunk := response.read(1024 * 1024):
+                    output.write(chunk)
+        temporary.replace(destination)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+def _verified_download(url: str, destination: Path, expected_sha256: str) -> str:
+    if destination.is_file() and _sha256(destination) == expected_sha256:
+        return "verified-cache"
+    print(f"Downloading: {url}")
+    _download(url, destination)
+    actual_sha256 = _sha256(destination)
+    if actual_sha256 != expected_sha256:
+        destination.unlink(missing_ok=True)
+        raise RecipeError(
+            f"download SHA-256 mismatch for {url}: expected "
+            f"{expected_sha256}, got {actual_sha256}"
+        )
+    return "downloaded"
+
+
+def _git_output(drone_root: Path, *arguments: str) -> str:
+    command = ["git", *arguments]
+    result = subprocess.run(
+        command,
+        cwd=drone_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        suffix = f": {detail}" if detail else ""
+        raise RecipeError(f"command failed: {subprocess.list2cmdline(command)}{suffix}")
+    return result.stdout.strip()
+
+
+def _git_is_ancestor(drone_root: Path, older: str, newer: str) -> bool:
+    return subprocess.run(
+        ["git", "merge-base", "--is-ancestor", older, newer],
+        cwd=drone_root,
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    ).returncode == 0
+
+
+def _repository_id(remote_url: str) -> str | None:
+    value = remote_url.strip().removesuffix(".git").rstrip("/")
+    match = re.search(r"github\.com(?::|/)([^/]+/[^/]+)$", value)
+    return match.group(1).lower() if match else None
+
+
+def prepare_drone_workspace(drone_root: Path) -> dict[str, Any]:
+    mode = "reused"
     if not drone_root.exists():
         drone_root.parent.mkdir(parents=True, exist_ok=True)
         _run_checked(
@@ -178,7 +279,7 @@ def prepare_native_distribution(drone_root: Path, system_name: str) -> int:
                 "clone",
                 "--recurse-submodules",
                 "--branch",
-                PUBLIC_DRONE_RELEASE,
+                "main",
                 "--depth",
                 "1",
                 PUBLIC_DRONE_REPOSITORY,
@@ -186,56 +287,302 @@ def prepare_native_distribution(drone_root: Path, system_name: str) -> int:
             ],
             cwd=drone_root.parent,
         )
+        mode = "cloned"
+    elif not (drone_root / ".git").exists():
+        raise RecipeError(
+            f"existing Drone workspace is not a Git checkout: {drone_root}"
+        )
+    else:
+        remote_url = _git_output(drone_root, "remote", "get-url", "origin")
+        actual_repository = _repository_id(remote_url)
+        if actual_repository != PUBLIC_DRONE_REPOSITORY_ID:
+            raise RecipeError(
+                "existing Drone workspace has an unexpected origin: expected "
+                f"{PUBLIC_DRONE_REPOSITORY_ID}, got {remote_url}"
+            )
+        branch = _git_output(drone_root, "branch", "--show-current")
+        if branch != "main":
+            raise RecipeError(
+                f"existing Drone workspace must be on main, got {branch or 'detached HEAD'}: "
+                f"{drone_root}"
+            )
+        _run_checked(["git", "fetch", "origin", "main"], cwd=drone_root)
+        current = _git_output(drone_root, "rev-parse", "HEAD")
+        upstream = _git_output(drone_root, "rev-parse", "origin/main")
+        if current != upstream:
+            if not _git_is_ancestor(drone_root, current, upstream):
+                raise RecipeError(
+                    "existing Drone workspace is not a fast-forward ancestor of "
+                    f"origin/main: HEAD={current}, origin/main={upstream}"
+                )
+            _run_checked(["git", "merge", "--ff-only", "origin/main"], cwd=drone_root)
+            mode = "updated"
+
+    _run_checked(
+        ["git", "submodule", "update", "--init", "--recursive"], cwd=drone_root
+    )
+    remote_url = _git_output(drone_root, "remote", "get-url", "origin")
+    actual_repository = _repository_id(remote_url)
+    if actual_repository != PUBLIC_DRONE_REPOSITORY_ID:
+        raise RecipeError(
+            "cloned Drone workspace has an unexpected origin: expected "
+            f"{PUBLIC_DRONE_REPOSITORY_ID}, got {remote_url}"
+        )
+    revision = _git_output(drone_root, "rev-parse", "HEAD")
+    dirty_paths = [
+        line for line in _git_output(drone_root, "status", "--short").splitlines() if line
+    ]
     if not (drone_root / "tools" / "gen_fleet_scale_config.py").is_file():
         raise RecipeError(
-            f"Hakoniwa Drone source is incomplete: {drone_root}; "
-            "use --drone-root to select a toppers/hakoniwa-drone-core checkout"
+            f"Hakoniwa Drone workspace is incomplete: {drone_root}; "
+            "tools/gen_fleet_scale_config.py is missing"
         )
+    return {
+        "mode": mode,
+        "repository": PUBLIC_DRONE_REPOSITORY_ID,
+        "requested_ref": "main",
+        "resolved_revision": revision,
+        "dirty": bool(dirty_paths),
+        "dirty_path_count": len(dirty_paths),
+    }
 
+
+def _mujoco_asset(version: str, system_name: str, machine: str) -> str:
+    normalized_machine = machine.lower()
+    if system_name == "Darwin":
+        return f"mujoco-{version}-macos-universal2.dmg"
+    if system_name == "Linux":
+        architectures = {
+            "x86_64": "x86_64",
+            "amd64": "x86_64",
+            "aarch64": "aarch64",
+            "arm64": "aarch64",
+        }
+        architecture = architectures.get(normalized_machine)
+        if architecture is None:
+            raise RecipeError(f"unsupported Linux architecture for MuJoCo: {machine}")
+        return f"mujoco-{version}-linux-{architecture}.tar.gz"
+    raise RecipeError(
+        f"unsupported native operating system: {system_name}; "
+        "drone-fleet-single-host supports macOS and Linux"
+    )
+
+
+def _read_checksum(path: Path, asset_name: str) -> str:
     try:
-        service = resolve_drone_binary(drone_root, system_name)
-        vsp = resolve_visual_state_publisher(drone_root, system_name)
-        print(f"Native Drone distribution is already ready: {service}")
-        print(f"Visual-state publisher is already ready: {vsp}")
-        return 0
-    except RecipeError:
-        pass
+        fields = path.read_text(encoding="utf-8").strip().split()
+    except OSError as exc:
+        raise RecipeError(f"cannot read MuJoCo checksum: {path}") from exc
+    if not fields or not re.fullmatch(r"[0-9a-fA-F]{64}", fields[0]):
+        raise RecipeError(f"invalid MuJoCo checksum file: {path}")
+    if len(fields) > 1 and Path(fields[-1].lstrip("*")).name != asset_name:
+        raise RecipeError(
+            f"MuJoCo checksum names an unexpected asset: {fields[-1]}"
+        )
+    return fields[0].lower()
+
+
+def _install_mujoco_linux(archive: Path, drone_root: Path, version: str) -> Path:
+    with tempfile.TemporaryDirectory(prefix="hakoniwa-mujoco-extract-") as temporary:
+        extraction_root = Path(temporary)
+        try:
+            with tarfile.open(archive, "r:gz") as package:
+                package.extractall(extraction_root, filter="data")
+        except (OSError, tarfile.TarError) as exc:
+            raise RecipeError(f"failed to extract MuJoCo archive: {exc}") from exc
+        source = extraction_root / f"mujoco-{version}"
+        if not source.is_dir():
+            directories = [path for path in extraction_root.iterdir() if path.is_dir()]
+            if len(directories) != 1:
+                raise RecipeError(
+                    f"MuJoCo archive has an unexpected layout: {archive}"
+                )
+            source = directories[0]
+        destination = drone_root / "vendor" / "mujoco"
+        shutil.copytree(source, destination, dirs_exist_ok=True)
+    library = destination / "lib" / f"libmujoco.so.{version}"
+    if not library.is_file():
+        raise RecipeError(f"MuJoCo runtime library is missing after install: {library}")
+    return library
+
+
+def materialize_mujoco_runtime(
+    drone_root: Path, system_name: str, cache_root: Path
+) -> dict[str, Any]:
+    native_runtime = load_native_runtime_module()
+    try:
+        _requirement, contract, _adapter = native_runtime.resolve_contract(
+            DRONE_CATALOG,
+            recipe_file(),
+            DRONE_COMPONENT_ID,
+            drone_root,
+            system_name,
+        )
+    except native_runtime.NativeRuntimeError as exc:
+        raise RecipeError(str(exc)) from exc
+    if contract.release != PUBLIC_DRONE_RELEASE:
+        raise RecipeError(
+            "Recipe native distribution and Catalog profile disagree: "
+            f"expected {PUBLIC_DRONE_RELEASE}, got {contract.release}"
+        )
+    mujoco = next(
+        (runtime for runtime in contract.managed_runtimes if runtime.name == "mujoco"),
+        None,
+    )
+    if mujoco is None:
+        raise RecipeError("Catalog native runtime profile does not require MuJoCo")
+    version = mujoco.version
+    asset_name = _mujoco_asset(version, system_name, platform.machine())
+    release_url = f"{MUJOCO_RELEASE_BASE}/{version}"
+    checksum_url = f"{release_url}/{asset_name}.sha256"
+    cache = cache_root / "mujoco" / version
+    checksum_path = cache / f"{asset_name}.sha256"
+    if not checksum_path.is_file():
+        print(f"Downloading MuJoCo checksum: {checksum_url}")
+        try:
+            _download(checksum_url, checksum_path)
+        except (OSError, urllib.error.URLError) as exc:
+            raise RecipeError(f"failed to download MuJoCo checksum: {exc}") from exc
+    expected_sha256 = _read_checksum(checksum_path, asset_name)
+    archive = cache / asset_name
+    try:
+        mode = _verified_download(
+            f"{release_url}/{asset_name}", archive, expected_sha256
+        )
+    except (OSError, urllib.error.URLError) as exc:
+        raise RecipeError(f"failed to download MuJoCo runtime: {exc}") from exc
+
+    if system_name == "Darwin":
+        installer = drone_root / "tools" / "install-mujoco-mac.bash"
+        linker = drone_root / "tools" / "link-mujoco-mac.bash"
+        if not installer.is_file() or not linker.is_file():
+            raise RecipeError(
+                "Drone workspace does not provide the required macOS MuJoCo "
+                "install/link scripts"
+            )
+        with tempfile.TemporaryDirectory(prefix="hakoniwa-mujoco-install-") as temporary:
+            staging = Path(temporary)
+            shutil.copy2(archive, staging / asset_name)
+            (staging / "MUJOCO_VERSION.txt").write_text(
+                version + "\n", encoding="utf-8"
+            )
+            _run_checked(["bash", str(installer), str(drone_root)], cwd=staging)
+        library = drone_root / "vendor" / "mujoco" / "lib" / f"libmujoco.{version}.dylib"
+        if not library.is_file():
+            raise RecipeError(
+                f"MuJoCo runtime library is missing after install: {library}"
+            )
+        target = drone_root / "mac"
+        _run_checked(
+            [
+                "bash",
+                str(linker),
+                str(target),
+                "--lib-dir",
+                str(library.parent),
+            ],
+            cwd=drone_root,
+        )
+        link_mode = "macos-install-name-and-rpath"
+    else:
+        library = _install_mujoco_linux(archive, drone_root, version)
+        link_mode = "runtime-library-path"
+
+    return {
+        "mode": mode,
+        "requirements": str(contract.path),
+        "version_authority": str(mujoco.version_file),
+        "version": version,
+        "asset": asset_name,
+        "sha256": expected_sha256,
+        "library": str(library.absolute()),
+        "link_mode": link_mode,
+    }
+
+
+def prepare_native_distribution(
+    drone_root: Path,
+    system_name: str,
+    *,
+    cache_root: Path | None = None,
+    evidence_path: Path | None = None,
+) -> int:
+    """Materialize the current Drone workspace and its verified native runtime."""
+    if system_name not in SUPPORTED_NATIVE_SYSTEMS:
+        raise RecipeError(
+            f"unsupported native operating system: {system_name}; "
+            "drone-fleet-single-host supports macOS and Linux"
+        )
+    profile = PUBLIC_DRONE_ARCHIVES.get(system_name)
+    if profile is None:
+        raise RecipeError(f"unsupported native operating system: {system_name}")
+    workspace_evidence = prepare_drone_workspace(drone_root)
 
     archive_name, expected_sha256 = profile
     url = (
         "https://github.com/toppers/hakoniwa-drone-core/releases/download/"
         f"{PUBLIC_DRONE_RELEASE}/{archive_name}"
     )
-    print(f"Downloading official Hakoniwa Drone {PUBLIC_DRONE_RELEASE}: {url}")
+    resolved_cache_root = cache_root or work_dir(ROOT) / "downloads"
+    archive = resolved_cache_root / "hakoniwa-drone-core" / PUBLIC_DRONE_RELEASE / archive_name
     try:
-        with tempfile.TemporaryDirectory(prefix="hakoniwa-drone-download-") as temporary:
-            archive = Path(temporary) / archive_name
-            with urllib.request.urlopen(url) as response:
-                with archive.open("wb") as output:
-                    while chunk := response.read(1024 * 1024):
-                        output.write(chunk)
-            digest = hashlib.sha256()
-            with archive.open("rb") as package:
-                while chunk := package.read(1024 * 1024):
-                    digest.update(chunk)
-            actual_sha256 = digest.hexdigest()
-            if actual_sha256 != expected_sha256:
-                raise RecipeError(
-                    f"native Drone archive SHA-256 mismatch: expected "
-                    f"{expected_sha256}, got {actual_sha256}"
-                )
-            _safe_extract(archive, drone_root)
+        native_mode = _verified_download(url, archive, expected_sha256)
+        _safe_extract(archive, drone_root)
     except (OSError, urllib.error.URLError, zipfile.BadZipFile) as exc:
         raise RecipeError(f"failed to prepare native Drone distribution: {exc}") from exc
 
-    for candidate in (*binary_candidates(drone_root, system_name), *visual_state_publisher_candidates(drone_root, system_name)):
-        if candidate.is_file() and system_name != "Windows":
+    for candidate in (
+        *binary_candidates(drone_root, system_name),
+        *visual_state_publisher_candidates(drone_root, system_name),
+    ):
+        if candidate.is_file():
             candidate.chmod(candidate.stat().st_mode | 0o111)
     service = resolve_drone_binary(drone_root, system_name)
     vsp = resolve_visual_state_publisher(drone_root, system_name)
+    mujoco_evidence = materialize_mujoco_runtime(
+        drone_root, system_name, resolved_cache_root
+    )
+    evidence = {
+        "schema_version": 1,
+        "recipe": RECIPE_ID,
+        "platform": system_name,
+        "drone_workspace": workspace_evidence,
+        "native_distribution": {
+            "mode": native_mode,
+            "release": PUBLIC_DRONE_RELEASE,
+            "platform": system_name,
+            "archive": archive_name,
+            "sha256": expected_sha256,
+            "service": {
+                "path": str(service),
+                "sha256": _sha256(service),
+            },
+            "visual_state_publisher": {
+                "path": str(vsp),
+                "sha256": _sha256(vsp),
+            },
+        },
+        "mujoco_runtime": mujoco_evidence,
+    }
+    if evidence_path is not None:
+        _atomic_json(evidence_path, evidence)
+        print(f"[OK] provenance evidence: {evidence_path}")
+    print("Drone workspace:")
+    print(f"  mode: {workspace_evidence['mode']}")
+    print(f"  repository: {workspace_evidence['repository']}")
+    print(f"  requested ref: {workspace_evidence['requested_ref']}")
+    print(f"  resolved revision: {workspace_evidence['resolved_revision']}")
+    print("Native distribution:")
+    print(f"  mode: {native_mode}")
+    print(f"  release: {PUBLIC_DRONE_RELEASE}")
+    print(f"  platform: {system_name}")
+    print(f"  sha256: {expected_sha256}")
+    print("MuJoCo runtime:")
+    print(f"  mode: {mujoco_evidence['mode']}")
+    print(f"  version: {mujoco_evidence['version']}")
+    print(f"  authority: {mujoco_evidence['version_authority']}")
     print(f"[OK] native drone service: {service}")
     print(f"[OK] visual-state publisher: {vsp}")
-    print(f"[OK] SHA-256: {expected_sha256}")
     return 0
 
 
@@ -309,9 +656,9 @@ def _parse_scalar(value: str) -> Any:
 
 
 def load_simple_yaml(path: Path) -> dict[str, Any]:
-    """Load the dependency-free YAML subset used by the experiment files."""
+    """Load the dependency-free YAML subset used by Recipe-owned contracts."""
     if not path.is_file():
-        raise RecipeError(f"experiment YAML not found: {path}")
+        raise RecipeError(f"YAML file not found: {path}")
     root: dict[str, Any] = {}
     stack: list[tuple[int, dict[str, Any]]] = [(-1, root)]
     for line_number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
@@ -323,7 +670,7 @@ def load_simple_yaml(path: Path) -> dict[str, Any]:
         text = raw.strip()
         if text.startswith("-") or ":" not in text:
             raise RecipeError(
-                f"{path}:{line_number}: experiment YAML supports mappings, scalars, and inline lists only"
+                f"{path}:{line_number}: YAML supports mappings, scalars, and inline lists only"
             )
         key, value = text.split(":", 1)
         key = key.strip()
@@ -356,14 +703,20 @@ def _require_fields(section: dict[str, Any], label: str, allowed: set[str]) -> N
         raise RecipeError(f"unknown {label} fields: {', '.join(unknown)}")
 
 
-def resolve_experiment(path: Path) -> Experiment:
+def resolve_experiment(
+    path: Path,
+    *,
+    drone_count_override: int | None = None,
+    process_count_override: int | None = None,
+    formation_scale_override: float | None = None,
+) -> Experiment:
     root = load_simple_yaml(path)
     _require_fields(
         root,
         "root",
         {
             "version", "experiment", "scale", "runtime", "scenario", "results",
-            "measurement", "matrix",
+            "measurement", "matrix", "resolved",
         },
     )
     if root.get("version") != 1:
@@ -479,6 +832,18 @@ def resolve_experiment(path: Path) -> Experiment:
             "Drone PRO research Recipe instead of the public default binaries; "
             "a PRO license and PRO source access are required"
         )
+    if drone_count_override is not None:
+        if not 1 <= drone_count_override <= GENERAL_USER_MAX_DRONES:
+            raise RecipeError(
+                "--drone-count must be in "
+                f"[1, {GENERAL_USER_MAX_DRONES}]"
+            )
+        drone_count = drone_count_override
+    if process_count_override is not None:
+        if not 1 <= process_count_override <= drone_count:
+            raise RecipeError("--process-count must be in [1, drone_count]")
+        process_count = process_count_override
+    drones_per_process = math.ceil(drone_count / process_count)
 
     experiment_id = identity.get("id")
     if not isinstance(experiment_id, str) or not experiment_id:
@@ -506,6 +871,13 @@ def resolve_experiment(path: Path) -> Experiment:
         if result < minimum:
             raise RecipeError(f"scenario.{name} must be >= {minimum}")
         return result
+
+    if formation_scale_override is not None:
+        if not 0.25 <= formation_scale_override <= 10.0:
+            raise RecipeError("--formation-scale must be in [0.25, 10.0]")
+        formation_scale = float(formation_scale_override)
+    else:
+        formation_scale = 1.0
 
     land = scenario.get("land")
     if not isinstance(land, bool):
@@ -737,9 +1109,9 @@ def resolve_experiment(path: Path) -> Experiment:
         show_runner_real_time_sync=show_runner_real_time_sync,
         scenario_type=str(scenario["type"]),
         word=word,
-        letter_width_m=number("letter_width_m", minimum=0.001),
-        letter_height_m=number("letter_height_m", minimum=0.001),
-        letter_gap_m=number("letter_gap_m", minimum=0.0),
+        letter_width_m=number("letter_width_m", minimum=0.001) * formation_scale,
+        letter_height_m=number("letter_height_m", minimum=0.001) * formation_scale,
+        letter_gap_m=number("letter_gap_m", minimum=0.0) * formation_scale,
         altitude_m=number("altitude_m", minimum=0.5),
         duration_sec=number("duration_sec", minimum=0.001),
         hold_sec=number("hold_sec", minimum=0.0),
@@ -782,6 +1154,8 @@ def _yaml_scalar(value: Any) -> str:
         return "false"
     if value is None:
         return "null"
+    if isinstance(value, list):
+        return json.dumps(value, ensure_ascii=False)
     if isinstance(value, str):
         return json.dumps(value, ensure_ascii=False)
     return str(value)
@@ -909,15 +1283,10 @@ def write_measurement_config(paths, experiment: Experiment) -> Path | None:
 
 
 def expected_partition_counts(drone_count: int, process_count: int) -> list[int]:
-    """Distribute drones evenly, assigning one extra to each final process."""
-    if process_count < 1 or process_count > drone_count:
-        raise RecipeError("process_count must be in [1, drone_count]")
-    base = drone_count // process_count
-    remainder = drone_count % process_count
-    counts = [base] * process_count
-    for index in range(process_count - remainder, process_count):
-        counts[index] += 1
-    return counts
+    try:
+        return fleet_runtime.expected_partition_counts(drone_count, process_count)
+    except ValueError as exc:
+        raise RecipeError(str(exc)) from exc
 
 
 def validate_materialized_experiment(paths, experiment: Experiment) -> list[str]:
@@ -936,76 +1305,12 @@ def validate_materialized_experiment(paths, experiment: Experiment) -> list[str]
                     "run configure after changing scale or runtime settings"
                 )
 
-    fleet_root = paths.recipe_config / "drone" / "fleets"
-    service_root = fleet_root / "services"
-    if experiment.process_count == 1:
-        fleet_paths = [fleet_root / "api-current.json"]
-        service_paths = [service_root / "api-current-service.json"]
-    else:
-        fleet_paths = [
-            fleet_root / f"api-current-part{index}.json"
-            for index in range(1, experiment.process_count + 1)
-        ]
-        service_paths = [
-            service_root / f"api-current-service-part{index}.json"
-            for index in range(1, experiment.process_count + 1)
-        ]
-
-    expected_counts = expected_partition_counts(
-        experiment.drone_count, experiment.process_count
+    errors.extend(
+        fleet_runtime.validate_partitions(
+            paths.recipe_config,
+            fleet_runtime.single_host_spec(experiment),
+        )
     )
-    observed_names: list[str] = []
-    for index, (fleet_path, service_path, expected_count) in enumerate(
-        zip(fleet_paths, service_paths, expected_counts), start=1
-    ):
-        if not fleet_path.is_file():
-            errors.append(f"missing process {index} fleet partition: {fleet_path}")
-            continue
-        if not service_path.is_file():
-            errors.append(f"missing process {index} service partition: {service_path}")
-            continue
-        try:
-            fleet_payload = json.loads(fleet_path.read_text(encoding="utf-8"))
-            service_payload = json.loads(service_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            errors.append(f"invalid process {index} partition: {exc}")
-            continue
-        drones = fleet_payload.get("drones")
-        services = service_payload.get("services")
-        if not isinstance(drones, list):
-            errors.append(f"process {index} fleet partition has no drones list")
-            continue
-        if len(drones) != expected_count:
-            errors.append(
-                f"process {index} fleet partition has {len(drones)} drones; "
-                f"expected {expected_count}"
-            )
-        if not isinstance(services, list) or len(services) != expected_count * 5:
-            actual_service_count = len(services) if isinstance(services, list) else 0
-            errors.append(
-                f"process {index} service partition has {actual_service_count} "
-                f"services; expected {expected_count * 5}"
-            )
-        for drone in drones:
-            name = drone.get("name") if isinstance(drone, dict) else None
-            if not isinstance(name, str) or not name:
-                errors.append(f"process {index} fleet partition has an invalid drone name")
-                continue
-            observed_names.append(name)
-
-    if len(observed_names) != len(set(observed_names)):
-        errors.append("fleet partitions contain duplicate drone names")
-    expected_names = {f"Drone-{index}" for index in range(1, experiment.drone_count + 1)}
-    observed_name_set = set(observed_names)
-    if observed_name_set != expected_names:
-        missing = sorted(expected_names - observed_name_set)
-        unexpected = sorted(observed_name_set - expected_names)
-        detail: list[str] = []
-        if missing:
-            detail.append("missing=" + ",".join(missing[:5]))
-        if unexpected:
-            detail.append("unexpected=" + ",".join(unexpected[:5]))
-        errors.append("fleet partition coverage mismatch" + (": " + " ".join(detail) if detail else ""))
     return errors
 
 
@@ -1069,210 +1374,58 @@ def _run_checked(command: list[str], *, cwd: Path | None = None) -> None:
 
 
 def prepare_config(paths, drone_root: Path, experiment: Experiment) -> None:
-    config = paths.recipe_config
-    fleet = config / "drone" / "fleets" / "api-current.json"
-    service = config / "drone" / "fleets" / "services" / "api-current-service.json"
-    pdudef = config / "pdudef" / "drone-pdudef-current.json"
-    shared_service_path = "config/drone/fleets/services/api-current-service.json"
-    # Remove partitions from a previous process_count so the Recipe workspace
-    # describes only the currently resolved experiment.
-    for pattern_root, pattern in (
-        (config / "drone" / "fleets", "api-current-part*.json"),
-        (
-            config / "drone" / "fleets" / "services",
-            "api-current-service-part*.json",
-        ),
-    ):
-        if pattern_root.is_dir():
-            for stale_partition in pattern_root.glob(pattern):
-                stale_partition.unlink()
-    _run_checked(
-        [
-            sys.executable,
-            str(drone_root / "tools" / "gen_fleet_scale_config.py"),
-            "--drone-count",
-            str(experiment.drone_count),
-            "--fleet-path",
-            str(fleet),
-            "--pdudef-path",
-            str(pdudef),
-            "--service-config-path",
-            shared_service_path,
-            "--service-out-path",
-            str(service),
-            "--layout",
-            "packed-rings",
-        ],
-        cwd=paths.recipe_root,
-    )
-    if experiment.process_count > 1:
-        _run_checked(
-            [
-                sys.executable,
-                str(drone_root / "tools" / "gen_fleet_split_config.py"),
-                "--fleet-in",
-                str(fleet),
-                "--service-in",
-                str(service),
-                "--fleet-out-template",
-                str(config / "drone" / "fleets" / "api-current-part{part}.json"),
-                "--service-out-template",
-                str(
-                    config
-                    / "drone"
-                    / "fleets"
-                    / "services"
-                    / "api-current-service-part{part}.json"
-                ),
-                "--shared-service-config-path",
-                shared_service_path,
-                "--parts",
-                str(experiment.process_count),
-            ],
-            cwd=paths.recipe_root,
+    try:
+        fleet_runtime.prepare_config(
+            paths,
+            drone_root,
+            fleet_runtime.single_host_spec(experiment),
+            run_checked=_run_checked,
+            scenario_writer=lambda: write_generated_scenario(
+                paths, drone_root, experiment
+            ),
         )
-    for relative in (
-        Path("config/drone/fleets/types"),
-        Path("config/controller"),
-    ):
-        source = drone_root / relative
-        if not source.is_dir():
-            raise RecipeError(f"Drone Core configuration not found: {source}")
-        shutil.copytree(
-            source,
-            paths.recipe_root / relative,
-            dirs_exist_ok=True,
-            ignore=shutil.ignore_patterns(".DS_Store", "logs"),
-        )
-    source_pdutypes = drone_root / "config" / "pdudef" / "drone-pdutypes.json"
-    if not source_pdutypes.is_file():
-        raise RecipeError(f"Drone PDU types not found: {source_pdutypes}")
-    shutil.copy2(source_pdutypes, config / "pdudef" / "drone-pdutypes.json")
-    visual_output = config / "assets" / "visual_state_publisher"
-    visual_pdudef_names = (
-        "drone-visual-state.json",
-        "drone-visual-state-pdutypes.json",
-        "pdutypes_time.json",
-    )
-    if experiment.visualization:
-        for name in visual_pdudef_names:
-            source = drone_root / "config" / "pdudef" / name
-            if not source.is_file():
-                raise RecipeError(f"Drone visual-state PDU definition not found: {source}")
-            shutil.copy2(source, config / "pdudef" / name)
-        visual_source = drone_root / "config" / "assets" / "visual_state_publisher"
-        if not visual_source.is_dir():
-            raise RecipeError(f"Visual-state publisher configuration not found: {visual_source}")
-        shutil.copytree(
-            visual_source,
-            visual_output,
-            dirs_exist_ok=True,
-            ignore=shutil.ignore_patterns(".DS_Store", "logs"),
-        )
-        _run_checked(
-            [
-                sys.executable,
-                str(drone_root / "tools" / "gen_visual_state_publisher_config.py"),
-                "--base-config",
-                str(visual_output / "visual_state_publisher.json"),
-                "--out",
-                str(visual_output / "visual_state_publisher.runtime.json"),
-                "--global-drone-count",
-                str(experiment.drone_count),
-                "--local-drone-count",
-                str(experiment.drone_count),
-                "--max-drones-per-packet",
-                "512",
-            ],
-            cwd=paths.recipe_root,
-        )
-    else:
-        if visual_output.exists():
-            shutil.rmtree(visual_output)
-        for name in visual_pdudef_names:
-            stale = config / "pdudef" / name
-            if stale.exists():
-                stale.unlink()
-    write_generated_scenario(paths, drone_root, experiment)
+    except (FileNotFoundError, ValueError) as exc:
+        raise RecipeError(str(exc)) from exc
 
 
 def write_generated_scenario(paths, drone_root: Path, experiment: Experiment) -> Path:
-    formation_dir = paths.recipe_config / "scenario" / "formations"
-    formation = formation_dir / "formation-HAKONIWA.json"
-    minimum_points = (
-        RECOMMENDED_DRONES_PER_STROKE
-        if experiment.drone_count
-        >= HAKONIWA_STROKE_COUNT * RECOMMENDED_DRONES_PER_STROKE
-        else 1
-    )
     if experiment.drone_count < HAKONIWA_STROKE_COUNT:
         print(
             "[WARN] HAKONIWA has 26 stroke segments; with fewer than 26 "
             "drones, evenly sampled strokes are used and the complete word "
             "will not be visible."
         )
-    elif minimum_points == 1:
+    elif experiment.drone_count < (
+        HAKONIWA_STROKE_COUNT * RECOMMENDED_DRONES_PER_STROKE
+    ):
         print(
             "[WARN] HAKONIWA formation uses fewer than two drones per stroke; "
             "52 or more drones are recommended for readability."
         )
-    generator = drone_root / "tools" / "drone-show" / "gen_word_formation.py"
-    if not generator.is_file():
-        raise RecipeError(f"word formation generator not found: {generator}")
-    _run_checked(
-        [
-            sys.executable,
-            str(generator),
-            "--word",
-            experiment.word,
-            "--count",
-            str(experiment.drone_count),
-            "--out",
-            str(formation),
-            "--id",
-            experiment.word,
-            "--letter-width",
-            str(experiment.letter_width_m),
-            "--letter-height",
-            str(experiment.letter_height_m),
-            "--gap",
-            str(experiment.letter_gap_m),
-            "--scale",
-            "1.0",
-            "--min-seg-points",
-            str(minimum_points),
-        ],
-        cwd=paths.recipe_root,
-    )
-    show = {
-        "meta": {
-            "name": experiment.experiment_id,
-            "version": "1.0",
-            "drone_count": experiment.drone_count,
-        },
-        "options": {
-            "center": [0.0, 0.0, 0.0],
-            "scale": 1.0,
-            "base_alt": experiment.altitude_m,
-            "min_distance": 0.0,
-            "max_speed": experiment.speed_m_s,
-            "failure_policy": "hold",
-        },
-        "formation_files": [
-            {"id": experiment.word, "path": "formations/formation-HAKONIWA.json"}
-        ],
-        "timeline": [
-            {
-                "formation": experiment.word,
-                "duration_sec": experiment.duration_sec,
-                "hold_sec": experiment.hold_sec,
-            }
-        ],
-    }
-    output = paths.recipe_config / "scenario" / "show.json"
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(show, indent=2) + "\n", encoding="utf-8")
-    return output
+    # Keep the established warning text at the single-host UI boundary while
+    # delegating the actual scenario materialization to the shared runtime.
+    try:
+        return fleet_runtime.prepare_scenario(
+            paths,
+            drone_root,
+            fleet_runtime.ScenarioRuntimeSpec(
+                experiment_id=experiment.experiment_id,
+                local_drone_count=experiment.drone_count,
+                word=experiment.word,
+                letter_width_m=experiment.letter_width_m,
+                letter_height_m=experiment.letter_height_m,
+                letter_gap_m=experiment.letter_gap_m,
+                altitude_m=experiment.altitude_m,
+                duration_sec=experiment.duration_sec,
+                hold_sec=experiment.hold_sec,
+                speed_m_s=experiment.speed_m_s,
+                stroke_count=HAKONIWA_STROKE_COUNT,
+                recommended_drones_per_stroke=RECOMMENDED_DRONES_PER_STROKE,
+            ),
+            run_checked=_run_checked,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        raise RecipeError(str(exc)) from exc
 
 
 def binary_candidates(drone_root: Path, system_name: str) -> tuple[Path, ...]:
@@ -1284,7 +1437,13 @@ def binary_candidates(drone_root: Path, system_name: str) -> tuple[Path, ...]:
         name, folder = "win-main_hako_drone_service.exe", "win"
     else:
         raise RecipeError(f"unsupported native operating system: {system_name}")
-    return drone_root / "lib" / name, drone_root / folder / name
+    # prepare-native extracts the verified public archive into its OS folder.
+    # Prefer that materialized artifact over an unrelated pre-existing lib copy.
+    return (
+        drone_root / folder / name,
+        drone_root / "lib" / name,
+        drone_root / ".hako" / "install" / "bin" / name,
+    )
 
 
 def visual_state_publisher_candidates(
@@ -1298,7 +1457,11 @@ def visual_state_publisher_candidates(
         name, folder = "win-drone_visual_state_publisher.exe", "win"
     else:
         raise RecipeError(f"unsupported native operating system: {system_name}")
-    return drone_root / "lib" / name, drone_root / folder / name
+    return (
+        drone_root / folder / name,
+        drone_root / "lib" / name,
+        drone_root / ".hako" / "install" / "bin" / name,
+    )
 
 
 def resolve_visual_state_publisher(drone_root: Path, system_name: str) -> Path:
@@ -1379,6 +1542,127 @@ def resolve_foundation_python(paths, system_name: str) -> Path:
     raise RecipeError("Foundation Python not found: " + ", ".join(map(str, candidates)))
 
 
+def materialize_mujoco_city_viewer(paths, viewer_root: Path) -> Path:
+    """Create a Recipe-local Map Viewer with a City-backed Three.js pane."""
+    marker_path = paths.recipe_config / "mujoco-city-fleet.json"
+    try:
+        marker = json.loads(marker_path.read_text(encoding="utf-8"))
+        city = marker["city_world"]
+        city_glb = Path(str(city["glb"])).resolve()
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise RecipeError(f"invalid MuJoCo City viewer contract {marker_path}: {exc}") from exc
+    if not city_glb.is_file():
+        raise RecipeError(f"MuJoCo City GLB not found: {city_glb}")
+
+    map_viewer_root = viewer_root.parent / "hakoniwa-map-viewer"
+    map_client = map_viewer_root / "src" / "client"
+    map_images = map_viewer_root / "images"
+    if not map_client.is_dir() or not map_images.is_dir():
+        raise RecipeError(
+            "Hakoniwa Map Viewer is required by the MuJoCo City fleet viewer: "
+            f"{map_viewer_root}"
+        )
+
+    web_root = paths.recipe_root / "web" / "map-viewer"
+    web_root.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(map_client, web_root / "src" / "client", dirs_exist_ok=True)
+    shutil.copytree(map_images, web_root / "images", dirs_exist_ok=True)
+
+    embedded = web_root / "thirdparty" / "hakoniwa-threejs-drone"
+    embedded.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(viewer_root / "index.html", embedded / "index.html")
+    for dirname in ("src", "config", "assets", "thirdparty"):
+        source = viewer_root / dirname
+        if not source.exists():
+            raise RecipeError(f"Three.js viewer resource not found: {source}")
+        shutil.copytree(source, embedded / dirname, dirs_exist_ok=True)
+
+    glb_destination = embedded / "assets" / "local_models" / "city-world.glb"
+    glb_destination.parent.mkdir(parents=True, exist_ok=True)
+    glb_destination.unlink(missing_ok=True)
+    try:
+        os.link(city_glb, glb_destination)
+    except OSError:
+        shutil.copy2(city_glb, glb_destination)
+
+    scene_path = embedded / "config" / "drone_config-city-fleet.json"
+    source_scene = viewer_root / "config" / "drone_config-compact-1.json"
+    try:
+        scene = json.loads(source_scene.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RecipeError(f"invalid Three.js scene {source_scene}: {exc}") from exc
+    scene["environments"] = [
+        {
+            "name": "city-world",
+            "model": "../assets/local_models/city-world.glb",
+            "pos": [0, 0, 0],
+            "hpr": [0, 0, 0],
+        }
+    ]
+    half_extent = city.get("half_extent_m", {})
+    camera_distance = max(
+        30.0,
+        float(half_extent.get("north_south", 100.0)),
+        float(half_extent.get("east_west", 100.0)),
+    )
+    scene["main_camera"].update(
+        {
+            "initialMode": "fixed",
+            "position": [-0.65 * camera_distance, -0.65 * camera_distance, 0.45 * camera_distance],
+            "target": "Drone",
+            "followDistance": 8.0,
+        }
+    )
+    scene_path.write_text(json.dumps(scene, indent=2) + "\n", encoding="utf-8")
+
+    viewer_config_path = embedded / "config" / "viewer-config-fleets.json"
+    try:
+        viewer_config = json.loads(
+            (viewer_root / "config" / "viewer-config-fleets.json").read_text(
+                encoding="utf-8"
+            )
+        )
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RecipeError(f"invalid Three.js fleet viewer config: {exc}") from exc
+    viewer_config["three"]["sceneConfigPath"] = "./drone_config-city-fleet.json"
+    fleet_options = viewer_config.setdefault("stateInput", {}).setdefault(
+        "fleets", {}
+    )
+    fleet_options.update(
+        {
+            "dynamicSpawn": True,
+            "templateDroneIndex": 0,
+            "maxDynamicDrones": int(marker["drone_count"]),
+        }
+    )
+    viewer_config_path.write_text(
+        json.dumps(viewer_config, indent=2) + "\n", encoding="utf-8"
+    )
+
+    # The Map Viewer is intentionally generic. Its Recipe-local copy only gets
+    # the selected City World origin. DroneViewer owns PDU polling; adding a
+    # second consumer here would race the consuming PDU buffer.
+    map_ui_path = web_root / "src" / "client" / "src" / "ui.js"
+    map_ui = map_ui_path.read_text(encoding="utf-8")
+    origin = city.get("origin", {})
+    origin_lat = float(origin["latitude"])
+    origin_lon = float(origin["longitude"])
+    map_ui = map_ui.replace(
+        "const map = L.map('map').setView([35.6812, 139.7671], 15); // 東京駅",
+        f"const map = L.map('map').setView([{origin_lat}, {origin_lon}], 17);",
+    )
+    map_ui = map_ui.replace(
+        "let ORIGIN_LAT = 35.6625;   // zone の原点（仮）",
+        f"let ORIGIN_LAT = {origin_lat};",
+    )
+    map_ui = map_ui.replace(
+        "let ORIGIN_LON = 139.70625;",
+        f"let ORIGIN_LON = {origin_lon};",
+    )
+    map_ui_path.write_text(map_ui, encoding="utf-8")
+    return web_root
+
+
 def write_launcher(
     paths,
     drone_root: Path,
@@ -1388,40 +1672,6 @@ def write_launcher(
 ) -> Path:
     drone_binary = resolve_drone_binary(drone_root, system_name)
     python = resolve_foundation_python(paths, system_name)
-    shared_env = {
-        "set": {
-            "HAKO_CONFIG_PATH": str(paths.foundation_config / "cpp_core_config.json"),
-            "HAKO_PROFILE_SERVICE_CLIENT": "0",
-        }
-    }
-    service_assets: list[dict[str, Any]] = []
-    for index in range(1, experiment.process_count + 1):
-        fleet = (
-            "config/drone/fleets/api-current.json"
-            if experiment.process_count == 1
-            else f"config/drone/fleets/api-current-part{index}.json"
-        )
-        args = [fleet, "config/pdudef/drone-pdudef-current.json"]
-        if experiment.process_count > 1:
-            args += ["--asset-name", f"drone-{index}"]
-        # A single host has exactly one Core domain and therefore one
-        # Conductor owner.  The first Drone process owns the built-in
-        # Conductor; additional workload partitions disable theirs.
-        if index >= 2:
-            args.append("--disable-conductor")
-        asset: dict[str, Any] = {
-            "name": f"drone-service-{index}",
-            "activation_timing": "before_start",
-            "command": str(drone_binary),
-            "args": args,
-            "cwd": str(paths.recipe_root),
-            "env": shared_env,
-            "delay_sec": 2 if index == 1 else 1,
-        }
-        if index >= 2:
-            asset["depends_on"] = [f"drone-service-{index - 1}"]
-        service_assets.append(asset)
-
     trial = measurement_trial_dir(paths, experiment)
     summary = (
         trial / "execution-summary.json"
@@ -1435,162 +1685,78 @@ def write_launcher(
     )
     if not show_runner.is_file():
         raise RecipeError(f"Drone show runner not found: {show_runner}")
-    show_args = [
-        str(show_runner),
-        "--show-json",
-        str(paths.recipe_config / "scenario" / "show.json"),
-        "--service-config",
-        str(
-            paths.recipe_config
-            / "drone"
-            / "fleets"
-            / "services"
-            / "api-current-service.json"
-        ),
-        "--pdu-config-path",
-        str(paths.recipe_config / "pdudef" / "drone-pdudef-current.json"),
-        "--drone-count",
-        str(experiment.drone_count),
-        "--asset-name",
-        "ShowRunnerAsset",
-        "--proc-count",
-        str(experiment.process_count),
-        "--summary-json",
-        str(summary),
-        "--assign-mode",
-        "index",
-        "--speed",
-        str(experiment.speed_m_s),
-        "--timeout-sec",
-        str(experiment.timeout_sec),
-        "--delta-time-msec",
-        "20",
-        "--poll-sleep-msec",
-        "0",
-        "--final-hold-extra-sec",
-        "0",
-    ]
-    if experiment.show_runner_real_time_sync:
-        show_args.append("--real-time-sync")
-    if experiment.land:
-        show_args.append("--land")
-    show_env = shared_env
-    if experiment.measurement is not None:
-        show_env = {
-            "set": {
-                **shared_env["set"],
-                "HAKO_DRONE_ROOT": str(drone_root),
-                "HAKO_PERFORMANCE_CONFIG": str(paths.recipe_config / "measurement.json"),
-            }
-        }
-    assets: list[dict[str, Any]] = service_assets + [
-        {
-            "name": "show-runner",
-            "activation_timing": "before_start",
-            "command": str(python),
-            "args": show_args,
-            "cwd": str(drone_root),
-            "env": show_env,
-            "depends_on": [service_assets[-1]["name"]],
-            "delay_sec": 1,
-        },
-    ]
-    if experiment.visualization:
-        visual_state_publisher = resolve_visual_state_publisher(drone_root, system_name)
-        web_bridge = web_bridge_path(paths, system_name)
-        assets.extend(
-            [
-                {
-                    "name": "visual-state-publisher",
-                    "activation_timing": "before_start",
-                    "command": str(visual_state_publisher),
-                    "args": [
-                        str(
-                            paths.recipe_config
-                            / "assets"
-                            / "visual_state_publisher"
-                            / "visual_state_publisher.runtime.json"
-                        )
-                    ],
-                    "cwd": str(paths.recipe_root),
-                    "env": shared_env,
-                    "depends_on": ["show-runner"],
-                    "delay_sec": 2,
-                },
-                {
-                    "name": "web-bridge-fleets",
-                    "activation_timing": "before_start",
-                    "command": str(web_bridge),
-                    "args": [
-                        "--config-root",
-                        str(bridge_config_root(paths)),
-                        "--node-name",
-                        "web_bridge_fleets_node1",
-                        "--delta-time-step-usec",
-                        "20000",
-                        "--enable-ondemand",
-                    ],
-                    "cwd": str(paths.recipe_root),
-                    "env": shared_env,
-                    "depends_on": ["visual-state-publisher"],
-                },
-                {
-                    "name": "threejs-viewer-webserver",
-                    "activation_timing": "after_start",
-                    "command": str(python),
-                    "args": ["-m", "http.server", "8000"],
-                    "cwd": str(viewer_root),
-                    "depends_on": ["web-bridge-fleets"],
-                },
-            ]
+    visual_state_publisher = (
+        resolve_visual_state_publisher(drone_root, system_name)
+        if experiment.visualization
+        else None
+    )
+    mujoco_city_mode = (paths.recipe_config / "mujoco-city-fleet.json").is_file()
+    runtime_viewer_root = (
+        materialize_mujoco_city_viewer(paths, viewer_root)
+        if mujoco_city_mode and experiment.visualization
+        else viewer_root
+    )
+    try:
+        return fleet_runtime.prepare_launcher(
+            paths,
+            drone_root,
+            runtime_viewer_root,
+            fleet_runtime.LauncherRuntimeSpec(
+                local_drone_count=experiment.drone_count,
+                process_count=experiment.process_count,
+                visualization=experiment.visualization,
+                external_conductor=False,
+                web_bridge=experiment.visualization,
+                viewer=experiment.visualization,
+                show_runner_real_time_sync=experiment.show_runner_real_time_sync,
+                land=experiment.land,
+                speed_m_s=experiment.speed_m_s,
+                timeout_sec=experiment.timeout_sec,
+                # A normal show-runner exit terminates every Launcher asset.
+                # Keep the non-ICRA City demo at its final formation so its
+                # browser viewer remains available until an explicit stop.
+                final_hold_extra_sec=86400.0 if mujoco_city_mode else 0.0,
+            ),
+            drone_binary=drone_binary,
+            python=python,
+            show_runner=show_runner,
+            summary=summary,
+            visual_state_publisher=visual_state_publisher,
+            web_bridge_binary=(
+                web_bridge_path(paths, system_name)
+                if experiment.visualization
+                else None
+            ),
+            web_bridge_config_root=(
+                bridge_config_root(paths) if experiment.visualization else None
+            ),
+            performance_config=(
+                paths.recipe_config / "measurement.json"
+                if experiment.measurement is not None
+                else None
+            ),
         )
-    library_paths = [
-        str(paths.install_prefix / "lib"),
-        str(drone_root / "lib"),
-        str(drone_root / "vendor" / "mujoco" / "lib"),
-    ]
-    launcher = {
-        "version": "0.1",
-        "defaults": {
-            "cwd": str(paths.recipe_root),
-            "stdout": str(paths.recipe_logs / "${asset}.out"),
-            "stderr": str(paths.recipe_logs / "${asset}.err"),
-            "start_grace_sec": 1,
-            "delay_sec": 1,
-            "env": {
-                "set": {
-                    "HAKO_CONFIG_PATH": str(paths.foundation_config / "cpp_core_config.json"),
-                    "HAKO_PROFILE_SERVICE_CLIENT": "0",
-                },
-                "prepend": {
-                    "lib_path": library_paths,
-                    "PATH": [
-                        str(python.parent),
-                        str(paths.install_prefix / "bin"),
-                        str(drone_binary.parent),
-                    ],
-                },
-            },
-        },
-        "assets": assets,
-    }
-    output = paths.recipe_config / "launcher.json"
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(launcher, indent=2) + "\n", encoding="utf-8")
-    return output
-
-
+    except ValueError as exc:
+        raise RecipeError(str(exc)) from exc
 def session_file(paths) -> Path:
     return paths.recipe_root / "runtime" / "launcher-session.json"
 
 
 def runtime_environment(paths, drone_root: Path, system_name: str) -> dict[str, str]:
-    env = os.environ.copy()
+    env = native_library_environment(paths, drone_root, system_name)
     python = resolve_foundation_python(paths, system_name)
     env["HAKO_CONFIG_PATH"] = str(paths.foundation_config / "cpp_core_config.json")
     env["PATH"] = os.pathsep.join(
         [str(python.parent), str(paths.install_prefix / "bin"), env.get("PATH", "")]
     )
+
+    return env
+
+
+def native_library_environment(
+    paths, drone_root: Path, system_name: str
+) -> dict[str, str]:
+    env = os.environ.copy()
     key = "PATH" if system_name == "Windows" else (
         "DYLD_LIBRARY_PATH" if system_name == "Darwin" else "LD_LIBRARY_PATH"
     )
@@ -1605,13 +1771,28 @@ def runtime_environment(paths, drone_root: Path, system_name: str) -> dict[str, 
     return env
 
 
-def configure(experiment_path: Path, drone_root: Path) -> int:
-    experiment = resolve_experiment(experiment_path)
+def configure(
+    experiment_path: Path,
+    drone_root: Path,
+    *,
+    drone_count_override: int | None = None,
+    process_count_override: int | None = None,
+    formation_scale_override: float | None = None,
+) -> int:
+    experiment = resolve_experiment(
+        experiment_path,
+        drone_count_override=drone_count_override,
+        process_count_override=process_count_override,
+        formation_scale_override=formation_scale_override,
+    )
     foundation = load_foundation_module()
     paths = foundation.resolve_workspace(ROOT, RECIPE_ID)
     foundation.prepare_workspace(paths)
     paths.recipe_validation.mkdir(parents=True, exist_ok=True)
     prepare_config(paths, drone_root, experiment)
+    mujoco_marker = paths.recipe_config / "mujoco-city-fleet.json"
+    marker = None
+    mujoco_marker.unlink(missing_ok=True)
     # Remove artifacts from the superseded external-Conductor topology.  The
     # single-host Recipe uses one Foundation Core domain and the first Drone
     # process owns its built-in Conductor.
@@ -1651,12 +1832,37 @@ def configure(experiment_path: Path, drone_root: Path) -> int:
     print("Launcher               : pending (generated by doctor/start)")
     print(f"Drone count            : {experiment.drone_count}")
     print(f"Process count          : {experiment.process_count}")
+    if marker is not None:
+        print("Physics backend        : MuJoCo shared City World")
+        print(f"MuJoCo process models  : {len(marker['process_models'])}")
+        print(f"Process 1 MJB          : {marker['shared_mjb']}")
+        plan = marker["flight_plan"]
+        print(
+            "Flight altitude        : "
+            f"{plan['resolved_flight_altitude_m']:.3f} m local Z "
+            f"({plan.get('requested_clearance_m', plan['requested_agl_m']):.3f} m "
+            f"clearance, {plan.get('altitude_mode', 'route-clearance')})"
+        )
+        print(f"Safe launch points     : {len(plan['spawn_points'])}")
     print("Conductor topology     : built-in owner in drone-service-1")
     print(
         "Visualization         : "
         + ("VSP + WebBridge + Three.js" if experiment.visualization else "disabled (headless)")
     )
-    print("Scenario               : takeoff -> HAKONIWA -> hold -> finish")
+    if marker is not None:
+        phases = marker["flight_plan"].get("show_phases", ["HAKONIWA"])
+        print(
+            "Scenario               : takeoff -> "
+            + " -> ".join(phases)
+            + " -> final hold"
+        )
+    else:
+        print("Scenario               : takeoff -> HAKONIWA -> hold -> finish")
+    print(
+        "Formation dimensions    : "
+        f"letter={experiment.letter_width_m:.3f} x "
+        f"{experiment.letter_height_m:.3f} m, gap={experiment.letter_gap_m:.3f} m"
+    )
     if measurement_config is not None:
         print(f"Measurement config     : {measurement_config}")
         print(f"Measurement trial      : {measurement_trial_dir(paths, experiment)}")
@@ -1670,8 +1876,12 @@ def configure(experiment_path: Path, drone_root: Path) -> int:
     return 0
 
 
-def _load_workspace(experiment_path: Path):
-    experiment = resolve_experiment(experiment_path)
+def _load_workspace(
+    experiment_path: Path, *, drone_count_override: int | None = None
+):
+    experiment = resolve_experiment(
+        experiment_path, drone_count_override=drone_count_override
+    )
     foundation = load_foundation_module()
     paths = foundation.resolve_workspace(ROOT, RECIPE_ID)
     requirements = paths.recipe_config / "foundation-requirements.yaml"
@@ -1680,27 +1890,202 @@ def _load_workspace(experiment_path: Path):
     return experiment, foundation, paths, requirements
 
 
+def _mujoco_city_runtime_checks(
+    paths, drone_root: Path, experiment: Experiment, system_name: str
+) -> list[tuple[str, bool, str]] | None:
+    marker_path = paths.recipe_config / "mujoco-city-fleet.json"
+    if not marker_path.is_file():
+        return None
+    checks: list[tuple[str, bool, str]] = []
+    try:
+        marker = json.loads(marker_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [("MuJoCo City fleet contract", False, f"invalid {marker_path}: {exc}")]
+    expected_root = Path(str(marker.get("drone_root", ""))).resolve()
+    checks.append(
+        (
+            "MuJoCo City Drone PRO workspace",
+            expected_root == drone_root.resolve(),
+            str(drone_root)
+            if expected_root == drone_root.resolve()
+            else f"configured={expected_root}, selected={drone_root.resolve()}",
+        )
+    )
+    checks.append(
+        (
+            "MuJoCo City process-model contract",
+            marker.get("process_count") == experiment.process_count,
+            f"configured={experiment.process_count}, model={marker.get('process_count')}",
+        )
+    )
+    checks.append(
+        (
+            "MuJoCo City fleet size",
+            marker.get("drone_count") == experiment.drone_count,
+            f"configured={experiment.drone_count}, model={marker.get('drone_count')}",
+        )
+    )
+    flight_plan = marker.get("flight_plan")
+    safety_ok = False
+    safety_detail = "flight_plan is missing"
+    if isinstance(flight_plan, dict):
+        try:
+            altitude_mode = str(
+                flight_plan.get("altitude_mode", "route-clearance")
+            )
+            requested_agl = float(flight_plan["requested_agl_m"])
+            requested_clearance = float(
+                flight_plan.get("requested_clearance_m", requested_agl)
+            )
+            route_maximum = float(flight_plan["route_maximum_surface_height_m"])
+            altitude_reference = float(
+                flight_plan.get("altitude_reference_height_m", route_maximum)
+            )
+            resolved_altitude = float(flight_plan["resolved_flight_altitude_m"])
+            spawn_points = flight_plan["spawn_points"]
+            mode_ok = altitude_mode in {
+                "route-clearance",
+                "city-max-clearance",
+            }
+            scenario_clearance_ok = (
+                altitude_mode == "city-max-clearance"
+                or abs(requested_agl - experiment.altitude_m) < 1e-6
+            )
+            safety_ok = (
+                len(spawn_points) == experiment.drone_count
+                and mode_ok
+                and scenario_clearance_ok
+                and altitude_reference >= route_maximum - 1e-6
+                and resolved_altitude
+                >= altitude_reference + requested_clearance - 1e-6
+                and all(
+                    float(point["surface_height_m"])
+                    <= float(point["terrain_height_m"]) + 0.15
+                    for point in spawn_points
+                )
+            )
+            safety_detail = (
+                f"mode={altitude_mode}, launch_points={len(spawn_points)}, "
+                f"route_max={route_maximum:.3f} m, "
+                f"reference={altitude_reference:.3f} m, "
+                f"flight={resolved_altitude:.3f} m, "
+                f"clearance={requested_clearance:.3f} m"
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            safety_detail = f"invalid flight_plan: {exc}"
+    checks.append(("MuJoCo City terrain/wall clearance", safety_ok, safety_detail))
+    shared_mjb = Path(str(marker.get("shared_mjb", "")))
+    process_models = marker.get("process_models")
+    if not isinstance(process_models, list):
+        process_models = [
+            {
+                "process_index": 1,
+                "drone_ids": list(range(1, experiment.drone_count + 1)),
+                "mjb": str(shared_mjb),
+                "receipt": marker.get("shared_model_receipt", ""),
+            }
+        ]
+    observed_ids: list[int] = []
+    process_model_files_ok = len(process_models) == experiment.process_count
+    process_model_detail: list[str] = []
+    for process_model in process_models:
+        index = process_model.get("process_index")
+        ids = process_model.get("drone_ids")
+        mjb = Path(str(process_model.get("mjb", "")))
+        receipt = Path(str(process_model.get("receipt", "")))
+        if isinstance(ids, list):
+            observed_ids.extend(int(value) for value in ids)
+        else:
+            process_model_files_ok = False
+            ids = []
+        model_ok = mjb.is_file() and receipt.is_file()
+        process_model_files_ok = process_model_files_ok and model_ok
+        process_model_detail.append(
+            f"p{index}={len(ids)} drones, mjb={'OK' if mjb.is_file() else 'NG'}"
+        )
+    coverage_ok = observed_ids == list(range(1, experiment.drone_count + 1))
+    checks.append(
+        (
+            "MuJoCo City process models",
+            process_model_files_ok and coverage_ok,
+            "; ".join(process_model_detail),
+        )
+    )
+    type_config = Path(str(marker.get("type_config", "")))
+    checks.append(
+        ("MuJoCo City Drone type config", type_config.is_file(), str(type_config))
+    )
+    receipt_path = Path(str(marker.get("shared_model_receipt", "")))
+    receipt_ok = False
+    receipt_detail = str(receipt_path)
+    if receipt_path.is_file() and shared_mjb.is_file():
+        try:
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            compiled = receipt["compiled_model"]
+            receipt_ok = (
+                compiled.get("reload_validation") == "passed"
+                and compiled.get("output_mjb_sha256") == _sha256(shared_mjb)
+            )
+            receipt_detail += (
+                f" (MuJoCo {compiled.get('mujoco_version')}, reload="
+                f"{compiled.get('reload_validation')})"
+            )
+        except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+            receipt_detail += f": {exc}"
+    checks.append(("Process 1 MJB compile receipt", receipt_ok, receipt_detail))
+    try:
+        drone_binary = resolve_drone_binary(drone_root, system_name)
+        checks.append(("Drone PRO service", True, str(drone_binary)))
+    except RecipeError as exc:
+        checks.append(("Drone PRO service", False, str(exc)))
+    if experiment.visualization:
+        try:
+            vsp = resolve_visual_state_publisher(drone_root, system_name)
+            checks.append(("Drone PRO visual-state publisher", True, str(vsp)))
+        except RecipeError as exc:
+            checks.append(("Drone PRO visual-state publisher", False, str(exc)))
+    return checks
+
+
 def doctor(
     experiment_path: Path,
     drone_root: Path,
     viewer_root: Path,
+    *,
+    drone_count_override: int | None = None,
 ) -> int:
-    experiment, foundation, paths, requirements = _load_workspace(experiment_path)
+    experiment, foundation, paths, requirements = _load_workspace(
+        experiment_path, drone_count_override=drone_count_override
+    )
     inspection = foundation.inspect_foundation(requirements, paths.install_prefix)
     foundation.print_inspection(inspection, False)
     system_name = platform.system()
     checks: list[tuple[str, bool, str]] = []
-    try:
-        drone_binary = resolve_drone_binary(drone_root, system_name)
-        checks.append(("native drone service", True, str(drone_binary)))
-    except RecipeError as exc:
-        checks.append(("native drone service", False, str(exc)))
-    if experiment.visualization:
+    mujoco_city_checks = _mujoco_city_runtime_checks(
+        paths, drone_root, experiment, system_name
+    )
+    if mujoco_city_checks is not None:
+        checks.extend(mujoco_city_checks)
+    else:
+        native_runtime = load_native_runtime_module()
         try:
-            publisher = resolve_visual_state_publisher(drone_root, system_name)
-            checks.append(("visual-state publisher", True, str(publisher)))
-        except RecipeError as exc:
-            checks.append(("visual-state publisher", False, str(exc)))
+            _contract, native_checks = native_runtime.validate_requirement(
+                DRONE_CATALOG,
+                recipe_file(),
+                DRONE_COMPONENT_ID,
+                drone_root,
+                native_library_environment(paths, drone_root, system_name),
+                active_optional_roles=(
+                    ("visual_state_publisher",) if experiment.visualization else ()
+                ),
+            )
+            checks.extend(
+                (check.label, check.ok, check.detail) for check in native_checks
+            )
+        except native_runtime.NativeRuntimeError as exc:
+            checks.append(("native runtime contract", False, str(exc)))
+
+    if experiment.visualization:
         bridge = web_bridge_path(paths, system_name)
         checks.append(("WebBridge", bridge.is_file(), str(bridge)))
         bridge_config = bridge_config_root(paths)
@@ -1816,10 +2201,19 @@ def start(
     experiment_path: Path,
     drone_root: Path,
     viewer_root: Path,
+    *,
+    drone_count_override: int | None = None,
 ) -> int:
-    if doctor(experiment_path, drone_root, viewer_root) != 0:
+    if doctor(
+        experiment_path,
+        drone_root,
+        viewer_root,
+        drone_count_override=drone_count_override,
+    ) != 0:
         return 1
-    experiment, _foundation, paths, _requirements = _load_workspace(experiment_path)
+    experiment, _foundation, paths, _requirements = _load_workspace(
+        experiment_path, drone_count_override=drone_count_override
+    )
     system_name = platform.system()
     trial = measurement_trial_dir(paths, experiment)
     if trial is not None:
@@ -1855,15 +2249,30 @@ def start(
     return rc
 
 
-def control(experiment_path: Path, drone_root: Path, operation: str) -> int:
-    _experiment, _foundation, paths, _requirements = _load_workspace(experiment_path)
+def control(
+    experiment_path: Path,
+    drone_root: Path,
+    operation: str,
+    *,
+    drone_count_override: int | None = None,
+) -> int:
+    _experiment, _foundation, paths, _requirements = _load_workspace(
+        experiment_path, drone_count_override=drone_count_override
+    )
     system_name = platform.system()
     command = _launcher_command(paths, system_name, operation)
     return _run(command, env=runtime_environment(paths, drone_root, system_name))
 
 
-def smoke(experiment_path: Path, timeout_sec: float) -> int:
-    experiment, _foundation, paths, _requirements = _load_workspace(experiment_path)
+def smoke(
+    experiment_path: Path,
+    timeout_sec: float,
+    *,
+    drone_count_override: int | None = None,
+) -> int:
+    experiment, _foundation, paths, _requirements = _load_workspace(
+        experiment_path, drone_count_override=drone_count_override
+    )
     trial = measurement_trial_dir(paths, experiment)
     if trial is not None:
         result = trial / "result.json"
@@ -1934,9 +2343,10 @@ def smoke(experiment_path: Path, timeout_sec: float) -> int:
     return 1
 
 
-def viewer_url(drone_count: int) -> str:
+def viewer_url(drone_count: int, *, map_viewer: bool = False) -> str:
+    base = MAP_VIEWER_URL_BASE if map_viewer else VIEWER_URL_BASE
     return (
-        f"{VIEWER_URL_BASE}&dynamicSpawn=true"
+        f"{base}&dynamicSpawn=true"
         f"&templateDroneIndex=0&maxDynamicDrones={drone_count}"
     )
 
@@ -1959,18 +2369,83 @@ def open_browser(url: str) -> bool:
             "WSL2: open the URL in a Windows browser. WSL localhost forwarding "
             "exposes HTTP port 8000 and WebSocket port 8765 to the host."
         )
+        return True
+    if platform.system() == "Darwin":
+        try:
+            completed = subprocess.run(["open", url], check=False)
+        except OSError as exc:
+            print(f"[WARN] could not open the macOS browser: {exc}")
+            return False
+        if completed.returncode != 0:
+            print(
+                "[WARN] macOS 'open' failed; open the URL printed above manually"
+            )
+            return False
     return True
 
 
-def open_viewer(experiment_path: Path) -> int:
-    experiment = resolve_experiment(experiment_path)
-    if not experiment.visualization:
+def open_viewer(
+    experiment_path: Path, *, drone_count_override: int | None = None
+) -> int:
+    # Headless is an experiment-level contract and should be rejected before
+    # consulting generated workspace state. This keeps diagnostics stable in a
+    # clean checkout where the Recipe has not been configured yet.
+    requested_experiment = resolve_experiment(
+        experiment_path, drone_count_override=drone_count_override
+    )
+    if not requested_experiment.visualization:
         raise RecipeError(
             "runtime.visualization=false; this headless experiment does not start "
             "VSP, WebBridge, or the Three.js viewer"
         )
-    url = viewer_url(experiment.drone_count)
+    experiment, _foundation, paths, _requirements = _load_workspace(
+        experiment_path, drone_count_override=drone_count_override
+    )
+    url = viewer_url(
+        experiment.drone_count,
+        map_viewer=(paths.recipe_config / "mujoco-city-fleet.json").is_file(),
+    )
     return 0 if open_browser(url) else 1
+
+
+def configured_experiment_path() -> Path:
+    return selected_recipe_root(ROOT, RECIPE_ID) / "config" / "resolved-experiment.yaml"
+
+
+def configured_drone_root() -> Path | None:
+    marker = configured_experiment_path().with_name("mujoco-city-fleet.json")
+    if not marker.is_file():
+        return None
+    try:
+        payload = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    value = payload.get("drone_root")
+    if not isinstance(value, str) or not value:
+        return None
+    return Path(value).expanduser().absolute()
+
+
+def command_experiment_path(command: str, requested: Path | None) -> Path:
+    if requested is not None:
+        return requested.absolute()
+    configured = configured_experiment_path()
+    if command != "configure" and configured.is_file():
+        return configured
+    return DEFAULT_EXPERIMENT.absolute()
+
+
+def command_drone_root(
+    command: str,
+    requested: Path | None,
+) -> Path:
+    if requested is not None:
+        return requested.absolute()
+    if command != "configure":
+        configured = configured_drone_root()
+        if configured is not None:
+            return configured
+    return default_source("hakoniwa-drone-core").absolute()
 
 
 def parser() -> argparse.ArgumentParser:
@@ -1991,40 +2466,168 @@ def parser() -> argparse.ArgumentParser:
             "stop",
         ],
     )
-    result.add_argument("--experiment", type=Path, default=DEFAULT_EXPERIMENT)
     result.add_argument(
-        "--drone-root", type=Path, default=default_source("hakoniwa-drone-core")
+        "--experiment",
+        type=Path,
+        help=(
+            "experiment YAML; after configure, omitted commands reuse the "
+            "workspace resolved experiment"
+        ),
+    )
+    result.add_argument(
+        "--drone-root",
+        type=Path,
+        help=(
+            "Drone workspace; after configure, omitted commands reuse the "
+            "configured workspace"
+        ),
     )
     result.add_argument(
         "--viewer-root", type=Path, default=default_source("hakoniwa-threejs-drone")
     )
     result.add_argument("--timeout-sec", type=float, default=300.0)
+    result.add_argument(
+        "--drone-count",
+        type=int,
+        help=(
+            "override scale.drone_count for a local run; configure "
+            "persists the resolved value for subsequent omitted commands"
+        ),
+    )
+    result.add_argument(
+        "--process-count",
+        type=int,
+        help=(
+            "configure only: split drones across this many local Drone Service "
+            "processes"
+        ),
+    )
+    result.add_argument(
+        "--mujoco-city-world",
+        type=Path,
+        help=argparse.SUPPRESS,
+    )
+    result.add_argument(
+        "--spawn-altitude-m",
+        type=float,
+        default=0.20,
+        help=argparse.SUPPRESS,
+    )
+    result.add_argument(
+        "--spawn-spacing-m",
+        type=float,
+        default=1.0,
+        help=argparse.SUPPRESS,
+    )
+    result.add_argument(
+        "--formation-scale",
+        type=float,
+        help=(
+            "configure only: multiply HAKONIWA letter width, height, and gap "
+            "by this factor (0.25..10.0); the resolved dimensions are persisted"
+        ),
+    )
+    result.add_argument(
+        "--formation-rotation-deg",
+        type=float,
+        default=90.0,
+        help=argparse.SUPPRESS,
+    )
+    result.add_argument(
+        "--formation-tilt-deg",
+        type=float,
+        default=15.0,
+        help=argparse.SUPPRESS,
+    )
+    result.add_argument(
+        "--altitude-mode",
+        choices=["route-clearance", "city-max-clearance"],
+        default="route-clearance",
+        help=argparse.SUPPRESS,
+    )
+    result.add_argument(
+        "--above-city-clearance-m",
+        type=float,
+        default=10.0,
+        help=argparse.SUPPRESS,
+    )
     return result
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
-        experiment_path = args.experiment.absolute()
-        drone_root = args.drone_root.absolute()
+        if args.mujoco_city_world is not None:
+            raise RecipeError(
+                "the private MuJoCo City drone-show Recipe moved to the sibling "
+                "hakoniwa-drone-show repository; use "
+                "'python tools/recipe/virtual_drone_show.py configure' there"
+            )
+        system_name = platform.system()
+        if system_name not in SUPPORTED_NATIVE_SYSTEMS:
+            raise RecipeError(
+                f"unsupported native operating system: {system_name}; "
+                "drone-fleet-single-host supports macOS and Linux"
+            )
+        experiment_path = command_experiment_path(args.command, args.experiment)
+        drone_root = command_drone_root(args.command, args.drone_root)
         viewer_root = args.viewer_root.absolute()
         if args.command == "prepare-native":
-            return prepare_native_distribution(drone_root, platform.system())
+            foundation = load_foundation_module()
+            paths = foundation.resolve_workspace(ROOT, RECIPE_ID)
+            return prepare_native_distribution(
+                drone_root,
+                system_name,
+                cache_root=paths.work_root / "downloads",
+                evidence_path=paths.recipe_validation / "native-distribution.json",
+            )
         if args.command == "prepare-viewer":
             return prepare_viewer(viewer_root)
         if args.command == "configure":
-            return configure(experiment_path, drone_root)
+            return configure(
+                experiment_path,
+                drone_root,
+                drone_count_override=args.drone_count,
+                process_count_override=args.process_count,
+                formation_scale_override=args.formation_scale,
+            )
         if args.command == "doctor":
-            return doctor(experiment_path, drone_root, viewer_root)
+            return doctor(
+                experiment_path,
+                drone_root,
+                viewer_root,
+                drone_count_override=args.drone_count,
+            )
         if args.command == "start":
-            return start(experiment_path, drone_root, viewer_root)
+            return start(
+                experiment_path,
+                drone_root,
+                viewer_root,
+                drone_count_override=args.drone_count,
+            )
         if args.command == "status":
-            return control(experiment_path, drone_root, "status")
+            return control(
+                experiment_path,
+                drone_root,
+                "status",
+                drone_count_override=args.drone_count,
+            )
         if args.command == "stop":
-            return control(experiment_path, drone_root, "terminate")
+            return control(
+                experiment_path,
+                drone_root,
+                "terminate",
+                drone_count_override=args.drone_count,
+            )
         if args.command == "open-viewer":
-            return open_viewer(experiment_path)
-        return smoke(experiment_path, args.timeout_sec)
+            return open_viewer(
+                experiment_path, drone_count_override=args.drone_count
+            )
+        return smoke(
+            experiment_path,
+            args.timeout_sec,
+            drone_count_override=args.drone_count,
+        )
     except RecipeError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

@@ -1,0 +1,32 @@
+schema_version: 1
+description: Shared native runtime declaration and Recipe selection contract.
+
+catalog_declaration:
+  field: native_runtime
+  required_fields: [schema_version, profiles]
+  supported_schema_versions: [1]
+  profile:
+    required_fields: [distribution_release, managed_runtimes, platforms]
+    optional_fields: [source_contract]
+    managed_runtime:
+      required_fields: [required, version_file, platforms]
+      platform_required_fields: [library]
+    platform:
+      required_fields: [dependency_inspector, binary_roles, required_libraries]
+
+recipe_requirement:
+  field: native_runtime_requirements
+  required_fields: [schema_version, components]
+  supported_schema_versions: [1]
+  component:
+    required_fields: [profile, required_roles, optional_roles]
+
+controlled_values:
+  platforms: [linux, macos, windows]
+  dependency_inspectors: [elf, macho, pe]
+
+semantics:
+  - Catalog profiles own distribution versions, managed runtimes, binary roles, and OS-specific required libraries.
+  - Recipes select a Catalog profile and roles without selecting an OS-specific inspection command.
+  - The common validator selects the current platform adapter and delegates only binary dependency discovery and resolution.
+  - Missing declared dependencies and unresolved undeclared dependencies are both failures.

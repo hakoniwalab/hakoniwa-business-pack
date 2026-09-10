@@ -10,10 +10,10 @@ distribution:
   notes:
     - Public OSS Hakoniwa component under the MIT license.
 verification:
-  verified_at: 2026-07-28
-  source_revision: a68bb9e3c263f1efcf6d366a16d7b24a879051a4
-  source_ref: agent/add-hako-doctor-entrypoint
-summary: Hakoniwa core runtime extension layer built on hakoniwa-core-cpp, providing shared-memory simulation hub integration, asset APIs, commands, events, and RPC services.
+  verified_at: 2026-08-29
+  source_revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
+  source_ref: main
+summary: Hakoniwa core runtime extension layer built on hakoniwa-core-cpp, providing shared-memory simulation hub integration, asset APIs, commands, events, RPC services, and reusable Python measurement support for simulation runs.
 category:
   primary: simulation-core
   secondary:
@@ -25,8 +25,9 @@ status:
   maturity: active
   catalog_confidence: high
   notes:
-    - Cataloged from README and core-cpp references.
+    - Cataloged from the current main branch, README, measurement-library documentation, build manifest, and core-cpp references.
     - The standard operational entry point is tools/hako.py; platform-specific build logic remains component-owned.
+    - The repository now declares build prerequisites and artifacts through hakoniwa-build.yaml and includes manifest-aware prerequisite checks.
     - A Foundation Python binding is built with CPython 3.12 and python.soabi enabled; its Receipt owns the binding_mode, SOABI, extension suffix, and exact tagged hakopy artifact identity.
 
 capabilities:
@@ -35,37 +36,43 @@ capabilities:
     evidence:
       - repository: hakoniwalab/hakoniwa-core-pro
         path: README.md
-        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+        revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
   - name: Asset APIs
     description: Provides C, C++, and Python-facing APIs for asset registration, event handling, PDU read/write, and time access.
     evidence:
       - repository: hakoniwalab/hakoniwa-core-pro
         path: README.md
-        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+        revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
   - name: Data receive events
     description: Lets assets register callbacks or polling flags for specific PDU channel receive events, with pending/resume notification control.
     evidence:
       - repository: hakoniwalab/hakoniwa-core-pro
         path: README.md
-        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+        revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
   - name: Core command and conductor tools
     description: Provides hako-master, hako-conductor, and hako-cmd style control and inspection commands.
     evidence:
       - repository: hakoniwalab/hakoniwa-core-pro
         path: README.md
-        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+        revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
   - name: PDU-based RPC services
     description: Provides request-response service APIs for assets using PDU buffers.
     evidence:
       - repository: hakoniwalab/hakoniwa-core-pro
         path: README.md
-        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+        revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
   - name: External SHM topic and service clients
     description: Provides Python examples where external clients join through shared-memory topic publish/subscribe or service APIs without being ordinary registered simulation assets.
     evidence:
       - repository: hakoniwalab/hakoniwa-core-pro
         path: examples/external
-        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+        revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
+  - name: Simulation run measurement library
+    description: Provides the hakoniwa_measurement Python library for one-run measurement of host resources, virtual-time execution intervals, optional temporal lag observation, result validation, and reproducible JSON/JSONL output without introducing a separate Hakoniwa asset or monitor process.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-core-pro
+        path: docs/measurement-library.md
+        revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
 
 limitations:
   - Low-level shared-memory runtime requires correct installation and configuration.
@@ -73,6 +80,8 @@ limitations:
   - "`hako-cmd stop` controls simulation lifecycle but does not necessarily terminate all OS processes; recipes must document launcher termination or cleanup."
   - Only one process should own conductor startup in a composed shared-memory runtime unless source documentation says otherwise.
   - A Foundation runtime must reject missing, ambiguous, or untagged hakopy artifacts rather than falling back to hakopy.so or hakopy.pyd.
+  - HakoniwaTimeObserver measures core-to-slowest-participating-Asset lag and must not be described as an exact inter-process time difference.
+  - Official performance runs intentionally separate machine/execution measurement from dedicated temporal validation; their wall-clock measurements should not be mixed as one result set.
 
 interfaces:
   inputs:
@@ -85,6 +94,9 @@ interfaces:
     - name: hako-cmd commands
       kind: command
       description: Start, stop, inspect, and control commands for the simulation hub.
+    - name: Measurement lifecycle events
+      kind: api
+      description: Existing assets may invoke hakoniwa_measurement components around one simulation run without registering a separate monitoring asset.
   outputs:
     - name: Shared-memory master data
       kind: file
@@ -95,6 +107,9 @@ interfaces:
     - name: Simulation time
       kind: api
       description: World and asset current time APIs.
+    - name: Measurement result files
+      kind: file
+      description: hakoniwa_measurement can emit result.json plus machine-samples.jsonl and temporal-samples.jsonl according to the selected measurement mode.
   protocols:
     - name: Shared Memory
       role: local
@@ -102,6 +117,8 @@ interfaces:
   configuration:
     - path: config
       description: Core and example runtime configs.
+    - path: hakoniwa-build.yaml
+      description: Component build manifest declaring prerequisites and build artifacts.
     - path: examples
       description: PDU communication and service examples.
 
@@ -116,7 +133,7 @@ dependencies:
   optional:
     - name: Python
       type: runtime
-      notes: Python 3.12 is the expected runtime for Hakoniwa Python bindings and asset examples unless a recipe explicitly verifies another version.
+      notes: Python 3.12 is the expected runtime for Hakoniwa Python bindings, measurement support, and asset examples unless a recipe explicitly verifies another version.
 
 platforms:
   supported:
@@ -124,8 +141,9 @@ platforms:
     - Linux
     - Windows
   notes:
-    - tools/hako.py provides the common doctor/build entry point.
+    - tools/hako.py provides the common doctor/build entry point and validates manifest-declared prerequisites.
     - Linux/macOS build delegates to build.bash; native Windows build delegates to win-build.ps1.
+    - hakoniwa_measurement provides platform-specific host-resource implementations for Linux, macOS, and Windows.
 
 connects_to:
   - component_id: hakoniwa-pdu-endpoint
@@ -159,28 +177,34 @@ data_contracts:
     source:
       - repository: hakoniwalab/hakoniwa-core-pro
         path: hakoniwa-core-cpp/SHARED_MEMORY_SPEC.md
-        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+        revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
   - name: Asset event model
     description: Assets observe simulation events and data receive events through callback or polling APIs.
     source:
       - repository: hakoniwalab/hakoniwa-core-pro
         path: README.md
-        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+        revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
   - name: Core startup and lifecycle contract
     description: Core examples establish the user-facing pattern of starting assets first, using hako-cmd to start/stop/reset simulation lifecycle, and verifying behavior after the runtime reaches RUNNING.
     source:
       - repository: hakoniwalab/hakoniwa-core-pro
         path: examples/hello_world/README.md
-        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+        revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
       - repository: hakoniwalab/hakoniwa-core-pro
         path: examples/pdu_communication/README.md
-        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+        revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
   - name: External client contract
     description: External topic/service examples use SHM service configuration and PDU offset data to join the runtime without ordinary asset lifecycle callbacks.
     source:
       - repository: hakoniwalab/hakoniwa-core-pro
         path: examples/external
-        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+        revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
+  - name: Measurement result contract
+    description: Measurement runs separate summary/validation output from raw machine and temporal samples and distinguish success, failed, and invalid results.
+    source:
+      - repository: hakoniwalab/hakoniwa-core-pro
+        path: docs/measurement-library.md
+        revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
 
 recipe_roles:
   - role: simulation_core
@@ -191,6 +215,8 @@ recipe_roles:
     description: Provides command, hakopy, and conductor operations for simulation lifecycle.
   - role: time_sync
     description: Supplies world and asset time synchronization primitives.
+  - role: measurement
+    description: Supplies reusable one-run machine, execution, and temporal measurement primitives for simulation validation and evidence collection.
 
 typical_usecases:
   - Run Hakoniwa assets with shared-memory PDU communication.
@@ -198,12 +224,14 @@ typical_usecases:
   - Build C/C++/Python assets that participate in the Hakoniwa runtime.
   - Provide the runtime base for MuJoCo, endpoint SHM, bridge, and Godot integrations.
   - Build external Python tools that publish/subscribe PDU topics or call PDU-based services against an existing shared-memory runtime.
+  - Collect one-run machine-resource, execution-time, and dedicated temporal-validation evidence from Hakoniwa simulations.
 
 anti_usecases:
   - Browser-only visualization without local Hakoniwa runtime.
   - Pure data schema generation.
   - Simple standalone simulations that do not need asset synchronization.
   - Treating a viewer, bridge, or service client as proof that a simulator/runtime producer exists.
+  - Treating HakoniwaTimeObserver output as an exact clock difference between arbitrary simulation processes.
 
 demo_candidates:
   - name: Hello world asset lifecycle
@@ -213,7 +241,7 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-core-pro
         path: examples/hello_world
-        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+        revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
   - name: PDU communication asset sample
     description: Build and run examples/pdu_communication to verify asset registration, start, and PDU exchange.
     required_components:
@@ -221,7 +249,7 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-core-pro
         path: examples/pdu_communication
-        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+        revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
   - name: PDU service sample
     description: Run examples/service to verify PDU-based request/response service behavior between server and client assets.
     required_components:
@@ -229,7 +257,7 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-core-pro
         path: examples/service
-        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+        revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
   - name: External SHM topic/service clients
     description: Run examples/external/topic or examples/external/service to verify loose external participation through SHM topic or service APIs.
     required_components:
@@ -237,7 +265,7 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-core-pro
         path: examples/external
-        revision: 98a057ab91184921e283ab43279b8ed05cf25363
+        revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
 
 runtime_checks:
   - id: build-readiness
@@ -253,7 +281,7 @@ runtime_checks:
     working_directory: repository
     output: text
     notes:
-      - Component-owned prerequisite and repository-layout check.
+      - Component-owned manifest-aware prerequisite and repository-layout check.
       - Exit status 0 means the declared build prerequisites are present; this is not runtime behavior verification.
 
 operations:
@@ -263,6 +291,7 @@ operations:
       - python tools/hako.py build
     notes:
       - tools/hako.py is the preferred OS-independent entry point.
+      - doctor checks hakoniwa-build.yaml prerequisites before build dispatch.
       - Linux/macOS delegate to build.bash; Windows delegates to win-build.ps1.
       - Installation remains a separate component-owned step where required.
   test:
@@ -279,48 +308,56 @@ operations:
 
 known_gaps:
   - Commercial licensing and redistribution constraints should be documented outside this technical catalog.
-  - Recipe-level validation should record exact launcher provider, launcher mode, Python environment, and cleanup commands for each composed demo.
+  - Recipe-level validation should record exact launcher provider, launcher mode, Python environment, cleanup commands, and selected measurement mode for each composed demo.
 
 source_refs:
   - repository: hakoniwalab/hakoniwa-core-pro
     path: README.md
-    revision: 98a057ab91184921e283ab43279b8ed05cf25363
-    description: Main overview, architecture, asset APIs, events, time, and RPC services.
+    revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
+    description: Main overview, architecture, asset APIs, events, time, measurement library entry point, and RPC services.
+  - repository: hakoniwalab/hakoniwa-core-pro
+    path: docs/measurement-library.md
+    revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
+    description: Measurement responsibilities, execution modes, validation semantics, and JSON/JSONL output contract.
+  - repository: hakoniwalab/hakoniwa-core-pro
+    path: hakoniwa-build.yaml
+    revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
+    description: Build manifest used by manifest-aware prerequisite checks.
   - repository: hakoniwalab/hakoniwa-core-pro
     path: tools/hako.py
-    revision: a68bb9e3c263f1efcf6d366a16d7b24a879051a4
-    description: Common doctor/build entry point that dispatches to the platform-native build driver.
+    revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
+    description: Common doctor/build entry point with manifest-aware prerequisite checks and platform build dispatch.
   - repository: hakoniwalab/hakoniwa-core-pro
     path: build.bash
-    revision: 44c32dd7cfb3766b13b3a4eaabff0cfe3bcf248c
-    description: Existing Linux/macOS build implementation used by tools/hako.py.
+    revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
+    description: Current Linux/macOS build implementation used by tools/hako.py.
   - repository: hakoniwalab/hakoniwa-core-pro
     path: win-build.ps1
-    revision: 44c32dd7cfb3766b13b3a4eaabff0cfe3bcf248c
-    description: Existing native Windows build implementation used by tools/hako.py.
+    revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
+    description: Current native Windows build implementation used by tools/hako.py.
   - repository: hakoniwalab/hakoniwa-core-pro
     path: hakoniwa-core-cpp/README.md
-    revision: 98a057ab91184921e283ab43279b8ed05cf25363
+    revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
     description: Core simulation hub details.
   - repository: hakoniwalab/hakoniwa-core-pro
     path: hakoniwa-core-cpp/API_SPEC.md
-    revision: 98a057ab91184921e283ab43279b8ed05cf25363
+    revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
     description: Core API specification.
   - repository: hakoniwalab/hakoniwa-core-pro
     path: hakoniwa-core-cpp/SHARED_MEMORY_SPEC.md
-    revision: 98a057ab91184921e283ab43279b8ed05cf25363
+    revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
     description: Shared memory layout.
   - repository: hakoniwalab/hakoniwa-core-pro
     path: examples/hello_world/README.md
-    revision: 98a057ab91184921e283ab43279b8ed05cf25363
+    revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
     description: Basic asset lifecycle sample.
   - repository: hakoniwalab/hakoniwa-core-pro
     path: examples/pdu_communication/README.md
-    revision: 98a057ab91184921e283ab43279b8ed05cf25363
+    revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
     description: Two-asset PDU communication sample.
   - repository: hakoniwalab/hakoniwa-core-pro
     path: examples/external
-    revision: 98a057ab91184921e283ab43279b8ed05cf25363
+    revision: 945ad77a34b1b86282bf74a04d79451d0eb2ebb8
     description: External SHM topic and service examples.
 
 tags:
@@ -333,3 +370,4 @@ tags:
   - asset
   - time-sync
   - hako-cmd
+  - measurement

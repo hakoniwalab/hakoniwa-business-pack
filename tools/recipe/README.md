@@ -6,6 +6,18 @@ Recipe固有のプロセス構成、Docker構成、smoke testはここへ分離�
 
 ## Drone Fleet性能測定
 
+Experiment A/B/Cの取得、構築、実行、result収集、グラフ生成、測定条件との
+トレーサビリティは
+[`docs/drone-fleet-performance-validation-guide-ja.md`](../../docs/drone-fleet-performance-validation-guide-ja.md)
+を正本とします。本節は各operatorの補足説明です。
+
+A/Bのcross-machine比較とCのmulti-host reportは
+`drone_fleet_performance_report.py`で生成します。入力・出力パスは
+`configs/result-layouts/drone-fleet-performance.yaml`から解決されます。
+収集済みA/B/Cを論文向けの`T_step`図、主要表、Markdownへ一括変換するときは
+`drone_fleet_performance_paper.py`を使用します。Markdown構成の正本は
+`templates/drone-fleet-performance-paper.md`です。
+
 ブラウザ表示用のDrone Fleetデモとは分離し、可視化なし、実時間同期なしで
 測定します。単一条件の確認では、Business Pack workspaceへ入ってから次を
 実行します。
@@ -107,9 +119,10 @@ single-process-scaling/summary/plots/scaling-overview.svg
 
 ### Experiment B：プロセス数の連続測定
 
-同一ホスト上で128機の論理ワークロードを固定し、シミュレータプロセス数だけを
+同一ホスト上で32、64、128機の論理ワークロードごとに、シミュレータプロセス数を
 `1, 2, 4, 6, 8, 12, 15`へ変える系列です。Experiment Aと同じ組み込み
-Conductorを使用し、外部Conductor PROはマルチホストのExperiment Cから使用します。
+Conductorを使用し、外部の公開Hakoniwa Conductor v1.1.0はマルチホストの
+Experiment Cから使用します。
 各条件では128機をプロセス間へ可能な限り均等に静的分割します。
 
 ```bash
@@ -133,9 +146,10 @@ python3.12 tools/recipe/drone_fleet_performance_b.py run --resume
 ```
 
 Experiment Bのマシン負荷preflightは、プロセス数そのものの負荷を外部負荷と
-誤認しないよう、各条件のDrone Serviceを起動する前に実施します。不合格または
-failedのattemptは`--resume`だけでは再利用しません。該当attemptを`rejected/`へ
-退避して再測定し、成功済み条件から続ける場合は次を使用します。
+誤認しないよう、各条件のDrone Serviceを起動する前に実施します。壊れたresultまたは
+preflight不合格のattemptを`rejected/`へ退避して再測定し、記録済み条件から続ける
+場合は次を使用します。preflight通過後のworkload failureは測定結果として保持され、
+extensionのtriggerになります。
 
 ```bash
 python3.12 tools/recipe/drone_fleet_performance_b.py run \
@@ -152,9 +166,10 @@ python3.12 tools/recipe/drone_fleet_performance_b.py run \
 `selection_status: additional_runs_required`とします。測定契約を変更して全条件を
 取り直す場合は、既存系列を削除せず退避する`--restart-series`を使用します。
 
-3試行の集計後、追加対象だけattempt 4・5を実行するには`extend`を使用します。
-`extend`は初期3試行を変更せず、`escalation_required: true`のプロセス数だけを
-追加測定して5試行で再集計します。
+通常の`run`は3試行の集計後、追加対象だけattempt 4・5を自動実行します。
+`extend`は`--baseline-only`で初期3試行だけを取得した場合や、中断したextensionの
+再判定に使用します。初期3試行を変更せず、`escalation_required: true`の
+configurationだけを追加測定して5試行で再集計します。
 
 ```bash
 python3.12 tools/recipe/drone_fleet_performance_b.py extend
@@ -234,20 +249,23 @@ Recipe固有ライフサイクルを実装する場合も、このディレク�
 - `hakoniwa_conductor.py`
 - `hakoniwa_conductor_time_sync.py`
 
-## Hakoniwa Conductor v1.0.0
+## Hakoniwa Conductor binary package
 
 公開バイナリの準備Recipeは、ライセンス確認後にOS/CPUに対応するRelease ZIPを
 Business Packの`work/`へ取得し、SHA-256、プラットフォーム契約、11個の収録
 バイナリを検証します。システムディレクトリにはインストールしません。
 
 ```bash
-python tools/recipe/hakoniwa_conductor.py configure --accept-license
-python tools/recipe/hakoniwa_conductor.py doctor
-python tools/recipe/hakoniwa_conductor.py status
+python tools/recipe/hakoniwa_conductor.py configure --version v1.1.0 --accept-license
+python tools/recipe/hakoniwa_conductor.py doctor --version v1.1.0
+python tools/recipe/hakoniwa_conductor.py status --version v1.1.0
 ```
 
 `--accept-license`は人間の判断境界です。AIが暗黙に付与してはいけません。
-このRecipeはバイナリ準備だけを担当し、Conductorプロセスは起動しません。
+このRecipeはv1.0.0とv1.1.0のバイナリ準備だけを担当し、Conductorプロセスは
+起動しません。`drone_fleet_multi_host.py`はv1.1.0を実行用に固定し、
+公開`hakoniwa-conductor` repositoryにcommitされた生成済み設定を使用します。
+実験hostにConductor PRO checkoutは不要です。
 
 生成済み設定を同梱した公開Python時刻同期サンプルは、別の実行Recipeで確認します。
 

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
+
+if sys.platform == "win32":
+    raise unittest.SkipTest("Hakoniwa Conductor is not supported on Windows")
 
 from tools.recipe import hakoniwa_conductor_time_sync as time_sync
 
