@@ -101,8 +101,12 @@ validation:
       describes.
 
 tracking:
-  implementation_status: none
-  issues: []
+  implementation_status: resolved
+  issues:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      number: 189
+      relation: fix
+      status: closed
 
 promotion_targets:
   catalog: []
@@ -123,11 +127,26 @@ promotion_rationale:
     that the check cannot say at the moment it matters.
 
 resolution:
-  status: pending
-  fixed_by: []
-  verified: false
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      issue: null
+      pull_request: 189
+      revision: de1dc01ee3345d013a8cb0401bc13b3b34e37096
+  verified: true
   promoted_to: []
-  executable_guardrails: []
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      kind: validator
+      path: knowledge/tools/validate_candidates.rb
+      mode: reject
+      notes:
+        - >-
+          Every element of observation.details must be a String, reported with
+          the file, the index and the reason. It runs for every candidate rather
+          than only the tracking-gated ones, and validates the parent shapes
+          first so a malformed candidate produces an ordinary error instead of
+          aborting the run.
   notes:
     - >-
       The pull request carrying this candidate also carries the proposed fix. It
@@ -140,5 +159,10 @@ resolution:
       details is not of the expected shape produces an ordinary validation error
       and the remaining candidates are still checked.
     - >-
-      implementation_status is none because no follow-up issue exists; the
-      proposed change lives in the pull request rather than in an issue.
+      Merged on 2026-09-09. The guardrail and the 16 conversions landed together,
+      so the check now runs in CI on every candidate change.
+    - >-
+      After merging, the maintainer pinned this candidate's claims to the
+      measured revision and moved them to past tense, since the counts describe
+      main at fb5d80c rather than main as it stands. The measurements themselves
+      were not changed.

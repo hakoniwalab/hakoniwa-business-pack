@@ -108,8 +108,12 @@ validation:
       run for each of them.
 
 tracking:
-  implementation_status: none
-  issues: []
+  implementation_status: resolved
+  issues:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      number: 190
+      relation: fix
+      status: closed
 
 promotion_targets:
   catalog: []
@@ -129,16 +133,37 @@ promotion_rationale:
     condition the tooling could simply handle instead.
 
 resolution:
-  status: pending
-  fixed_by: []
-  verified: false
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      issue: null
+      pull_request: 190
+      revision: 6eebf792ce4da0f172624ecc34f9d938300b642b
+  verified: true
   promoted_to: []
   executable_guardrails: []
   notes:
     - >-
-      Smallest change that would fix the measured failure is to decode the
-      exporter's output as UTF-8 explicitly, since the producer is a Ruby script
-      in this repository emitting JSON and its encoding is known.
+      Fixed on the producer side instead, which is smaller than the consumer-side
+      change this candidate suggested: export_recipe_json.rb now calls
+      JSON.generate(data, ascii_only: true), so non-ASCII leaves as \uXXXX
+      escapes and the byte stream is valid under any ASCII-compatible host codec.
+      tools/recipe.py still reads in text mode, and the fix carries a comment
+      saying so.
+    - >-
+      Re-verified on the same cp932 Windows host on 2026-09-10. The documented
+      entry command loads a Recipe with Japanese prose without PYTHONUTF8=1.
+      Repeating the exporter survey with only the exporter revision changed:
+      after 6eebf79, 37 of 37 Recipes load clean with 0 raised and 0 corrupted;
+      before, 12 clean, 24 raised and 1 corrupted. Losslessness was checked
+      rather than assumed - every non-ASCII string in the parsed JSON still
+      appears verbatim in the source YAML.
+    - >-
+      One hypothesis was tested and not substantiated: because the consumer still
+      reads in text mode, the exporter's stderr looked exposed as well. Feeding it
+      malformed YAML containing characters cp932 cannot represent produced a clean
+      exit 2 with a readable Ruby traceback, because Ruby transcodes its stderr to
+      the host code page. Recorded so nobody re-opens that path on suspicion.
     - >-
       A second, independent improvement would be to surface the real error. The
       decode failure is swallowed by the reader thread today, so the user-facing
