@@ -230,25 +230,28 @@ macOS arm64 と Windows x64 で実行検証済みの **`mujoco-turtlebot3-wall-f
 リポジトリのルートで実行します。
 
 ~~~bash
-# 1. 隔離された作業シェルに入る（プロンプト先頭に (hako) が付く）
-python3.12 tools/workspace.py enter      # Windows: py -3.12 tools\workspace.py enter
-
-# 2. 何が足りないか確認（ビルドはしない）
+# 1. 何が足りないか確認（ビルドはしない）
 python3.12 tools/recipe.py doctor --recipe recipes/examples/mujoco-turtlebot3-wall-follower.yaml
 
-# 3. これから何を clone / build するか確認
+# 2. これから何を clone / build するか確認
 python3.12 tools/recipe.py plan   --recipe recipes/examples/mujoco-turtlebot3-wall-follower.yaml
 
-# 4. Foundation を構築（clone -> build -> install -> Python 依存導入）  ※初回は 10 分前後
+# 3. Foundation を構築（clone -> build -> install -> Python 依存導入）  ※初回は 10 分前後
 python3.12 tools/recipe.py configure --recipe recipes/examples/mujoco-turtlebot3-wall-follower.yaml
 
-# 5. 使い方ガイド（HTML）を生成してブラウザで開く（configure 完了後は `python` で OK）
+# 4. Foundation runtime が隔離環境として利用可能か確認
+python3.12 tools/workspace.py doctor
+
+# 5. 隔離された作業シェルに入る（プロンプト先頭に (hako) が付く）
+python3.12 tools/workspace.py enter      # Windows: py -3.12 tools\workspace.py enter
+
+# 6. 使い方ガイド（HTML）を生成してブラウザで開く
 python tools/recipe.py guide  --recipe recipes/examples/mujoco-turtlebot3-wall-follower.yaml --open
 ~~~
 
-`configure` が完了すると、`(hako)` シェルの `python` は Foundation venv の Python 3.12 を指すようになります。以後の操作は `python` で構いません。
+`workspace.py enter` は Foundation runtime が未構築の場合は起動しません。先に `recipe.py configure` で Foundation を構築してください。手順 5 で `(hako)` シェルへ入ると、`python` は Foundation venv の Python 3.12 を指します。以後の操作は `python` で構いません。
 
-手順 4 の最後に次のように出れば Foundation は完成です。
+手順 3 の最後に次のように出れば Foundation は完成です。
 
 ```text
 Foundation: SATISFIED
@@ -258,8 +261,8 @@ Foundation: SATISFIED
 [SATISFIED] hakoniwa-pdu-endpoint
 ```
 
-続けて `python tools/workspace.py doctor` を実行し、
-`[OK] Foundation Python and Hakoniwa modules are workspace-owned.` と出れば OK です。
+続けて手順 4 の `workspace.py doctor` で
+`[OK] Foundation Python and Hakoniwa modules are workspace-owned.` と出れば、隔離されたWorkspaceへ入る準備ができています。
 
 `configure` は **既存の checkout を勝手に更新・削除しません**。
 2 回目以降は差分だけがビルドされます。

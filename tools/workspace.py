@@ -497,7 +497,18 @@ def _apply_prompt_environment(shell: str, env: dict[str, str]) -> None:
         env["PS1"] = "(hako) $ "
 
 
+def require_runtime_ready(paths: WorkspacePaths) -> None:
+    if paths.foundation_python.is_file():
+        return
+    raise WorkspaceError(
+        "Foundation runtime is not ready; managed Python was not found at "
+        f"{paths.foundation_python}. Build/configure a Recipe first, for example: "
+        "python3.12 tools/recipe.py configure --recipe <recipe.yaml>"
+    )
+
+
 def enter(paths: WorkspacePaths) -> int:
+    require_runtime_ready(paths)
     prepare(paths)
     env = build_environment(paths)
     if os.name == "nt":
@@ -546,6 +557,7 @@ def _interactive_shell_command(shell: str) -> list[str]:
 
 
 def run_command(paths: WorkspacePaths, command: Sequence[str]) -> int:
+    require_runtime_ready(paths)
     values = list(command)
     if values and values[0] == "--":
         values = values[1:]

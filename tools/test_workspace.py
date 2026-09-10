@@ -471,7 +471,37 @@ if (Test-Path Env:\\HAKONIWA_WORKSPACE_ACTIVE) {{ exit 18 }}
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_enter_fails_closed_when_foundation_runtime_is_missing(self) -> None:
+        with mock.patch.object(workspace, "prepare") as prepare, mock.patch.object(
+            workspace.subprocess, "run"
+        ) as run:
+            with self.assertRaisesRegex(
+                workspace.WorkspaceError,
+                "Foundation runtime is not ready",
+            ) as raised:
+                workspace.enter(self.paths)
+        self.assertIn(str(self.paths.foundation_python), str(raised.exception))
+        self.assertIn("tools/recipe.py configure", str(raised.exception))
+        prepare.assert_not_called()
+        run.assert_not_called()
+
+    def test_run_command_fails_closed_when_foundation_runtime_is_missing(self) -> None:
+        with mock.patch.object(workspace, "prepare") as prepare, mock.patch.object(
+            workspace.subprocess, "run"
+        ) as run:
+            with self.assertRaisesRegex(
+                workspace.WorkspaceError,
+                "Foundation runtime is not ready",
+            ) as raised:
+                workspace.run_command(self.paths, ["python", "-V"])
+        self.assertIn(str(self.paths.foundation_python), str(raised.exception))
+        self.assertIn("tools/recipe.py configure", str(raised.exception))
+        prepare.assert_not_called()
+        run.assert_not_called()
+
     def test_run_command_does_not_inherit_pythonpath(self) -> None:
+        self.paths.foundation_python.parent.mkdir(parents=True, exist_ok=True)
+        self.paths.foundation_python.write_text("", encoding="utf-8")
         script = "import os, sys; sys.exit(0 if 'PYTHONPATH' not in os.environ else 9)"
         with mock.patch.dict(os.environ, {"PYTHONPATH": "/legacy"}, clear=False):
             result = workspace.run_command(
