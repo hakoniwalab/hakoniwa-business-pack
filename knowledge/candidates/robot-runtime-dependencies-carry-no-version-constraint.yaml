@@ -83,11 +83,21 @@ promotion_targets:
       path: catalog/tools/validate_catalog.rb
       mode: detect-only
       notes:
-        - This is a schema proposal rather than a ready-to-add check. No dependencies.required entry in the catalog carries a version or revision today (88 entries, none), so a validator would first need the schema to define where a minimum generation is recorded. Folding pinned revisions into the existing notes field would work without a schema change.
+        - >-
+          Recorded as an observation, not as a proposal: no dependencies.required
+          entry in the catalog carries a version or revision today (88 entries,
+          none), so there is currently no field a validator could read. Where a
+          minimum generation should live, and whether any check is worth adding,
+          is a maintainer decision; this candidate implies no schema change.
 
 promotion_rationale:
-  - The dependency list is where a consumer looks first, so the minimum generation belongs there rather than in prose.
-  - Any check would be cheap once the schema says where a minimum generation lives, since the condition is then visible in the catalog files alone without building anything. That schema decision is the maintainers' to make.
+  - >-
+    The finding is about a consumer having no way to learn which generation is
+    required. Which layer answers that is open: exact revisions are naturally
+    Recipe-level today, while the Catalog is the place a consumer looks first
+    and could carry compatibility or minimum-generation metadata, or simply a
+    note recording the generations that were verified.
+  - Any check would be cheap once there is a field to read, since the condition is then visible in the catalog files alone without building anything. Whether to introduce such a field is the maintainers' decision.
 
 resolution:
   status: pending
@@ -96,5 +106,12 @@ resolution:
   promoted_to: []
   executable_guardrails: []
   notes:
-    - Suggested minimal edit: record a minimum revision or version for hakoniwa-mujoco-robots on the component entry, or state the verified dependency generations alongside verification.source_revision the way the Recipes record their evidence.
-    - implementation_status is none because no follow-up issue exists yet. The fix may be a catalog metadata change rather than code, which is a maintainer decision; happy to open an issue if that is the preferred tracking.
+    - >-
+      The gap to close is that a consumer cannot tell which generation of
+      hakoniwa-mujoco-robots the runtime needs. Ownership of that answer is
+      deliberately left open here: pinning exact revisions is Recipe-level work
+      today, and the Catalog could instead carry compatibility or
+      minimum-generation metadata, or a note stating the generations that were
+      verified, in the way the Recipes record their evidence. No schema change
+      is implied by this candidate.
+    - implementation_status is none because no follow-up issue exists yet. The resolution may be metadata rather than code, which is a maintainer decision; happy to open an issue if that is the preferred tracking.

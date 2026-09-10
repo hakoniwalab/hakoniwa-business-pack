@@ -30,12 +30,14 @@ observation:
     - Warnings totalled 26 and all originated in dependency headers, none in robot-runtime sources. Eighteen were C4819 on core-pro's pdu_primitive_ctypes.h and pdu-endpoint's endpoint_types.h and comm.hpp, which carry UTF-8 without a BOM and are therefore read in the host's default code page on a Japanese Windows install; eight were C4267 raised inside the MSVC standard library.
     - The Runtime was not executed. Instantiating it requires a manifest and a MuJoCo model, which upstream assigns to the Robot Pack layer, so this candidate deliberately claims compile and link only.
     - >-
-      The composition used here is not the official one. The parent that
-      composes this runtime, teras-project/hakoniwa-robot-arm, is public and
-      carries its own CMakeLists; the composition used for this measurement was
-      derived from the sources beforehand and agrees with it structurally. The
-      parent's documented host-only build targets macOS and Ubuntu, so building
-      the runtime through the parent on Windows is separate work.
+      The composition used for this measurement is not the official one. The
+      parent that composes this runtime, teras-project/hakoniwa-robot-arm,
+      carries the official composition in the top-level CMakeLists.txt on main;
+      the composition used here was derived from the sources beforehand and
+      agrees with it structurally. The official parent has since been built on
+      Windows as well, which is the stronger current confirmation and is
+      recorded as follow-up evidence below; the derived composition remains as
+      the historical measurement that the sources themselves are portable.
 
 sources:
   repositories:
@@ -70,6 +72,19 @@ sources:
         hakoniwa-pdu-endpoint b089e0e built with hakoniwa_core OFF,
         hakoniwa-mujoco-robots 326ff7c7 for the PDU adapter/converter headers
         and 3d12fc8 for the prebuilt mujoco-common.lib, MuJoCo 3.9.0.
+    - description: >-
+        Follow-up evidence, the official parent on Windows: on 2026-09-10, at
+        teras-project/hakoniwa-robot-arm a629fa37 and after e850600 and
+        27f4d40, the parent's own composition was built natively on Windows
+        from a deleted build directory through the documented path
+        (business-pack Foundation Recipe, then nova5.py build --headless). The
+        build completed with no linker errors and produced
+        build/bin/robot-arm-hakoniwa-asset.exe, without the PYTHONUTF8,
+        CMAKE_PREFIX_PATH, explicit --config Release or hako.lib workarounds
+        that the earlier consumer-role build had needed. The executable starts
+        far enough to resolve its runtime DLLs and validate its arguments. This
+        is build and startup evidence only; no simulation was run, so the
+        compile-and-link scope of this candidate is unchanged.
     - description: >
         The catalog-pinned revision and current main are identical in source:
         the diff between 0a9bba3d and 732daad3 touches only README, docs and
@@ -97,6 +112,11 @@ validation:
     - Verified on one Windows 11 x64 host on 2026-09-07. Compile and link only; no runtime behaviour was exercised, and this candidate makes no claim about it.
     - The link probe references one public entry point. Symbols reachable only through a real consumer's composition were not pulled in, so this is link-level portability of the library as built, not proof that every code path links in every configuration.
     - The result depends on the PDU adapter/converter headers being new enough; see the companion candidate on the missing dependency version constraint.
+    - >-
+      The follow-up build of the official parent on 2026-09-10 confirms the
+      same portability through the maintained composition rather than a derived
+      one. It too stops at build and startup, so neither measurement says
+      anything about running the Runtime.
 
 tracking:
   implementation_status: none

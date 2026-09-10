@@ -82,14 +82,28 @@ sources:
         Link libraries: core-pro assets/conductor/hako/shakoc,
         hakoniwa_pdu_endpoint, mujoco-common and mujoco. This produced
         robot_runtime.lib and an executable linking ManifestFactory::create.
-    - description: >
+    - description: >-
         teras-project/hakoniwa-robot-arm, Apache-2.0 and public, carries the
-        composition on its work branch (19a39730; main holds an initial commit
-        only). Its top-level CMakeLists sets HAKONIWA_ROBOT_RUNTIME_ROOT to
+        official consumer composition in the top-level CMakeLists.txt on main.
+        It was read there at a629fa37 (2026-09-10); main has since advanced to
+        b40cc90d, whose diff against a629fa37 touches README, docs, recipes and
+        tools/recipe/ros2_workspace.py only, leaving the composition unchanged.
+        That CMakeLists sets HAKONIWA_ROBOT_RUNTIME_ROOT to
         ../hakoniwa-robot-runtime by default, declares
         target_compile_features(... cxx_std_20), and lists the runtime's
-        include/ and src/ directories as include roots — the same structure
+        include/ and src/ directories as include roots - the same structure
         this workspace had derived from the sources.
+    - description: >-
+        The official parent composition was then built on Windows on
+        2026-09-10, after e850600, 27f4d40 and a629fa37 landed. From a deleted
+        build directory, the documented path (business-pack Foundation Recipe,
+        then nova5.py build --headless) ran to completion with no linker errors
+        and produced build/bin/robot-arm-hakoniwa-asset.exe. None of the four
+        workarounds the earlier Windows run had needed were required any more:
+        no PYTHONUTF8, no CMAKE_PREFIX_PATH, no explicit --config Release and
+        no hako.lib added to the linker flags. The executable starts far enough
+        to resolve its runtime DLLs and to validate its arguments. Nothing
+        beyond build and startup was exercised in this measurement.
 
 confidence: high
 
@@ -99,7 +113,13 @@ validation:
   status: verified
   required: []
   notes:
-    - The derived composition was exercised on Windows only. The parent's own composition has not yet been built here; its documented host-only path targets macOS and Ubuntu, and whether it runs on Windows is the subject of separate work.
+    - >-
+      The derived composition was exercised on Windows in September 2026, and
+      the official parent composition was built there on 2026-09-10 at
+      a629fa37. That second result is build and startup evidence: the build
+      completes and the produced executable resolves its runtime DLLs and
+      validates its arguments. It is not an end-to-end simulation run, and this
+      candidate makes no claim about runtime behaviour beyond startup.
     - This candidate documents how the ownership split resolves in practice, not a defect. It was originally written as a cost report when no public parent existed; with teras-project/hakoniwa-robot-arm published, the useful content is the correspondence between the official composition and one derived from the sources.
 
 tracking:
