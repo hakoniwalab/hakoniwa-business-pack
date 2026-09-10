@@ -149,4 +149,9 @@ resolution:
       Documentation would be enough on its own. A sentence in a Windows setup
       note saying to keep the checkout root short and to set core.longpaths=true
       would let the next person recognise the failure immediately.
-    - implementation_status is none because no follow-up issue exists yet.
+    - >-
+      The maintainer reviewed this on 2026-09-09 and chose to keep it as
+      knowledge rather than treat it as a defect, which matches what this
+      candidate proposed: both escape hatches already exist and the documented
+      layout fits. No implementation work is tracked, so implementation_status
+      stays none deliberately rather than for want of an issue.

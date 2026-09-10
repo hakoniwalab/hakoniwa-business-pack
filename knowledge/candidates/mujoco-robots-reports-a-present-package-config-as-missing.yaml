@@ -96,8 +96,12 @@ validation:
       that config would be hidden the same way, but only Boost was exercised.
 
 tracking:
-  implementation_status: none
-  issues: []
+  implementation_status: resolved
+  issues:
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      number: 55
+      relation: fix
+      status: closed
 
 promotion_targets:
   catalog:
@@ -114,9 +118,13 @@ promotion_rationale:
     build and the diagnostic it emits.
 
 resolution:
-  status: pending
-  fixed_by: []
-  verified: false
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-mujoco-robots
+      issue: null
+      pull_request: 55
+      revision: a22c70347b242f5d3f6a0ac2a26eb49977916b42
+  verified: true
   promoted_to: []
   executable_guardrails: []
   notes:
@@ -130,4 +138,23 @@ resolution:
       Checking whether the config file exists at the searched prefixes before
       claiming it was not found would also stop the message from sending readers
       to re-run an install that already happened.
-    - implementation_status is none because no follow-up issue exists yet.
+    - >-
+      Fixed as suggested. The quiet probe is kept, and when it fails the package
+      is looked up again without QUIET so CMake prints the real diagnostic; the
+      fatal message now says the config may be absent or a dependency may be
+      unavailable, rather than asserting the first.
+    - >-
+      Re-verified on the same Windows host on 2026-09-10 by configuring the
+      consumer against an installed Foundation with no vcpkg discovery context
+      and changing only the hakoniwa-mujoco-robots revision. Before a22c703 the
+      output says "package config not found" and "run cmake --install ... first",
+      and the word Boost does not appear at all. After it, the output carries
+      "retrying with dependency diagnostics enabled", CMake's own "Could not find
+      a package configuration file provided by Boost", the
+      hakoniwa_pdu_endpointConfig.cmake:33 find_dependency call site, and
+      "hakoniwa_pdu_endpoint could not be found because dependency Boost could
+      not be found".
+    - >-
+      The separate question of whether the Foundation should propagate its vcpkg
+      dependency context to consumers is tracked upstream as
+      hakoniwalab/hakoniwa-business-pack#191, and is not part of this fix.
