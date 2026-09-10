@@ -188,11 +188,9 @@ class FoundationWorkspaceTest(unittest.TestCase):
         )
         data = json.loads(result.stdout)
 
-        self.assertTrue(data["foundation_root"].endswith("work/foundation"))
-        self.assertTrue(
-            data["foundation_python"].endswith("work/foundation/install/python")
-        )
-        self.assertTrue(data["recipe_root"].endswith("work/recipes/drone-threejs"))
+        self.assertEqual(Path(data["foundation_root"]), foundation.repository_root() / "work" / "foundation")
+        self.assertEqual(Path(data["foundation_python"]), foundation.repository_root() / "work" / "foundation" / "install" / "python")
+        self.assertEqual(Path(data["recipe_root"]), foundation.repository_root() / "work" / "recipes" / "drone-threejs")
 
 
 class FoundationPythonContractTest(unittest.TestCase):
@@ -395,7 +393,7 @@ class FoundationInspectorTest(unittest.TestCase):
             f'  architecture: "{architecture}"\n'
             '  toolchain: "test"\n'
             "install:\n"
-            f'  prefix: "{self.prefix}"\n'
+            f"  prefix: {json.dumps(str(self.prefix))}\n"
             "capabilities:\n"
             f"{capabilities}"
             f"build_limits: {build_limits}\n"
@@ -1131,7 +1129,7 @@ class FoundationInspectorTest(unittest.TestCase):
             )
         manifest = paths.foundation_build / "hakoniwa-pdu-endpoint.yaml"
         content = manifest.read_text(encoding="utf-8")
-        self.assertIn(f'hakoniwa_core_root: "{paths.install_prefix}"', content)
+        self.assertIn(f"hakoniwa_core_root: {json.dumps(str(paths.install_prefix))}", content)
         self.assertIn("  python: true", content)
 
     def test_core_free_endpoint_manifest_disables_core_and_python(self) -> None:
@@ -1229,10 +1227,8 @@ class FoundationInspectorTest(unittest.TestCase):
         content = manifest.read_text(encoding="utf-8")
         self.assertIn("  hakotime: false", content)
         self.assertIn("  hakopdu_ev3: true", content)
-        self.assertIn(
-            f'  hakoniwa_core_root: "{paths.install_prefix}"', content
-        )
-        self.assertIn(f'  athrill_root: "{source.parent / "athrill"}"', content)
+        self.assertIn(f"  hakoniwa_core_root: {json.dumps(str(paths.install_prefix))}", content)
+        self.assertIn(f"  athrill_root: {json.dumps(str(source.parent / 'athrill'))}", content)
 
     def test_athrill_device_does_not_require_saved_vcpkg_toolchain(self) -> None:
         paths = foundation.resolve_workspace(self.root, "test")
