@@ -25,6 +25,9 @@ jobs:
       - name: Test catalog freshness checker
         run: ruby catalog/tools/test_check_freshness.rb
 
+      - name: Test catalog index line endings
+        run: ruby catalog/tools/test_generate_index.rb
+
       - name: Validate recipes
         run: ruby recipes/tools/validate_recipes.rb
 
@@ -78,9 +81,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      - name: Test catalog index line endings
+        run: ruby catalog/tools/test_generate_index.rb
 
       - name: Test Workspace Environment
         run: >-
