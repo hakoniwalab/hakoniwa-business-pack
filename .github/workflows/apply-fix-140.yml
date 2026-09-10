@@ -1,0 +1,159 @@
+name: Apply TurtleBot3 local dependency fix
+
+on:
+  push:
+    branches:
+      - fix/turtlebot3-local-deps-140
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/turtlebot3-local-deps-140
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply Recipe, guide, and regression test changes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          recipe = Path('recipes/examples/mujoco-turtlebot3-wall-follower.yaml')
+          text = recipe.read_text(encoding='utf-8')
+          old = '''recipe_local_requirements:\n  hakoniwa-mbody-registry:\n    role: generated-physics-artifact-source\n  hakoniwa-mujoco-robots:\n    build_entrypoint: source CMake configured by the Recipe runner\n    required_artifacts:\n      - tb3_sim_waffle\n      - tb3_obstacle_avoider.py\n'''
+          new = '''recipe_local_requirements_schema_version: 1\nrecipe_local_requirements:\n  hakoniwa-mbody-registry:\n    root:\n      default_path: ../hakoniwa-mbody-registry\n      override_env: HAKONIWA_MBODY_REGISTRY_ROOT\n      relative_to: recipe_repository\n    source:\n      type: git\n      url: https://github.com/hakoniwalab/hakoniwa-mbody-registry.git\n      revision: main\n    required_artifacts:\n      - path: tools/fetch.py\n        kind: file\n      - path: sources\n        kind: directory\n      - path: bodies\n        kind: directory\n  hakoniwa-mujoco-robots:\n    root:\n      default_path: ../hakoniwa-mujoco-robots\n      override_env: HAKONIWA_MUJOCO_ROBOTS_ROOT\n      relative_to: recipe_repository\n    source:\n      type: git\n      url: https://github.com/hakoniwalab/hakoniwa-mujoco-robots.git\n      revision: main\n    required_artifacts:\n      - path: src/CMakeLists.txt\n        kind: file\n      - path: config/tb3-pdudef-compact.json\n        kind: file\n      - path: config/endpoint/tb3_sim_endpoint.json\n        kind: file\n      - path: python/tb3_obstacle_avoider.py\n        kind: file\n      - path: python/lidar_visualizer.py\n        kind: file\n'''
+          if text.count(old) != 1:
+              raise SystemExit(f'recipe dependency block count={text.count(old)}')
+          recipe.write_text(text.replace(old, new), encoding='utf-8')
+
+          guide = Path('docs/getting-started-ja.md')
+          text = guide.read_text(encoding='utf-8')
+          old = '''Foundation 部品（core-pro / pdu-python / pdu-endpoint）は `recipe.py configure` が\n自動で clone しますが、**Recipe 固有の部品は自動 clone されません**。\n`mujoco-turtlebot3-wall-follower` では次の 2 つを手動で隣に置きます。\n\n```bash\ncd ~/Hakoniwa                                   # 親ディレクトリで\ngit clone --recursive https://github.com/hakoniwalab/hakoniwa-mbody-registry.git\ngit clone --recursive https://github.com/hakoniwalab/hakoniwa-mujoco-robots.git\n```\n\n（どの Recipe が何を要求するかは、Recipe YAML の `recipe_local_requirements` と\n`catalog/components/<id>.yaml` の `url` で確認できます。）\n\n最終的な配置イメージ:\n\n```text\nHakoniwa/\n├── hakoniwa-business-pack/     # このリポジトリ\n├── hakoniwa-core-pro/          # configure が自動 clone\n├── hakoniwa-pdu-python/        # 同上\n├── hakoniwa-pdu-endpoint/      # 同上\n├── hakoniwa-mbody-registry/    # 手動 clone（Recipe 固有）\n└── hakoniwa-mujoco-robots/     # 手動 clone（Recipe 固有）\n```\n'''
+          new = '''Foundation 部品（core-pro / pdu-python / pdu-endpoint）に加え、実行契約を宣言した\nRecipe 固有の部品も `recipe.py plan/configure` が扱います。\n`mujoco-turtlebot3-wall-follower` では `hakoniwa-mbody-registry` と\n`hakoniwa-mujoco-robots` を不足時に自動で隣へ clone するため、手動 clone は不要です。\n\n`plan` は clone 予定を表示するだけで、リポジトリを変更しません。`configure` は不足する\nリポジトリを clone しますが、**既存の checkout を勝手に更新・reset・削除しません**。\n必要なら Recipe YAML の `recipe_local_requirements` で取得元、revision、必要artifactを確認できます。\n\n`configure` 後の配置イメージ:\n\n```text\nHakoniwa/\n├── hakoniwa-business-pack/     # このリポジトリ\n├── hakoniwa-core-pro/          # configure が必要に応じて自動 clone\n├── hakoniwa-pdu-python/        # 同上\n├── hakoniwa-pdu-endpoint/      # 同上\n├── hakoniwa-mbody-registry/    # Recipe 固有依存として自動 clone\n└── hakoniwa-mujoco-robots/     # Recipe 固有依存として自動 clone\n```\n'''
+          if text.count(old) != 1:
+              raise SystemExit(f'getting-started block count={text.count(old)}')
+          guide.write_text(text.replace(old, new), encoding='utf-8')
+
+          test = Path('tools/tests/test_turtlebot3_recipe_local_requirements.py')
+          test.write_text(r'''#!/usr/bin/env python3
+from __future__ import annotations
+
+import importlib.util
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = ROOT / "tools" / "recipe.py"
+SPEC = importlib.util.spec_from_file_location("business_pack_tb3_local_requirements", SCRIPT)
+assert SPEC is not None and SPEC.loader is not None
+guide = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(guide)
+RECIPE = ROOT / "recipes" / "examples" / "mujoco-turtlebot3-wall-follower.yaml"
+
+
+class TurtleBot3RecipeLocalRequirementsTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.data = guide.load_recipe(RECIPE)
+        self.requirements = guide.validate_local_requirements(self.data)
+
+    def test_recipe_declares_executable_local_dependency_contract(self) -> None:
+        self.assertEqual(
+            set(self.requirements),
+            {"hakoniwa-mbody-registry", "hakoniwa-mujoco-robots"},
+        )
+        self.assertEqual(
+            self.requirements["hakoniwa-mbody-registry"]["source"]["url"],
+            "https://github.com/hakoniwalab/hakoniwa-mbody-registry.git",
+        )
+        self.assertEqual(
+            self.requirements["hakoniwa-mujoco-robots"]["source"]["url"],
+            "https://github.com/hakoniwalab/hakoniwa-mujoco-robots.git",
+        )
+
+    def _resolved(self, dependency_id: str, target: Path, boundary: Path) -> dict:
+        requirement = self.requirements[dependency_id]
+        source = requirement["source"]
+        return guide._resolve_source_requirement(
+            source_id=dependency_id,
+            kind="recipe",
+            target=target,
+            source_type=source["type"],
+            repository=source.get("url"),
+            revision=source.get("revision"),
+            required_artifacts=requirement["required_artifacts"],
+            clone_boundary=boundary,
+        )
+
+    def test_missing_dependencies_are_planned_as_clone(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            boundary = Path(temporary)
+            for dependency_id in self.requirements:
+                with self.subTest(dependency_id=dependency_id):
+                    source = self._resolved(
+                        dependency_id, boundary / dependency_id, boundary
+                    )
+                    self.assertEqual(source["action"], "clone")
+                    self.assertEqual(
+                        source["provenance"]["reproducibility"], "unpinned"
+                    )
+
+    def test_valid_existing_checkout_is_reused_without_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            boundary = Path(temporary)
+            dependency_id = "hakoniwa-mbody-registry"
+            target = boundary / dependency_id
+            target.mkdir()
+            subprocess.run(["git", "init", "-b", "main", str(target)], check=True, capture_output=True)
+            for artifact in self.requirements[dependency_id]["required_artifacts"]:
+                path = target / artifact["path"]
+                if artifact["kind"] == "directory":
+                    path.mkdir(parents=True, exist_ok=True)
+                else:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text("test\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(target), "add", "."], check=True, capture_output=True)
+            subprocess.run(
+                ["git", "-C", str(target), "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "fixture"],
+                check=True,
+                capture_output=True,
+            )
+            before = subprocess.run(
+                ["git", "-C", str(target), "rev-parse", "HEAD"],
+                check=True, capture_output=True, text=True,
+            ).stdout.strip()
+            source = self._resolved(dependency_id, target, boundary)
+            after = subprocess.run(
+                ["git", "-C", str(target), "rev-parse", "HEAD"],
+                check=True, capture_output=True, text=True,
+            ).stdout.strip()
+            self.assertEqual(source["action"], "reuse")
+            self.assertEqual(before, after)
+
+
+if __name__ == "__main__":
+    unittest.main()
+''', encoding='utf-8')
+          PY
+          git diff --check
+          ruby recipes/tools/validate_recipes.rb
+          python -m unittest tools/tests/test_turtlebot3_recipe_local_requirements.py -v
+      - name: Commit fix
+        shell: bash
+        run: |
+          git config user.name "tmori"
+          git config user.email "164193+tmori@users.noreply.github.com"
+          git add recipes/examples/mujoco-turtlebot3-wall-follower.yaml docs/getting-started-ja.md tools/tests/test_turtlebot3_recipe_local_requirements.py
+          git commit -m "fix: auto-materialize TurtleBot3 Recipe dependencies"
+          git push origin HEAD:fix/turtlebot3-local-deps-140
