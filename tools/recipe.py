@@ -833,7 +833,7 @@ def _resolve_source_requirement(
             ),
             "reproducibility": (
                 "pinned"
-                if revision
+                if revision and GIT_FULL_SHA1_PATTERN.fullmatch(revision)
                 else "local"
                 if source_type == "local"
                 else "unpinned"
