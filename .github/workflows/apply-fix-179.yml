@@ -1,0 +1,66 @@
+name: Apply Foundation toolchain prefix fix
+
+on:
+  push:
+    branches:
+      - fix/foundation-toolchain-install-dir-179
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/foundation-toolchain-install-dir-179
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply minimal implementation and tests
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('tools/foundation.py')
+          text = path.read_text(encoding='utf-8')
+
+          old = '''    toolchain.add_argument("--recipe-id", required=True)\n    toolchain.add_argument("--vcpkg-root", required=True)\n'''
+          new = '''    toolchain.add_argument("--recipe-id", required=True)\n    toolchain.add_argument("--install-dir", default=None)\n    toolchain.add_argument("--vcpkg-root", required=True)\n'''
+          if text.count(old) != 1:
+              raise SystemExit(f'parser block count={text.count(old)}')
+          text = text.replace(old, new)
+
+          old = '''        paths = resolve_workspace(repository_root(), args.recipe_id)\n        if args.command == "toolchain":\n            output = configure_foundation_toolchain(paths, Path(args.vcpkg_root))\n'''
+          new = '''        root = repository_root()\n        if args.command == "toolchain" and args.install_dir:\n            prefix = Path(args.install_dir).resolve()\n            paths = resolve_workspace(root, args.recipe_id, prefix.parent)\n            if prefix.name != "install" or prefix != paths.install_prefix:\n                raise FoundationError(\n                    "toolchain install prefix must be "\n                    "<workdir>/<foundation-name>/install"\n                )\n        else:\n            paths = resolve_workspace(root, args.recipe_id)\n        if args.command == "toolchain":\n            output = configure_foundation_toolchain(paths, Path(args.vcpkg_root))\n'''
+          if text.count(old) != 1:
+              raise SystemExit(f'main block count={text.count(old)}')
+          text = text.replace(old, new)
+
+          old = '''            if result.returncode != 0:\n                raise FoundationError(\n                    f"{action['component']} command failed "\n                    f"with exit code {result.returncode}"\n                )\n'''
+          new = '''            if result.returncode != 0:\n                message = (\n                    f"{action['component']} command failed "\n                    f"with exit code {result.returncode}"\n                )\n                toolchain_path = foundation_toolchain_path(paths)\n                if platform.system() == "Windows" and not toolchain_path.is_file():\n                    message += (\n                        f". Foundation toolchain config for install prefix "\n                        f"{paths.install_prefix} was not found at {toolchain_path}. "\n                        "If this component needs vcpkg, configure this prefix with: "\n                        f"python tools/foundation.py toolchain --recipe-id "\n                        f"{Path(plan['recipe']).stem} --install-dir "\n                        f"{paths.install_prefix} --vcpkg-root <vcpkg-root>"\n                    )\n                raise FoundationError(message)\n'''
+          if text.count(old) != 1:
+              raise SystemExit(f'failure block count={text.count(old)}')
+          text = text.replace(old, new)
+          path.write_text(text, encoding='utf-8')
+
+          test = Path('tools/test_foundation.py')
+          text = test.read_text(encoding='utf-8')
+          marker = '''            self.assertEqual(foundation.load_foundation_toolchain(paths)["vcpkg_root"], str(vcpkg.resolve()))\n\n\nclass FoundationInspectorTest(unittest.TestCase):\n'''
+          addition = '''            self.assertEqual(foundation.load_foundation_toolchain(paths)["vcpkg_root"], str(vcpkg.resolve()))\n\n    def test_toolchain_cli_can_target_alternate_install_prefix(self) -> None:\n        with tempfile.TemporaryDirectory() as temporary:\n            root = Path(temporary).resolve()\n            vcpkg = root / "external" / "vcpkg"\n            vcpkg.mkdir(parents=True)\n            (vcpkg / ("vcpkg.exe" if sys.platform == "win32" else "vcpkg")).write_text("test\\n", encoding="utf-8")\n            cmake = vcpkg / "scripts" / "buildsystems" / "vcpkg.cmake"\n            cmake.parent.mkdir(parents=True)\n            cmake.write_text("# test\\n", encoding="utf-8")\n            alt_install = root / "work" / "alt-prefix" / "install"\n            with mock.patch.object(foundation, "repository_root", return_value=root), mock.patch.object(foundation, "warn_if_workspace_invalid"):\n                result = foundation.main([\n                    "toolchain", "--recipe-id", "test-recipe",\n                    "--install-dir", str(alt_install),\n                    "--vcpkg-root", str(vcpkg),\n                ])\n            self.assertEqual(result, 0)\n            alt_paths = foundation.resolve_workspace(root, "test-recipe", alt_install.parent)\n            self.assertEqual(foundation.load_foundation_toolchain(alt_paths)["vcpkg_root"], str(vcpkg.resolve()))\n            default_paths = foundation.resolve_workspace(root, "test-recipe")\n            self.assertFalse(foundation.foundation_toolchain_path(default_paths).exists())\n            source = root / "athrill-target-v850e2m"\n            source.mkdir()\n            manifest = foundation.write_component_manifest("athrill-target-v850e2m", source, alt_paths, {})\n            self.assertIsNotNone(manifest)\n            self.assertIn(json.dumps(str(vcpkg.resolve())), manifest.read_text(encoding="utf-8"))\n\n    def test_toolchain_cli_rejects_install_prefix_outside_selected_workdir(self) -> None:\n        with tempfile.TemporaryDirectory() as temporary:\n            root = Path(temporary).resolve()\n            outside = root / "outside" / "install"\n            with mock.patch.object(foundation, "repository_root", return_value=root), mock.patch.object(foundation, "warn_if_workspace_invalid"):\n                result = foundation.main([\n                    "toolchain", "--recipe-id", "test-recipe",\n                    "--install-dir", str(outside),\n                    "--vcpkg-root", str(root / "missing-vcpkg"),\n                ])\n            self.assertEqual(result, 2)\n\n\nclass FoundationInspectorTest(unittest.TestCase):\n'''
+          if text.count(marker) != 1:
+              raise SystemExit(f'test marker count={text.count(marker)}')
+          test.write_text(text.replace(marker, addition), encoding='utf-8')
+          PY
+          git diff --check
+          python -m unittest tools/test_foundation.py -v
+      - name: Commit fix
+        shell: bash
+        run: |
+          git config user.name "tmori"
+          git config user.email "164193+tmori@users.noreply.github.com"
+          git add tools/foundation.py tools/test_foundation.py
+          git commit -m "fix: align Foundation toolchain with install prefix"
+          git push origin HEAD:fix/foundation-toolchain-install-dir-179
