@@ -32,6 +32,11 @@ class WorkspaceEnterTest(unittest.TestCase):
             encoding="utf-8",
         )
         self.paths = workspace.resolve_workspace(self.root)
+        self.paths.foundation_python.parent.mkdir(parents=True, exist_ok=True)
+        self.paths.foundation_python.write_text(
+            "# managed runtime fixture\n",
+            encoding="utf-8",
+        )
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
