@@ -309,6 +309,45 @@ class FoundationPythonContractTest(unittest.TestCase):
             self.assertEqual(output, paths.foundation_config / "toolchain.json")
             self.assertEqual(foundation.load_foundation_toolchain(paths)["vcpkg_root"], str(vcpkg.resolve()))
 
+    def test_toolchain_cli_can_target_alternate_install_prefix(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            vcpkg = root / "external" / "vcpkg"
+            vcpkg.mkdir(parents=True)
+            (vcpkg / ("vcpkg.exe" if sys.platform == "win32" else "vcpkg")).write_text("test\n", encoding="utf-8")
+            cmake = vcpkg / "scripts" / "buildsystems" / "vcpkg.cmake"
+            cmake.parent.mkdir(parents=True)
+            cmake.write_text("# test\n", encoding="utf-8")
+            alt_install = root / "work" / "alt-prefix" / "install"
+            with mock.patch.object(foundation, "repository_root", return_value=root), mock.patch.object(foundation, "warn_if_workspace_invalid"):
+                result = foundation.main([
+                    "toolchain", "--recipe-id", "test-recipe",
+                    "--install-dir", str(alt_install),
+                    "--vcpkg-root", str(vcpkg),
+                ])
+            self.assertEqual(result, 0)
+            alt_paths = foundation.resolve_workspace(root, "test-recipe", alt_install.parent)
+            self.assertEqual(foundation.load_foundation_toolchain(alt_paths)["vcpkg_root"], str(vcpkg.resolve()))
+            default_paths = foundation.resolve_workspace(root, "test-recipe")
+            self.assertFalse(foundation.foundation_toolchain_path(default_paths).exists())
+            source = root / "athrill-target-v850e2m"
+            source.mkdir()
+            manifest = foundation.write_component_manifest("athrill-target-v850e2m", source, alt_paths, {})
+            self.assertIsNotNone(manifest)
+            self.assertIn(json.dumps(str(vcpkg.resolve())), manifest.read_text(encoding="utf-8"))
+
+    def test_toolchain_cli_rejects_install_prefix_outside_selected_workdir(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            outside = root / "outside" / "install"
+            with mock.patch.object(foundation, "repository_root", return_value=root), mock.patch.object(foundation, "warn_if_workspace_invalid"):
+                result = foundation.main([
+                    "toolchain", "--recipe-id", "test-recipe",
+                    "--install-dir", str(outside),
+                    "--vcpkg-root", str(root / "missing-vcpkg"),
+                ])
+            self.assertEqual(result, 2)
+
 
 class FoundationInspectorTest(unittest.TestCase):
     def setUp(self) -> None:
