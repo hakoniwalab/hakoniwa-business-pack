@@ -68,7 +68,11 @@ validation:
 
 tracking:
   implementation_status: open
-  issues: []
+  issues:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      number: 179
+      relation: fix
+      status: open
 
 promotion_targets:
   catalog: []
@@ -96,5 +100,7 @@ resolution:
   promoted_to: []
   executable_guardrails: []
   notes:
-    - Workaround: copy work/foundation/config/toolchain.json into <alternate-prefix>/config/ before building.
-    - No issue has been filed in this repository yet.
+    - Workaround: copy work/foundation/config/toolchain.json into <alternate-prefix>/config/ before building, until #179 lands.
+    - >-
+      Tracked upstream as #179. Windows re-verification of the fix is offered by
+      the reporter, on the host where the failure was measured.
