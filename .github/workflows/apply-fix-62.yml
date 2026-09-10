@@ -25,6 +25,8 @@ jobs:
           from pathlib import Path
           path = Path('tools/test_foundation.py')
           text = path.read_text(encoding='utf-8')
+          if 'f"  prefix: {json.dumps(str(self.prefix))}\\n"' in text:
+              raise SystemExit(0)
           replacements = {
               '            f\'  prefix: "{self.prefix}"\\n\'\n': '            f"  prefix: {json.dumps(str(self.prefix))}\\n"\n',
               '        self.assertTrue(data["foundation_root"].endswith("work/foundation"))\n': '        self.assertEqual(Path(data["foundation_root"]), foundation.repository_root() / "work" / "foundation")\n',
@@ -39,23 +41,15 @@ jobs:
                   raise SystemExit(f'expected one match, found {text.count(old)}: {old!r}')
               text = text.replace(old, new)
           path.write_text(text, encoding='utf-8')
-
-          workflow = Path('.github/workflows/validate-business-pack.yml')
-          text = workflow.read_text(encoding='utf-8')
-          old = '''      - name: Test Workspace Environment\n        run: >-\n          python -m unittest\n          tools/test_workspace.py\n          tools/test_workspace_enter.py\n          tools/test_workspace_guard.py\n          -v\n'''
-          new = old + '''\n      - name: Test Foundation path portability\n        run: python -m unittest tools/test_foundation.py -v\n'''
-          if text.count(old) != 1:
-              raise SystemExit(f'expected one workflow insertion point, found {text.count(old)}')
-          workflow.write_text(text.replace(old, new), encoding='utf-8')
-          Path('.github/workflows/apply-fix-62.yml').unlink()
           PY
           git diff --check
           python -m unittest tools/test_foundation.py -v
       - name: Commit fix
         shell: bash
         run: |
+          if git diff --quiet; then exit 0; fi
           git config user.name "tmori"
           git config user.email "164193+tmori@users.noreply.github.com"
-          git add tools/test_foundation.py .github/workflows/validate-business-pack.yml .github/workflows/apply-fix-62.yml
+          git add tools/test_foundation.py
           git commit -m "test: make Foundation paths portable on Windows"
           git push origin HEAD:fix/foundation-tests-windows-62
