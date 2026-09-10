@@ -182,29 +182,25 @@ git clone https://github.com/hakoniwalab/hakoniwa-business-pack.git
 cd hakoniwa-business-pack
 ```
 
-Foundation 部品（core-pro / pdu-python / pdu-endpoint）は `recipe.py configure` が
-自動で clone しますが、**Recipe 固有の部品は自動 clone されません**。
-`mujoco-turtlebot3-wall-follower` では次の 2 つを手動で隣に置きます。
+Foundation 部品（core-pro / pdu-python / pdu-endpoint）に加え、実行契約を宣言した
+Recipe 固有の部品も `recipe.py plan/configure` が扱います。
+`mujoco-turtlebot3-wall-follower` では `hakoniwa-mbody-registry` と
+`hakoniwa-mujoco-robots` を不足時に自動で隣へ clone するため、手動 clone は不要です。
 
-```bash
-cd ~/Hakoniwa                                   # 親ディレクトリで
-git clone --recursive https://github.com/hakoniwalab/hakoniwa-mbody-registry.git
-git clone --recursive https://github.com/hakoniwalab/hakoniwa-mujoco-robots.git
-```
+`plan` は clone 予定を表示するだけで、リポジトリを変更しません。`configure` は不足する
+リポジトリを clone しますが、**既存の checkout を勝手に更新・reset・削除しません**。
+必要なら Recipe YAML の `recipe_local_requirements` で取得元、revision、必要artifactを確認できます。
 
-（どの Recipe が何を要求するかは、Recipe YAML の `recipe_local_requirements` と
-`catalog/components/<id>.yaml` の `url` で確認できます。）
-
-最終的な配置イメージ:
+`configure` 後の配置イメージ:
 
 ```text
 Hakoniwa/
 ├── hakoniwa-business-pack/     # このリポジトリ
-├── hakoniwa-core-pro/          # configure が自動 clone
+├── hakoniwa-core-pro/          # configure が必要に応じて自動 clone
 ├── hakoniwa-pdu-python/        # 同上
 ├── hakoniwa-pdu-endpoint/      # 同上
-├── hakoniwa-mbody-registry/    # 手動 clone（Recipe 固有）
-└── hakoniwa-mujoco-robots/     # 手動 clone（Recipe 固有）
+├── hakoniwa-mbody-registry/    # Recipe 固有依存として自動 clone
+└── hakoniwa-mujoco-robots/     # Recipe 固有依存として自動 clone
 ```
 
 ### 4.6 Windows のみ: vcpkg を Foundation に登録
