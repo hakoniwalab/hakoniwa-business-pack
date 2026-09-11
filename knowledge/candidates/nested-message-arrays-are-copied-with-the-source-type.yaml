@@ -68,8 +68,9 @@ validation:
       representation-sensitive serialisation, not whether the substitution happens.
     - >-
       Decide whether a mismatched element type should be an error rather than a silent
-      fallback. Constructing an object of the source type for a destination list is never
-      what the caller wants.
+      fallback. Where the destination declares an element type, constructing an object of
+      the source type instead is a substitution the caller did not ask for; where nothing
+      is declared, the fallback is all there is to go on.
   notes:
     - >-
       Measured against one nested type. The annotation-based path is still correct for
@@ -105,7 +106,9 @@ resolution:
       The fix measured here falls back to `get_fields_and_field_types()` when
       `__annotations__` carries nothing for the field, resolving
       `sequence<pkg/Type>` to `pkg.msg.Type`. With it, and with the octet normalisation
-      it enables, a nested varray round-trips exactly in both directions.
+      it enables, a nested varray round-trips exactly in both directions. Two conditions
+      bound that: an empty array is unaffected, and a destination already holding elements
+      of the source type keeps them unless those are replaced as well.
     - >-
       A fix is proposed upstream as hakoniwalab/hakoniwa-pdu-ros#23, with five tests that
       fail against the current mapper and pass with the change. The existing suite is
