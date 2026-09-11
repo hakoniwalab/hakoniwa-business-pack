@@ -32,12 +32,16 @@ feasibility:
 
 validation:
   status: partially_verified
-  verified_at: 2026-07-31
+  verified_at: 2026-09-11
   summary: >-
-    JointState reaches the peer correctly and repeatably, but it never enters a
-    Hakoniwa Core SHM channel, so no conductor participates and there is no shared
-    clock. The transport arrangement that made it work is a workaround for an
-    unexplained inbound-blocking behaviour on the host OS.
+    JointState reaches the peer correctly and repeatably, and it now enters a
+    Hakoniwa Core SHM channel with a registered asset owning the conductor, so the
+    composition is a simulation rather than a decode. The reverse direction is
+    verified too, in a neutral type and in a real vendor command type, with a
+    verification-only subscriber standing in for any vendor consumer. Still
+    partial: no vendor Action has been driven end to end, and the transport
+    arrangement remains a workaround for an unexplained inbound-blocking behaviour
+    on the host OS.
   steps:
     - id: jointstate_ros_to_pdu_over_tcp
       status: verified
@@ -123,21 +127,98 @@ validation:
           start, then a 1 second wait, then the external processes -- skipping the
           wait produced 0xC0000005.
     - id: jointstate_into_hakoniwa_core
-      status: not_tested
+      status: verified
       notes:
         - >-
-          Until this is done no Hakoniwa conductor participates, so the composition is
-          a decode rather than a simulation.
+          Verified 2026-09-11. A ROS 2 stream passing through the vendor's own
+          joint_states_bridge node now reaches a Hakoniwa SHM channel across the OS
+          boundary, with a registered asset owning the conductor and a second
+          external process reading the values back. Positive path exit 0 twice, with
+          1251 and 1228 payloads received by the relay and all of them written with
+          no write failures -- a count across the relay, not a losslessness claim for
+          the whole chain from the publisher. Seven negative paths, each required to
+          fail through its own expected mechanism rather than merely to exit non-zero.
         - >-
-          The SHM leg itself is already verified, with synthetic data (see
-          shm_leg_with_synthetic_jointstate above). What remains here is narrower:
-          combining it with real Tobas JointState output, and replacing the
-          synthetic-waveform identity check with a validation method suited to an
-          unknown vendor waveform.
+          The payload is relayed as raw bytes. It arrives already encoded as an
+          800-byte JointState PDU, so decoding and re-encoding it would drag the
+          converter into the path being measured; only the reader decodes.
+        - >-
+          Withdrawing the note that previously stood here. It said the vendor waveform
+          was unknown and that the check therefore had to weaken to something suited
+          to an unknown signal. That was wrong. The stream originates in an
+          Apache-2.0 publisher on the contributor's side with position = sin(t +
+          i*pi/4), velocity = cos(same) and effort = 0.1*(i+1), and the vendor node
+          converts it, so five independent invariants are available: the trig identity
+          per joint, the pi/4 phase offset between adjacent joints, exact equality of
+          the effort constants, structural agreement including joint names, and
+          liveness.
+        - >-
+          Liveness needs a ratio, not just a count, and this is the part worth
+          carrying into other Recipes. The channel is last-value, so an upstream that
+          stalls while holding its connection open lets the reader re-read one frame
+          and still satisfy any absolute sample threshold. Measured: with the writer
+          stopped after 8 samples, both absolute thresholds passed and only the
+          distinct-value ratio caught it -- 0.007 against 0.96-0.98 on a healthy run.
+        - >-
+          What this does NOT show is values produced by vendor flight control. With
+          the synthetic publisher stopped, the vendor node creates a publisher and a
+          subscriber observes nothing from it in six seconds, which is weaker than
+          proving it published nothing; the publisher's docstring attributes that to
+          an empty joint list on the example airframe, and the airframe configuration
+          was not inspected. Actuation is excluded by the human gate in any case.
+          What is verified is that values consistent with the known waveform survive
+          the whole chain with a real vendor node in it -- weaker than byte-level
+          preservation, since a reordering that swaps position and velocity across
+          joints satisfies all five invariants while every per-joint association is
+          wrong.
     - id: pdu_to_ros_command_direction
-      status: not_tested
+      status: verified
       notes:
-        - Prerequisite of any action work.
+        - >-
+          Verified 2026-09-11, in two stages, both green twice: 50 samples of
+          tobas_std_msgs/PairFloat64 (fixed length, no control semantics) and 20 of
+          tobas_command_msgs/Rate, a type the vendor really defines. Three negative
+          paths, each required to fail through its own mechanism. The receiver
+          compares the fields it was written to compare -- both PairFloat64 members,
+          and Rate's frame_id, priority and the three rate components to 1e-9 -- and
+          does not compare header.stamp.
+        - >-
+          Scope. No vendor control node participates and the receiver is a
+          verification-only subscriber, so this establishes PDU-to-ROS-2 delivery
+          using the vendor's types, NOT that any vendor node would accept a command.
+        - >-
+          The binding does not publish on the topic it names. For pdu_to_ros the
+          configured name is prefixed with /pdu, and a configured name already
+          beginning with /pdu is refused, so a binding that says /hako_probe/pair
+          publishes on /pdu/hako_probe/pair. A subscriber on the configured name
+          receives nothing, with no error on either side. Measured for topic bindings;
+          action bindings were not exercised. See the candidate
+          pdu-ros-pdu-to-ros-publishes-under-a-reserved-namespace.
+        - >-
+          Rate looks variable-length because of the string in its header and is not: a
+          ROS string becomes a fixed 128-byte array in a PDU, so the type has no
+          varray at all. The hazard is the opposite one -- a 130-byte frame_id is
+          truncated with no error.
+        - >-
+          Three hypotheses raised while getting this working did not survive
+          measurement, and are recorded so they do not become folklore: arming the
+          recv event, reordering subscribe before start, and a metadata-inclusive
+          pdu_size were each removed again and the runs still passed. That is weaker
+          than proving them irrelevant -- the ordering requirement is documented in
+          endpoint.hpp and two green runs do not exclude a timing-dependent
+          contribution. The actual cause was on the contributor's side: a connect
+          probe stripped the 24-byte metadata regardless of its flag, so the first
+          frame on the wire was 16 bytes while the rest were 40, and the bridge raised
+          "MetaData not found" out of its recv callback and stopped processing that
+          channel. No patch to hakoniwa-pdu-ros remains.
+        - >-
+          Open observation, not explained. The sending session drops intermittently
+          with an IO error partway through a stream, observed at samples 17, 22 and 43
+          of 50, with many runs completing all 50. TCP timeout options were suspected;
+          a run with them restored also completed, so they are not a sufficient
+          condition, and whether they contribute was not determined. Worked around by
+          retrying and by checking a value relation rather than position in the
+          sequence, so a resend cannot mask a real failure.
     - id: execute_mission_action
       status: not_tested
       notes:
@@ -154,13 +235,43 @@ validation:
           reason; what is untested is this specific goal against these specific
           revisions.
         - >-
-          Three things remain open, none of them the client-existence question: (a)
-          whether the ExecuteMission goal shape -- a variable-length array of
-          variable-size structs each holding a byte array -- has a workable PDU
-          representation, which has not been checked against the registry
-          generator; (b) the command direction (pdu_to_ros) is unverified, and
-          every Action path depends on it; (c) no combination with the Tobas side
-          has been attempted.
+          Updated 2026-09-11. Of the three things previously open here, two are
+          closed. (a) The ExecuteMission goal shape does have a workable PDU
+          representation: it generates and round-trips exactly, including the empty
+          and ragged cases, with the outer count decoded independently at a
+          hand-computed offset and the heap walked at both candidate strides to
+          confirm the check can tell them apart. MissionItem's registry pdu_size (16)
+          and the stride the generated writer uses (12) differ, and a configuration
+          that assumes they are equal corrupts data. `data` was declared uint8[]
+          rather than the vendor's byte[], because the Python runtime decodes a byte
+          sequence to None without raising. (b) The command direction is now verified
+          above. (c) remains: no vendor Action has been driven end to end.
+        - >-
+          A new blocker was measured, and it is the reason status stays not_tested. A
+          custom Action type is invisible to the native endpoints until the shared
+          library is rebuilt, because hako_pdu_get_size is compiled in from a
+          generated size registry. Measured as an A/B pair with one probe: the shipped
+          library returns rc=-1 for the new type and rc=0 for the bundled sample; a
+          library rebuilt from a work copy carrying the regenerated registry returns
+          rc=0 for both. Placing Python artifacts alone achieves nothing. See the
+          candidate
+          custom-action-type-requires-rebuilding-the-pdu-size-registry-and-dll.
+        - >-
+          The recommended first step is itself blocked. The staging advice is to run a
+          payload-free Action first, and a field-less message type generates Python
+          that cannot be imported -- and its plain converter is not emitted at all,
+          so inserting the obvious `pass` is not sufficient. Offsets and sizes for
+          that type are correct, so generation reports success. See the candidate
+          pdu-registry-emits-uncompilable-python-for-a-field-less-type.
+        - >-
+          Remaining before this can move to verified: rebuild the library on the ROS 2
+          side as well, stand up a stand-in Action Server for the vendor type, and
+          drive accept / reject / abort / feedback from the Hakoniwa side. Cancel is
+          expected to fail for a reason already recorded against the action-client
+          bridge and would need to be judged on its own. The only real ExecuteMission
+          server is the mission executor, which flies missions, so it is out of scope
+          under the actuation gate -- a stand-in exercises the protocol and says
+          nothing about the vendor executor's own accept and reject conditions.
 
 agency_boundary:
   agent_actions:
@@ -445,16 +556,15 @@ artifacts:
 
 missing_pieces:
   - >-
-      The command direction (pdu_to_ros) is unverified. Every action path needs it,
-      so it gates more than it appears to.
+      RESOLVED 2026-09-11. The command direction is verified, in a neutral
+      fixed-length type and in a real vendor command type. Kept here rather than
+      deleted because it gated everything downstream.
   - >-
-      The PDU does not reach a Core SHM channel with this Recipe's own components,
-      so no conductor participates and there is no shared clock. This is now
-      narrower than it once was: the SHM leg itself is verified with synthetic
-      data in a separate configuration (see
-      validation.steps.shm_leg_with_synthetic_jointstate), so what remains is
-      carrying real Tobas telemetry across it and replacing the synthetic-waveform
-      identity check with a validation method suited to Tobas's actual signal.
+      RESOLVED 2026-09-11. The PDU reaches a Core SHM channel with a registered
+      asset owning the conductor, carrying output from the vendor's own node, and an
+      external reader checks the values against five invariants. The second half of
+      the old statement was itself mistaken: the waveform was known all along, so no
+      weaker validation method was needed.
   - >-
       Updated 2026-08-08. Vendor action bridging is no longer unexecutable.
       hakoniwa-pdu-rpc 501ce5a implements the Action Client, Server and Mux Server,
@@ -464,10 +574,25 @@ missing_pieces:
       still-unverified command direction above, and (c) no attempt yet at
       combining this with the Tobas side.
   - >-
-      The ExecuteMission goal is a variable-length array of variable-size structs
-      each holding a byte array. No verified PDU representation for that shape is
-      known to the contributor. The registry generator was not read, so this is an
-      open question rather than a stated limitation.
+      RESOLVED 2026-09-11. The shape is expressible and round-trips exactly,
+      including the empty and ragged cases, against the real vendor type. Two numbers
+      differ and must not be conflated: MissionItem's registry pdu_size is 16 while
+      the generated writer steps through the heap in 12.
+  - >-
+      Still open: no vendor Action has been driven end to end. The type side is done,
+      but the shared library must also be rebuilt on the ROS 2 side, and the only real
+      ExecuteMission server flies missions and is therefore excluded by the actuation
+      gate. A stand-in server can exercise the protocol but says nothing about the
+      vendor executor's own accept and reject conditions.
+  - >-
+      Still open: a field-less message type generates Python that cannot be imported,
+      and its plain converter is not generated at all, which blocks the recommended
+      payload-free first step for bringing up any new Action.
+  - >-
+      Still open: the sending session in the command direction drops intermittently
+      with an IO error partway through a stream. Timeout options were suspected; a run
+      with them restored also completed, so they are not a sufficient condition, but
+      whether they contribute was not determined.
   - >-
       Resolved by design, 2026-08-08. An externally caused abort (operator
       override, a newer mission superseding a running one) maps to ABORTED with
