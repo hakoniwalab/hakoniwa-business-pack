@@ -10,11 +10,12 @@ summary: >
   A ROS `byte[]` field is `sequence<octet>` in IDL. rclpy accepts a Python list or tuple
   of ints for it, stores the value unchanged, and reads it back identical in process --
   and then serialises every element as 0xff, at the correct CDR length. `bytes`,
-  `bytearray` and a list of one-byte `bytes` objects all serialise correctly. No DDS is
-  involved: the same thing happens through `rclpy.serialization` in a single process,
-  which is what makes this dangerous. Any assertion that does not cross serialisation
-  passes, so a bridge, a converter or a test that builds the message and reads it back is
-  blind to it. hakoniwa-pdu-ros hands exactly the failing shape across when a PDU
+  `bytearray` and a list of one-byte `bytes` objects all serialise correctly. It
+  reproduces through `rclpy.serialization` in a single process, with no message
+  transported between processes, which is what makes it dangerous: an assertion on the
+  values read back passes, so a bridge, a converter or a test that builds the message and
+  reads it back is blind to it. An assertion on the stored representation does catch
+  it. hakoniwa-pdu-ros hands exactly the failing shape across when a PDU
   `uint8[]` field is copied into a ROS `byte[]` field, so a message whose `byte[]` field
   arrives as a sequence of ints is silently corrupted on the way to ROS. A payload that is
   already bytes-like, and an empty one, are unaffected -- the condition is the
@@ -93,10 +94,13 @@ validation:
       field of a type the PDU side does not distinguish.
   notes:
     - >-
-      The fix applied here normalises at the copy site in both directions and raises on
-      an out-of-range value rather than masking it. Masking would be the worse bug: 0xff
-      is also what rclpy produces for -1 and 256, so a mapper that quietly masked could
-      not be told apart from the defect it was meant to prevent.
+      The fix applied here normalises at the copy site and validates elements rather
+      than coercing them: a bytes-like element must be exactly one byte, an int must be a
+      real int in range, and a str is refused. Coercion was the first version's mistake --
+      `int()` turns "12" into two octets and 1.9 into 1, and extending from a multi-byte
+      element merges two elements while an empty one vanishes, each producing a
+      plausible-looking payload of the wrong length. Note that rejecting an out-of-range
+      int is a behavioural change: the unpatched mapper passes such values through.
 
 tracking:
   implementation_status: open
@@ -135,7 +139,9 @@ resolution:
       verdict per library rather than one per direction, so it is not cited as evidence
       that both directions failed beforehand.
     - >-
-      A fix is proposed upstream as hakoniwalab/hakoniwa-pdu-ros#23, with five tests that
-      fail against the current mapper and pass with the change. The existing suite is
-      unchanged by it: 117 passed excluding test/native, and test/native fails identically
-      with and without the change because it needs the built native libraries.
+      A fix is proposed upstream as hakoniwalab/hakoniwa-pdu-ros#23. Of its 13 tests, ten
+      fail against the current mapper and pass with the change; three guard existing
+      behaviour, and one of those was verified to fail against the fix's own first version.
+      The existing suite goes from 111 to 125 passed excluding test/native, and test/native
+      fails on the same 19 node ids with and without the change because it needs the built
+      native libraries.

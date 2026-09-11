@@ -110,7 +110,7 @@ resolution:
       bound that: an empty array is unaffected, and a destination already holding elements
       of the source type keeps them unless those are replaced as well.
     - >-
-      A fix is proposed upstream as hakoniwalab/hakoniwa-pdu-ros#23, with five tests that
-      fail against the current mapper and pass with the change. The existing suite is
-      unchanged by it: 117 passed excluding test/native, and test/native fails identically
-      with and without the change because it needs the built native libraries.
+      A fix is proposed upstream as hakoniwalab/hakoniwa-pdu-ros#23. Of its 13 tests, ten
+      fail against the current mapper and pass with the change. The existing suite goes
+      from 111 to 125 passed excluding test/native, and test/native fails on the same 19
+      node ids with and without the change because it needs the built native libraries.
