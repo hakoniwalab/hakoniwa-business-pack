@@ -1,0 +1,116 @@
+id: nested-message-arrays-are-copied-with-the-source-type
+title: A nested message array is filled with objects of the source type, because ROS message classes leave __annotations__ empty
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+
+summary: >
+  hakoniwa-pdu-ros resolves the element type of a nested message array from the
+  destination class's `__annotations__`. ROS message classes leave `__annotations__`
+  empty and declare their fields through `get_fields_and_field_types()` instead, so that
+  lookup always returns None for them and the copy falls back to constructing elements of
+  the SOURCE type. The ROS message then holds PDU objects. rosidl duck-types its way
+  through serialisation, so scalar fields still come out right and nothing raises -- which
+  is why this went unnoticed. The real cost is that every destination-type-aware decision
+  is bypassed for the contents of such an array, and one of those decisions is what keeps
+  a ROS `byte[]` field from being handed a list of ints.
+
+observation:
+  context: >
+    Bridging a vendor Action whose goal is `Mission{MissionItem[] items}` between a
+    Hakoniwa PDU and ROS 2 Jazzy, 2026-09-11.
+  details:
+    - >-
+      Measured directly on the vendor type. `tobas_mission_msgs/Mission.__annotations__`
+      is `{}` while `get_fields_and_field_types()` reports
+      `{'items': 'sequence<tobas_mission_msgs/MissionItem>'}`.
+    - >-
+      Consequence, printed after a copy into a ROS goal: the elements of
+      `goal.mission.items` were instances of
+      `hakoniwa_pdu.pdu_msgs.tobas_mission_msgs.pdu_pytype_MissionItem.MissionItem`,
+      not the ROS MissionItem.
+    - >-
+      Why it stays invisible. rosidl reads attributes off whatever object is in the list,
+      so `uint8 type` serialised correctly and the array length was right. Only a field
+      whose correct serialisation depends on the Python representation shows the problem
+      -- `byte[]` being that field, which then serialises as all-0xff.
+    - >-
+      This is the enabling defect rather than the visible one. A fix for the byte[]
+      handling alone changes nothing while the nested elements are still PDU objects: a
+      patch that normalised octet fields at the copy site had no effect until the element
+      type was also resolved the ROS way. That was measured -- the A/B run failed
+      identically with and without the octet fix until the second change was added.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      path: hakoniwa_pdu_ros/type_mapper.py
+      revision: f17e1cc20b8ba52e36dc76376cf91093d7f8bd80
+  runtime_evidence:
+    - description: >-
+        WSL Ubuntu 24.04.4, ROS 2 Jazzy, 2026-09-11. After
+        `copy_matching_fields(pdu_goal_body, ExecuteMission.Goal())`, the items in the ROS
+        goal were PDU MissionItem instances; `Mission.__annotations__` was empty and
+        `get_fields_and_field_types()` carried the declaration.
+  expert_input: []
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - >-
+      Establish how widely this bites. Every nested message array between a PDU and a ROS
+      message goes through this path, so the question is which other field types have a
+      representation-sensitive serialisation, not whether the substitution happens.
+    - >-
+      Decide whether a mismatched element type should be an error rather than a silent
+      fallback. Where the destination declares an element type, constructing an object of
+      the source type instead is a substitution the caller did not ask for; where nothing
+      is declared, the fallback is all there is to go on.
+  notes:
+    - >-
+      Measured against one nested type. The annotation-based path is still correct for
+      destinations that do populate `__annotations__`, so a fix should add the ROS lookup
+      rather than replace the existing one.
+
+tracking:
+  implementation_status: open
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: true
+  recipes: []
+  executable_guardrails: []
+
+promotion_rationale:
+  - >-
+    It is the reason a byte[] corruption could not be fixed at the byte[] handling, and
+    it silently disables destination-type-aware behaviour for the whole contents of any
+    nested message array.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - >-
+      The fix measured here falls back to `get_fields_and_field_types()` when
+      `__annotations__` carries nothing for the field, resolving
+      `sequence<pkg/Type>` to `pkg.msg.Type`. With it, and with the octet normalisation
+      it enables, a nested varray round-trips exactly in both directions. Two conditions
+      bound that: an empty array is unaffected, and a destination already holding elements
+      of the source type keeps them unless those are replaced as well.
+    - >-
+      A fix is proposed upstream as hakoniwalab/hakoniwa-pdu-ros#23. Of its 13 tests, ten
+      fail against the current mapper and pass with the change. The existing suite goes
+      from 111 to 125 passed excluding test/native, and test/native fails on the same 19
+      node ids with and without the change because it needs the built native libraries.
