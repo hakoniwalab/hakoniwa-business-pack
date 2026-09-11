@@ -20,14 +20,16 @@ feasibility:
   rationale:
     - The state direction was demonstrated end to end, twice, with values matching a known input waveform.
     - >-
-      The command direction was never attempted. It is a strict prerequisite of any
-      action or service work, so its absence bounds this Recipe rather than weakening
-      the part that was measured.
+      The command direction was verified on 2026-09-11, in a neutral fixed-length type
+      and in a real vendor command type, with a verification-only subscriber standing
+      in for any vendor consumer. It is a strict prerequisite of any action or service
+      work, so closing it unblocks more than it appears to.
     - >-
       The only substantive vendor action, tobas_mission_msgs/ExecuteMission, carries
       a goal shaped as a variable-length array of variable-size structs each holding
-      a byte array. That is a structural obstacle in the PDU representation, separate
-      from the Action protocol itself.
+      a byte array. That was expected to be a structural obstacle in the PDU
+      representation and turned out not to be: the shape generates and round-trips.
+      What bounds this Recipe now is the runtime leg, not the representation.
     - Simulation only. No arming, no actuation, no real aircraft. The verified path reads one topic.
 
 validation:
@@ -92,8 +94,8 @@ validation:
         - date: 2026-08-03
       notes:
         - >-
-          Demonstrated in a separate configuration (configs/tobas-jointstate-shm/,
-          case T31, not one of this Recipe's own components), not with Tobas itself:
+          Demonstrated in a separate configuration on the contributor's side (not one
+          of this Recipe's own components), not with Tobas itself:
           a registered asset (consumer.py) calls asset_register() and
           conductor_start(), creating the channel and single-owning the conductor. A
           second, unregistered external process (injector.py) attaches with
@@ -134,10 +136,16 @@ validation:
           joint_states_bridge node now reaches a Hakoniwa SHM channel across the OS
           boundary, with a registered asset owning the conductor and a second
           external process reading the values back. Positive path exit 0 twice, with
-          1251 and 1228 payloads received by the relay and all of them written with
-          no write failures -- a count across the relay, not a losslessness claim for
-          the whole chain from the publisher. Seven negative paths, each required to
-          fail through its own expected mechanism rather than merely to exit non-zero.
+          1251 and 1228 payloads received by the Windows TCP-to-SHM injector and all
+          of them written with no write failures -- a count taken at the injector, not
+          a losslessness claim for the whole chain from the publisher, and not a count
+          at the ROS QoS relay further upstream. Seven negative paths, each required
+          to fail through the mechanism it targets rather than merely to exit
+          non-zero, across distinct signatures: an invariant tripping on samples that
+          did arrive, the ratio falling while the absolute thresholds still pass, an
+          early attach failure with its own error, and starvation showing as zero
+          valid samples with non-empty reads. The two starvation variants share one
+          signature and are therefore not distinguished from each other.
         - >-
           The payload is relayed as raw bytes. It arrives already encoded as an
           800-byte JointState PDU, so decoding and re-encoding it would drag the
@@ -149,9 +157,10 @@ validation:
           Apache-2.0 publisher on the contributor's side with position = sin(t +
           i*pi/4), velocity = cos(same) and effort = 0.1*(i+1), and the vendor node
           converts it, so five independent invariants are available: the trig identity
-          per joint, the pi/4 phase offset between adjacent joints, exact equality of
-          the effort constants, structural agreement including joint names, and
-          liveness.
+          per joint, the pi/4 phase offset accumulated from the first joint (to 1e-4),
+          the effort constants (to 1e-9), structural agreement including joint names,
+          and liveness. The trig identity is checked to 1e-6. These are tolerances,
+          not exact equality.
         - >-
           Liveness needs a ratio, not just a count, and this is the part worth
           carrying into other Recipes. The channel is last-value, so an upstream that
@@ -178,7 +187,10 @@ validation:
           Verified 2026-09-11, in two stages, both green twice: 50 samples of
           tobas_std_msgs/PairFloat64 (fixed length, no control semantics) and 20 of
           tobas_command_msgs/Rate, a type the vendor really defines. Three negative
-          paths, each required to fail through its own mechanism. The receiver
+          paths. Only the mutation one is pinned to a mechanism -- it must be caught
+          by a value comparison, with samples actually arriving, so that a broken
+          transport cannot pass for a working check. The other two are held only to
+          not reporting a pass, which is weaker. The receiver
           compares the fields it was written to compare -- both PairFloat64 members,
           and Rate's frame_id, priority and the three rate components to 1e-9 -- and
           does not compare header.stamp.
@@ -210,7 +222,9 @@ validation:
           probe stripped the 24-byte metadata regardless of its flag, so the first
           frame on the wire was 16 bytes while the rest were 40, and the bridge raised
           "MetaData not found" out of its recv callback and stopped processing that
-          channel. No patch to hakoniwa-pdu-ros remains.
+          channel. No patch introduced for this investigation remains in
+          hakoniwa-pdu-ros; two patches that predate this work were applied
+          throughout, so this is not a claim about an unpatched checkout.
         - >-
           Open observation, not explained. The sending session drops intermittently
           with an IO error partway through a stream, observed at samples 17, 22 and 43
@@ -218,7 +232,10 @@ validation:
           a run with them restored also completed, so they are not a sufficient
           condition, and whether they contribute was not determined. Worked around by
           retrying and by checking a value relation rather than position in the
-          sequence, so a resend cannot mask a real failure.
+          sequence. That argument covers the 50 PairFloat64 samples, which are
+          distinct and counted as distinct. It does not cover Rate: all 20 carry the
+          same static value deliberately, so a resend there could stand in for a lost
+          sample without being noticed.
     - id: execute_mission_action
       status: not_tested
       notes:
@@ -237,8 +254,10 @@ validation:
         - >-
           Updated 2026-09-11. Of the three things previously open here, two are
           closed. (a) The ExecuteMission goal shape does have a workable PDU
-          representation: it generates and round-trips exactly, including the empty
-          and ragged cases, with the outer count decoded independently at a
+          representation: it generates, and its mission items and request kind
+          round-trip exactly, including the empty and ragged cases. Goal priority was
+          set but not compared on the way back, so this is not a whole-message
+          equality claim. The outer count is decoded independently at a
           hand-computed offset and the heap walked at both candidate strides to
           confirm the check can tell them apart. MissionItem's registry pdu_size (16)
           and the stride the generated writer uses (12) differ, and a configuration
@@ -268,9 +287,10 @@ validation:
           side as well, stand up a stand-in Action Server for the vendor type, and
           drive accept / reject / abort / feedback from the Hakoniwa side. Cancel is
           expected to fail for a reason already recorded against the action-client
-          bridge and would need to be judged on its own. The only real ExecuteMission
-          server is the mission executor, which flies missions, so it is out of scope
-          under the actuation gate -- a stand-in exercises the protocol and says
+          bridge and would need to be judged on its own. The only ExecuteMission
+          server the contributor located is the mission executor, which flies
+          missions and is therefore out of scope under the actuation gate; no
+          exhaustive inventory of vendor servers was made -- a stand-in exercises the protocol and says
           nothing about the vendor executor's own accept and reject conditions.
 
 agency_boundary:
@@ -368,7 +388,11 @@ target_environment:
       The verified environment was a native Windows host with the ROS 2 side in WSL2
       Ubuntu-24.04. The same shape should hold for any host where inbound connections
       into the host are blocked but outbound ones are not.
-    - No Hakoniwa Core install is required for the verified path.
+    - >-
+      No Hakoniwa Core install is required for this Recipe's own demo, which decodes
+      the PDU on the peer. The separately verified SHM step does require Core, a
+      registered asset and a running conductor; the two paths have different runtime
+      requirements and should not be read as one.
 
 execution_environment:
   required_for: executable-demo
@@ -401,11 +425,16 @@ execution_environment:
 foundation_contract:
   mode: not_required
   reason: >-
-    This Recipe never uses the Foundation runtime. It builds hakoniwa-pdu-endpoint
-    locally and uses only its TCP transport: no Hakoniwa Core, no shared memory, no
-    hakopy, and no managed Workspace. The endpoint capability it depends on (TCP, and
-    explicitly not the Core binding) is stated in execution_environment and in the
-    hakoniwa-pdu-endpoint component entry, so no Foundation-managed requirement applies.
+    The demo this Recipe ships never uses the Foundation runtime. It builds
+    hakoniwa-pdu-endpoint locally and uses only its TCP transport: no Hakoniwa Core,
+    no shared memory, no hakopy, and no managed Workspace. The endpoint capability it
+    depends on (TCP, and explicitly not the Core binding) is stated in
+    execution_environment and in the hakoniwa-pdu-endpoint component entry, so no
+    Foundation-managed requirement applies to the demo. Note the scope: the validation
+    step jointstate_into_hakoniwa_core was verified in a separate configuration that
+    does use Core, shared memory and hakopy. That configuration is not this Recipe's
+    demo, so mode stays not_required; a maintainer who would rather the contract cover
+    every validated path should change this deliberately.
 
 components:
   - id: tobas
@@ -485,13 +514,12 @@ external_connections:
         - a registered asset must own the conductor
       validation_notes:
         - >-
-          Not attempted with this Recipe's own components, so status stays
-          not_tested rather than being promoted to verified. Corroborating
-          evidence exists (validation.steps.shm_leg_with_synthetic_jointstate,
-          2026-08-03) but comes from a separate configuration
-          (configs/tobas-jointstate-shm/) with its own registered asset and
-          external processes, not from the tobas, hakoniwa-pdu-ros and
-          hakoniwa-pdu-endpoint components listed in this Recipe. It shows the SHM
+          Verified 2026-09-11 (validation.steps.jointstate_into_hakoniwa_core), in a
+          configuration that adds a registered asset and an external reader to the
+          components listed here rather than using those components alone. The earlier
+          synthetic-data evidence (validation.steps.shm_leg_with_synthetic_jointstate,
+          2026-08-03) again came from a separate configuration on the contributor's
+          side. It shows the SHM
           read/write contract and ownership model hold in general -- external
           priming, direct polling instead of notify_write_pdu_done(), and startup
           ordering -- but does not by itself demonstrate this Recipe's own
@@ -569,13 +597,14 @@ missing_pieces:
       Updated 2026-08-08. Vendor action bridging is no longer unexecutable.
       hakoniwa-pdu-rpc 501ce5a implements the Action Client, Server and Mux Server,
       the C API and the Python CFFI API; hakoniwa-pdu-ros f17e1cc adds Action
-      Client and Server Bridges. What remains is (a) whether the ExecuteMission
-      goal shape has a workable PDU representation (see the next item), (b) the
-      still-unverified command direction above, and (c) no attempt yet at
-      combining this with the Tobas side.
+      Client and Server Bridges. Of what remained then, (a) the ExecuteMission goal
+      shape and (b) the command direction both closed on 2026-09-11 (see the
+      following items). Still open is (c): no attempt yet at combining this with the
+      Tobas side.
   - >-
-      RESOLVED 2026-09-11. The shape is expressible and round-trips exactly,
-      including the empty and ragged cases, against the real vendor type. Two numbers
+      RESOLVED 2026-09-11. The shape is expressible, and its mission items and
+      request kind round-trip exactly for the empty and ragged cases against the real
+      vendor type; goal priority was not compared on the way back. Two numbers
       differ and must not be conflated: MissionItem's registry pdu_size is 16 while
       the generated writer steps through the heap in 12.
   - >-
