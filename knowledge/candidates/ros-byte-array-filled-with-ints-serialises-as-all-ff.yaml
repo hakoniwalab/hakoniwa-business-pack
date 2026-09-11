@@ -1,0 +1,132 @@
+id: ros-byte-array-filled-with-ints-serialises-as-all-ff
+title: A ROS byte[] field accepts a list of ints, reads back correctly, and then serialises every element as 0xff
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - interface_contract
+
+summary: >
+  A ROS `byte[]` field is `sequence<octet>` in IDL. rclpy accepts a Python list or tuple
+  of ints for it, stores the value unchanged, and reads it back identical in process --
+  and then serialises every element as 0xff, at the correct CDR length. `bytes`,
+  `bytearray` and a list of one-byte `bytes` objects all serialise correctly. No DDS is
+  involved: the same thing happens through `rclpy.serialization` in a single process,
+  which is what makes this dangerous. Any assertion that does not cross serialisation
+  passes, so a bridge, a converter or a test that builds the message and reads it back is
+  blind to it. hakoniwa-pdu-ros hands exactly the failing shape across when a PDU
+  `uint8[]` field is copied into a ROS `byte[]` field, so every message with a `byte[]`
+  field is silently corrupted on the way to ROS.
+
+observation:
+  context: >
+    Driving a vendor Action whose goal contains `MissionItem[]{uint8 type; byte[] data}`
+    from a Hakoniwa ActionClient on Windows into a ROS 2 Action Server in WSL Ubuntu 24.04
+    (ROS 2 Jazzy, rclpy 7.1.11, rosidl-generator-py 0.22.2), 2026-09-11.
+  details:
+    - >-
+      Symptom. The goal arrived with its structure perfect -- three items, types 1/9/17,
+      payload lengths 32/3/0 -- and every payload byte replaced by 0xff.
+    - >-
+      The shape sensitivity, measured with rclpy.serialization and no transport, no
+      discovery and no second process. Each shape assigned to a freshly constructed
+      message, read back, serialised, deserialised, read back again. list-of-int and
+      tuple-of-int came back as all-0xff at CDR length 20; bytes, bytearray and a list of
+      one-byte bytes objects came back byte for byte. All five read back identically
+      in process before serialisation.
+    - >-
+      0xff is the conversion failure output, not a memory fill. Assigning -1 or 256 also
+      yields 0xff. That is why the array LENGTH survives while the contents do not: the
+      sequence is the right size and each element fails to convert.
+    - >-
+      What this cost before it was found. The Windows encoder, the TCP transport across
+      the OS boundary, the Linux-side PDU decoder, a Windows-internal native loopback and
+      hakoniwa-pdu-ros's copy routine driven directly were each cleared in a separate run
+      before the representation was suspected. A bridge-less native Action Server on the
+      receiving side reported the goal byte-perfect (ff_count=0), which is what narrowed
+      it to the ROS leg.
+    - >-
+      An earlier check that looked clean was not. A plain `ros2 action send_goal` against
+      the same server, with no Hakoniwa component in the path at all, was also corrupted:
+      the CLI's YAML produces a list of ints too. Its echoed checksums match the all-0xff
+      values exactly, which was only noticed on review.
+    - >-
+      Where hakoniwa-pdu-ros walks into it. `type_mapper._copy_list` takes a scalar
+      fast path for a sequence whose first element is an int and returns `list(src_list)`,
+      and that list is assigned to the ROS field. The destination type is never consulted:
+      `_decode_binary_sequence`, which does look at it, is only reached for a bytes-like
+      source and in any case handles `uint8`/`int8` but not `octet`.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      path: hakoniwa_pdu_ros/type_mapper.py
+      revision: f17e1cc20b8ba52e36dc76376cf91093d7f8bd80
+  runtime_evidence:
+    - description: >-
+        WSL Ubuntu 24.04.4, ROS 2 Jazzy, rclpy 7.1.11, rosidl-generator-py 0.22.2,
+        2026-09-11. Five representations of the same 8-byte payload assigned to a
+        sequence<octet> field and round-tripped through rclpy.serialization: list-of-int
+        and tuple-of-int returned ffffffffffffffff, bytes / bytearray / list-of-bytes
+        returned 0001020304050607. Out-of-range ints (-1, 256) also returned ff.
+  expert_input: []
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - >-
+      Confirm the behaviour on another ROS distribution and another RMW. It was measured
+      on Jazzy with CycloneDDS only, though the serialisation path used does not involve
+      the RMW.
+    - >-
+      Decide whether the normalisation belongs in the bridge alone, or whether a
+      conversion guard is worth having wherever a PDU sequence is assigned to a ROS
+      field of a type the PDU side does not distinguish.
+  notes:
+    - >-
+      The fix applied here normalises at the copy site in both directions and raises on
+      an out-of-range value rather than masking it. Masking would be the worse bug: 0xff
+      is also what rclpy produces for -1 and 256, so a mapper that quietly masked could
+      not be told apart from the defect it was meant to prevent.
+
+tracking:
+  implementation_status: open
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: true
+  recipes: []
+  executable_guardrails: []
+
+promotion_rationale:
+  - >-
+    Any vendor type with a `byte[]` field is affected, and the failure is silent on both
+    sides: the sender sees a correct message, the receiver sees a correctly shaped one,
+    and only the values are wrong. Nothing short of a serialisation round trip detects it.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - >-
+      A fix was written and measured against a work copy: the copy site normalises on
+      whichever side declares the field as octet. Its detection power is shown by an A/B
+      run in which only the library differs -- the check fails against the pinned library
+      and passes against the patched one, in both directions -- and by a negative path in
+      the full configuration that restores the pinned library and requires the payload to
+      arrive as all-0xff.
+    - >-
+      A fix is proposed upstream as hakoniwalab/hakoniwa-pdu-ros#23, with five tests that
+      fail against the current mapper and pass with the change. The existing suite is
+      unchanged by it: 117 passed excluding test/native, and test/native fails identically
+      with and without the change because it needs the built native libraries.
