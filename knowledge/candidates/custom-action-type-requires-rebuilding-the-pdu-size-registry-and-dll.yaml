@@ -1,0 +1,127 @@
+id: custom-action-type-requires-rebuilding-the-pdu-size-registry-and-dll
+title: A custom Action type is invisible to hakoniwa-pdu-rpc until its shared library is rebuilt, and on the measured CP932 host that rebuild needed /utf-8
+status: candidate
+
+knowledge_type:
+  - interface_contract
+  - known_pitfall
+  - runtime_rule
+
+summary: >
+  Adding a custom Action type to hakoniwa-pdu-rpc is not a matter of generating Python and
+  pointing a config at it. Both endpoint implementations resolve packet sizes through
+  `hako_pdu_get_size`, which is compiled into the shared library from a generated
+  `pdu_size_registry.c`, so a type absent from that registry is rejected at runtime no
+  matter what artifacts exist on disk. Rebuilding the library is therefore a required step
+  for any custom Action. On the one host measured -- Windows 11 with code page 932 --
+  the rebuild also required `/utf-8`: without it MSVC failed on a syntactically valid
+  `namespace` line in a dependency header, and with it the build succeeded with zero
+  errors. That `/utf-8` fixes it is measured; that the host code page is the operative
+  variable is an inference from the accompanying C4819 warning, and no other code page
+  was tried, so neither the necessity on other non-UTF-8 hosts nor the irrelevance on
+  UTF-8 hosts is established.
+
+observation:
+  context: >
+    Bringing up a Tobas Action type (tobas_action_msgs, generated from the vendor's
+    Apache-2.0 .action definitions) on a native Windows 11 x64 host with the shipped
+    hakoniwa-pdu-rpc build, case T33, 2026-09-11.
+  details:
+    - >-
+      A/B measurement with the same ctypes probe against two libraries. Shipped DLL:
+      `sample_action_msgs/FibonacciActionRequest` -> rc=0 size=24, while
+      `tobas_action_msgs/EmptyActionRequest` -> rc=-1 size=0. DLL rebuilt from a work copy
+      whose registry includes the new type: both -> rc=0 size=24.
+    - >-
+      Call sites that make this load-bearing: `action_server_endpoint_impl.cpp` calls
+      `hako_pdu_get_size` at three points when sizing request, response and feedback, and
+      `action_client_endpoint_impl.cpp` calls it while validating packet capacity. A
+      failed lookup is a hard stop, not a fallback.
+    - >-
+      Rebuild path used: copy the repository (excluding .git and build outputs) to a work
+      directory, drop in the regenerated `pdu_size_registry.c` plus the new type's
+      artifacts, and run `tools/hako.py configure / build / install`. The upstream tree is
+      never modified, and the resulting library is selected at runtime through
+      HAKO_PDU_RPC_LIBRARY.
+    - >-
+      Locale. The first rebuild failed with `error C2059: syntax error: 'namespace'` at
+      line 6 of `hakoniwa/time_source/virtual_time_source.hpp`, a header that is correct
+      and that the shipped build had already compiled. The only hint was
+      `warning C4819: the file contains a character that cannot be represented in the
+      current code page (932)` on an unrelated generated header, several hundred lines
+      earlier in the log. Setting `CL=/utf-8` before the build makes it succeed with zero
+      errors. Chasing the C++ standard first was a dead end: both builds already used
+      stdcpp20.
+    - >-
+      The misleading part is where the error surfaces. It points at a dependency's header
+      and at a language construct, so it reads as a toolchain or standard-version problem
+      rather than as a source-encoding one.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      path: src/action_server_endpoint_impl.cpp
+      revision: 501ce5a
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      path: src/action_client_endpoint_impl.cpp
+      revision: 501ce5a
+    - repository: hakoniwalab/hakoniwa-pdu-registry
+      path: pdu/types/pdu_size_registry.c
+      revision: unknown
+  runtime_evidence:
+    - description: >-
+        Windows 11 x64, Visual Studio 2022, vcpkg x64-windows, 2026-09-11. Shipped library
+        returns rc=-1 for the custom action type and rc=0 for the bundled sample; a
+        rebuilt library returns rc=0 for both. The rebuild fails without CL=/utf-8 and
+        succeeds with it.
+  expert_input: []
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - >-
+      Decide whether the build should set /utf-8 itself on MSVC. Every source in the tree
+      is UTF-8, so this does not depend on the particular host locale -- only on whether
+      the host's code page happens to be UTF-8 already.
+    - >-
+      Decide whether a failed `hako_pdu_get_size` should say that the type is absent from
+      the compiled registry, and name the rebuild, rather than returning a bare non-zero.
+    - >-
+      Confirm the same requirement on Linux and macOS. Only Windows was measured.
+  notes:
+    - >-
+      The registry requirement was measured as an A/B pair against one custom type. The
+      locale finding was measured on one host, once in each direction.
+
+tracking:
+  implementation_status: open
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: true
+  component_asset_guide: true
+  recipes: []
+  executable_guardrails: []
+
+promotion_rationale:
+  - >-
+    "Generate the Python and point a config at it" is the reasonable expectation, and it
+    is wrong for Actions. The cost of finding that out by experiment is a full rebuild
+    cycle plus the locale detour.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - >-
+      Related but distinct from the cp932 finding recorded for the business-pack recipe
+      loader: that one is a Python decode, this one is MSVC's source-charset default.
