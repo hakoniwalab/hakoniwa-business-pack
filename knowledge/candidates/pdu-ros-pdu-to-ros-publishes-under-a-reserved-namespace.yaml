@@ -1,0 +1,103 @@
+id: pdu-ros-pdu-to-ros-publishes-under-a-reserved-namespace
+title: A pdu_to_ros binding does not publish on the topic it names, and the rewrite is undocumented at the point of configuration
+status: candidate
+
+knowledge_type:
+  - interface_contract
+  - known_pitfall
+
+summary: >
+  hakoniwa-pdu-ros rewrites the topic name of every `pdu_to_ros` TOPIC binding: the
+  configured name is prefixed with `/pdu`, and a configured name that already begins with
+  `/pdu` is rejected outright. A binding that says `/hako_probe/pair` therefore publishes
+  on `/pdu/hako_probe/pair`. The rule looks deliberate -- `/pdu` reads as reserved for
+  PDU-owned mirror topics, which keeps the bridge from publishing onto a ROS-owned name.
+  It constrains where the bridge publishes; it is not access control over subscribers,
+  and action bindings were not exercised. Nothing at the point of configuration says so, and the resulting failure is silent on both sides: the bridge
+  connects, receives, and publishes, while a subscriber on the configured name receives
+  nothing. `ros_to_pdu` is unaffected, which is why this surfaces only for whoever uses
+  the command direction first.
+
+observation:
+  context: >
+    First use of the `pdu_to_ros` direction on this workspace's Tobas bridge (case T34),
+    Windows 11 native sender to WSL Ubuntu 24.04 / ROS 2 Jazzy, 2026-09-11. The state
+    direction (`ros_to_pdu`) had been in use since 2026-07-31 and never exercised this
+    path.
+  details:
+    - >-
+      Symptom. With `"topic": "/hako_probe/pair"` and `"direction": "pdu_to_ros"`, a
+      subscriber on `/hako_probe/pair` received zero messages while the bridge reported no
+      error. `ros2 topic list` showed `/pdu/hako_probe/pair` alongside the configured name.
+    - >-
+      Mechanism. `config_loader._topic_for_direction` returns `f"/pdu{normalized}"` when the
+      direction is `pdu_to_ros`, and `_validate_ros_topic` raises for any configured name
+      that is `/pdu` or begins with `/pdu/`, so the caller cannot write the effective name
+      either.
+    - >-
+      After changing the subscriber to `/pdu/hako_probe/pair`, 50 of 50 samples arrived and
+      matched exactly, and a second type (a real vendor command type) behaved the same way.
+    - >-
+      The reservation is worth keeping, and for the command-direction work it meant the
+      bridge would not publish onto the vendor's own topic names. Stated precisely: the
+      rule determines where the bridge publishes, it is not access control over
+      subscribers, and it was measured for topic bindings only. The gap is documentation
+      at the point of use, not the behaviour.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      path: hakoniwa_pdu_ros/config_loader.py
+      revision: 8693f4d82a61765feb990754459427a287347bb3
+  runtime_evidence:
+    - description: >-
+        Windows 11 x64 host with WSL Ubuntu 24.04 / ROS 2 Jazzy, 2026-09-11. A
+        tobas_std_msgs/PairFloat64 stream written on the Hakoniwa side reached
+        /pdu/hako_probe/pair (50/50 exact) while a subscriber on the configured
+        /hako_probe/pair received nothing.
+  expert_input: []
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - >-
+      Decide where the rule should be stated: the binding schema description, the README's
+      binding section, or a log line at bridge startup naming the effective topic per
+      binding. A startup log line would have made this self-diagnosing.
+    - >-
+      Confirm the same rewrite applies to action bindings, which were not exercised here.
+  notes:
+    - >-
+      Measured on one host with one ROS distribution, against two message types.
+
+tracking:
+  implementation_status: open
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: true
+  recipes: []
+  executable_guardrails: []
+
+promotion_rationale:
+  - >-
+    Anyone wiring the command direction for the first time hits this, and the failure mode
+    gives no signal at all -- the bridge looks healthy while the subscriber starves.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - >-
+      No code change is being proposed. The behaviour is correct; what is missing is that
+      the effective topic name is never surfaced where the user chooses it.
