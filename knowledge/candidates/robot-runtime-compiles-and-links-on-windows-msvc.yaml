@@ -1,0 +1,150 @@
+id: robot-runtime-compiles-and-links-on-windows-msvc
+title: hakoniwa-robot-runtime compiles and links unmodified on Windows with MSVC and C++20, which the catalog's macOS/Linux platform list does not yet reflect
+
+status: candidate
+
+knowledge_type:
+  - capability
+
+summary: >
+  The catalog lists only macOS and Linux as supported platforms for
+  hakoniwa-robot-runtime and records validation on macOS arm64. Composed as a
+  consumer on native Windows, all 26 translation units at the catalog-pinned
+  revision compile with MSVC and C++20 and link into an executable that
+  references the public ManifestFactory entry point. No source change and no
+  platform shim was needed: the repository contains no platform conditionals at
+  all, and every warning raised came from dependency headers rather than from
+  the runtime's own sources. This establishes compile and link portability
+  only; running the Runtime needs a Robot Pack and was not attempted.
+
+observation:
+  context: >
+    Independent Windows verification of the newly catalogued component, using a
+    consumer-role CMake composition written outside the source tree because the
+    repository owns no build system of its own.
+  details:
+    - The pinned tree has 26 .cpp and 32 .hpp files with two include roots, include/ for the public headers and src/ for the internal ones its sources include as "runtime/..." and "runner/...".
+    - Compilation used MSVC 19.44 (Visual Studio 2022, x64, Release) with CMAKE_CXX_STANDARD 20 and CXX_EXTENSIONS OFF; the C++20 requirement is real, since several adapters take std::span<const std::byte>.
+    - Nothing in the sources branches on platform, so there was no Windows-specific code path to exercise or to add; the portability result comes from the code being platform-neutral rather than from Windows support being implemented.
+    - The link step resolved against prebuilt dependency libraries (core-pro assets/conductor/hako/shakoc, hakoniwa_pdu_endpoint, mujoco-common, mujoco), which is what distinguishes this from a compile-only check. It exercised the symbol-bearing dependencies; the PDU adapter/converter layer was deliberately taken from a different mujoco-robots revision than the prebuilt mujoco-common.lib, and the link still succeeded, which is itself the evidence that that layer is header-only.
+    - Warnings totalled 26 and all originated in dependency headers, none in robot-runtime sources. Eighteen were C4819 on core-pro's pdu_primitive_ctypes.h and pdu-endpoint's endpoint_types.h and comm.hpp, which carry UTF-8 without a BOM and are therefore read in the host's default code page on a Japanese Windows install; eight were C4267 raised inside the MSVC standard library.
+    - The Runtime was not executed. Instantiating it requires a manifest and a MuJoCo model, which upstream assigns to the Robot Pack layer, so this candidate deliberately claims compile and link only.
+    - >-
+      The composition used for this measurement is not the official one. The
+      parent that composes this runtime, teras-project/hakoniwa-robot-arm,
+      carries the official composition in the top-level CMakeLists.txt on main;
+      the composition used here was derived from the sources beforehand and
+      agrees with it structurally. The official parent has since been built on
+      Windows as well, which is the stronger current confirmation and is
+      recorded as follow-up evidence below; the derived composition remains as
+      the historical measurement that the sources themselves are portable.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-robot-runtime
+      path: src
+      revision: 0a9bba3d529c7acc0e62c98569a4443eb736beed
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: catalog/components/hakoniwa-robot-runtime.yaml
+      revision: b5585c6
+  runtime_evidence:
+    - description: >
+        Windows 11 x64, Visual Studio 2022 (MSVC 19.44.35207), Release x64:
+        26 of 26 translation units compiled and the targets linked, producing
+        robot_runtime.lib (11,135,648 bytes) and link_probe.exe (697,856 bytes)
+        with zero errors. The probe includes
+        hakoniwa/robot_runtime/factory/manifest_factory.hpp and calls
+        ManifestFactory::create, so the public composition root is actually
+        referenced rather than merely compiled.
+    - description: >
+        Translation-unit accounting: the object files produced were reconciled
+        by name against the repository's .cpp files, 26 against 26 with an exact
+        match. The source list in the harness is explicit rather than globbed so
+        that a silently dropped file would show up as a count mismatch.
+    - description: >
+        Detection-power control for the harness itself: adding one translation
+        unit containing #include <unistd.h> made the build fail with
+        "error C1083: Cannot open include file: 'unistd.h'" and produced no
+        link_probe.exe; removing it returned the build to green. The harness
+        therefore surfaces a portability error rather than swallowing it.
+    - description: >
+        Dependency generations used: hakoniwa-core-pro dccd99f (install prefix),
+        hakoniwa-pdu-endpoint b089e0e built with hakoniwa_core OFF,
+        hakoniwa-mujoco-robots 326ff7c7 for the PDU adapter/converter headers
+        and 3d12fc8 for the prebuilt mujoco-common.lib, MuJoCo 3.9.0.
+    - description: >-
+        Follow-up evidence, the official parent on Windows: on 2026-09-10, at
+        teras-project/hakoniwa-robot-arm a629fa37 and after e850600 and
+        27f4d40, the parent's own composition was built natively on Windows
+        from a deleted build directory through the documented path
+        (business-pack Foundation Recipe, then nova5.py build --headless). The
+        build completed with no linker errors and produced
+        build/bin/robot-arm-hakoniwa-asset.exe, without the PYTHONUTF8,
+        CMAKE_PREFIX_PATH, explicit --config Release or hako.lib workarounds
+        that the earlier consumer-role build had needed. The executable starts
+        far enough to resolve its runtime DLLs and validate its arguments. This
+        is build and startup evidence only; no simulation was run, so the
+        compile-and-link scope of this candidate is unchanged.
+    - description: >
+        The catalog-pinned revision and current main are identical in source:
+        the diff between 0a9bba3d and 732daad3 touches only README, docs and
+        schemas (8 files), and the src and include tree hashes match exactly
+        (ff35e5bc and c4fba6c0), so this result applies to main as it stands.
+
+confidence: high
+
+contradictions:
+  - target: catalog/components/hakoniwa-robot-runtime.yaml
+    existing_claim: >
+      platforms.supported lists macOS and Linux, with the note that extraction
+      and end-to-end validation were completed on macOS arm64 and that broader
+      platform validation remains consumer-specific.
+    new_evidence: >
+      Windows is neither listed nor excluded, yet the sources compile and link
+      there unmodified. This does not make Windows a supported platform in the
+      sense that list carries, since nothing was executed; it is evidence that
+      belongs in the notes beside it.
+
+validation:
+  status: verified
+  required: []
+  notes:
+    - Verified on one Windows 11 x64 host on 2026-09-07. Compile and link only; no runtime behaviour was exercised, and this candidate makes no claim about it.
+    - The link probe references one public entry point. Symbols reachable only through a real consumer's composition were not pulled in, so this is link-level portability of the library as built, not proof that every code path links in every configuration.
+    - The result depends on the PDU adapter/converter headers being new enough; see the companion candidate on the missing dependency version constraint.
+    - >-
+      The follow-up build of the official parent on 2026-09-10 confirms the
+      same portability through the maintained composition rather than a derived
+      one. It too stops at build and startup, so neither measurement says
+      anything about running the Runtime.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog:
+    - hakoniwa-robot-runtime
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+  executable_guardrails: []
+
+promotion_rationale:
+  - The claim belongs in the component's platform list, which is where the current macOS/Linux statement lives.
+  - No guardrail is proposed because the repository owns no build system to attach one to; that gap is the subject of a separate candidate.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - >-
+      Suggested minimal edit: record the Windows evidence in platforms.notes as
+      compile-and-link with MSVC and C++20. Adding Windows to
+      platforms.supported is deliberately not proposed, because that list reads
+      as runtime support and nothing was executed here.
+    - implementation_status is none because no follow-up issue exists yet, which is what that value means in MAINTAINER.md; the suggested edit is a notes change in this repository, so the pull request may be the smallest useful tracking unit. Happy to open an issue if you prefer one.
