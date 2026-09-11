@@ -1,0 +1,194 @@
+id: pdu-endpoint-windows-shm-callback-requires-asset-context
+title: Windows SHM callback endpoints owned by a Hakoniwa asset require explicit asset context
+status: candidate
+
+knowledge_type:
+  - runtime_rule
+  - usage_pattern
+  - known_pitfall
+  - architectural_principle
+
+summary: >
+  Hakoniwa Shared Memory is OS-owned shared storage, but the Core/Asset objects and
+  pointers that map into it are local to the binary module that contains them. This
+  distinction is especially visible on Windows, where callback `assets`, `conductor`,
+  and Core code can be statically embedded into both an application executable and an
+  Endpoint DLL. Therefore an SHM callback Endpoint that operates as part of a registered
+  Hakoniwa asset must preserve that asset identity by calling
+  `Endpoint::open(config_path, asset_name)`. The one-argument
+  `Endpoint::open(config_path)` intentionally selects the external-use context and must
+  not be used as a substitute for an asset-owned Endpoint. The detailed memory and link
+  model is documented upstream in
+  `hakoniwalab/hakoniwa-pdu-endpoint/docs/shm-callback-module-boundary.md`.
+
+observation:
+  context: >
+    Investigating a native Windows Nova5 runtime failure where Endpoint `post_start()`
+    reached receive-event registration but the Endpoint-side Core instance reported
+    `recv_event_table_ == nullptr`, even though Hakoniwa shared memory had already been
+    created and loaded by another module in the same process.
+  details:
+    - >-
+      The OS shared-memory region and module-local Core/Asset state have different
+      lifecycles. A valid shared-memory object does not prove that every DLL or executable
+      module has initialized its own `asset_ptr`, `pro_data_ptr`, or
+      `recv_event_table_` state.
+    - >-
+      On Windows, the callback `assets` and `conductor` frontends are built as static
+      libraries, and Core `hako` is static as well. An executable and an Endpoint DLL can
+      therefore each carry independent copies of Core/Asset implementation state even
+      though they access the same OS shared memory.
+    - >-
+      On Linux/macOS, callback `assets` and `conductor` are shared libraries, so duplicate
+      callback frontend state is normally less likely. This must not be generalized into
+      "Linux shares all static state"; the portable rule is to make the Endpoint ownership
+      context explicit rather than infer readiness from process identity.
+    - >-
+      `Endpoint::open(config_path)` passes no asset identity and the SHM callback backend
+      uses the external attach path (`hako_asset_attach_core()`).
+    - >-
+      `Endpoint::open(config_path, asset_name)` stores the asset context and the SHM
+      callback backend lazily attaches with
+      `hako_asset_attach_core_with_name(asset_name, pdu_config_path)` when SHM access or
+      receive-event registration first requires Core access.
+    - >-
+      Passing `asset_name` does not register the asset. It identifies the already-defined
+      Hakoniwa asset context whose PDU I/O semantics the Endpoint must use.
+    - >-
+      Asset-context open requires a resolvable `pdu_def_path` in the Endpoint configuration,
+      because that PDU definition path is passed to the Core attach path.
+    - >-
+      This rule is separate from the build-time requirement that the Endpoint package be
+      built with Hakoniwa Core/SHM support enabled. A correct SHM integration needs both
+      the build capability and the correct runtime asset context.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      path: docs/shm-callback-module-boundary.md
+      revision: 2430ee9435c2a345357e13825779135786f0a160
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      path: include/hakoniwa/pdu/endpoint.hpp
+      revision: 2430ee9435c2a345357e13825779135786f0a160
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      path: src/comm_shm_callback.cpp
+      revision: 2430ee9435c2a345357e13825779135786f0a160
+    - repository: hakoniwalab/hakoniwa-core-pro
+      path: sources/assets/callback/CMakeLists.txt
+      revision: main
+    - repository: hakoniwalab/hakoniwa-core-pro
+      path: sources/conductor/CMakeLists.txt
+      revision: main
+  runtime_evidence:
+    - description: >-
+        hakoniwalab/hakoniwa-core-pro#90 records the native Windows Nova5 failure:
+        shared memory is created and one Core instance loads PDU data, while a second
+        module-local Core instance reaches receive-event registration with
+        `recv_event_table_ == nullptr`. The downstream caller was found to be opening the
+        Endpoint with the one-argument overload; hakoniwalab/hakoniwa-robot-runtime#7
+        changes that caller to pass the runtime asset name. Windows re-verification of
+        that exact failure is still pending at the time this candidate is written.
+  expert_input:
+    - source: hakoniwalab/hakoniwa-pdu-endpoint design contract
+      statement: >-
+        Shared memory is shared storage; Core/Asset runtime state is not automatically
+        shared across binary-module boundaries. External Endpoints use
+        `open(config_path)` intentionally, while Endpoints owned by a registered Hakoniwa
+        asset use `open(config_path, asset_name)` with the same asset identity.
+
+confidence: high
+
+contradictions:
+  - target: same-process SHM integration assumption
+    existing_claim: >-
+      If Hakoniwa shared memory already exists in a process, every DLL in that process can
+      safely use the callback SHM path without additional Core/Asset attach context.
+    new_evidence: >-
+      Windows DLL/static-library boundaries can produce independent module-local
+      Core/Asset state. One module can have a valid mapped event table while another has
+      `recv_event_table_ == nullptr` against the same OS shared-memory objects.
+
+validation:
+  status: partially_verified
+  required:
+    - >-
+      Re-run the native Windows Nova5 procedure from hakoniwalab/hakoniwa-core-pro#90
+      with hakoniwalab/hakoniwa-robot-runtime#7 applied and confirm that Endpoint
+      `post_start()` completes and the `recv_event_table_ is null` failure disappears.
+  notes:
+    - >-
+      The API contract, lazy attach path, Windows vs. non-Windows link layout, and
+      module-local-vs-shared-memory model are verified directly from the current source
+      and the merged Endpoint design document.
+    - >-
+      The candidate remains partially_verified only because the exact downstream Windows
+      failure that motivated the documentation is awaiting reporter re-test after the
+      robot-runtime caller correction.
+
+tracking:
+  implementation_status: open
+  issues:
+    - repository: hakoniwalab/hakoniwa-core-pro
+      number: 90
+      relation: validation
+      status: open
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      number: 31
+      relation: fix
+      status: closed
+    - repository: hakoniwalab/hakoniwa-core-pro
+      number: 64
+      relation: fix
+      status: closed
+
+promotion_targets:
+  catalog:
+    - hakoniwa-pdu-endpoint
+  runtime_primer: true
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+  executable_guardrails: []
+
+promotion_rationale:
+  - >-
+    This is a reusable integration rule for any callback SHM consumer that embeds an
+    Endpoint inside a Hakoniwa asset, especially on Windows. The full architectural
+    explanation belongs in hakoniwa-pdu-endpoint and is already documented there; the
+    Business Pack should retain only the discoverable usage rule and link to that source
+    of truth.
+  - >-
+    The rule also belongs in runtime guidance because future C++, Python, C#, or other
+    module-separated integrations can encounter the same ownership distinction even when
+    the immediate symptom differs from `recv_event_table_ == nullptr`.
+  - >-
+    No new executable guardrail is proposed here. The correct asset name and ownership
+    intent are application semantics that cannot be inferred reliably from a generic
+    Endpoint config alone. Downstream runtime-specific tests should verify `post_start()`
+    and receive-event registration on Windows.
+
+resolution:
+  status: documented
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      issue: 31
+      pull_request: null
+      revision: 2430ee9435c2a345357e13825779135786f0a160
+    - repository: hakoniwalab/hakoniwa-core-pro
+      issue: 64
+      pull_request: null
+      revision: null
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - >-
+      The authoritative design explanation is now
+      `hakoniwalab/hakoniwa-pdu-endpoint/docs/shm-callback-module-boundary.md`, merged by
+      hakoniwalab/hakoniwa-pdu-endpoint#74. Business Pack intentionally does not duplicate
+      the full memory diagrams or link-topology rationale.
+    - >-
+      `resolution.verified` stays false until the Windows Nova5 regression case is
+      re-tested with the downstream caller using the asset-context overload. If that test
+      still fails, keep the usage rule but investigate the Core attach lifecycle as a
+      separate defect rather than weakening the Endpoint ownership contract.
