@@ -1,5 +1,5 @@
 id: pdu-registry-emits-uncompilable-python-for-a-field-less-type
-title: A message type with no fields generates Python that cannot be imported, and its plain converter is not generated at all, which blocks the recommended first step for any new Action
+title: A zero-field message type is already a known unsupported case, but generation reports success and emits Python that cannot be imported plus no plain converter
 status: candidate
 
 knowledge_type:
@@ -7,13 +7,19 @@ knowledge_type:
   - validation_rule
 
 summary: >
-  The Python emitter in hakoniwa-pdu-registry writes `def __init__(self):` with no body
-  when a message type has no fields, so the module raises IndentationError on import. The
-  offset and pdu_size artifacts for the same type are correct, so generation reports
-  success and the defect only appears at import time. This is not an exotic corner: an
-  Action whose goal, result and feedback are all empty is the standard way to test an
-  Action's state machine without any marshalling, and it is what the Hakoniwa Action
-  design guidance recommends doing first.
+  Zero-field message types are a known unsupported case in Hakoniwa PDU:
+  hakoniwa-pdu-registry#25 states that generation assumes at least one data field, and
+  that the near-term behaviour should be to stop with an explicit unsupported-type error.
+  What was measured here is that the generator does not do that yet. It reports success
+  for a field-less type and emits artifacts that cannot be used: the Python emitter writes
+  `def __init__(self):` with no body, so the module raises IndentationError on import, and
+  no plain `pdu_conv_*` module is emitted at all while the generated wrapper imports one.
+  The offset and pdu_size artifacts for the same type are correct, so nothing fails until
+  import time. The gap that matters is therefore the missing rejection, not the missing
+  zero-field support: an Action whose goal, result and feedback are all empty is the
+  standard way to bring up an Action's state machine without any marshalling, and it is
+  what the Hakoniwa Action design guidance recommends doing first, so this is the path a
+  new Action is most likely to start on.
 
 observation:
   context: >
@@ -46,9 +52,20 @@ observation:
       import *`. So the import fails with ModuleNotFoundError once the
       IndentationError is out of the way.
     - >-
-      Any fix therefore has to cover both: emit a body for the empty `__init__`, and
-      emit the plain converter for a field-less type (or stop the wrapper from
-      importing one). Non-empty types in the same run get all three modules.
+      Relation to the declared policy. hakoniwa-pdu-registry#25 (opened 2026-08-03,
+      still open) already records that zero-field message types are unsupported and
+      that generation should stop with an explicit unsupported-type error rather than
+      emit invalid source. The measured behaviour on this revision is the state that
+      issue describes as the one to replace: generation succeeds and emits the invalid
+      artifacts. So what is reported here is evidence for that issue's near-term
+      acceptance criteria, not a request for zero-field support.
+    - >-
+      Either resolution removes the failure mode observed here. Rejecting the type at
+      generation time surfaces it immediately with a diagnostic, which is the declared
+      direction. Emitting usable artifacts instead would have to cover both defects --
+      a body for the empty `__init__` and the plain converter (or a wrapper that does
+      not import one) -- because fixing only the first still leaves ModuleNotFoundError.
+      Non-empty types in the same run get all three modules.
     - >-
       Impact beyond the type itself: the wrapper types that reference it
       (EmptyActionRequest and friends) import the broken module, so the whole Action is
@@ -78,18 +95,21 @@ validation:
       Confirm which of the other language emitters (C, C++, C#, JavaScript, GDScript)
       have the same gap. Only the Python one was exercised here.
     - >-
-      Decide whether an empty message type should emit a body plus its missing plain
-      converter, or whether the generator should reject a field-less type outright.
-      Emitting both looks preferable given that the offsets are already correct and
-      useful, but only the `pass` half was tried here and it is not sufficient on its
-      own.
+      Confirm against hakoniwa-pdu-registry#25 that the intended near-term response is
+      rejection with an unsupported-type diagnostic rather than emitting usable
+      artifacts for a field-less type. Only the `pass` half of the emit-instead path was
+      tried here, and it is not sufficient on its own.
   notes:
     - >-
       Measured on one host and one generator revision, on the Python emitter only.
 
 tracking:
   implementation_status: open
-  issues: []
+  issues:
+    - repository: hakoniwalab/hakoniwa-pdu-registry
+      number: 25
+      relation: fix
+      status: open
 
 promotion_targets:
   catalog: []

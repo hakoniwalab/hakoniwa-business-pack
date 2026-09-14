@@ -99,7 +99,11 @@ validation:
 
 tracking:
   implementation_status: open
-  issues: []
+  issues:
+    - repository: hakoniwalab/hakoniwa-pdu-rpc
+      number: 81
+      relation: fix
+      status: open
 
 promotion_targets:
   catalog: []
