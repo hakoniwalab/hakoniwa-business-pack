@@ -1,0 +1,141 @@
+id: pdu-registry-emits-uncompilable-python-for-a-field-less-type
+title: A zero-field message type is already a known unsupported case, but generation reports success and emits Python that cannot be imported plus no plain converter
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - validation_rule
+
+summary: >
+  Zero-field message types are a known unsupported case in Hakoniwa PDU:
+  hakoniwa-pdu-registry#25 states that generation assumes at least one data field, and
+  that the near-term behaviour should be to stop with an explicit unsupported-type error.
+  What was measured here is that the generator does not do that yet. It reports success
+  for a field-less type and emits artifacts that cannot be used: the Python emitter writes
+  `def __init__(self):` with no body, so the module raises IndentationError on import, and
+  no plain `pdu_conv_*` module is emitted at all while the generated wrapper imports one.
+  The offset and pdu_size artifacts for the same type are correct, so nothing fails until
+  import time. The gap that matters is therefore the missing rejection, not the missing
+  zero-field support: an Action whose goal, result and feedback are all empty is the
+  standard way to bring up an Action's state machine without any marshalling, and it is
+  what the Hakoniwa Action design guidance recommends doing first, so this is the path a
+  new Action is most likely to start on.
+
+observation:
+  context: >
+    Generating Hakoniwa Action PDU types for tobas_std_msgs/action/Empty (case T33) as
+    the payload-free first step before the real ExecuteMission goal type, Windows 11
+    native generation with TDM-GCC-64 and Windows Python 3.12.7, 2026-09-11.
+  details:
+    - >-
+      An .action file with three empty sections generates EmptyGoal.msg, EmptyResult.msg
+      and EmptyFeedback.msg with no content, which is correct.
+    - >-
+      Generation completes with "--- Generation Complete! ---" and warns only
+      "Offset file is empty, cannot calculate size for tobas_action_msgs/EmptyGoal",
+      which reads as informational.
+    - >-
+      The offsets are right. EmptyActionRequest is `single:struct:header:...:0:20` plus
+      `single:struct:body:EmptyGoal:20:0`, and its pdu_size is 24. The wrapper around an
+      empty body is well formed.
+    - >-
+      The emitted Python is not. pdu_pytype_EmptyGoal.py contains `def __init__(self):`
+      followed by a blank line and then `def __str__(self):`, so importing it raises
+      `IndentationError: expected an indented block after function definition`.
+    - >-
+      There are two defects here, not one, and the second is the blocking one. Measured
+      by applying the obvious remedy: inserting `pass` into the three empty pytype
+      modules makes them importable and does NOT make the Action usable, because
+      `pdu_conv_EmptyGoal` was never emitted at all. The generator produces
+      pdu_pytype_* and pdu_cdr_conv_* for a field-less type but no pdu_conv_*, while
+      the wrapper it also generates does `from ..tobas_action_msgs.pdu_conv_EmptyGoal
+      import *`. So the import fails with ModuleNotFoundError once the
+      IndentationError is out of the way.
+    - >-
+      Relation to the declared policy. hakoniwa-pdu-registry#25 (opened 2026-08-03,
+      still open) already records that zero-field message types are unsupported and
+      that generation should stop with an explicit unsupported-type error rather than
+      emit invalid source. The measured behaviour on this revision is the state that
+      issue describes as the one to replace: generation succeeds and emits the invalid
+      artifacts. So what is reported here is evidence for that issue's near-term
+      acceptance criteria, not a request for zero-field support.
+    - >-
+      Either resolution removes the failure mode observed here. Rejecting the type at
+      generation time surfaces it immediately with a diagnostic, which is the declared
+      direction. Emitting usable artifacts instead would have to cover both defects --
+      a body for the empty `__init__` and the plain converter (or a wrapper that does
+      not import one) -- because fixing only the first still leaves ModuleNotFoundError.
+      Non-empty types in the same run get all three modules.
+    - >-
+      Impact beyond the type itself: the wrapper types that reference it
+      (EmptyActionRequest and friends) import the broken module, so the whole Action is
+      unusable from Python even though its sizes and offsets are correct.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-pdu-registry
+      path: generators/generate_hako_pdu_msgs
+      revision: unknown
+  runtime_evidence:
+    - description: >-
+        Windows 11 x64, Python 3.12.7, generating tobas_action_msgs from a three-section
+        empty .action file, 2026-09-11. Sizes and offsets correct, Python import fails
+        with IndentationError. Asserted in both directions by
+        pdu/tests/tobas_action_roundtrip.py so that a fix upstream turns the test red.
+  expert_input: []
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - >-
+      Confirm which of the other language emitters (C, C++, C#, JavaScript, GDScript)
+      have the same gap. Only the Python one was exercised here.
+    - >-
+      Confirm against hakoniwa-pdu-registry#25 that the intended near-term response is
+      rejection with an unsupported-type diagnostic rather than emitting usable
+      artifacts for a field-less type. Only the `pass` half of the emit-instead path was
+      tried here, and it is not sufficient on its own.
+  notes:
+    - >-
+      Measured on one host and one generator revision, on the Python emitter only.
+
+tracking:
+  implementation_status: open
+  issues:
+    - repository: hakoniwalab/hakoniwa-pdu-registry
+      number: 25
+      relation: fix
+      status: open
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-pdu-registry
+      kind: test
+      path: unknown
+      mode: detect-only
+      notes:
+        - >-
+          Generating a field-less type and importing the result would catch this in one
+          assertion. Generation success alone does not, because generation does succeed.
+
+promotion_rationale:
+  - >-
+    It blocks the documented first step for bringing up any new Action, and the failure
+    appears only at import time, after generation has reported success.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes: []
