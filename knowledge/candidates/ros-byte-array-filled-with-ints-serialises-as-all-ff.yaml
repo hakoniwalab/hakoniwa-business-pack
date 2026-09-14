@@ -103,8 +103,12 @@ validation:
       int is a behavioural change: the unpatched mapper passes such values through.
 
 tracking:
-  implementation_status: open
-  issues: []
+  implementation_status: in_progress
+  issues:
+    - repository: hakoniwalab/hakoniwa-pdu-ros
+      number: 24
+      relation: fix
+      status: open
 
 promotion_targets:
   catalog: []
