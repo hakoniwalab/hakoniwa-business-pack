@@ -15,11 +15,15 @@ summary: >
   `def __init__(self):` with no body, so the module raises IndentationError on import, and
   no plain `pdu_conv_*` module is emitted at all while the generated wrapper imports one.
   The offset and pdu_size artifacts for the same type are correct, so nothing fails until
-  import time. The gap that matters is therefore the missing rejection, not the missing
+  import time. The gap that mattered was therefore the missing rejection, not the missing
   zero-field support: an Action whose goal, result and feedback are all empty is the
   standard way to bring up an Action's state machine without any marshalling, and it is
   what the Hakoniwa Action design guidance recommends doing first, so this is the path a
-  new Action is most likely to start on.
+  new Action is most likely to start on. Resolved upstream on 2026-09-14, and by giving
+  zero-field types a representation rather than by rejecting them: the parser injects one
+  reserved `uint8 hako_dummy` field, so the existing generation, offset, converter and
+  runtime paths are reused unchanged. Re-verified on Windows against the fixed revision;
+  see `resolution`.
 
 observation:
   context: >
@@ -95,21 +99,29 @@ validation:
       Confirm which of the other language emitters (C, C++, C#, JavaScript, GDScript)
       have the same gap. Only the Python one was exercised here.
     - >-
-      Confirm against hakoniwa-pdu-registry#25 that the intended near-term response is
-      rejection with an unsupported-type diagnostic rather than emitting usable
-      artifacts for a field-less type. Only the `pass` half of the emit-instead path was
-      tried here, and it is not sufficient on its own.
+      Answered by the upstream fix. The response was neither rejection nor the `pass`
+      half tried here: hakoniwa-pdu-registry#30 injects one reserved `uint8 hako_dummy`
+      field for a zero-field message, which makes both the importable `__init__` and the
+      plain converter fall out of the existing code paths. Recorded under `resolution`.
   notes:
     - >-
       Measured on one host and one generator revision, on the Python emitter only.
+    - >-
+      The re-verification covered generation, import and round trip. It did not rebuild
+      the PDU-RPC shared library or drive the Action at runtime, so the reserved field's
+      effect on a live Action session is not measured here.
 
 tracking:
-  implementation_status: open
+  implementation_status: resolved
   issues:
     - repository: hakoniwalab/hakoniwa-pdu-registry
       number: 25
       relation: fix
-      status: open
+      status: closed
+    - repository: hakoniwalab/hakoniwa-pdu-python
+      number: 50
+      relation: fix
+      status: closed
 
 promotion_targets:
   catalog: []
@@ -133,9 +145,57 @@ promotion_rationale:
     appears only at import time, after generation has reported success.
 
 resolution:
-  status: pending
-  fixed_by: []
-  verified: false
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-pdu-registry
+      pull_request: 30
+      revision: 4238ba249f94816d15d6302133dfd8c9b46c9e51
+    - repository: hakoniwalab/hakoniwa-pdu-registry
+      revision: 5ab8870f85eae47df4d4f373624fd19c13753885
+    - repository: hakoniwalab/hakoniwa-pdu-python
+      revision: 049fde71f2aab627ff822d01b12d8ee748eb9478
+  verified: true
   promoted_to: []
   executable_guardrails: []
-  notes: []
+  notes:
+    - >-
+      Re-verified on the original measured path, 2026-09-15. Windows 11 x64, Python
+      3.12.7, TDM-GCC-64 10.3.0, the same three-section Empty .action as the original
+      report (identical SHA-256, 629CF53DDF9F939A3BA35E998B9B90E940639F5B6B3701404E6FE93AB1475D74),
+      generated through `generators.generate_hako_action_msgs.main` and then
+      `generators.generate_hako_pdu_msgs.main`. A/B against two pinned registry
+      checkouts, the generator revision being the only variable.
+    - >-
+      Before, at 854b4f5fe88702a1dd9e21746f447105a3fb39b6 (the revision the original
+      report used, vendored under hakoniwa-pdu-rpc): `EmptyGoal.offset` is 0 bytes,
+      generation warns "Offset file is empty, cannot calculate size for
+      tobas_action_msgs/EmptyGoal", importing pdu_pytype_EmptyGoal raises
+      IndentationError, and importing pdu_conv_EmptyGoal raises ModuleNotFoundError.
+    - >-
+      After, at 5ab8870f: `EmptyGoal.offset` is `single:primitive:hako_dummy:uint8:0:1`,
+      pdu_pytype_EmptyGoal imports, pdu_conv_EmptyGoal is emitted and imports, and the
+      payload-free wrapper round-trips -- header fields and the reserved byte survive,
+      at 45 bytes (the 24-byte MetaData prefix plus the 21-byte base). That round trip
+      is what the original measurement could not do at all.
+    - >-
+      Sizes move, and not uniformly. EmptyActionRequest and EmptyActionResponse stay at
+      24, because their 20-byte header plus the new 1-byte body still rounds to 24.
+      EmptyActionFeedback goes 24 -> 32: its header is already 24 bytes, so the extra
+      byte crosses the boundary. A peer built against pre-fix artifacts and one built
+      against post-fix artifacts therefore disagree on the feedback packet size while
+      agreeing on request and response. The standalone bodies (EmptyGoal, EmptyResult,
+      EmptyFeedback) gain a pdu_size of 8, where before no pdu_size file was emitted.
+    - >-
+      The reserved field is user-visible. hakoniwa-pdu-registry#25 noted that a dummy
+      field should ideally stay an internal serialization detail; in the merged
+      implementation `hako_dummy` is an ordinary generated field, present in the
+      pytype's annotations, __init__, __str__ and to_dict/from_dict.
+    - >-
+      The fix is not on PyPI yet. The newest published hakoniwa-pdu is 1.6.9, released
+      2026-08-14, a month before the fix; anyone taking the generated artifacts from the
+      pip package rather than from a registry checkout still meets the original failure.
+    - >-
+      Upgrading the registry for this did not disturb the non-empty types. The
+      ExecuteMission artifacts generated at 5ab8870f are byte-identical to those
+      generated at 854b4f5 (registry sizes 32 / 160 / 32, MissionItem 16), and the
+      round-trip test's ExecuteMission section passes unchanged.
