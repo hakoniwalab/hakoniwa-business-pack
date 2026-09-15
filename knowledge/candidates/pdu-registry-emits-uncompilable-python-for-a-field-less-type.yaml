@@ -57,7 +57,7 @@ observation:
       IndentationError is out of the way.
     - >-
       Relation to the declared policy. hakoniwa-pdu-registry#25 (opened 2026-08-03,
-      still open) already records that zero-field message types are unsupported and
+      closed 2026-09-14) already recorded that zero-field message types are unsupported and
       that generation should stop with an explicit unsupported-type error rather than
       emit invalid source. The measured behaviour on this revision is the state that
       issue describes as the one to replace: generation succeeds and emits the invalid
@@ -85,7 +85,9 @@ sources:
         Windows 11 x64, Python 3.12.7, generating tobas_action_msgs from a three-section
         empty .action file, 2026-09-11. Sizes and offsets correct, Python import fails
         with IndentationError. Asserted in both directions by
-        pdu/tests/tobas_action_roundtrip.py so that a fix upstream turns the test red.
+        pdu/tests/tobas_action_roundtrip.py so that a fix upstream would turn the test
+        red -- which is what happened on 2026-09-14. The test now asserts the fixed
+        behaviour instead, and goes red if the pre-fix artifacts are put back.
   expert_input: []
 
 confidence: high
@@ -105,7 +107,8 @@ validation:
       plain converter fall out of the existing code paths. Recorded under `resolution`.
   notes:
     - >-
-      Measured on one host and one generator revision, on the Python emitter only.
+      Measured on one host, on the Python emitter only. The original report covered one
+      generator revision; the re-verification adds a second and compares them.
     - >-
       The re-verification covered generation, import and round trip. It did not rebuild
       the PDU-RPC shared library or drive the Action at runtime, so the reserved field's
@@ -181,21 +184,31 @@ resolution:
       Sizes move, and not uniformly. EmptyActionRequest and EmptyActionResponse stay at
       24, because their 20-byte header plus the new 1-byte body still rounds to 24.
       EmptyActionFeedback goes 24 -> 32: its header is already 24 bytes, so the extra
-      byte crosses the boundary. A peer built against pre-fix artifacts and one built
-      against post-fix artifacts therefore disagree on the feedback packet size while
-      agreeing on request and response. The standalone bodies (EmptyGoal, EmptyResult,
-      EmptyFeedback) gain a pdu_size of 8, where before no pdu_size file was emitted.
+      byte crosses the boundary. The header widths are read off the offset files (:0:20
+      for request and response, :0:24 for feedback), not assumed. These are the
+      registry pdu_size numbers, which is what hako_pdu_get_size compiles in; that two
+      peers built from pre- and post-fix artifacts would therefore disagree on the
+      feedback packet while agreeing on request and response follows from those numbers
+      and was not measured against a live session. The standalone bodies (EmptyGoal,
+      EmptyResult, EmptyFeedback) gain a pdu_size of 8, where before no pdu_size file
+      was emitted.
     - >-
       The reserved field is user-visible. hakoniwa-pdu-registry#25 noted that a dummy
       field should ideally stay an internal serialization detail; in the merged
       implementation `hako_dummy` is an ordinary generated field, present in the
       pytype's annotations, __init__, __str__ and to_dict/from_dict.
     - >-
-      The fix is not on PyPI yet. The newest published hakoniwa-pdu is 1.6.9, released
-      2026-08-14, a month before the fix; anyone taking the generated artifacts from the
-      pip package rather than from a registry checkout still meets the original failure.
+      The fix had not reached PyPI as of 2026-09-15. The newest published hakoniwa-pdu
+      was 1.6.9, released 2026-08-14, a month before the fix; anyone taking the generated
+      artifacts from the pip package rather than from a registry checkout still met the
+      original failure. Worth re-checking rather than assuming, since a release closes
+      this gap without any further change upstream.
     - >-
-      Upgrading the registry for this did not disturb the non-empty types. The
-      ExecuteMission artifacts generated at 5ab8870f are byte-identical to those
-      generated at 854b4f5 (registry sizes 32 / 160 / 32, MissionItem 16), and the
-      round-trip test's ExecuteMission section passes unchanged.
+      Upgrading the registry for this did not disturb the non-empty types. Regenerating
+      ExecuteMission at 5ab8870f reproduced the artifacts committed from the original
+      854b4f5 run byte for byte -- overwriting them left no diff at all (registry sizes
+      32 / 160 / 32, MissionItem 16) -- and the round-trip test's ExecuteMission section
+      passes unchanged. One shared runtime file outside that package did change with the
+      revision bump: python/binary_io.py now writes explicit little-endian struct formats
+      (`'<h'` where it used `'h'`). That is unrelated to zero-field support and makes no
+      difference on the x86-64 host measured here.
