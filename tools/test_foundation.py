@@ -21,6 +21,10 @@ SPEC.loader.exec_module(foundation)
 
 
 class FoundationWorkspaceTest(unittest.TestCase):
+    def test_repository_root_is_business_pack_root(self) -> None:
+        expected = Path(foundation.__file__).resolve().parents[1]
+        self.assertEqual(foundation.repository_root(), expected)
+
     def test_selected_components_share_state_across_all_operations(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
@@ -465,9 +469,8 @@ class FoundationInspectorTest(unittest.TestCase):
             "    capabilities:\n"
             "      available: true\n"
         )
-        self.write_receipt("hakoniwa-pdu-endpoint")
-
         with mock.patch.object(foundation.platform, "system", return_value="Windows"):
+            self.write_receipt("hakoniwa-pdu-endpoint")
             result = foundation.inspect_foundation(self.recipe, self.prefix)
             output = io.StringIO()
             with mock.patch("sys.stdout", output):
@@ -486,7 +489,6 @@ class FoundationInspectorTest(unittest.TestCase):
             "    capabilities:\n"
             "      available: true\n"
         )
-        self.write_receipt("hakoniwa-pdu-endpoint")
         vcpkg = self.root / "vcpkg"
         toolchain = vcpkg / "scripts" / "buildsystems" / "vcpkg.cmake"
         toolchain.parent.mkdir(parents=True)
@@ -499,11 +501,38 @@ class FoundationInspectorTest(unittest.TestCase):
         )
 
         with mock.patch.object(foundation.platform, "system", return_value="Windows"):
+            (vcpkg / "vcpkg.exe").write_text("test\n", encoding="utf-8")
+            self.write_receipt("hakoniwa-pdu-endpoint")
             result = foundation.inspect_foundation(self.recipe, self.prefix)
 
         self.assertEqual(result["status"], "SATISFIED")
         self.assertEqual(result["toolchain"]["status"], "SATISFIED")
         self.assertEqual(result["toolchain"]["vcpkg_root"], str(vcpkg.resolve()))
+
+    def test_windows_vcpkg_component_rejects_missing_executable(self) -> None:
+        self.write_recipe(
+            "  hakoniwa-pdu-endpoint:\n"
+            "    capabilities:\n"
+            "      available: true\n"
+        )
+        vcpkg = self.root / "vcpkg"
+        toolchain = vcpkg / "scripts" / "buildsystems" / "vcpkg.cmake"
+        toolchain.parent.mkdir(parents=True)
+        toolchain.write_text("# test toolchain\n", encoding="utf-8")
+        config = self.prefix.parent / "config" / "toolchain.json"
+        config.parent.mkdir(parents=True)
+        config.write_text(
+            json.dumps({"schema_version": 1, "vcpkg_root": str(vcpkg)}),
+            encoding="utf-8",
+        )
+
+        with mock.patch.object(foundation.platform, "system", return_value="Windows"):
+            self.write_receipt("hakoniwa-pdu-endpoint")
+            result = foundation.inspect_foundation(self.recipe, self.prefix)
+
+        self.assertEqual(result["status"], "INCOMPATIBLE")
+        self.assertEqual(result["toolchain"]["status"], "INCOMPATIBLE")
+        self.assertIn("vcpkg.exe", result["toolchain"]["reason"])
 
     def test_minimum_component_version_is_enforced(self) -> None:
         self.write_recipe(

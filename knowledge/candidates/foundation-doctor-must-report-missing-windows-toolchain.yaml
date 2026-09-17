@@ -28,10 +28,10 @@ sources:
   repositories:
     - repository: hakoniwalab/hakoniwa-business-pack
       path: tools/foundation.py
-      revision: 3d8b09dd8d35
+      revision: 1815a23582aa8ae38922153af20f5d54a9d6b84a
     - repository: teras-project/hakoniwa-robot-arm
       path: recipes/nova5/nova5-joint-trajectory-control.yaml
-      revision: working-tree
+      revision: 58f163f2f12c88c3eca2159cf26fecef6a6f71aa
   runtime_evidence:
     - description: >
         Windows 11 x64 on 2026-09-17: Test-Path for
@@ -60,7 +60,7 @@ validation:
     - The guard is limited to Windows Recipes that declare a Foundation component from the vcpkg-dependent component set.
 
 tracking:
-  implementation_status: in_progress
+  implementation_status: resolved
   issues: []
 
 promotion_targets:
@@ -73,7 +73,7 @@ promotion_targets:
   executable_guardrails:
     - repository: hakoniwalab/hakoniwa-business-pack
       kind: doctor
-      path: tools/foundation.py
+      path: tools/foundation_lib/runtime.py
       mode: detect-and-suggest-remediation
       notes:
         - Fail Foundation inspection before configure/build when the persisted Windows vcpkg toolchain is missing or unusable.
@@ -84,10 +84,15 @@ promotion_rationale:
   - The setup guide already documents registration; the reusable improvement is an executable check that prevents omission.
 
 resolution:
-  status: pending
-  fixed_by: []
-  verified: false
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      pull_request: null
+      revision: 1815a23582aa8ae38922153af20f5d54a9d6b84a
+  verified: true
   promoted_to: []
-  executable_guardrails: []
+  executable_guardrails:
+    - hakoniwalab/hakoniwa-business-pack:tools/foundation_lib/runtime.py
   notes:
-    - A local implementation and focused tests are present but have not been merged into an owning repository revision.
+    - The Foundation doctor guard was merged and verified on the same Windows host that exposed the missing persisted toolchain.
+    - A follow-up hardens registration and doctor to validate both the vcpkg executable and its CMake toolchain file.
