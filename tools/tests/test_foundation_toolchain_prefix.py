@@ -108,6 +108,8 @@ class FoundationToolchainPrefixTest(unittest.TestCase):
                 "ensure_foundation_python",
                 return_value=(python, contract),
             ), mock.patch.object(
+                foundation, "install_workspace_python_bootstrap"
+            ), mock.patch.object(
                 foundation.platform, "system", return_value="Windows"
             ), mock.patch.object(
                 foundation.subprocess,
