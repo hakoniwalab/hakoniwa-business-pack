@@ -487,14 +487,16 @@ def doctor(paths: WorkspacePaths) -> int:
 
 
 def _apply_prompt_environment(shell: str, env: dict[str, str]) -> None:
+    role = env.get("HAKO_TERMINAL_ROLE", "").strip()
+    role_prefix = f"({role}) " if role else ""
     name = Path(shell).name.lower()
     if name in {"zsh", "zsh.exe"}:
-        env["PROMPT"] = "(hako) %n@%m %1~ %# "
+        env["PROMPT"] = f"{role_prefix}(hako) %n@%m %1~ %# "
         env["PS1"] = env["PROMPT"]
     elif name in {"bash", "bash.exe"}:
-        env["PS1"] = r"(hako) \u@\h \W \$ "
+        env["PS1"] = role_prefix + r"(hako) \u@\h \W \$ "
     elif name in {"sh", "sh.exe", "dash", "dash.exe", "ksh", "ksh.exe"}:
-        env["PS1"] = "(hako) $ "
+        env["PS1"] = f"{role_prefix}(hako) $ "
 
 
 def enter(paths: WorkspacePaths) -> int:
