@@ -459,6 +459,52 @@ class FoundationInspectorTest(unittest.TestCase):
         self.assertEqual(result["status"], "SATISFIED")
         self.assertEqual(result["components"][0]["reasons"], [])
 
+    def test_windows_vcpkg_component_reports_missing_foundation_toolchain(self) -> None:
+        self.write_recipe(
+            "  hakoniwa-pdu-endpoint:\n"
+            "    capabilities:\n"
+            "      available: true\n"
+        )
+        self.write_receipt("hakoniwa-pdu-endpoint")
+
+        with mock.patch.object(foundation.platform, "system", return_value="Windows"):
+            result = foundation.inspect_foundation(self.recipe, self.prefix)
+            output = io.StringIO()
+            with mock.patch("sys.stdout", output):
+                foundation.print_inspection(result, False)
+
+        self.assertEqual(result["status"], "MISSING")
+        self.assertEqual(result["toolchain"]["status"], "MISSING")
+        self.assertIn("hakoniwa-pdu-endpoint", result["toolchain"]["required_by"])
+        self.assertIn("foundation.py toolchain", result["toolchain"]["remediation"])
+        self.assertIn("[MISSING] Foundation toolchain", output.getvalue())
+        self.assertIn("--vcpkg-root <vcpkg-root>", output.getvalue())
+
+    def test_windows_vcpkg_component_accepts_registered_foundation_toolchain(self) -> None:
+        self.write_recipe(
+            "  hakoniwa-pdu-endpoint:\n"
+            "    capabilities:\n"
+            "      available: true\n"
+        )
+        self.write_receipt("hakoniwa-pdu-endpoint")
+        vcpkg = self.root / "vcpkg"
+        toolchain = vcpkg / "scripts" / "buildsystems" / "vcpkg.cmake"
+        toolchain.parent.mkdir(parents=True)
+        toolchain.write_text("# test toolchain\n", encoding="utf-8")
+        config = self.prefix.parent / "config" / "toolchain.json"
+        config.parent.mkdir(parents=True)
+        config.write_text(
+            json.dumps({"schema_version": 1, "vcpkg_root": str(vcpkg)}),
+            encoding="utf-8",
+        )
+
+        with mock.patch.object(foundation.platform, "system", return_value="Windows"):
+            result = foundation.inspect_foundation(self.recipe, self.prefix)
+
+        self.assertEqual(result["status"], "SATISFIED")
+        self.assertEqual(result["toolchain"]["status"], "SATISFIED")
+        self.assertEqual(result["toolchain"]["vcpkg_root"], str(vcpkg.resolve()))
+
     def test_minimum_component_version_is_enforced(self) -> None:
         self.write_recipe(
             "  component-a:\n"

@@ -147,6 +147,16 @@ def foundation_toolchain_path(paths: WorkspacePaths) -> Path:
     return paths.foundation_config / "toolchain.json"
 
 
+VCPKG_COMPONENTS = frozenset(
+    {
+        "hakoniwa-pdu-endpoint",
+        "hakoniwa-pdu-rpc",
+        "hakoniwa-pdu-bridge-core",
+        "athrill-target-v850e2m",
+    }
+)
+
+
 def configure_foundation_toolchain(paths: WorkspacePaths, vcpkg_root: Path) -> Path:
     root = vcpkg_root.expanduser().resolve()
     executable = root / ("vcpkg.exe" if sys.platform == "win32" else "vcpkg")
@@ -166,7 +176,10 @@ def configure_foundation_toolchain(paths: WorkspacePaths, vcpkg_root: Path) -> P
 
 
 def load_foundation_toolchain(paths: WorkspacePaths) -> dict[str, str]:
-    path = foundation_toolchain_path(paths)
+    return load_foundation_toolchain_file(foundation_toolchain_path(paths))
+
+
+def load_foundation_toolchain_file(path: Path) -> dict[str, str]:
     if not path.is_file():
         return {}
     try:
@@ -182,6 +195,54 @@ def load_foundation_toolchain(paths: WorkspacePaths) -> dict[str, str]:
     if not (root / "scripts" / "buildsystems" / "vcpkg.cmake").is_file():
         raise FoundationError(f"Foundation toolchain vcpkg_root is not usable: {root}")
     return {"vcpkg_root": str(root)}
+
+
+def inspect_foundation_toolchain(
+    recipe: Path,
+    prefix: Path,
+    requirements: dict[str, dict],
+) -> dict | None:
+    required_by = sorted(set(requirements) & VCPKG_COMPONENTS)
+    if platform.system() != "Windows" or not required_by:
+        return None
+    path = prefix.parent / "config" / "toolchain.json"
+    try:
+        toolchain = load_foundation_toolchain_file(path)
+    except FoundationError as exc:
+        return {
+            "status": "INCOMPATIBLE",
+            "path": str(path),
+            "vcpkg_root": None,
+            "required_by": required_by,
+            "reason": str(exc),
+            "remediation": (
+                "re-register vcpkg with: python tools/foundation.py toolchain "
+                f"--recipe-id {recipe.stem} --install-dir {prefix} "
+                "--vcpkg-root <vcpkg-root>"
+            ),
+        }
+    if not toolchain:
+        return {
+            "status": "MISSING",
+            "path": str(path),
+            "vcpkg_root": None,
+            "required_by": required_by,
+            "reason": "Foundation vcpkg toolchain is not registered",
+            "remediation": (
+                "register it before configure/build with: "
+                "python tools/foundation.py toolchain "
+                f"--recipe-id {recipe.stem} --install-dir {prefix} "
+                "--vcpkg-root <vcpkg-root>"
+            ),
+        }
+    return {
+        "status": "SATISFIED",
+        "path": str(path),
+        "vcpkg_root": toolchain["vcpkg_root"],
+        "required_by": required_by,
+        "reason": None,
+        "remediation": None,
+    }
 
 
 def foundation_python_executable(python_root: Path) -> Path:
@@ -822,6 +883,7 @@ def inspect_foundation(
     validate_core_config: bool = False,
 ) -> dict:
     requirements = load_foundation_requirements(recipe)
+    toolchain = inspect_foundation_toolchain(recipe, prefix, requirements)
     all_receipts: dict[str, dict] = {}
     receipt_dir = prefix / "share" / "hakoniwa" / "receipts"
     for path in sorted(receipt_dir.glob("*.yaml")) if receipt_dir.is_dir() else []:
@@ -857,6 +919,8 @@ def inspect_foundation(
                     break
     statuses = {component["status"] for component in components}
     statuses.add(runtime_python["status"])
+    if toolchain is not None:
+        statuses.add(toolchain["status"])
     core_config = None
     if validate_core_config and "hakoniwa-core-pro" in requirements:
         core_config = inspect_core_runtime_config(prefix)
@@ -874,6 +938,7 @@ def inspect_foundation(
         "install_prefix": str(prefix),
         "status": status,
         "components": components,
+        "toolchain": toolchain,
         "runtime": {"python": runtime_python, "core_config": core_config},
     }
 
@@ -1181,15 +1246,9 @@ def write_component_manifest(
     build_dir = paths.foundation_build / component_id
     manifest = paths.foundation_build / f"{component_id}.yaml"
     prefix = paths.install_prefix
-    vcpkg_components = {
-        "hakoniwa-pdu-endpoint",
-        "hakoniwa-pdu-rpc",
-        "hakoniwa-pdu-bridge-core",
-        "athrill-target-v850e2m",
-    }
     toolchain = (
         load_foundation_toolchain(paths)
-        if component_id in vcpkg_components
+        if component_id in VCPKG_COMPONENTS
         else {}
     )
     vcpkg_root = toolchain.get("vcpkg_root", "")
@@ -1589,6 +1648,18 @@ def print_inspection(result: dict, json_output: bool) -> None:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
     print(f"Foundation: {result['status']}")
+    toolchain = result.get("toolchain")
+    if isinstance(toolchain, dict):
+        detail = (
+            f"vcpkg_root={toolchain.get('vcpkg_root')} "
+            f"path={toolchain.get('path')}"
+            if toolchain.get("status") == "SATISFIED"
+            else f"{toolchain.get('reason')} path={toolchain.get('path')}"
+        )
+        print(f"[{toolchain.get('status')}] Foundation toolchain: {detail}")
+        print(f"  - required by: {', '.join(toolchain.get('required_by', []))}")
+        if toolchain.get("remediation"):
+            print(f"  - remediation: {toolchain['remediation']}")
     runtime_python = result.get("runtime", {}).get("python")
     if isinstance(runtime_python, dict):
         detail = (

@@ -1,0 +1,93 @@
+id: foundation-doctor-must-report-missing-windows-toolchain
+title: Foundation doctor must report a missing persisted vcpkg toolchain before Windows Recipe builds
+status: validating
+
+knowledge_type:
+  - known_pitfall
+  - validation_rule
+
+summary: >
+  On Windows, a Recipe can report every installed Foundation component as
+  SATISFIED even when work/foundation/config/toolchain.json is absent. That
+  hides a required, reproducible vcpkg configuration from users and lets later
+  consumer builds depend on ambient CMake discovery state. Foundation doctor
+  should fail early, name the components that require vcpkg, and print the
+  exact toolchain registration command.
+
+observation:
+  context: >
+    Re-verifying the native Windows Nova5 host-only procedure after documenting
+    the Business Pack vcpkg registration step.
+  details:
+    - The persisted Foundation toolchain file was absent on the verified Windows host.
+    - Recipe doctor reported Foundation, Endpoint, Bridge, and Python as SATISFIED and exited zero.
+    - The earlier native build still succeeded because CMake resolved Boost and GLFW from the host's existing vcpkg integration, which is not a self-contained Recipe contract.
+    - The condition is deterministic from the host OS, Foundation requirements, selected install prefix, and persisted toolchain file.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/foundation.py
+      revision: 3d8b09dd8d35
+    - repository: teras-project/hakoniwa-robot-arm
+      path: recipes/nova5/nova5-joint-trajectory-control.yaml
+      revision: working-tree
+  runtime_evidence:
+    - description: >
+        Windows 11 x64 on 2026-09-17: Test-Path for
+        work/foundation/config/toolchain.json returned False, while
+        recipe.py doctor reported Foundation and all four required components
+        SATISFIED and exited zero.
+    - description: >
+        With the proposed guardrail, the same doctor invocation reports
+        Foundation MISSING, identifies hakoniwa-pdu-endpoint and
+        hakoniwa-pdu-bridge-core as requiring the toolchain, prints the
+        foundation.py toolchain remediation, and exits one.
+  expert_input:
+    - source: user-feedback
+      statement: Users should be able to notice the missing Windows toolchain through doctor rather than only through setup documentation.
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required: []
+  notes:
+    - The missing configuration and the new diagnostic were exercised on the same Windows host.
+    - Focused Foundation inspector tests cover both missing and valid persisted toolchain configurations.
+    - The guard is limited to Windows Recipes that declare a Foundation component from the vcpkg-dependent component set.
+
+tracking:
+  implementation_status: in_progress
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - nova5-joint-trajectory-control
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      kind: doctor
+      path: tools/foundation.py
+      mode: detect-and-suggest-remediation
+      notes:
+        - Fail Foundation inspection before configure/build when the persisted Windows vcpkg toolchain is missing or unusable.
+        - Keep non-Windows and vcpkg-independent Recipes unaffected.
+
+promotion_rationale:
+  - The persisted toolchain is a Foundation-wide Windows prerequisite, so the Foundation inspector is the owning diagnostic layer.
+  - The setup guide already documents registration; the reusable improvement is an executable check that prevents omission.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - A local implementation and focused tests are present but have not been merged into an owning repository revision.
