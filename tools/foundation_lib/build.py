@@ -52,13 +52,18 @@ def _set_manifest_boolean(
     return lines
 
 
-def _core_foundation_manifest(source_manifest: Path) -> str:
+def _core_foundation_manifest(
+    source_manifest: Path, *, callback_assets_shared: bool = False
+) -> str:
     if not source_manifest.is_file():
         raise FoundationError(
             f"hakoniwa-core-pro build manifest not found: {source_manifest}"
         )
     lines = source_manifest.read_text(encoding="utf-8").splitlines()
     lines = _set_manifest_boolean(lines, "python", "soabi", True)
+    lines = _set_manifest_boolean(
+        lines, "features", "callback_assets_shared", callback_assets_shared
+    )
     lines = _set_manifest_boolean(lines, "validation", "tests", False)
     return "\n".join(lines) + "\n"
 
@@ -80,7 +85,12 @@ def write_component_manifest(
     vcpkg_root = toolchain.get("vcpkg_root", "")
     required_capabilities = (required or {}).get("capabilities", {})
     if component_id == "hakoniwa-core-pro":
-        content = _core_foundation_manifest(source / "hakoniwa-build.yaml")
+        content = _core_foundation_manifest(
+            source / "hakoniwa-build.yaml",
+            callback_assets_shared=(
+                required_capabilities.get("callback_assets_shared") is True
+            ),
+        )
     elif component_id == "hakoniwa-pdu-endpoint":
         core_free = (
             required_capabilities.get("core_free_runtime") is True
