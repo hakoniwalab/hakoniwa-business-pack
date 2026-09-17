@@ -36,6 +36,7 @@ from foundation_lib.runtime import (
     validate_foundation_python_probe,
     validate_recipe_id,
 )
+from foundation_lib.python_bootstrap import install_workspace_python_bootstrap
 
 from foundation_lib.inspection import (
     ARTIFACT_PROBES,
@@ -107,6 +108,10 @@ def execute_build_plan(plan: dict, paths: WorkspacePaths) -> dict:
     validate_build_plan_sources(plan)
     python, python_contract = ensure_foundation_python(
         paths, Path(plan["recipe"])
+    )
+    install_workspace_python_bootstrap(
+        paths.business_pack_root,
+        paths.foundation_python,
     )
     print(
         "Foundation Python: "

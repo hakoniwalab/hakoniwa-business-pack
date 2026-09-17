@@ -17,6 +17,10 @@ TOOLS_DIR = Path(__file__).resolve().parent
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 from workdir import resolve_work_dir
+from foundation_lib.python_bootstrap import (
+    foundation_site_package_dirs,
+    install_workspace_python_bootstrap,
+)
 
 
 class WorkspaceError(RuntimeError):
@@ -337,29 +341,20 @@ def _foundation_site_package_dirs(
     *,
     windows: bool | None = None,
 ) -> list[Path]:
-    use_windows_layout = os.name == "nt" if windows is None else windows
-    if use_windows_layout:
-        candidate = paths.foundation_python_root / "Lib" / "site-packages"
-        return [candidate] if candidate.is_dir() else []
-    return sorted(
-        path
-        for path in (paths.foundation_python_root / "lib").glob("python*/site-packages")
-        if path.is_dir()
+    return foundation_site_package_dirs(
+        paths.foundation_python_root,
+        windows=windows,
     )
 
 
 def _install_python_bootstrap(paths: WorkspacePaths) -> list[Path]:
-    bootstrap_source = paths.business_pack_root / "foundation" / "python"
-    bootstrap_module = bootstrap_source / "hakoniwa_workspace_bootstrap.py"
-    if not bootstrap_module.is_file():
-        raise WorkspaceError(f"Workspace Python bootstrap is missing: {bootstrap_module}")
-    installed: list[Path] = []
-    content = f"{bootstrap_source}\nimport hakoniwa_workspace_bootstrap\n"
-    for site_packages in _foundation_site_package_dirs(paths):
-        pth_path = site_packages / "hakoniwa_workspace_bootstrap.pth"
-        pth_path.write_text(content, encoding="utf-8")
-        installed.append(pth_path)
-    return installed
+    try:
+        return install_workspace_python_bootstrap(
+            paths.business_pack_root,
+            paths.foundation_python_root,
+        )
+    except FileNotFoundError as exc:
+        raise WorkspaceError(str(exc)) from exc
 
 
 def _python_bootstrap_paths(paths: WorkspacePaths) -> list[Path]:

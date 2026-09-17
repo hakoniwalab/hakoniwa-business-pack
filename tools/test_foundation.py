@@ -75,6 +75,46 @@ class FoundationWorkspaceTest(unittest.TestCase):
         self.assertEqual(result, 0)
         warning.assert_not_called()
 
+    def test_build_installs_python_bootstrap_after_foundation_venv_creation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "business-pack"
+            paths = foundation.resolve_workspace(root, "test")
+            site_packages = (
+                paths.foundation_python / "Lib" / "site-packages"
+                if os.name == "nt"
+                else paths.foundation_python / "lib" / "python3.12" / "site-packages"
+            )
+            site_packages.mkdir(parents=True)
+            bootstrap_source = root / "foundation" / "python"
+            bootstrap_source.mkdir(parents=True)
+            (bootstrap_source / "hakoniwa_workspace_bootstrap.py").write_text(
+                "# test bootstrap\n", encoding="utf-8"
+            )
+            python = foundation.foundation_python_executable(paths.foundation_python)
+            plan = {"blocked": [], "recipe": str(root / "recipe.yaml"), "actions": []}
+            contract = {
+                "version": "3.12.0",
+                "soabi": "cpython-312-test",
+            }
+
+            with mock.patch.object(
+                foundation,
+                "ensure_foundation_python",
+                return_value=(python, contract),
+            ), mock.patch.object(
+                foundation,
+                "inspect_foundation",
+                return_value={"status": "SATISFIED"},
+            ):
+                foundation.execute_build_plan(plan, paths)
+
+            pth = site_packages / "hakoniwa_workspace_bootstrap.pth"
+            self.assertTrue(pth.is_file())
+            self.assertEqual(
+                pth.read_text(encoding="utf-8"),
+                f"{bootstrap_source}\nimport hakoniwa_workspace_bootstrap\n",
+            )
+
     def test_resolve_workspace_stays_under_business_pack_work(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "business-pack"
@@ -1074,6 +1114,8 @@ class FoundationInspectorTest(unittest.TestCase):
             foundation,
             "ensure_foundation_python",
             return_value=(foundation_python, python_contract),
+        ), mock.patch.object(
+            foundation, "install_workspace_python_bootstrap"
         ), mock.patch.object(
             foundation, "prepare_workspace"
         ), mock.patch.object(

@@ -151,6 +151,31 @@ class WorkspaceEnvironmentTest(unittest.TestCase):
             [site_packages],
         )
 
+    def test_posix_bootstrap_is_installed_in_versioned_site_packages(self) -> None:
+        site_packages = (
+            self.paths.foundation_python_root
+            / "lib"
+            / "python3.12"
+            / "site-packages"
+        )
+        site_packages.mkdir(parents=True)
+
+        installed = workspace.install_workspace_python_bootstrap(
+            self.paths.business_pack_root,
+            self.paths.foundation_python_root,
+            windows=False,
+        )
+
+        pth_path = site_packages / "hakoniwa_workspace_bootstrap.pth"
+        self.assertEqual(installed, [pth_path])
+        self.assertEqual(
+            pth_path.read_text(encoding="utf-8"),
+            (
+                f"{self.paths.business_pack_root / 'foundation' / 'python'}\n"
+                "import hakoniwa_workspace_bootstrap\n"
+            ),
+        )
+
     @unittest.skipUnless(
         os.name != "nt" and shutil.which("bash"),
         "POSIX bash is required",
@@ -377,6 +402,24 @@ unset LD_LIBRARY_PATH
 
         self.assertEqual(registered, [])
         self.assertEqual(calls, [])
+
+    def test_bootstrap_is_inactive_on_linux_and_macos(self) -> None:
+        self.paths.foundation_bin.mkdir(parents=True)
+        environment = {
+            "HAKONIWA_WORKSPACE_ACTIVE": "1",
+            "HAKONIWA_HOME": str(self.paths.install_prefix),
+            "HAKO_PDU_ENDPOINT_RUNTIME_DIRS": str(self.paths.foundation_bin),
+        }
+        for platform_name in ("linux", "darwin"):
+            with self.subTest(platform_name=platform_name):
+                calls: list[str] = []
+                registered = bootstrap.activate(
+                    environment,
+                    platform_name=platform_name,
+                    add_directory=lambda path: calls.append(path),
+                )
+                self.assertEqual(registered, [])
+                self.assertEqual(calls, [])
 
     @unittest.skipUnless(
         os.name == "nt" and hasattr(os, "add_dll_directory"),
