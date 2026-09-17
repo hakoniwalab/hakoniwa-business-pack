@@ -85,7 +85,9 @@ class FoundationWorkspaceTest(unittest.TestCase):
                 else paths.foundation_python / "lib" / "python3.12" / "site-packages"
             )
             site_packages.mkdir(parents=True)
-            bootstrap_source = root / "foundation" / "python"
+            bootstrap_source = (
+                paths.business_pack_root / "foundation" / "python"
+            )
             bootstrap_source.mkdir(parents=True)
             (bootstrap_source / "hakoniwa_workspace_bootstrap.py").write_text(
                 "# test bootstrap\n", encoding="utf-8"
