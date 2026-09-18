@@ -392,6 +392,9 @@ tests, and a locally defined implementation.
 
 ## City World browser job
 
+Operator向けの起動・画面操作・成果物取得手順は
+[`docs/city-world-web-ui-guide-ja.md`](../../docs/city-world-web-ui-guide-ja.md)を参照してください。
+
 The City World vertical slice reuses this transport with a domain-specific
 codec. `hakoniwa-pdu-javascript` connects directly to a Core-free Python
 WebSocket Endpoint and sends `INSPECT_SELECTION`; the Worker returns

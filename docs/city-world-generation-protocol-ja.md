@@ -1,5 +1,8 @@
 # City World生成ジョブ・プロトコル
 
+> 起動から範囲選択、生成、3D確認、ZIP取得、停止までの利用手順は
+> [`city-world-web-ui-guide-ja.md`](city-world-web-ui-guide-ja.md)を参照する。
+
 ## 1. 目的
 
 本仕様は、地図で選択したPLATEAU対象範囲を事前診断し、Hakoniwa

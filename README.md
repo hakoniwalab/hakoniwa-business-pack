@@ -266,6 +266,12 @@ Catalog にある主要コンポーネントがエコシステムのどこに位
 - PDU ROS: PDU と ROS 2 message の軽量な実行時変換ブリッジ
 - Foxglove / Three.js / Scratch: 観測、可視化、インタラクション
 
+### City World Web UI Guide
+
+[`docs/city-world-web-ui-guide-ja.md`](docs/city-world-web-ui-guide-ja.md) は、
+ブラウザでPLATEAUの対象範囲を診断し、表示用GLBと物理用MuJoCo MJCFを生成・確認・取得する
+City World Web UIの起動方法と操作手順を説明します。
+
 ---
 
 ## Building Blocks
