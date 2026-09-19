@@ -424,8 +424,36 @@ profiles:
                 root / "drone",
                 root / "viewer",
                 drone_count_override=None,
+                workspace=None,
+                launcher_writer=None,
             )
             run.assert_not_called()
+
+    def test_start_forwards_explicit_composition_hooks_to_doctor(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            experiment_path = self._experiment(root, drones=1, per_process=1)
+            workspace = object()
+            launcher_writer = mock.Mock()
+            with mock.patch.object(recipe, "doctor", return_value=1) as doctor:
+                self.assertEqual(
+                    recipe.start(
+                        experiment_path,
+                        root / "drone",
+                        root / "viewer",
+                        workspace=workspace,
+                        launcher_writer=launcher_writer,
+                    ),
+                    1,
+                )
+            doctor.assert_called_once_with(
+                experiment_path,
+                root / "drone",
+                root / "viewer",
+                drone_count_override=None,
+                workspace=workspace,
+                launcher_writer=launcher_writer,
+            )
 
     def test_total_drone_count_is_derived_from_process_shape(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

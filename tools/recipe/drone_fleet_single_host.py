@@ -1778,6 +1778,7 @@ def configure(
     drone_count_override: int | None = None,
     process_count_override: int | None = None,
     formation_scale_override: float | None = None,
+    workspace=None,
 ) -> int:
     experiment = resolve_experiment(
         experiment_path,
@@ -1786,7 +1787,7 @@ def configure(
         formation_scale_override=formation_scale_override,
     )
     foundation = load_foundation_module()
-    paths = foundation.resolve_workspace(ROOT, RECIPE_ID)
+    paths = workspace or foundation.resolve_workspace(ROOT, RECIPE_ID)
     foundation.prepare_workspace(paths)
     paths.recipe_validation.mkdir(parents=True, exist_ok=True)
     prepare_config(paths, drone_root, experiment)
@@ -1877,13 +1878,16 @@ def configure(
 
 
 def _load_workspace(
-    experiment_path: Path, *, drone_count_override: int | None = None
+    experiment_path: Path,
+    *,
+    drone_count_override: int | None = None,
+    workspace=None,
 ):
     experiment = resolve_experiment(
         experiment_path, drone_count_override=drone_count_override
     )
     foundation = load_foundation_module()
-    paths = foundation.resolve_workspace(ROOT, RECIPE_ID)
+    paths = workspace or foundation.resolve_workspace(ROOT, RECIPE_ID)
     requirements = paths.recipe_config / "foundation-requirements.yaml"
     if not requirements.is_file():
         raise RecipeError("Recipe is not configured; run configure first")
@@ -2053,9 +2057,13 @@ def doctor(
     viewer_root: Path,
     *,
     drone_count_override: int | None = None,
+    workspace=None,
+    launcher_writer=None,
 ) -> int:
     experiment, foundation, paths, requirements = _load_workspace(
-        experiment_path, drone_count_override=drone_count_override
+        experiment_path,
+        drone_count_override=drone_count_override,
+        workspace=workspace,
     )
     inspection = foundation.inspect_foundation(requirements, paths.install_prefix)
     foundation.print_inspection(inspection, False)
@@ -2163,7 +2171,8 @@ def doctor(
         print(f"[{'OK' if ok else 'NG'}] {label}: {detail}")
         failed = failed or not ok
     if not failed:
-        launcher = write_launcher(
+        selected_launcher_writer = launcher_writer or write_launcher
+        launcher = selected_launcher_writer(
             paths,
             drone_root,
             viewer_root,
@@ -2203,16 +2212,22 @@ def start(
     viewer_root: Path,
     *,
     drone_count_override: int | None = None,
+    workspace=None,
+    launcher_writer=None,
 ) -> int:
     if doctor(
         experiment_path,
         drone_root,
         viewer_root,
         drone_count_override=drone_count_override,
+        workspace=workspace,
+        launcher_writer=launcher_writer,
     ) != 0:
         return 1
     experiment, _foundation, paths, _requirements = _load_workspace(
-        experiment_path, drone_count_override=drone_count_override
+        experiment_path,
+        drone_count_override=drone_count_override,
+        workspace=workspace,
     )
     system_name = platform.system()
     trial = measurement_trial_dir(paths, experiment)
@@ -2255,9 +2270,12 @@ def control(
     operation: str,
     *,
     drone_count_override: int | None = None,
+    workspace=None,
 ) -> int:
     _experiment, _foundation, paths, _requirements = _load_workspace(
-        experiment_path, drone_count_override=drone_count_override
+        experiment_path,
+        drone_count_override=drone_count_override,
+        workspace=workspace,
     )
     system_name = platform.system()
     command = _launcher_command(paths, system_name, operation)
