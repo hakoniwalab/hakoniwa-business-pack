@@ -140,6 +140,9 @@ paths:
   vcpkg_root: {_yaml_string(vcpkg_root)}
 """
     elif component_id == "hakoniwa-pdu-bridge-core":
+        hakoniwa_app = required_capabilities.get("hakoniwa_app", True) is True
+        standalone_app = required_capabilities.get("standalone_app", False) is True
+        monitor = required_capabilities.get("monitor", False) is True
         content = f"""version: 1
 
 build:
@@ -149,9 +152,9 @@ build:
 
 components:
   library: true
-  standalone_app: false
-  hakoniwa_app: true
-  monitor: false
+  standalone_app: {str(standalone_app).lower()}
+  hakoniwa_app: {str(hakoniwa_app).lower()}
+  monitor: {str(monitor).lower()}
 
 validation:
   tests: false
@@ -160,7 +163,7 @@ validation:
 
 paths:
   pdu_endpoint_root: {_yaml_string(prefix)}
-  hakoniwa_core_root: {_yaml_string(prefix)}
+  hakoniwa_core_root: {_yaml_string(prefix) if hakoniwa_app else '\"\"'}
   vcpkg_root: {_yaml_string(vcpkg_root)}
 """
     elif component_id == "hakoniwa-pdu-python":

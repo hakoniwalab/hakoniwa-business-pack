@@ -945,6 +945,30 @@ class FoundationInspectorTest(unittest.TestCase):
 
         self.assertEqual(order, ["hakoniwa-pdu-endpoint"])
 
+    def test_standalone_bridge_narrows_optional_core_dependency(self) -> None:
+        requirements = {
+            "hakoniwa-pdu-endpoint": {
+                "capabilities": {"hakoniwa_core": False}
+            },
+            "hakoniwa-pdu-bridge-core": {
+                "capabilities": {
+                    "standalone_app": True,
+                    "hakoniwa_app": False,
+                }
+            },
+        }
+
+        order = foundation.dependency_order(
+            ["hakoniwa-pdu-bridge-core"],
+            self.build_catalog(),
+            requirements,
+        )
+
+        self.assertEqual(
+            order,
+            ["hakoniwa-pdu-endpoint", "hakoniwa-pdu-bridge-core"],
+        )
+
     def test_plan_has_no_actions_when_foundation_is_satisfied(self) -> None:
         self.write_recipe(
             "  hakoniwa-core-pro:\n"
@@ -1316,6 +1340,50 @@ class FoundationInspectorTest(unittest.TestCase):
         self.assertIn("  python: false", content)
         self.assertIn('  hakoniwa_core_root: ""', content)
         self.assertTrue(all("--python-venv" not in command for command in commands))
+
+    def test_standalone_bridge_manifest_disables_core_app(self) -> None:
+        paths = foundation.resolve_workspace(self.root, "test")
+        source = self.root / "hakoniwa-pdu-bridge-core"
+        hako = source / "tools" / "hako.py"
+        hako.parent.mkdir(parents=True)
+        hako.write_text("# test\n", encoding="utf-8")
+
+        foundation.component_commands(
+            "hakoniwa-pdu-bridge-core",
+            source,
+            ["doctor"],
+            paths,
+        )
+
+        manifest = paths.foundation_build / "hakoniwa-pdu-bridge-core.yaml"
+        legacy_content = manifest.read_text(encoding="utf-8")
+        self.assertIn("  standalone_app: false", legacy_content)
+        self.assertIn("  hakoniwa_app: true", legacy_content)
+        self.assertIn("  monitor: false", legacy_content)
+        self.assertIn(
+            f"  hakoniwa_core_root: {json.dumps(str(paths.install_prefix))}",
+            legacy_content,
+        )
+
+        foundation.component_commands(
+            "hakoniwa-pdu-bridge-core",
+            source,
+            ["doctor", "build", "install"],
+            paths,
+            {
+                "capabilities": {
+                    "standalone_app": True,
+                    "hakoniwa_app": False,
+                    "monitor": False,
+                }
+            },
+        )
+
+        content = manifest.read_text(encoding="utf-8")
+        self.assertIn("  standalone_app: true", content)
+        self.assertIn("  hakoniwa_app: false", content)
+        self.assertIn("  monitor: false", content)
+        self.assertIn('  hakoniwa_core_root: ""', content)
 
     def test_rpc_commands_install_python_into_foundation_venv(self) -> None:
         paths = foundation.resolve_workspace(self.root, "test")

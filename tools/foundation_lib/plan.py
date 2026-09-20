@@ -114,6 +114,13 @@ def dependency_order(
             dependencies = [
                 item for item in dependencies if item != "hakoniwa-core-pro"
             ]
+        if (
+            component_id == "hakoniwa-pdu-bridge-core"
+            and required_capabilities.get("hakoniwa_app") is False
+        ):
+            dependencies = [
+                item for item in dependencies if item != "hakoniwa-core-pro"
+            ]
         return dependencies
 
     def visit(component_id: str) -> None:
