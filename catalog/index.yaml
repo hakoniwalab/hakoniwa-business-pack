@@ -862,6 +862,30 @@ components:
   - multi-drone
   - 100-drones
   catalog_path: components/hakoniwa-threejs-drone.yaml
+- id: hakoniwa-zenoh-topology-viewer
+  name: Hakoniwa Zenoh Topology Viewer
+  category: visualization
+  secondary_categories:
+  - monitoring
+  - integration
+  - browser
+  maturity: active
+  distribution: oss
+  summary: Observes real process-local Zenoh sessions, aggregates snapshots through
+    core-free Hakoniwa PDU Endpoint, and renders the topology in a browser.
+  recipe_roles:
+  - visualizer
+  connects_to:
+  - zenoh-c
+  - hakoniwa-pdu-endpoint
+  - hakoniwa-pdu-bridge-core
+  tags:
+  - zenoh
+  - topology
+  - browser
+  - pdu
+  - monitoring
+  catalog_path: components/hakoniwa-zenoh-topology-viewer.yaml
 - id: tobas
   name: Tobas
   category: tool
@@ -902,3 +926,23 @@ components:
   - integration
   - dual-license
   catalog_path: components/tobas.yaml
+- id: zenoh-c
+  name: Zenoh C (Tutorial-pinned)
+  category: communication
+  secondary_categories:
+  - infrastructure
+  - integration
+  maturity: active
+  distribution: oss
+  summary: Tutorial-pinned Zenoh C library built with the unstable Connectivity API
+    for the optional topology exercise.
+  recipe_roles:
+  - communication_infrastructure
+  connects_to:
+  - hakoniwa-zenoh-topology-viewer
+  tags:
+  - zenoh
+  - c
+  - middleware
+  - topology
+  catalog_path: components/zenoh-c.yaml

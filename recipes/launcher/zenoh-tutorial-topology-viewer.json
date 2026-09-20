@@ -1,0 +1,46 @@
+{
+  "version": "0.1",
+  "runtime": { "cleanup_mmap_on_start": false },
+  "defaults": {
+    "delay_sec": 1,
+    "stdout": "${HAKO_RECIPE_WORKSPACE}/logs/${asset}.out",
+    "stderr": "${HAKO_RECIPE_WORKSPACE}/logs/${asset}.err"
+  },
+  "assets": [
+    {
+      "name": "topology-bridge",
+      "command": "${HAKO_FOUNDATION_INSTALL}/bin/hakoniwa-pdu-bridge",
+      "args": [
+        "${HAKO_TOPOLOGY_CONFIG_DIR}/bridge.json",
+        "1000",
+        "${HAKO_TOPOLOGY_CONFIG_DIR}/endpoint-container.json",
+        "zenoh_topology_bridge"
+      ],
+      "cwd": "${HAKO_TOPOLOGY_CONFIG_DIR}",
+      "activation_timing": "before_start"
+    },
+    {
+      "name": "topology-web",
+      "command": "${HAKO_FOUNDATION_PYTHON}",
+      "args": [
+        "-m", "http.server", "5173", "--bind", "0.0.0.0",
+        "--directory", "${HAKO_TOPOLOGY_WEB_DIR}"
+      ],
+      "cwd": "${HAKO_TOPOLOGY_WEB_DIR}",
+      "depends_on": ["topology-bridge"],
+      "activation_timing": "before_start"
+    },
+    {
+      "name": "topology-aggregator",
+      "command": "${HAKO_FOUNDATION_INSTALL}/bin/hako-zenoh-topology-collector",
+      "args": [
+        "--inventory", "${HAKO_TOPOLOGY_CONFIG_DIR}/inventory.json",
+        "--endpoint-config", "${HAKO_TOPOLOGY_CONFIG_DIR}/collector-out.json",
+        "--publish-interval-ms", "1000", "--no-stdout"
+      ],
+      "cwd": "${HAKO_TOPOLOGY_CONFIG_DIR}",
+      "depends_on": ["topology-bridge", "topology-web"],
+      "activation_timing": "before_start"
+    }
+  ]
+}

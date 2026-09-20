@@ -91,6 +91,21 @@ def write_component_manifest(
                 required_capabilities.get("callback_assets_shared") is True
             ),
         )
+    elif component_id == "zenoh-c":
+        content = f"""version: 1
+
+build:
+  type: Release
+  dir: {_yaml_string(build_dir)}
+  parallel: 0
+
+features:
+  unstable_api: true
+  shared_memory: false
+
+validation:
+  tests: false
+"""
     elif component_id == "hakoniwa-pdu-endpoint":
         core_free = (
             required_capabilities.get("core_free_runtime") is True
@@ -175,6 +190,28 @@ build:
 
 paths:
   hakoniwa_core_root: {_yaml_string(prefix)}
+"""
+    elif component_id == "hakoniwa-zenoh-topology-viewer":
+        content = f"""version: 1
+
+build:
+  type: Release
+  dir: {_yaml_string(build_dir)}
+  parallel: 0
+
+components:
+  collector: true
+  web: true
+
+validation:
+  tests: true
+  smoke: true
+
+paths:
+  zenohc_root: {_yaml_string(prefix)}
+  pdu_endpoint_root: {_yaml_string(prefix)}
+  pdu_registry_root: {_yaml_string(source.parent / "hakoniwa-pdu-registry")}
+  pdu_javascript_root: {_yaml_string(source.parent / "hakoniwa-pdu-javascript")}
 """
     elif component_id == "athrill-target-v850e2m":
         athrill_source = source.parent / "athrill"
@@ -291,10 +328,12 @@ def component_commands(
                 str(paths.install_prefix),
             ]
             if component_id in {
+                "zenoh-c",
                 "hakoniwa-pdu-endpoint",
                 "hakoniwa-pdu-bridge-core",
                 "hakoniwa-pdu-python",
                 "hakoniwa-pdu-rpc",
+                "hakoniwa-zenoh-topology-viewer",
             }:
                 command.extend(
                     [

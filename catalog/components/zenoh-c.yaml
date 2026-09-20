@@ -1,0 +1,128 @@
+id: zenoh-c
+name: Zenoh C (Tutorial-pinned)
+repository:
+  owner: tmori
+  name: zenoh-tutorial
+  url: https://github.com/tmori/zenoh-tutorial
+  visibility: public
+distribution:
+  channel: oss
+  notes:
+    - zenoh-c is pinned as a git submodule of zenoh-tutorial and retains its upstream licenses.
+verification:
+  verified_at: 2026-09-20
+  source_revision: 709e688ae0143a963bdf63976d8954672382a6e2
+  source_ref: main
+summary: Tutorial-pinned Zenoh C library built with the unstable Connectivity API for the optional topology exercise.
+category:
+  primary: communication
+  secondary:
+    - infrastructure
+    - integration
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - The default zenoh-tutorial build remains independent; Foundation invokes the optional component wrapper only for the topology Recipe.
+capabilities:
+  - name: Zenoh C shared library
+    description: Builds and installs the tutorial-pinned zenoh-c shared library and CMake package.
+    evidence:
+      - repository: tmori/zenoh-tutorial
+        path: zenoh-c/CMakeLists.txt
+        revision: 709e688ae0143a963bdf63976d8954672382a6e2
+  - name: Connectivity API build
+    description: Enables the unstable API required to inspect the owning process's real Zenoh session.
+    evidence:
+      - repository: tmori/zenoh-tutorial
+        path: tools/hako.py
+        revision: working-tree
+limitations:
+  - The unstable Connectivity API is tied to the tutorial-pinned zenoh-c revision.
+  - This component observes only sessions in the process that attaches the agent.
+interfaces:
+  inputs: []
+  outputs:
+    - name: zenohc CMake package
+      kind: api
+      description: Headers, shared library, and package metadata installed into Foundation.
+  protocols:
+    - name: Zenoh
+      role: peer
+      notes: Supports peer, client, and router connectivity according to Zenoh configuration.
+  configuration:
+    - path: tools/hako.py
+      description: Optional Foundation build lifecycle for the pinned submodule.
+dependencies:
+  required:
+    - name: CMake and Rust
+      type: tool
+      notes: Build the C wrapper and its Rust implementation.
+  optional: []
+platforms:
+  supported:
+    - Linux
+    - macOS
+  notes:
+    - The Recipe acceptance path is Ubuntu 24.04 in Docker on amd64 and arm64.
+connects_to:
+  - component_id: hakoniwa-zenoh-topology-viewer
+    direction: used_by
+    interface: api
+recipe_roles:
+  - role: communication_infrastructure
+    description: Provides the real Zenoh session and Connectivity API observed by the topology agent.
+typical_usecases:
+  - Build zenoh-tutorial's optional topology-enabled publisher and subscriber.
+anti_usecases:
+  - Treat the unstable Connectivity API as a version-independent public ABI.
+demo_candidates:
+  - name: Peer-to-peer topology observation
+    description: Run the tutorial publisher and subscriber with explicit topology-agent opt-in.
+    required_components:
+      - zenoh-c
+      - hakoniwa-zenoh-topology-viewer
+    source_examples:
+      - repository: tmori/zenoh-tutorial
+        path: sample/c-sample
+        revision: 709e688ae0143a963bdf63976d8954672382a6e2
+operations:
+  build:
+    commands:
+      - python tools/hako.py doctor --config <manifest>
+      - python tools/hako.py build --config <manifest>
+    notes:
+      - Foundation supplies the resolved manifest and install prefix.
+  test:
+    commands:
+      - python tools/hako.py smoke --config <manifest> --install-dir <prefix>
+    notes:
+      - Verifies the installed CMake package.
+  run:
+    commands: []
+    notes:
+      - Consumed as a library by tutorial binaries and the topology collector.
+runtime_checks:
+  - id: zenoh-c-install-smoke
+    kind: smoke-test
+    platforms: [linux, macos]
+    command: [python, tools/hako.py, smoke]
+    working_directory: repository
+    output: text
+hako_cli:
+  contract_version: "1.1"
+  path: tools/hako.py
+  common_options: [--config, --install-dir, --state-dir]
+  commands: [doctor, configure, build, test, install, smoke]
+known_gaps:
+  - Native Windows is not part of this Recipe's current acceptance matrix.
+source_refs:
+  - repository: tmori/zenoh-tutorial
+    path: .gitmodules
+    revision: 709e688ae0143a963bdf63976d8954672382a6e2
+    description: Pins zenoh-c as a tutorial dependency.
+  - repository: tmori/zenoh-tutorial
+    path: tools/hako.py
+    revision: working-tree
+    description: Component lifecycle and receipt adapter.
+tags: [zenoh, c, middleware, topology]

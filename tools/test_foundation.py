@@ -1385,6 +1385,45 @@ class FoundationInspectorTest(unittest.TestCase):
         self.assertIn("  monitor: false", content)
         self.assertIn('  hakoniwa_core_root: ""', content)
 
+    def test_zenoh_topology_manifests_use_optional_core_free_graph(self) -> None:
+        paths = foundation.resolve_workspace(self.root, "test")
+        tutorial = self.root / "zenoh-tutorial"
+        viewer = self.root / "hakoniwa-zenoh-topology-viewer"
+        for source in (tutorial, viewer):
+            hako = source / "tools" / "hako.py"
+            hako.parent.mkdir(parents=True)
+            hako.write_text("# test\n", encoding="utf-8")
+
+        zenoh_commands = foundation.component_commands(
+            "zenoh-c", tutorial, ["doctor", "configure", "build", "install", "smoke"], paths
+        )
+        zenoh_manifest = (paths.foundation_build / "zenoh-c.yaml").read_text(encoding="utf-8")
+        self.assertIn("  unstable_api: true", zenoh_manifest)
+        self.assertIn("  shared_memory: false", zenoh_manifest)
+        self.assertEqual([command[-1] for command in zenoh_commands], [
+            "doctor", "configure", "build", "install", "smoke"
+        ])
+
+        viewer_commands = foundation.component_commands(
+            "hakoniwa-zenoh-topology-viewer",
+            viewer,
+            ["doctor", "build", "test", "install", "smoke"],
+            paths,
+        )
+        viewer_manifest = (
+            paths.foundation_build / "hakoniwa-zenoh-topology-viewer.yaml"
+        ).read_text(encoding="utf-8")
+        self.assertIn(f"  zenohc_root: {json.dumps(str(paths.install_prefix))}", viewer_manifest)
+        self.assertIn(f"  pdu_endpoint_root: {json.dumps(str(paths.install_prefix))}", viewer_manifest)
+        self.assertIn(
+            f"  pdu_registry_root: {json.dumps(str(viewer.parent / 'hakoniwa-pdu-registry'))}",
+            viewer_manifest,
+        )
+        self.assertEqual([command[-1] for command in viewer_commands], [
+            "doctor", "build", "test", "install", "smoke"
+        ])
+        self.assertTrue(all("--state-dir" in command for command in viewer_commands))
+
     def test_rpc_commands_install_python_into_foundation_venv(self) -> None:
         paths = foundation.resolve_workspace(self.root, "test")
         source = self.root / "hakoniwa-pdu-rpc"

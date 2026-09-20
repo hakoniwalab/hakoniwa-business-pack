@@ -1,0 +1,154 @@
+id: hakoniwa-zenoh-topology-viewer
+name: Hakoniwa Zenoh Topology Viewer
+repository:
+  owner: hakoniwalab
+  name: hakoniwa-zenoh-topology-viewer
+  url: https://github.com/hakoniwalab/hakoniwa-zenoh-topology-viewer
+  visibility: public
+distribution:
+  channel: oss
+  notes:
+    - Optional topology education and diagnostics component; not required by normal Zenoh tutorials.
+verification:
+  verified_at: 2026-09-20
+  source_revision: bd02efb3f22f6ace4bb685c78f7168442942e9bf
+  source_ref: main
+summary: Observes real process-local Zenoh sessions, aggregates snapshots through core-free Hakoniwa PDU Endpoint, and renders the topology in a browser.
+category:
+  primary: visualization
+  secondary:
+    - monitoring
+    - integration
+    - browser
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - Agent and Aggregator use a shared topology snapshot contract; multiple agents enter one TCP multiplexer port.
+capabilities:
+  - name: Session-local topology agent
+    description: Attaches to an existing Zenoh session and reports its Connectivity API snapshot only when the host application opts in.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-zenoh-topology-viewer
+        path: collector/src/topology_agent_c.cpp
+        revision: bd02efb3f22f6ace4bb685c78f7168442942e9bf
+  - name: Multiplexed topology aggregation
+    description: Accepts multiple agent connections through one PDU Endpoint multiplexer and merges current snapshots with stale-source handling.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-zenoh-topology-viewer
+        path: collector/src/topology_pdu_subscriber.cpp
+        revision: bd02efb3f22f6ace4bb685c78f7168442942e9bf
+  - name: Browser topology visualization
+    description: Consumes the aggregated PDU over WebSocket and displays nodes, roles, links, and stale state.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-zenoh-topology-viewer
+        path: web/src/main.js
+        revision: bd02efb3f22f6ace4bb685c78f7168442942e9bf
+limitations:
+  - An external process cannot remotely inspect another peer's session-local Connectivity API; each observed process must attach the agent.
+  - The current tutorial inventory uses fixed expected Zenoh IDs for two peers.
+interfaces:
+  inputs:
+    - name: Borrowed Zenoh session
+      kind: api
+      description: Session handle retained and owned by the tutorial process.
+    - name: Agent snapshot endpoint
+      kind: protocol
+      description: Core-free TCP PDU Endpoint accepted by the Aggregator multiplexer.
+  outputs:
+    - name: Aggregated topology snapshot
+      kind: pdu
+      description: std_msgs/String JSON snapshot sent to the Bridge.
+    - name: Browser application
+      kind: file
+      description: Static application consuming the topology WebSocket.
+  protocols:
+    - name: Hakoniwa PDU TCP
+      role: client-server
+      notes: Carries agent and aggregate snapshots without shared memory or Hakoniwa Core.
+    - name: WebSocket
+      role: server
+      notes: Carries the aggregate snapshot from Bridge to browsers.
+  configuration:
+    - path: config/foundation
+      description: Installable multiplexer, collector, bridge, inventory, and browser endpoint configuration.
+dependencies:
+  required:
+    - name: zenoh-c
+      type: library
+      notes: Provides the unstable Connectivity API.
+    - name: hakoniwa-pdu-endpoint
+      type: library
+      notes: Provides core-free TCP endpoints and the multiplexer.
+    - name: hakoniwa-pdu-javascript
+      type: repository
+      notes: Provides WebSocket PDU communication and data conversion in the browser.
+  optional: []
+platforms:
+  supported: [Linux, macOS]
+  notes:
+    - Docker Compose on Ubuntu 24.04 is the reference end-to-end path.
+connects_to:
+  - component_id: zenoh-c
+    direction: uses
+    interface: api
+  - component_id: hakoniwa-pdu-endpoint
+    direction: uses
+    interface: endpoint
+  - component_id: hakoniwa-pdu-bridge-core
+    direction: uses
+    interface: pdu
+recipe_roles:
+  - role: visualizer
+    description: Aggregates and displays the live topology without owning tutorial process lifecycle.
+typical_usecases:
+  - Explain peer-to-peer Zenoh connectivity in the zenoh-tutorial Compose network.
+  - Diagnose missing or stale tutorial agents in a browser.
+anti_usecases:
+  - Discover arbitrary remote Zenoh sessions without cooperation from those processes.
+  - Replace a production monitoring or security system.
+demo_candidates:
+  - name: Zenoh tutorial peer topology
+    description: Render the real pub/sub peer connection while tutorial data continues to flow.
+    required_components: [zenoh-c, hakoniwa-pdu-endpoint, hakoniwa-pdu-bridge-core, hakoniwa-zenoh-topology-viewer]
+    source_examples:
+      - repository: tmori/zenoh-tutorial
+        path: sample/c-sample
+        revision: 709e688ae0143a963bdf63976d8954672382a6e2
+operations:
+  build:
+    commands: [python tools/hako.py build --config <manifest>]
+    notes:
+      - Builds the C++ collector/agent and staged web application.
+  test:
+    commands: [python tools/hako.py test --config <manifest>]
+    notes:
+      - Runs CTest and web unit tests.
+  run:
+    commands: [hako-zenoh-topology-collector --help]
+    notes:
+      - Business Pack Launcher owns the Aggregator, Bridge, and HTTP server processes.
+runtime_checks:
+  - id: component-smoke
+    kind: smoke-test
+    platforms: [linux, macos]
+    command: [python, tools/hako.py, smoke]
+    working_directory: repository
+    output: text
+hako_cli:
+  contract_version: "1.1"
+  path: tools/hako.py
+  common_options: [--config, --install-dir, --state-dir]
+  commands: [doctor, configure, build, test, install, smoke]
+known_gaps:
+  - The Docker peer-to-peer browser E2E must be recorded before the Recipe is marked verified.
+source_refs:
+  - repository: hakoniwalab/hakoniwa-zenoh-topology-viewer
+    path: collector
+    revision: bd02efb3f22f6ace4bb685c78f7168442942e9bf
+    description: Collector, agent, multiplexer, and aggregation implementation.
+  - repository: hakoniwalab/hakoniwa-zenoh-topology-viewer
+    path: web
+    revision: bd02efb3f22f6ace4bb685c78f7168442942e9bf
+    description: Browser visualization and tests.
+tags: [zenoh, topology, browser, pdu, monitoring]

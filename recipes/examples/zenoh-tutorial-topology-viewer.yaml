@@ -1,0 +1,257 @@
+id: zenoh-tutorial-topology-viewer
+title: Zenoh Tutorial Optional Topology Viewer
+recipe_version: 0.1
+goal:
+  user_request: Add an opt-in Business Pack topology viewer to zenoh-tutorial without changing its default tutorial flow.
+  description: >
+    Build the tutorial-pinned zenoh-c with Connectivity API support, attach an
+    observer only when --topology-agent is passed, aggregate observations through
+    Hakoniwa PDU Endpoint, and display the peer-to-peer topology in a browser.
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - The tutorial keeps its normal binaries and Compose flow independent of Business Pack.
+    - Foundation owns the optional native dependencies, collector, agent, bridge, and web artifacts.
+validation:
+  status: partially_verified
+  summary: Static contracts and component tests are automated; Docker peer-to-peer browser E2E is the final acceptance step.
+  steps:
+    - id: default_tutorial_regression
+      status: not_tested
+      evidence:
+        - repository: tmori/zenoh-tutorial
+          path: sample/c-sample/CMakeLists.txt
+          revision: 709e688ae0143a963bdf63976d8954672382a6e2
+    - id: optional_foundation_build
+      status: not_tested
+      evidence:
+        - repository: hakoniwalab/hakoniwa-business-pack
+          path: tools/foundation_lib/build.py
+          revision: bfba97b
+    - id: peer_to_peer_browser_e2e
+      status: not_tested
+      evidence:
+        - repository: tmori/zenoh-tutorial
+          path: docker-compose.viewer.yml
+          revision: working-tree
+constraints:
+  - optional-feature-only
+  - no-hakoniwa-core
+  - no-hako-cmd
+  - docker-compose-peer-to-peer
+target_environment:
+  required_for: executable-demo
+  status: specified
+  os: Linux
+  os_version: Ubuntu 24.04 container
+  architecture: x64 | arm64
+  execution_mode: docker
+  runtimes:
+    - name: Python
+      required: true
+      version: "3"
+      path: work/foundation/python
+  hakoniwa:
+    install_prefix: work/foundation/install
+    components_built:
+      - zenoh-c
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-pdu-bridge-core
+      - hakoniwa-zenoh-topology-viewer
+execution_environment:
+  required_for: executable-demo
+  status: specified
+  workspace:
+    mode: managed
+  os: Linux
+  os_version: Ubuntu 24.04 container
+  architecture: x64 | arm64
+  execution_mode: docker
+  gui:
+    required: false
+    status: browser-on-host
+  shared_memory:
+    required: false
+    access: not-used
+  python:
+    environment: venv
+    hakopy_available: not-required
+  hakoniwa:
+    install_prefix: work/foundation/install
+    hako_cmd_access: not-required
+  notes:
+    - Launcher runs in activate-only mode and starts only Bridge, Aggregator, and the static web server.
+foundation_contract:
+  mode: required
+  reason: Foundation owns the optional compiled dependency graph, install prefix, and receipts; Hakoniwa Core is explicitly disabled.
+runtime_dependencies:
+  python:
+    interpreter: work/foundation/install/python
+    requirements: recipes/requirements/zenoh-tutorial-topology-viewer.txt
+    packages:
+      - name: pydantic
+        version: ">=2.7.0"
+        purpose: Validate the hakoniwa-pdu-python Launcher configuration models.
+foundation_requirements:
+  zenoh-c:
+    version:
+      min: 1.10.1
+    capabilities:
+      shared_library: true
+      unstable_api: true
+      shared_memory: false
+  hakoniwa-pdu-endpoint:
+    capabilities:
+      hakoniwa_core: false
+      python_binding: false
+  hakoniwa-pdu-bridge-core:
+    capabilities:
+      hakoniwa_app: false
+      standalone_app: true
+      monitor: false
+  hakoniwa-zenoh-topology-viewer:
+    capabilities:
+      collector: true
+      topology_agent: true
+      browser_viewer: true
+      tcp_multiplexer: true
+      hakoniwa_core: false
+recipe_local_requirements_schema_version: 1
+recipe_local_requirements:
+  hakoniwa-pdu-registry:
+    root:
+      default_path: ../hakoniwa-pdu-registry
+      override_env: HAKONIWA_PDU_REGISTRY_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/hakoniwa-pdu-registry.git
+      revision: main
+    required_artifacts:
+      - path: pdu/types/std_msgs/pdu_cpptype_cdr_conv_String.hpp
+        kind: file
+  hakoniwa-pdu-javascript:
+    root:
+      default_path: ../hakoniwa-pdu-javascript
+      override_env: HAKONIWA_PDU_JAVASCRIPT_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/hakoniwa-pdu-javascript.git
+      revision: main
+    required_artifacts:
+      - path: package.json
+        kind: file
+  hakoniwa-pdu-python:
+    root:
+      default_path: ../hakoniwa-pdu-python
+      override_env: HAKONIWA_PDU_PYTHON_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/hakoniwa-pdu-python.git
+      revision: main
+    required_artifacts:
+      - path: src/hakoniwa_pdu/apps/launcher/hako_launcher.py
+        kind: file
+recipe_runtime_schema_version: 1
+recipe_runtime:
+  environment:
+    HAKO_FOUNDATION_INSTALL: ${FOUNDATION_INSTALL}
+    HAKO_FOUNDATION_PYTHON: ${FOUNDATION_PYTHON}
+    HAKO_RECIPE_WORKSPACE: ${RECIPE_WORKSPACE}
+    HAKO_TOPOLOGY_CONFIG_DIR: ${FOUNDATION_INSTALL}/share/hakoniwa/zenoh-topology-viewer/config
+    HAKO_TOPOLOGY_WEB_DIR: ${FOUNDATION_INSTALL}/share/hakoniwa/zenoh-topology-viewer/web
+    PYTHONPATH: ${DEPENDENCY:hakoniwa-pdu-python}/src
+  launcher:
+    template: recipes/launcher/zenoh-tutorial-topology-viewer.json
+    output: config/launcher.json
+    mode: activate-only
+components:
+  - id: zenoh-c
+    roles:
+      - communication_infrastructure
+    purpose: Supplies the tutorial-pinned Zenoh C ABI with Connectivity API support.
+  - id: hakoniwa-pdu-endpoint
+    roles:
+      - communication_infrastructure
+    purpose: Carries agent observations and aggregated snapshots without Hakoniwa Core.
+  - id: hakoniwa-pdu-bridge-core
+    roles:
+      - bridge
+    purpose: Bridges the aggregated snapshot from TCP Endpoint to browser WebSocket.
+  - id: hakoniwa-zenoh-topology-viewer
+    roles:
+      - visualizer
+    purpose: Observes sessions, aggregates topology, and renders it in the browser.
+connections:
+  - from: zenoh-c
+    to: hakoniwa-zenoh-topology-viewer
+    interface: api
+  - from: hakoniwa-zenoh-topology-viewer
+    to: hakoniwa-pdu-endpoint
+    interface: endpoint
+  - from: hakoniwa-pdu-endpoint
+    to: hakoniwa-pdu-bridge-core
+    interface: pdu
+data_flow:
+  - pub/sub Zenoh sessions -> opt-in local agents -> TCP multiplexer -> Aggregator -> Bridge -> WebSocket -> browser
+time_model:
+  mode: wall-clock
+  notes:
+    - Agents publish snapshots every second and the Aggregator marks sources stale after five seconds.
+artifact_sets: {}
+artifacts:
+  - id: topology_collector
+    kind: executable
+    path: work/foundation/install/bin/hako-zenoh-topology-collector
+    platforms: [linux]
+  - id: topology_web
+    kind: directory
+    path: work/foundation/install/share/hakoniwa/zenoh-topology-viewer/web
+    platforms: [linux]
+platform_notes:
+  linux:
+    - Both amd64 and arm64 Docker Compose targets use the same optional viewer stage.
+missing_pieces:
+  - Execute and record the Docker browser E2E before promoting validation to verified.
+demo:
+  prerequisites:
+    - id: start_optional_compose
+      command: docker compose -f docker-compose.yml -f docker-compose.viewer.yml up -d --build
+      expected: node_a, node_b, and node_c start with the optional viewer toolchain available.
+  steps:
+    - id: inspect_plan
+      command: python tools/recipe.py plan --recipe recipes/examples/zenoh-tutorial-topology-viewer.yaml
+      expected: Show only the core-free Foundation graph and three local source requirements.
+    - id: configure_optional_foundation
+      command: python tools/recipe.py configure --recipe recipes/examples/zenoh-tutorial-topology-viewer.yaml
+      expected: Build and install all optional components and materialize the activate-only Launcher.
+    - id: launch_viewer
+      command: python tools/recipe.py launch --recipe recipes/examples/zenoh-tutorial-topology-viewer.yaml
+      expected: Bridge, Aggregator, and web server start without hako-cmd.
+  cleanup:
+    expected_behavior:
+      - Stop the Launcher session and Docker Compose services after the tutorial.
+    verification_checks:
+      - Confirm no topology assets remain after Launcher stop.
+    cautions:
+      - The viewer is opt-in; do not add it to the default tutorial startup path.
+expected_result: >
+  A peer-to-peer publisher and subscriber communicate normally while their real
+  Zenoh sessions appear as a live topology at http://localhost:5173.
+source_catalogs:
+  - component_id: zenoh-c
+  - component_id: hakoniwa-pdu-endpoint
+  - component_id: hakoniwa-pdu-bridge-core
+  - component_id: hakoniwa-zenoh-topology-viewer
+source_artifacts:
+  - repository: tmori/zenoh-tutorial
+    path: sample/c-sample/pub.c
+    revision: 709e688ae0143a963bdf63976d8954672382a6e2
+    description: Existing tutorial publisher with compile-time and runtime opt-in observer boundary.
+  - repository: hakoniwalab/hakoniwa-zenoh-topology-viewer
+    path: collector/src/topology_agent_c.cpp
+    revision: bd02efb3f22f6ace4bb685c78f7168442942e9bf
+    description: Session-local Connectivity API observer and PDU publisher.
