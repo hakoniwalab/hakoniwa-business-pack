@@ -10,8 +10,8 @@ distribution:
   notes:
     - Optional topology education and diagnostics component; not required by normal Zenoh tutorials.
 verification:
-  verified_at: 2026-09-20
-  source_revision: bd02efb3f22f6ace4bb685c78f7168442942e9bf
+  verified_at: 2026-09-21
+  source_revision: 3c2063376981a7a7b326367927ec489ad943815c
   source_ref: main
 summary: Observes real process-local Zenoh sessions, aggregates snapshots through core-free Hakoniwa PDU Endpoint, and renders the topology in a browser.
 category:
@@ -31,22 +31,21 @@ capabilities:
     evidence:
       - repository: hakoniwalab/hakoniwa-zenoh-topology-viewer
         path: collector/src/topology_agent_c.cpp
-        revision: bd02efb3f22f6ace4bb685c78f7168442942e9bf
+        revision: 3c2063376981a7a7b326367927ec489ad943815c
   - name: Multiplexed topology aggregation
-    description: Accepts multiple agent connections through one PDU Endpoint multiplexer and merges current snapshots with stale-source handling.
+    description: Dynamically accepts multiple agent connections through one PDU Endpoint multiplexer and merges current snapshots with stale-source handling.
     evidence:
       - repository: hakoniwalab/hakoniwa-zenoh-topology-viewer
-        path: collector/src/topology_pdu_subscriber.cpp
-        revision: bd02efb3f22f6ace4bb685c78f7168442942e9bf
+        path: collector/src/main.cpp
+        revision: 3c2063376981a7a7b326367927ec489ad943815c
   - name: Browser topology visualization
     description: Consumes the aggregated PDU over WebSocket and displays nodes, roles, links, and stale state.
     evidence:
       - repository: hakoniwalab/hakoniwa-zenoh-topology-viewer
         path: web/src/main.js
-        revision: bd02efb3f22f6ace4bb685c78f7168442942e9bf
+        revision: 3c2063376981a7a7b326367927ec489ad943815c
 limitations:
   - An external process cannot remotely inspect another peer's session-local Connectivity API; each observed process must attach the agent.
-  - The current tutorial inventory uses fixed expected Zenoh IDs for two peers.
 interfaces:
   inputs:
     - name: Borrowed Zenoh session
@@ -114,7 +113,7 @@ demo_candidates:
     source_examples:
       - repository: tmori/zenoh-tutorial
         path: sample/c-sample
-        revision: 709e688ae0143a963bdf63976d8954672382a6e2
+        revision: 66aed859cd9b9ce50c5237817035bf783be28731
 operations:
   build:
     commands: [python tools/hako.py build --config <manifest>]
@@ -145,10 +144,10 @@ known_gaps:
 source_refs:
   - repository: hakoniwalab/hakoniwa-zenoh-topology-viewer
     path: collector
-    revision: bd02efb3f22f6ace4bb685c78f7168442942e9bf
+    revision: 3c2063376981a7a7b326367927ec489ad943815c
     description: Collector, agent, multiplexer, and aggregation implementation.
   - repository: hakoniwalab/hakoniwa-zenoh-topology-viewer
     path: web
-    revision: bd02efb3f22f6ace4bb685c78f7168442942e9bf
+    revision: 3c2063376981a7a7b326367927ec489ad943815c
     description: Browser visualization and tests.
 tags: [zenoh, topology, browser, pdu, monitoring]

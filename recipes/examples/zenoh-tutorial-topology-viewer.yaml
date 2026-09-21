@@ -13,6 +13,7 @@ feasibility:
   rationale:
     - The tutorial keeps its normal binaries and Compose flow independent of Business Pack.
     - The normal and Foundation zenoh-c builds share Cargo artifacts while retaining separate CMake state, install prefixes, and Foundation receipts.
+    - The Aggregator dynamically accepts tutorial agents, so existing Zenoh exercise configuration remains unchanged.
     - Foundation owns the optional native dependencies, collector, agent, bridge, and web artifacts.
 validation:
   status: partially_verified
@@ -23,7 +24,7 @@ validation:
       evidence:
         - repository: tmori/zenoh-tutorial
           path: sample/c-sample/CMakeLists.txt
-          revision: 709e688ae0143a963bdf63976d8954672382a6e2
+          revision: 66aed859cd9b9ce50c5237817035bf783be28731
     - id: optional_foundation_build
       status: not_tested
       evidence:
@@ -35,7 +36,7 @@ validation:
       evidence:
         - repository: tmori/zenoh-tutorial
           path: docker-compose.viewer.yml
-          revision: working-tree
+          revision: 66aed859cd9b9ce50c5237817035bf783be28731
 constraints:
   - optional-feature-only
   - no-hakoniwa-core
@@ -194,7 +195,7 @@ connections:
       status: partially_verified
       requires:
         - zenoh-c 1.10.1 is built with the unstable API and shared-library support in the same Foundation prefix used by the topology agent and tutorial sample.
-        - The tutorial sample attaches the topology agent to its opened Zenoh session only when compile-time support and the --topology-agent runtime option are both enabled.
+        - The tutorial sample attaches the topology agent to its opened Zenoh session only when compile-time support and the -A or --topology-agent runtime option are enabled.
       validation_notes:
         - A manual Docker E2E observed live Connectivity API data from the instrumented tutorial pub/sub sessions; repeatable Recipe-owned CI evidence is not yet recorded.
   - from: hakoniwa-zenoh-topology-viewer
@@ -204,7 +205,7 @@ connections:
       status: partially_verified
       requires:
         - The agents and Aggregator use the installed ZenohTopology/topology PDU schema and matching Endpoint configurations.
-        - Agent connections terminate at the configured TCP multiplexer and the Aggregator consumes the latest available topology snapshots.
+        - Agent connections terminate at the configured TCP multiplexer; the Aggregator dynamically registers their Zenoh IDs and consumes the latest available snapshots.
       validation_notes:
         - A manual multi-agent Docker E2E delivered topology snapshots through the TCP multiplexer and exercised stale-state recovery; this path is not yet covered by Recipe-owned CI.
   - from: hakoniwa-pdu-endpoint
@@ -271,9 +272,9 @@ source_catalogs:
 source_artifacts:
   - repository: tmori/zenoh-tutorial
     path: sample/c-sample/pub.c
-    revision: 709e688ae0143a963bdf63976d8954672382a6e2
+    revision: 66aed859cd9b9ce50c5237817035bf783be28731
     description: Existing tutorial publisher with compile-time and runtime opt-in observer boundary.
   - repository: hakoniwalab/hakoniwa-zenoh-topology-viewer
     path: collector/src/topology_agent_c.cpp
-    revision: bd02efb3f22f6ace4bb685c78f7168442942e9bf
+    revision: 3c2063376981a7a7b326367927ec489ad943815c
     description: Session-local Connectivity API observer and PDU publisher.
