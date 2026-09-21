@@ -98,6 +98,7 @@ build:
   type: Release
   dir: {_yaml_string(build_dir)}
   parallel: 0
+  in_source_tree: true
 
 features:
   unstable_api: true

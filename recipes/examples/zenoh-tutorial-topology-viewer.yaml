@@ -12,6 +12,7 @@ feasibility:
   confidence: high
   rationale:
     - The tutorial keeps its normal binaries and Compose flow independent of Business Pack.
+    - The normal and Foundation zenoh-c builds share Cargo artifacts while retaining separate CMake state, install prefixes, and Foundation receipts.
     - Foundation owns the optional native dependencies, collector, agent, bridge, and web artifacts.
 validation:
   status: partially_verified

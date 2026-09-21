@@ -1400,6 +1400,7 @@ class FoundationInspectorTest(unittest.TestCase):
         zenoh_manifest = (paths.foundation_build / "zenoh-c.yaml").read_text(encoding="utf-8")
         self.assertIn("  unstable_api: true", zenoh_manifest)
         self.assertIn("  shared_memory: false", zenoh_manifest)
+        self.assertIn("  in_source_tree: true", zenoh_manifest)
         self.assertEqual([command[-1] for command in zenoh_commands], [
             "doctor", "configure", "build", "install", "smoke"
         ])
