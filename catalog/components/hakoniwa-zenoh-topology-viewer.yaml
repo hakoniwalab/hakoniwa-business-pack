@@ -11,7 +11,7 @@ distribution:
     - Optional topology education and diagnostics component; not required by normal Zenoh tutorials.
 verification:
   verified_at: 2026-09-21
-  source_revision: 3c2063376981a7a7b326367927ec489ad943815c
+  source_revision: 0aee6fe5c5c512ffe61493fd52ef76b4ba458d34
   source_ref: main
 summary: Observes real process-local Zenoh sessions, aggregates snapshots through core-free Hakoniwa PDU Endpoint, and renders the topology in a browser.
 category:
@@ -31,19 +31,19 @@ capabilities:
     evidence:
       - repository: hakoniwalab/hakoniwa-zenoh-topology-viewer
         path: collector/src/topology_agent_c.cpp
-        revision: 3c2063376981a7a7b326367927ec489ad943815c
+        revision: 0aee6fe5c5c512ffe61493fd52ef76b4ba458d34
   - name: Multiplexed topology aggregation
     description: Dynamically accepts multiple agent connections through one PDU Endpoint multiplexer and merges current snapshots with stale-source handling.
     evidence:
       - repository: hakoniwalab/hakoniwa-zenoh-topology-viewer
         path: collector/src/main.cpp
-        revision: 3c2063376981a7a7b326367927ec489ad943815c
+        revision: 0aee6fe5c5c512ffe61493fd52ef76b4ba458d34
   - name: Browser topology visualization
     description: Consumes the aggregated PDU over WebSocket and displays nodes, roles, links, and stale state.
     evidence:
       - repository: hakoniwalab/hakoniwa-zenoh-topology-viewer
         path: web/src/main.js
-        revision: 3c2063376981a7a7b326367927ec489ad943815c
+        revision: 0aee6fe5c5c512ffe61493fd52ef76b4ba458d34
 limitations:
   - An external process cannot remotely inspect another peer's session-local Connectivity API; each observed process must attach the agent.
 interfaces:
@@ -113,7 +113,7 @@ demo_candidates:
     source_examples:
       - repository: tmori/zenoh-tutorial
         path: sample/c-sample
-        revision: 66aed859cd9b9ce50c5237817035bf783be28731
+        revision: f415170df2ee666d54447aab33475a5c489ef4c1
 operations:
   build:
     commands: [python tools/hako.py build --config <manifest>]
@@ -144,10 +144,10 @@ known_gaps:
 source_refs:
   - repository: hakoniwalab/hakoniwa-zenoh-topology-viewer
     path: collector
-    revision: 3c2063376981a7a7b326367927ec489ad943815c
+    revision: 0aee6fe5c5c512ffe61493fd52ef76b4ba458d34
     description: Collector, agent, multiplexer, and aggregation implementation.
   - repository: hakoniwalab/hakoniwa-zenoh-topology-viewer
     path: web
-    revision: 3c2063376981a7a7b326367927ec489ad943815c
+    revision: 0aee6fe5c5c512ffe61493fd52ef76b4ba458d34
     description: Browser visualization and tests.
 tags: [zenoh, topology, browser, pdu, monitoring]

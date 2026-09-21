@@ -24,7 +24,7 @@ validation:
       evidence:
         - repository: tmori/zenoh-tutorial
           path: sample/c-sample/CMakeLists.txt
-          revision: 66aed859cd9b9ce50c5237817035bf783be28731
+          revision: f415170df2ee666d54447aab33475a5c489ef4c1
     - id: optional_foundation_build
       status: not_tested
       evidence:
@@ -36,7 +36,7 @@ validation:
       evidence:
         - repository: tmori/zenoh-tutorial
           path: docker-compose.viewer.yml
-          revision: 66aed859cd9b9ce50c5237817035bf783be28731
+          revision: f415170df2ee666d54447aab33475a5c489ef4c1
 constraints:
   - optional-feature-only
   - no-hakoniwa-core
@@ -272,9 +272,9 @@ source_catalogs:
 source_artifacts:
   - repository: tmori/zenoh-tutorial
     path: sample/c-sample/pub.c
-    revision: 66aed859cd9b9ce50c5237817035bf783be28731
+    revision: f415170df2ee666d54447aab33475a5c489ef4c1
     description: Existing tutorial publisher with compile-time and runtime opt-in observer boundary.
   - repository: hakoniwalab/hakoniwa-zenoh-topology-viewer
     path: collector/src/topology_agent_c.cpp
-    revision: 3c2063376981a7a7b326367927ec489ad943815c
+    revision: 0aee6fe5c5c512ffe61493fd52ef76b4ba458d34
     description: Session-local Connectivity API observer and PDU publisher.
