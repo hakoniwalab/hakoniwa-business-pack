@@ -189,12 +189,33 @@ connections:
   - from: zenoh-c
     to: hakoniwa-zenoh-topology-viewer
     interface: api
+    contract:
+      status: partially_verified
+      requires:
+        - zenoh-c 1.10.1 is built with the unstable API and shared-library support in the same Foundation prefix used by the topology agent and tutorial sample.
+        - The tutorial sample attaches the topology agent to its opened Zenoh session only when compile-time support and the --topology-agent runtime option are both enabled.
+      validation_notes:
+        - A manual Docker E2E observed live Connectivity API data from the instrumented tutorial pub/sub sessions; repeatable Recipe-owned CI evidence is not yet recorded.
   - from: hakoniwa-zenoh-topology-viewer
     to: hakoniwa-pdu-endpoint
     interface: endpoint
+    contract:
+      status: partially_verified
+      requires:
+        - The agents and Aggregator use the installed ZenohTopology/topology PDU schema and matching Endpoint configurations.
+        - Agent connections terminate at the configured TCP multiplexer and the Aggregator consumes the latest available topology snapshots.
+      validation_notes:
+        - A manual multi-agent Docker E2E delivered topology snapshots through the TCP multiplexer and exercised stale-state recovery; this path is not yet covered by Recipe-owned CI.
   - from: hakoniwa-pdu-endpoint
     to: hakoniwa-pdu-bridge-core
     interface: pdu
+    contract:
+      status: partially_verified
+      requires:
+        - The Aggregator output and Bridge input agree on the ZenohTopology/topology PDU schema and TCP Endpoint configuration.
+        - The Bridge immediate-transfer route targets the WebSocket Endpoint used by the static browser viewer.
+      validation_notes:
+        - A manual static-build browser E2E displayed live topology snapshots through the Bridge; repeatable browser E2E evidence remains to be added to CI.
 data_flow:
   - pub/sub Zenoh sessions -> opt-in local agents -> TCP multiplexer -> Aggregator -> Bridge -> WebSocket -> browser
 time_model:
