@@ -5,7 +5,7 @@ goal:
   user_request: Add an opt-in Business Pack topology viewer to zenoh-tutorial without changing its default tutorial flow.
   description: >
     Build the tutorial-pinned zenoh-c with Connectivity API support, attach an
-    observer only when --topology-agent is passed, aggregate observations through
+    observer only when --topology-agent <name> is passed, aggregate observations through
     Hakoniwa PDU Endpoint, and display the peer-to-peer topology in a browser.
 feasibility:
   status: feasible
@@ -195,7 +195,7 @@ connections:
       status: partially_verified
       requires:
         - zenoh-c 1.10.1 is built with the unstable API and shared-library support in the same Foundation prefix used by the topology agent and tutorial sample.
-        - The tutorial sample attaches the topology agent to its opened Zenoh session only when compile-time support and the -A or --topology-agent runtime option are enabled.
+        - The tutorial sample attaches the topology agent to its opened Zenoh session only when compile-time support and the -A <name> or --topology-agent <name> runtime option is provided.
       validation_notes:
         - A manual Docker E2E observed live Connectivity API data from the instrumented tutorial pub/sub sessions; repeatable Recipe-owned CI evidence is not yet recorded.
   - from: hakoniwa-zenoh-topology-viewer
