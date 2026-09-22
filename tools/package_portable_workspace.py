@@ -176,6 +176,7 @@ def _rewrite_embedded_python_pth(python_root: Path) -> Path:
     path = candidates[0]
     output: list[str] = []
     has_site_packages = False
+    has_business_pack = False
     has_import_site = False
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
@@ -185,9 +186,17 @@ def _rewrite_embedded_python_pth(python_root: Path) -> Path:
             has_import_site = True
         if line.replace("/", "\\").lower() == r"lib\site-packages":
             has_site_packages = True
+        if line.replace("/", "\\") == r"..\..\..\..":
+            has_business_pack = True
         output.append(raw)
     if not has_site_packages:
         output.append(r"Lib\site-packages")
+    if not has_business_pack:
+        # The embeddable runtime sits at
+        # work/foundation/install/python.  Add the packaged Business Pack
+        # root explicitly because ._pth mode does not add the working
+        # directory to sys.path.
+        output.append(r"..\..\..\..")
     if not has_import_site:
         output.append("import site")
     path.write_text("\n".join(output) + "\n", encoding="utf-8")
