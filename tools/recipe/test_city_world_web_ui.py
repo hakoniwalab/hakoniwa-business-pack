@@ -46,8 +46,8 @@ class CityWorldWebUiToolTest(unittest.TestCase):
             "/foundation/python/bin/python", "-m",
             "tools.remote_operation.city_world.launcher", "start",
         ])
-        self.assertIn("/selected-work/recipes/city-world-web-ui/runtime", command)
-        self.assertIn("/selected-work/recipes/city-world-web-ui/launcher", command)
+        self.assertIn(str(paths.recipe_root / "runtime"), command)
+        self.assertIn(str(paths.recipe_root / "launcher"), command)
         self.assertIn("--open-browser", command)
 
     def test_status_uses_the_same_recipe_owned_state(self) -> None:
@@ -65,7 +65,7 @@ class CityWorldWebUiToolTest(unittest.TestCase):
             self.assertEqual(recipe.lifecycle({}, "status", arguments), 0)
         command = run.call_args.args[0]
         self.assertNotIn("--open-browser", command)
-        self.assertIn("/selected-work/recipes/city-world-web-ui/runtime", command)
+        self.assertIn(str(paths.recipe_root / "runtime"), command)
 
 
 if __name__ == "__main__":

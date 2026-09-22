@@ -26,7 +26,7 @@ validation:
     configure/doctor or browser E2E record.
   steps:
     - id: core_free_foundation_contract
-      status: partially_verified
+      status: verified
       evidence:
         - repository: hakoniwalab/hakoniwa-business-pack
           path: tools/foundation_lib/plan.py
@@ -175,10 +175,10 @@ components:
     roles: [communication_infrastructure]
     purpose: Provides the Core-free Python WebSocket PDU endpoint for the Worker.
   - id: hakoniwa-pdu-python
-    roles: [runtime_orchestrator]
+    roles: [control_plane]
     purpose: Provides the activate-only process Launcher and lifecycle control.
   - id: hakoniwa-pdu-javascript
-    roles: [browser_client]
+    roles: [visualizer]
     purpose: Provides the browser-side WebSocket PDU client.
 
 connections:
@@ -209,14 +209,22 @@ time_model:
     - The Web UI manages local asynchronous jobs; simulation time is not used.
 
 artifact_sets:
-  - id: generated_city_world
+  generated_city_world:
+    status: partially_verified
+    description: Recipe-owned City World jobs, including MJCF, GLB, validation and receipt ZIP files.
+    artifacts: [work/recipes/city-world-web-ui/runtime/jobs]
+  plateau_cache:
+    status: partially_verified
+    description: Shared PLATEAU CityGML and texture cache retained across Recipe jobs.
+    artifacts: [work/recipes/city-world-web-ui/runtime/cache/plateau-citygml]
+
+artifacts:
+  - id: generated_city_world_jobs
     kind: generated-directory
     path: work/recipes/city-world-web-ui/runtime/jobs
-    ownership: recipe
-  - id: plateau_cache
+  - id: plateau_citygml_cache
     kind: generated-directory
     path: work/recipes/city-world-web-ui/runtime/cache/plateau-citygml
-    ownership: recipe
 
 agency_boundary:
   agent_actions:
@@ -255,6 +263,38 @@ demo:
       command: python tools/recipe/city_world_web_ui.py start --open-browser
       expected: Start the local Worker and Web UI at http://127.0.0.1:8008/ without Hakoniwa Core.
   cleanup:
-    expected_behavior: Run python tools/recipe/city_world_web_ui.py stop before leaving the Workspace.
+    expected_behavior:
+      - Run python tools/recipe/city_world_web_ui.py stop before leaving the Workspace.
     verification_checks:
       - Worker and Web UI processes terminate together.
+    cautions:
+      - Stop the local services before changing worker-count or terrain-spacing options.
+
+expected_result: >
+  A Core-free local Web UI starts a City World Worker and permits the operator
+  to inspect a PLATEAU selection, generate a validated MJCF/GLB result, and
+  download its job ZIP without starting Hakoniwa Core.
+
+source_catalogs:
+  - component_id: hakoniwa-envsim
+  - component_id: hakoniwa-pdu-endpoint
+  - component_id: hakoniwa-pdu-python
+  - component_id: hakoniwa-pdu-javascript
+
+source_artifacts:
+  - repository: hakoniwalab/hakoniwa-business-pack
+    path: tools/remote_operation/city_world/worker.py
+    revision: main
+    description: Fixed City World request handling and Envsim generation delegation.
+  - repository: hakoniwalab/hakoniwa-business-pack
+    path: tools/remote_operation/city_world/launcher.py
+    revision: main
+    description: Core-free Worker and Web UI lifecycle management.
+  - repository: hakoniwalab/hakoniwa-envsim
+    path: tools/hako.py
+    revision: main
+    description: PLATEAU acquisition and City World conversion entry point.
+  - repository: hakoniwalab/hakoniwa-pdu-python
+    path: src/hakoniwa_pdu/apps/launcher/hako_launcher.py
+    revision: main
+    description: Activate-only process Launcher used by the Recipe.
