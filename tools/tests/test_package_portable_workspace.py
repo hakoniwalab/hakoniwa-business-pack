@@ -57,6 +57,18 @@ class PortableWorkspacePackageTest(unittest.TestCase):
             self.assertFalse((destination / "build").exists())
             self.assertTrue((destination / "install" / "bin" / "runtime.dll").is_file())
 
+    def test_site_package_copy_excludes_python_bytecode_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "source-python"
+            package = source / "Lib" / "site-packages" / "demo"
+            (package / "__pycache__").mkdir(parents=True)
+            (package / "__init__.py").write_text("", encoding="utf-8")
+            (package / "__pycache__" / "demo.cpython-312.pyc").write_bytes(b"pyc")
+            destination = Path(temporary) / "portable-python"
+            portable._copy_site_packages(source, destination)
+            self.assertTrue((destination / "Lib" / "site-packages" / "demo" / "__init__.py").is_file())
+            self.assertFalse((destination / "Lib" / "site-packages" / "demo" / "__pycache__").exists())
+
     def test_start_script_uses_packaged_python_and_web_ui_recipe(self) -> None:
         script = portable._render_start_batch()
         self.assertIn(

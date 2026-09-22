@@ -229,7 +229,14 @@ def _copy_site_packages(source_root: Path, destination_root: Path) -> None:
             continue
         target = destination / item.name
         if item.is_dir():
-            shutil.copytree(item, target, dirs_exist_ok=True)
+            shutil.copytree(
+                item,
+                target,
+                ignore=lambda _directory, names: {
+                    name for name in names if name in COMMON_IGNORES
+                },
+                dirs_exist_ok=True,
+            )
         else:
             shutil.copy2(item, target)
     _reject_absolute_pth_entries(destination)
