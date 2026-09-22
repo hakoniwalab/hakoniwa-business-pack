@@ -33,7 +33,7 @@ COMMON_IGNORES = {
 # package uses the official embeddable interpreter and never installs packages
 # at runtime, so carrying pip adds no runtime capability and can exceed
 # Windows MAX_PATH while staging the ZIP.
-PORTABLE_PYTHON_IGNORES = COMMON_IGNORES | {"pip"}
+PORTABLE_PYTHON_IGNORES = COMMON_IGNORES | {"pip", "setuptools"}
 BUSINESS_PACK_IGNORES = COMMON_IGNORES | {"dist", "work"}
 SIBLING_IGNORES = COMMON_IGNORES | {"build", "dist", "work"}
 
@@ -241,7 +241,9 @@ def _copy_site_packages(source_root: Path, destination_root: Path) -> None:
         # Workspace prepare regenerates this path for the extraction directory.
         if item.name == "hakoniwa_workspace_bootstrap.pth":
             continue
-        if item.name in PORTABLE_PYTHON_IGNORES or item.name.startswith("pip-"):
+        if item.name in PORTABLE_PYTHON_IGNORES or item.name.startswith(
+            ("pip-", "setuptools-")
+        ):
             continue
         target = destination / item.name
         if item.is_dir():

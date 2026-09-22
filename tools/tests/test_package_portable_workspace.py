@@ -86,6 +86,21 @@ class PortableWorkspacePackageTest(unittest.TestCase):
             self.assertFalse((target / "pip").exists())
             self.assertFalse((target / "pip-24.0.dist-info").exists())
 
+    def test_site_package_copy_excludes_setuptools(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "source-python"
+            site_packages = source / "Lib" / "site-packages"
+            (site_packages / "setuptools" / "_vendor").mkdir(parents=True)
+            (site_packages / "setuptools" / "_vendor" / "build_meta.py").write_text(
+                "", encoding="utf-8"
+            )
+            (site_packages / "setuptools-70.0.dist-info").mkdir()
+            destination = Path(temporary) / "portable-python"
+            portable._copy_site_packages(source, destination)
+            target = destination / "Lib" / "site-packages"
+            self.assertFalse((target / "setuptools").exists())
+            self.assertFalse((target / "setuptools-70.0.dist-info").exists())
+
     def test_site_package_copy_excludes_wheel_sbom(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             source = Path(temporary) / "source-python"

@@ -231,6 +231,11 @@ def inspect_foundation_toolchain(
 
 
 def foundation_python_executable(python_root: Path) -> Path:
+    # Windows portable packages use the official embeddable distribution,
+    # whose interpreter is at the Python root rather than Scripts/python.exe.
+    portable_python = python_root / "python.exe"
+    if portable_python.is_file():
+        return portable_python
     return python_root / (
         "Scripts/python.exe" if sys.platform == "win32" else "bin/python"
     )
