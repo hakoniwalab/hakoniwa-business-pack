@@ -19,6 +19,20 @@ Hakoniwaで同じworld-frameを共有する次の成果物を生成するロー�
 
 ## 2. 前提
 
+### 2.1 Windows Portable版
+
+Windows x64向けに作成済みのportable packageを利用する場合は、Business Packの開発Workspaceを構築する必要はない。
+
+```text
+ZIPを展開
+  -> start-city-world.bat
+  -> ブラウザ起動
+```
+
+Python、Git、WSL、Dockerの追加インストールも不要である。portable packageの作成方法と配布物の構成は[`windows-portable-city-world-workspace-ja.md`](windows-portable-city-world-workspace-ja.md)を参照する。
+
+### 2.2 Source checkoutから起動する場合
+
 コマンドは`hakoniwa-business-pack`のルートで実行する。
 
 - Business PackのWorkspace環境が構成済みであること
