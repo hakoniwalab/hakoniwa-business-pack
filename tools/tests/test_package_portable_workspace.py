@@ -86,6 +86,22 @@ class PortableWorkspacePackageTest(unittest.TestCase):
             self.assertFalse((target / "pip").exists())
             self.assertFalse((target / "pip-24.0.dist-info").exists())
 
+    def test_site_package_copy_excludes_wheel_sbom(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "source-python"
+            site_packages = source / "Lib" / "site-packages"
+            distribution = site_packages / "pydantic_core-2.46.5.dist-info"
+            (distribution / "sboms").mkdir(parents=True)
+            (distribution / "METADATA").write_text("Name: pydantic_core\n")
+            (distribution / "sboms" / "pydantic-core.cyclonedx.json").write_text(
+                "{}\n", encoding="utf-8"
+            )
+            destination = Path(temporary) / "portable-python"
+            portable._copy_site_packages(source, destination)
+            target = destination / "Lib" / "site-packages" / distribution.name
+            self.assertTrue((target / "METADATA").is_file())
+            self.assertFalse((target / "sboms").exists())
+
     def test_start_script_uses_packaged_python_and_web_ui_recipe(self) -> None:
         script = portable._render_start_batch()
         self.assertIn(

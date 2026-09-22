@@ -33,7 +33,7 @@ COMMON_IGNORES = {
 # package uses the official embeddable interpreter and never installs packages
 # at runtime, so carrying pip adds no runtime capability and can exceed
 # Windows MAX_PATH while staging the ZIP.
-PORTABLE_PYTHON_IGNORES = COMMON_IGNORES | {"pip", "pip-24.0.dist-info"}
+PORTABLE_PYTHON_IGNORES = COMMON_IGNORES | {"pip"}
 BUSINESS_PACK_IGNORES = COMMON_IGNORES | {"dist", "work"}
 SIBLING_IGNORES = COMMON_IGNORES | {"build", "dist", "work"}
 
@@ -228,6 +228,15 @@ def _copy_site_packages(source_root: Path, destination_root: Path) -> None:
         raise PortablePackageError(f"Python site-packages not found: {source}")
     destination = _site_packages(destination_root)
     destination.mkdir(parents=True, exist_ok=True)
+
+    def ignore(directory: str, names: list[str]) -> set[str]:
+        ignored = {name for name in names if name in PORTABLE_PYTHON_IGNORES}
+        # SBOMs belong to installed-wheel provenance, not to the runtime.  They
+        # can make the temporary Windows staging path exceed MAX_PATH.
+        if Path(directory).name.endswith(".dist-info"):
+            ignored.add("sboms")
+        return ignored
+
     for item in source.iterdir():
         # Workspace prepare regenerates this path for the extraction directory.
         if item.name == "hakoniwa_workspace_bootstrap.pth":
@@ -239,9 +248,7 @@ def _copy_site_packages(source_root: Path, destination_root: Path) -> None:
             shutil.copytree(
                 item,
                 target,
-                ignore=lambda _directory, names: {
-                    name for name in names if name in PORTABLE_PYTHON_IGNORES
-                },
+                ignore=ignore,
                 dirs_exist_ok=True,
             )
         else:
@@ -578,10 +585,10 @@ def build_package(
         if package_root.exists():
             shutil.rmtree(package_root)
     else:
-        temporary = tempfile.TemporaryDirectory(
-            prefix="hakoniwa-portable-",
-            dir=staging_base,
-        )
+        # Keep the staging root short: package paths contain the full
+        # Foundation Python site-packages hierarchy and Windows MAX_PATH still
+        # applies to several stdlib copy operations.
+        temporary = tempfile.TemporaryDirectory(prefix="hako-portable-")
         package_root = Path(temporary.name) / PACKAGE_ID
 
     try:
