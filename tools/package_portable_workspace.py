@@ -438,6 +438,28 @@ def _validate_staged_package(package_root: Path) -> None:
     )
 
 
+def _remove_staging_specific_workspace_files(package_root: Path) -> None:
+    """Remove files whose contents were generated with the temporary staging path.
+
+    workspace.py run regenerates them for the user's actual extraction path
+    before starting any City World process.
+    """
+    business_pack = package_root / "hakoniwa-business-pack"
+    for path in (
+        business_pack / "work" / "foundation" / "activate",
+        business_pack / "work" / "foundation" / "Activate.ps1",
+        business_pack
+        / "work"
+        / "foundation"
+        / "install"
+        / "python"
+        / "Lib"
+        / "site-packages"
+        / "hakoniwa_workspace_bootstrap.pth",
+    ):
+        path.unlink(missing_ok=True)
+
+
 def _write_manifest(
     package_root: Path,
     python_identity: dict[str, object],
@@ -611,6 +633,7 @@ def build_package(
             },
         )
         _validate_staged_package(package_root)
+        _remove_staging_specific_workspace_files(package_root)
         _zip_tree(package_root, output)
         print(f"[OK] Windows portable package: {output}")
         print(f"[OK] SHA-256: {_sha256(output)}")
