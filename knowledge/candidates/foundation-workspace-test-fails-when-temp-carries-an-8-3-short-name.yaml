@@ -15,10 +15,10 @@ summary: >
   Path.resolve() expands an 8.3 short component for a plain path but leaves it
   in place when resolving a symlink to a target that does not exist. The
   assertion then compares a long-form expected value against a short-form actual
-  one. This bites whenever TEMP contains a shortened component, which is the
-  default for any account whose user name exceeds eight characters. It cannot be
-  seen from CI: the windows-latest job runs this same file, and its TMPDIR is
-  D:\a\_temp, which has nothing to shorten.
+  one. The condition is a TEMP path containing a shortened component, which is
+  what this host has because its account name does not fit 8.3. The
+  windows-latest job runs this same file and passes: its TMPDIR is D:\a\_temp,
+  so the job exercises the test without ever meeting the condition.
 
 observation:
   context: >
@@ -42,9 +42,15 @@ observation:
       under test resolves through the link, so it produces the short form and
       the assertion fails on the user-name component alone.
     - >-
-      This is a property of the fixture, not of resolve_workspace. Nothing in
-      the product path depends on which spelling comes back, and the other 65
-      tests in the file pass.
+      The failure itself is a property of the fixture: resolve_workspace
+      returned a usable path and the other 65 tests pass. That is not the same
+      as the spelling being harmless everywhere. inspection.py compares receipt
+      prefixes with string equality and resolve_workspace checks containment
+      lexically, so a work_root that keeps a short-form component could in
+      principle fail to match a long-form one recorded elsewhere. No such
+      downstream failure was produced here and none is claimed; the point is
+      only that the fixture should not be repaired by assuming the spelling
+      never matters.
     - >-
       The condition is a shortened TEMP, not a symlink permission or a
       developer-mode setting. Re-running only this test with TMP and TEMP
@@ -53,9 +59,9 @@ observation:
       The windows-latest job in .github/workflows/validate-business-pack.yml
       runs "python -m unittest tools/test_foundation.py -v", so the test is
       executed on every PR. It stays green because the runner's temporary
-      directory is D:\a\_temp. A contributor on an ordinary Windows workstation
-      sees a red suite that CI says is green, which is the kind of divergence
-      that costs an afternoon before it is attributed to the environment.
+      directory is D:\a\_temp. The job therefore exercises the test without
+      meeting the condition, and a contributor whose TEMP is shortened sees a
+      red suite that CI reports as green.
 
 sources:
   repositories:
@@ -107,10 +113,11 @@ validation:
     - >-
       Not applicable on macOS or Linux, which have no 8.3 short names.
     - >-
-      Not reproduced on a second Windows host, so "any account whose user name
-      exceeds eight characters" is the documented Windows rule for 8.3
-      generation rather than something measured across machines. 8.3 creation
-      can also be disabled per volume, in which case the failure disappears.
+      Measured on one account on one host. How commonly a Windows profile
+      directory ends up shortened was not surveyed, and 8.3 creation can be
+      disabled per volume, so the population this affects is not established
+      here -- only that a short-form TEMP is sufficient to fail the test and a
+      long-form one is sufficient to pass it.
 
 tracking:
   implementation_status: none
@@ -135,8 +142,10 @@ promotion_targets:
 
 promotion_rationale:
   - >-
-    A one-line fixture change removes a failure that every Windows contributor
-    with a long user name will hit and that CI structurally cannot see.
+    A one-line fixture change removes a failure that a Windows contributor with
+    a shortened TEMP meets on the first run of the repository's own checks, and
+    that the windows-latest job does not reproduce because its temporary
+    directory has no shortened component.
 
 resolution:
   status: pending
