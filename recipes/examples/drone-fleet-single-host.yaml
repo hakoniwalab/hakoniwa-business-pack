@@ -96,7 +96,7 @@ target_environment:
       - hakoniwa-pdu-endpoint
       - hakoniwa-pdu-bridge-core
   notes:
-    - The same experiment YAML and Python operator are used on macOS and Linux; Windows is not supported by this Recipe.
+    - The same experiment YAML and Python operator are used on macOS, Linux, and Windows.
     - Platform differences are limited to native executable names and dynamic-library search paths.
     - The single-host Recipe does not install or launch the distributed Hakoniwa Conductor Server/Client package.
 
@@ -134,7 +134,7 @@ native_runtime_requirements:
   schema_version: 1
   components:
     hakoniwa-drone-core:
-      profile: public-v4.0.0
+      profile: public-v4.1.1
       required_roles: ["drone_service"]
       optional_roles: ["visual_state_publisher"]
 
@@ -395,7 +395,7 @@ connections:
         - Only drone-service-2..N receive --disable-conductor.
       validation_notes:
         - Native macOS E2E completed with 26 drones in one and two processes and with 200 drones in four processes.
-        - Linux native E2E remains unverified; Windows is outside this Recipe's support contract.
+        - Linux and Windows native E2E remain to be revalidated with the v4.1.1 distribution.
   - from: hakoniwa-pdu-python
     to: hakoniwa-drone-core
     interface: api
@@ -608,7 +608,7 @@ demo:
     - order: 1
       id: prepare_native
       component: hakoniwa-drone-core
-      action: Clone or safely fast-forward the official Drone Core main workspace, then materialize the pinned v4.0.0 native distribution and its required MuJoCo runtime on macOS or Linux.
+      action: Clone or safely fast-forward the official Drone Core main workspace, then materialize the pinned v4.1.1 native distribution and its required MuJoCo runtime on macOS, Linux, or Windows.
       description: Record the resolved Drone Core main revision, verify and extract the official native archive even when unproven binaries already exist, verify its NATIVE_RUNTIME_REQUIREMENTS.yaml release contract, read the MuJoCo version from hakoniwa-drone-core/MUJOCO_VERSION.txt, install that runtime, apply the required macOS link adjustment, and preserve provenance in validation/native-distribution.json.
       command: python tools/recipe/drone_fleet_single_host.py prepare-native
       agency: agent_action

@@ -71,24 +71,36 @@ RECOMMENDED_DRONES_PER_STROKE = 2
 # larger Foundation receipt is insufficient because the native Drone/VSP
 # artifacts belong to the same compile-time contract.
 GENERAL_USER_MAX_DRONES = 200
-PUBLIC_DRONE_RELEASE = "v4.0.0"
+PUBLIC_DRONE_RELEASE = "v4.1.1"
 PUBLIC_DRONE_REPOSITORY = "https://github.com/toppers/hakoniwa-drone-core.git"
 PUBLIC_DRONE_REPOSITORY_ID = "toppers/hakoniwa-drone-core"
-PUBLIC_DRONE_SOURCE_REVISION = "d2922adef42930aa75860fa673762635ad6781a0"
+PUBLIC_DRONE_SOURCE_REVISION = "109d3a944908b185f79d554cfe08a8e2f0def205"
+DRONE_GENERATED_DIRECTORY_PREFIXES = (
+    "config/launcher/logs/",
+    "lnx/",
+    "logs/",
+    "mac/",
+    "vendor/",
+    "win/",
+)
 DRONE_COMPONENT_ID = "hakoniwa-drone-core"
 DRONE_CATALOG = ROOT / "catalog" / "components" / f"{DRONE_COMPONENT_ID}.yaml"
 THREEJS_VIEWER_REPOSITORY = "https://github.com/hakoniwalab/hakoniwa-threejs-drone.git"
 PUBLIC_DRONE_ARCHIVES = {
     "Darwin": (
         "mac.zip",
-        "c8f81a7aa0dc85d335c6568676dd4e958e30cf19d23668c1b96d2e4cebddbd3f",
+        "9f604b4ce8f5d083ce0eacad72b04dd433a6fb4664e3883e808eec30ffc43530",
     ),
     "Linux": (
         "lnx.zip",
-        "d8ef1418e8754dcb4048d808a700568f21dd9b328966ae2806f70285e273fc60",
+        "dfc5a264370c284598f677d261e5c180ede567b1cbce90092e974f88fa438da8",
+    ),
+    "Windows": (
+        "win.zip",
+        "b1fd838918e3c035551ac111d722a011a7f0e8351e483ed61544b851791feb1f",
     ),
 }
-SUPPORTED_NATIVE_SYSTEMS = ("Darwin", "Linux")
+SUPPORTED_NATIVE_SYSTEMS = ("Darwin", "Linux", "Windows")
 MUJOCO_RELEASE_BASE = "https://github.com/google-deepmind/mujoco/releases/download"
 
 
@@ -264,16 +276,47 @@ def _git_is_ancestor(drone_root: Path, older: str, newer: str) -> bool:
     ).returncode == 0
 
 
+def _git_revision_exists(drone_root: Path, revision: str) -> bool:
+    return subprocess.run(
+        ["git", "cat-file", "-e", f"{revision}^{{commit}}"],
+        cwd=drone_root,
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    ).returncode == 0
+
+
 def _repository_id(remote_url: str) -> str | None:
     value = remote_url.strip().removesuffix(".git").rstrip("/")
     match = re.search(r"github\.com(?::|/)([^/]+/[^/]+)$", value)
     return match.group(1).lower() if match else None
 
 
+def _is_allowed_drone_generated_change(status_line: str) -> bool:
+    """Return whether a porcelain entry is a known disposable runtime output.
+
+    Only untracked files may be ignored while moving the source checkout.  A
+    tracked modification under the same directory remains protected.
+    """
+    if not status_line.startswith("?? "):
+        return False
+    relative_path = status_line[3:].strip()
+    if relative_path.startswith(DRONE_GENERATED_DIRECTORY_PREFIXES):
+        return True
+    if re.match(r"^drone_log\d+(?:/|$)", relative_path):
+        return True
+    return bool(
+        re.match(
+            r"^mujoco-[^/]+\.(?:dmg|tar\.gz|zip)$",
+            relative_path,
+        )
+    )
+
+
 def prepare_drone_workspace(drone_root: Path) -> dict[str, Any]:
     """Materialize the source revision verified for PUBLIC_DRONE_RELEASE.
 
-    The native archive is pinned to v4.0.0, so its source-side runtime contract
+    The native archive is pinned to v4.1.1, so its source-side runtime contract
     must not float with repository main.  The Catalog verification revision is
     the authority for the matching source checkout.
     """
@@ -317,25 +360,32 @@ def prepare_drone_workspace(drone_root: Path) -> dict[str, Any]:
                 ).splitlines()
                 if line
             ]
-            if dirty_paths:
+            protected_paths = [
+                line
+                for line in dirty_paths
+                if not _is_allowed_drone_generated_change(line)
+            ]
+            if protected_paths:
                 raise RecipeError(
                     "existing Drone workspace has local changes and cannot be "
                     "moved to the verified source revision "
-                    f"{PUBLIC_DRONE_SOURCE_REVISION}: {drone_root}"
+                    f"{PUBLIC_DRONE_SOURCE_REVISION}: {drone_root}; "
+                    f"protected changes: {', '.join(protected_paths)}"
                 )
-            shallow = (
-                _git_output(
-                    drone_root, "rev-parse", "--is-shallow-repository"
-                ).strip()
-                == "true"
-            )
-            if shallow:
-                _run_checked(
-                    ["git", "fetch", "--unshallow", "origin", "main"],
-                    cwd=drone_root,
+            if not _git_revision_exists(drone_root, PUBLIC_DRONE_SOURCE_REVISION):
+                shallow = (
+                    _git_output(
+                        drone_root, "rev-parse", "--is-shallow-repository"
+                    ).strip()
+                    == "true"
                 )
-            else:
-                _run_checked(["git", "fetch", "origin", "main"], cwd=drone_root)
+                if shallow:
+                    _run_checked(
+                        ["git", "fetch", "--unshallow", "origin", "main"],
+                        cwd=drone_root,
+                    )
+                else:
+                    _run_checked(["git", "fetch", "origin", "main"], cwd=drone_root)
             _run_checked(
                 ["git", "checkout", "--detach", PUBLIC_DRONE_SOURCE_REVISION],
                 cwd=drone_root,
@@ -391,9 +441,15 @@ def _mujoco_asset(version: str, system_name: str, machine: str) -> str:
         if architecture is None:
             raise RecipeError(f"unsupported Linux architecture for MuJoCo: {machine}")
         return f"mujoco-{version}-linux-{architecture}.tar.gz"
+    if system_name == "Windows":
+        if normalized_machine not in {"x86_64", "amd64"}:
+            raise RecipeError(
+                f"unsupported Windows architecture for MuJoCo: {machine}"
+            )
+        return f"mujoco-{version}-windows-x86_64.zip"
     raise RecipeError(
         f"unsupported native operating system: {system_name}; "
-        "drone-fleet-single-host supports macOS and Linux"
+        "drone-fleet-single-host supports macOS, Linux, and Windows"
     )
 
 
@@ -430,6 +486,26 @@ def _install_mujoco_linux(archive: Path, drone_root: Path, version: str) -> Path
         destination = drone_root / "vendor" / "mujoco"
         shutil.copytree(source, destination, dirs_exist_ok=True)
     library = destination / "lib" / f"libmujoco.so.{version}"
+    if not library.is_file():
+        raise RecipeError(f"MuJoCo runtime library is missing after install: {library}")
+    return library
+
+
+def _install_mujoco_windows(archive: Path, drone_root: Path, version: str) -> Path:
+    with tempfile.TemporaryDirectory(prefix="hakoniwa-mujoco-extract-") as temporary:
+        extraction_root = Path(temporary)
+        _safe_extract(archive, extraction_root)
+        source = extraction_root / f"mujoco-{version}"
+        if not source.is_dir():
+            directories = [path for path in extraction_root.iterdir() if path.is_dir()]
+            if len(directories) != 1:
+                raise RecipeError(
+                    f"MuJoCo archive has an unexpected layout: {archive}"
+                )
+            source = directories[0]
+        destination = drone_root / "vendor" / "mujoco"
+        shutil.copytree(source, destination, dirs_exist_ok=True)
+    library = destination / "bin" / "mujoco.dll"
     if not library.is_file():
         raise RecipeError(f"MuJoCo runtime library is missing after install: {library}")
     return library
@@ -489,14 +565,13 @@ def materialize_mujoco_runtime(
                 "Drone workspace does not provide the required macOS MuJoCo "
                 "install/link scripts"
             )
-        with tempfile.TemporaryDirectory(prefix="hakoniwa-mujoco-install-") as temporary:
-            staging = Path(temporary)
-            shutil.copy2(archive, staging / asset_name)
-            (staging / "MUJOCO_VERSION.txt").write_text(
-                version + "\n", encoding="utf-8"
-            )
-            _run_checked(["bash", str(installer), str(drone_root)], cwd=staging)
         library = drone_root / "vendor" / "mujoco" / "lib" / f"libmujoco.{version}.dylib"
+        header = drone_root / "vendor" / "mujoco" / "include" / "mujoco" / "mujoco.h"
+        if not library.is_file() or not header.is_file():
+            installer_archive = drone_root / "vendor" / "downloads" / asset_name
+            installer_archive.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(archive, installer_archive)
+            _run_checked(["bash", str(installer), str(drone_root)], cwd=drone_root)
         if not library.is_file():
             raise RecipeError(
                 f"MuJoCo runtime library is missing after install: {library}"
@@ -513,9 +588,12 @@ def materialize_mujoco_runtime(
             cwd=drone_root,
         )
         link_mode = "macos-install-name-and-rpath"
-    else:
+    elif system_name == "Linux":
         library = _install_mujoco_linux(archive, drone_root, version)
         link_mode = "runtime-library-path"
+    else:
+        library = _install_mujoco_windows(archive, drone_root, version)
+        link_mode = "runtime-path"
 
     return {
         "mode": mode,
@@ -540,7 +618,7 @@ def prepare_native_distribution(
     if system_name not in SUPPORTED_NATIVE_SYSTEMS:
         raise RecipeError(
             f"unsupported native operating system: {system_name}; "
-            "drone-fleet-single-host supports macOS and Linux"
+            "drone-fleet-single-host supports macOS, Linux, and Windows"
         )
     profile = PUBLIC_DRONE_ARCHIVES.get(system_name)
     if profile is None:
@@ -1786,16 +1864,24 @@ def native_library_environment(
     paths, drone_root: Path, system_name: str
 ) -> dict[str, str]:
     env = os.environ.copy()
-    key = "PATH" if system_name == "Windows" else (
-        "DYLD_LIBRARY_PATH" if system_name == "Darwin" else "LD_LIBRARY_PATH"
-    )
-    env[key] = os.pathsep.join(
-        [
-            str(paths.install_prefix / "lib"),
-            str(drone_root / "lib"),
-            str(drone_root / "vendor" / "mujoco" / "lib"),
-            env.get(key, ""),
+    if system_name == "Windows":
+        key = "PATH"
+        library_paths = [
+            paths.install_prefix / "bin",
+            paths.install_prefix / "lib",
+            drone_root / "win",
+            drone_root / "lib",
+            drone_root / "vendor" / "mujoco" / "bin",
         ]
+    else:
+        key = "DYLD_LIBRARY_PATH" if system_name == "Darwin" else "LD_LIBRARY_PATH"
+        library_paths = [
+            paths.install_prefix / "lib",
+            drone_root / "lib",
+            drone_root / "vendor" / "mujoco" / "lib",
+        ]
+    env[key] = os.pathsep.join(
+        [*(str(path) for path in library_paths), env.get(key, "")]
     )
     return env
 
@@ -1942,7 +2028,7 @@ def _mujoco_city_runtime_checks(
     expected_root = Path(str(marker.get("drone_root", ""))).resolve()
     checks.append(
         (
-            "MuJoCo City Drone PRO workspace",
+            "MuJoCo City Drone Core workspace",
             expected_root == drone_root.resolve(),
             str(drone_root)
             if expected_root == drone_root.resolve()
@@ -2073,15 +2159,15 @@ def _mujoco_city_runtime_checks(
     checks.append(("Process 1 MJB compile receipt", receipt_ok, receipt_detail))
     try:
         drone_binary = resolve_drone_binary(drone_root, system_name)
-        checks.append(("Drone PRO service", True, str(drone_binary)))
+        checks.append(("Drone Core service", True, str(drone_binary)))
     except RecipeError as exc:
-        checks.append(("Drone PRO service", False, str(exc)))
+        checks.append(("Drone Core service", False, str(exc)))
     if experiment.visualization:
         try:
             vsp = resolve_visual_state_publisher(drone_root, system_name)
-            checks.append(("Drone PRO visual-state publisher", True, str(vsp)))
+            checks.append(("Drone Core visual-state publisher", True, str(vsp)))
         except RecipeError as exc:
-            checks.append(("Drone PRO visual-state publisher", False, str(exc)))
+            checks.append(("Drone Core visual-state publisher", False, str(exc)))
     return checks
 
 
@@ -2424,7 +2510,7 @@ def open_browser(url: str) -> bool:
         return True
     if platform.system() == "Darwin":
         try:
-            completed = subprocess.run(["open", url], check=False)
+            completed = subprocess.run(["/usr/bin/open", url], check=False)
         except OSError as exc:
             print(f"[WARN] could not open the macOS browser: {exc}")
             return False
@@ -2619,7 +2705,7 @@ def main(argv: list[str] | None = None) -> int:
         if system_name not in SUPPORTED_NATIVE_SYSTEMS:
             raise RecipeError(
                 f"unsupported native operating system: {system_name}; "
-                "drone-fleet-single-host supports macOS and Linux"
+                "drone-fleet-single-host supports macOS, Linux, and Windows"
             )
         experiment_path = command_experiment_path(args.command, args.experiment)
         drone_root = command_drone_root(args.command, args.drone_root)

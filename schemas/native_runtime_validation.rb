@@ -101,7 +101,9 @@ module NativeRuntimeValidation
               )
             end
             library = platform_runtime.is_a?(Hash) ? platform_runtime["library"] : nil
-            unless non_empty_string?(library) && library.include?("{version}")
+            if !non_empty_string?(library)
+              errors << "#{runtime_prefix}.platforms.#{platform}.library must be a non-empty path"
+            elsif platform != "windows" && !library.include?("{version}")
               errors << "#{runtime_prefix}.platforms.#{platform}.library must contain {version}"
             end
           end

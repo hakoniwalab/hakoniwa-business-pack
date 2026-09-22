@@ -165,7 +165,7 @@ native_runtime_requirements:
   schema_version: 1
   components:
     hakoniwa-drone-core:
-      profile: public-v4.0.0
+      profile: public-v4.1.1
       required_roles: [drone_service, visual_state_publisher]
       optional_roles: []
 

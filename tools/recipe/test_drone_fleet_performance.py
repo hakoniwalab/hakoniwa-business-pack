@@ -48,7 +48,7 @@ class DroneFleetPerformanceTest(unittest.TestCase):
     def test_recipe_declares_drone_native_runtime_contract(self) -> None:
         manifest = RECIPE_MANIFEST.read_text(encoding="utf-8")
         self.assertIn("native_runtime_requirements:\n  schema_version: 1", manifest)
-        self.assertIn("    hakoniwa-drone-core:\n      profile: public-v4.0.0", manifest)
+        self.assertIn("    hakoniwa-drone-core:\n      profile: public-v4.1.1", manifest)
         self.assertIn('      required_roles: ["drone_service"]', manifest)
         self.assertIn('      optional_roles: ["visual_state_publisher"]', manifest)
 

@@ -49,7 +49,7 @@ class NativeRuntimeValidationTest < Minitest::Test
 
   def test_catalog_rejects_unknown_dependency_inspector
     value = Marshal.load(Marshal.dump(CATALOG_ENTRY["native_runtime"]))
-    value.dig("profiles", "public-v4.0.0", "platforms", "macos")[
+    value.dig("profiles", "public-v4.1.1", "platforms", "macos")[
       "dependency_inspector"
     ] = "shell-command"
 
@@ -62,7 +62,7 @@ class NativeRuntimeValidationTest < Minitest::Test
 
   def test_catalog_rejects_schema_required_field_omission
     value = Marshal.load(Marshal.dump(CATALOG_ENTRY["native_runtime"]))
-    value.dig("profiles", "public-v4.0.0", "platforms", "linux").delete(
+    value.dig("profiles", "public-v4.1.1", "platforms", "linux").delete(
       "required_libraries"
     )
 
@@ -71,6 +71,19 @@ class NativeRuntimeValidationTest < Minitest::Test
     )
 
     assert errors.any? { |error| error.include?("missing required_libraries") }
+  end
+
+  def test_version_placeholder_is_required_except_for_windows_loader_names
+    value = Marshal.load(Marshal.dump(CATALOG_ENTRY["native_runtime"]))
+    profile = value.dig("profiles", "public-v4.1.1", "managed_runtimes", "mujoco")
+    profile.dig("platforms", "linux")["library"] = "vendor/mujoco/lib/libmujoco.so"
+
+    errors = NativeRuntimeValidation.validate_catalog(
+      value, SCHEMA, label: "catalog"
+    )
+
+    assert errors.any? { |error| error.include?("linux.library must contain {version}") }
+    refute errors.any? { |error| error.include?("windows.library") }
   end
 
   def test_recipe_rejects_role_not_declared_by_catalog_profile

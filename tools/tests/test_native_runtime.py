@@ -188,8 +188,8 @@ class NativeRuntimeTest(unittest.TestCase):
             (component_root / "NATIVE_RUNTIME_REQUIREMENTS.yaml").write_text(
                 """schema_version: 1
 profiles:
-  public-v4.0.0:
-    distribution_release: v4.0.0
+  public-v4.1.1:
+    distribution_release: v4.1.1
     managed_runtimes:
       mujoco:
         required: true
@@ -199,6 +199,8 @@ profiles:
             library: vendor/mujoco/lib/libmujoco.so.{version}
           macos:
             library: vendor/mujoco/lib/libmujoco.{version}.dylib
+          windows:
+            library: vendor/mujoco/bin/mujoco.dll
     platforms:
       linux:
         dependency_inspector: elf
@@ -212,6 +214,12 @@ profiles:
           drone_service: mac/mac-main_hako_drone_service
           visual_state_publisher: mac/mac-drone_visual_state_publisher
         required_libraries: [\"libglfw.3.dylib\"]
+      windows:
+        dependency_inspector: pe
+        binary_roles:
+          drone_service: win/win-main_hako_drone_service.exe
+          visual_state_publisher: win/win-drone_visual_state_publisher.exe
+        required_libraries: [\"mujoco.dll\", \"glfw3.dll\"]
 """,
                 encoding="utf-8",
             )
@@ -226,9 +234,9 @@ profiles:
                 FakeAdapter(),
             )
 
-            self.assertEqual(requirement.profile, "public-v4.0.0")
+            self.assertEqual(requirement.profile, "public-v4.1.1")
             self.assertEqual(requirement.required_roles, ("drone_service",))
-            self.assertEqual(contract.release, "v4.0.0")
+            self.assertEqual(contract.release, "v4.1.1")
             self.assertEqual(contract.managed_runtimes[0].version, "7.6.5")
             self.assertEqual(
                 contract.shared_libraries, ("libOpenGL.so.0", "libglfw.so.3")
@@ -273,7 +281,7 @@ profiles:
             source.write_text(
                 """schema_version: 1
 profiles:
-  public-v4.0.0:
+  public-v4.1.1:
     distribution_release: stale-release
     managed_runtimes: {}
     platforms: {}

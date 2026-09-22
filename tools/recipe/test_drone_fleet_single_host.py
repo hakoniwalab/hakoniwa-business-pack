@@ -5,6 +5,7 @@ import importlib.util
 import hashlib
 import io
 import json
+import os
 import subprocess
 import sys
 import tarfile
@@ -99,7 +100,7 @@ results:
         self,
         drone_root: Path,
         *,
-        mujoco_version: str = "3.9.0",
+        mujoco_version: str = "3.13.0",
     ) -> Path:
         drone_root.mkdir(parents=True, exist_ok=True)
         version_file = drone_root / "MUJOCO_VERSION.txt"
@@ -109,8 +110,8 @@ results:
         (drone_root / "NATIVE_RUNTIME_REQUIREMENTS.yaml").write_text(
             """schema_version: 1
 profiles:
-  public-v4.0.0:
-    distribution_release: v4.0.0
+  public-v4.1.1:
+    distribution_release: v4.1.1
     managed_runtimes:
       mujoco:
         required: true
@@ -120,6 +121,8 @@ profiles:
             library: vendor/mujoco/lib/libmujoco.so.{version}
           macos:
             library: vendor/mujoco/lib/libmujoco.{version}.dylib
+          windows:
+            library: vendor/mujoco/bin/mujoco.dll
     platforms:
       linux:
         dependency_inspector: elf
@@ -133,6 +136,12 @@ profiles:
           drone_service: mac/mac-main_hako_drone_service
           visual_state_publisher: mac/mac-drone_visual_state_publisher
         required_libraries: [\"libglfw.3.dylib\"]
+      windows:
+        dependency_inspector: pe
+        binary_roles:
+          drone_service: win/win-main_hako_drone_service.exe
+          visual_state_publisher: win/win-drone_visual_state_publisher.exe
+        required_libraries: [\"mujoco.dll\", \"glfw3.dll\"]
 """,
             encoding="utf-8",
         )
@@ -565,7 +574,7 @@ profiles:
                 )
             urlopen.assert_called_once_with(
                 "https://github.com/toppers/hakoniwa-drone-core/releases/download/"
-                "v4.0.0/lnx.zip"
+                "v4.1.1/lnx.zip"
             )
             self.assertTrue(
                 (drone_root / "lnx" / "linux-main_hako_drone_service").is_file()
@@ -650,7 +659,7 @@ profiles:
 
             with mock.patch.object(recipe, "_run_checked") as run, mock.patch.object(
                 recipe, "_git_output", side_effect=git_output
-            ):
+            ), mock.patch.object(recipe, "_git_revision_exists", return_value=False):
                 evidence = recipe.prepare_drone_workspace(drone_root)
 
             self.assertEqual(evidence["mode"], "reused")
@@ -688,7 +697,7 @@ profiles:
 
             with mock.patch.object(recipe, "_run_checked") as run, mock.patch.object(
                 recipe, "_git_output", side_effect=git_output
-            ):
+            ), mock.patch.object(recipe, "_git_revision_exists", return_value=False):
                 evidence = recipe.prepare_drone_workspace(drone_root)
 
             self.assertEqual(evidence["mode"], "updated")
@@ -727,6 +736,77 @@ profiles:
             with mock.patch.object(
                 recipe, "_git_output", side_effect=git_output
             ), self.assertRaisesRegex(recipe.RecipeError, "local changes"):
+                recipe.prepare_drone_workspace(drone_root)
+
+    def test_prepare_drone_workspace_allows_generated_outputs_when_updating(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            drone_root = Path(temporary).resolve() / "hakoniwa-drone-core"
+            (drone_root / ".git").mkdir(parents=True)
+            generator = drone_root / "tools" / "gen_fleet_scale_config.py"
+            generator.parent.mkdir(parents=True)
+            generator.touch()
+            revisions = iter(
+                ["newer-main-revision", recipe.PUBLIC_DRONE_SOURCE_REVISION]
+            )
+            generated_status = "\n".join(
+                [
+                    "?? mac/mac-main_hako_drone_service",
+                    "?? vendor/mujoco/lib/libmujoco.dylib",
+                    "?? config/launcher/logs/drone.err",
+                    "?? drone_log0/vehicle_pos.csv",
+                    "?? mujoco-3.9.0-macos-universal2.dmg",
+                ]
+            )
+
+            def git_output(_root, *arguments):
+                if arguments == ("rev-parse", "HEAD"):
+                    return next(revisions)
+                return {
+                    ("remote", "get-url", "origin"): recipe.PUBLIC_DRONE_REPOSITORY,
+                    ("status", "--short"): generated_status,
+                    ("rev-parse", "--is-shallow-repository"): "false",
+                }[arguments]
+
+            with mock.patch.object(recipe, "_run_checked") as run, mock.patch.object(
+                recipe, "_git_output", side_effect=git_output
+            ), mock.patch.object(recipe, "_git_revision_exists", return_value=True):
+                evidence = recipe.prepare_drone_workspace(drone_root)
+
+            self.assertEqual(evidence["mode"], "updated")
+            self.assertTrue(evidence["dirty"])
+            self.assertEqual(evidence["dirty_path_count"], 5)
+            self.assertIn(
+                mock.call(
+                    [
+                        "git",
+                        "checkout",
+                        "--detach",
+                        recipe.PUBLIC_DRONE_SOURCE_REVISION,
+                    ],
+                    cwd=drone_root,
+                ),
+                run.call_args_list,
+            )
+            self.assertNotIn(
+                mock.call(["git", "fetch", "origin", "main"], cwd=drone_root),
+                run.call_args_list,
+            )
+
+    def test_prepare_drone_workspace_rejects_unknown_untracked_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            drone_root = Path(temporary).resolve() / "hakoniwa-drone-core"
+            (drone_root / ".git").mkdir(parents=True)
+
+            def git_output(_root, *arguments):
+                return {
+                    ("remote", "get-url", "origin"): recipe.PUBLIC_DRONE_REPOSITORY,
+                    ("rev-parse", "HEAD"): "newer-main-revision",
+                    ("status", "--short"): "?? local-notes.txt",
+                }[arguments]
+
+            with mock.patch.object(
+                recipe, "_git_output", side_effect=git_output
+            ), self.assertRaisesRegex(recipe.RecipeError, "local-notes.txt"):
                 recipe.prepare_drone_workspace(drone_root)
 
     def test_prepare_drone_workspace_rejects_unrelated_checkout(self) -> None:
@@ -880,6 +960,54 @@ profiles:
             commands = [call.args[0] for call in run.call_args_list]
             self.assertTrue(any(command[:2] == ["bash", str(installer)] for command in commands))
             self.assertTrue(any(command[:2] == ["bash", str(linker)] for command in commands))
+            self.assertEqual(
+                (drone_root / "vendor" / "downloads" / asset).read_bytes(),
+                archive_bytes,
+            )
+
+    def test_macos_mujoco_reuses_installed_runtime_and_still_links(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            drone_root = root / "hakoniwa-drone-core"
+            tools = drone_root / "tools"
+            tools.mkdir(parents=True)
+            installer = tools / "install-mujoco-mac.bash"
+            linker = tools / "link-mujoco-mac.bash"
+            installer.touch()
+            linker.touch()
+            (drone_root / "mac").mkdir()
+            workspace_version = "8.7.6"
+            self._mujoco_version(drone_root, mujoco_version=workspace_version)
+            library = (
+                drone_root
+                / f"vendor/mujoco/lib/libmujoco.{workspace_version}.dylib"
+            )
+            header = drone_root / "vendor/mujoco/include/mujoco/mujoco.h"
+            library.parent.mkdir(parents=True)
+            header.parent.mkdir(parents=True)
+            library.write_bytes(b"installed-mujoco-dylib")
+            header.write_text("/* installed */\n", encoding="utf-8")
+            archive_bytes = b"fixture-dmg"
+            digest = hashlib.sha256(archive_bytes).hexdigest()
+            asset = f"mujoco-{workspace_version}-macos-universal2.dmg"
+            checksum = f"{digest}  {asset}\n".encode()
+
+            with mock.patch.object(
+                recipe.urllib.request,
+                "urlopen",
+                side_effect=[io.BytesIO(checksum), io.BytesIO(archive_bytes)],
+            ), mock.patch.object(recipe, "_run_checked") as run:
+                recipe.materialize_mujoco_runtime(
+                    drone_root, "Darwin", root / "downloads"
+                )
+
+            commands = [call.args[0] for call in run.call_args_list]
+            self.assertFalse(
+                any(command[:2] == ["bash", str(installer)] for command in commands)
+            )
+            self.assertTrue(
+                any(command[:2] == ["bash", str(linker)] for command in commands)
+            )
 
     def test_verified_download_reuses_only_matching_cache(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -895,12 +1023,28 @@ profiles:
             self.assertEqual(mode, "verified-cache")
             urlopen.assert_not_called()
 
-    def test_prepare_native_rejects_windows(self) -> None:
+    def test_windows_mujoco_asset_is_supported(self) -> None:
+        self.assertEqual(
+            recipe._mujoco_asset("3.13.0", "Windows", "AMD64"),
+            "mujoco-3.13.0-windows-x86_64.zip",
+        )
+
+    def test_windows_mujoco_archive_installs_dll_in_runtime_path(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            with self.assertRaisesRegex(recipe.RecipeError, "supports macOS and Linux"):
-                recipe.prepare_native_distribution(
-                    Path(temporary).resolve() / "hakoniwa-drone-core", "Windows"
-                )
+            root = Path(temporary).resolve()
+            archive_path = root / "mujoco.zip"
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr("mujoco-3.13.0/bin/mujoco.dll", b"fixture-dll")
+
+            library = recipe._install_mujoco_windows(
+                archive_path, root / "hakoniwa-drone-core", "3.13.0"
+            )
+
+            self.assertEqual(
+                library,
+                root / "hakoniwa-drone-core/vendor/mujoco/bin/mujoco.dll",
+            )
+            self.assertEqual(library.read_bytes(), b"fixture-dll")
 
     def test_linux_runtime_resolves_distribution_and_ld_library_path(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -923,6 +1067,25 @@ profiles:
             self.assertIn(str(paths.install_prefix / "lib"), environment["LD_LIBRARY_PATH"])
             self.assertIn(str(drone_root / "lib"), environment["LD_LIBRARY_PATH"])
             self.assertNotIn("DYLD_LIBRARY_PATH", environment)
+
+    def test_windows_runtime_adds_binary_and_mujoco_dll_directories(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            paths = foundation.resolve_workspace(root, recipe.RECIPE_ID)
+            foundation.prepare_workspace(paths)
+            python = paths.foundation_python / "python.exe"
+            python.parent.mkdir(parents=True, exist_ok=True)
+            python.touch()
+            drone_root = root / "hakoniwa-drone-core"
+
+            with mock.patch.dict(recipe.os.environ, {"PATH": "C:\\Windows"}, clear=True):
+                environment = recipe.runtime_environment(paths, drone_root, "Windows")
+
+            path_entries = environment["PATH"].split(os.pathsep)
+            self.assertIn(str(paths.install_prefix / "bin"), path_entries)
+            self.assertIn(str(drone_root / "win"), path_entries)
+            self.assertIn(str(drone_root / "vendor" / "mujoco" / "bin"), path_entries)
+            self.assertNotIn(str(drone_root / "vendor" / "mujoco" / "lib"), path_entries)
 
     def test_prepare_native_rejects_archive_path_traversal(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1297,7 +1460,7 @@ profiles:
             recipe.subprocess, "run", return_value=completed
         ) as run:
             self.assertTrue(recipe.open_browser(url))
-        run.assert_called_once_with(["open", url], check=False)
+        run.assert_called_once_with(["/usr/bin/open", url], check=False)
 
     def test_prepare_viewer_updates_existing_submodules(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
