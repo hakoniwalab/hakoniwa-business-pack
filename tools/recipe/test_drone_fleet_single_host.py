@@ -584,7 +584,7 @@ profiles:
                 recorded["mujoco_runtime"]["version"], "workspace-version"
             )
 
-    def test_prepare_drone_workspace_clones_latest_main(self) -> None:
+    def test_prepare_drone_workspace_clones_verified_source_revision(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             drone_root = Path(temporary).resolve() / "hakoniwa-drone-core"
 
@@ -598,11 +598,13 @@ profiles:
             def git_output(_root, *arguments):
                 return {
                     ("remote", "get-url", "origin"): recipe.PUBLIC_DRONE_REPOSITORY,
-                    ("rev-parse", "HEAD"): "new-main-revision",
+                    ("rev-parse", "HEAD"): recipe.PUBLIC_DRONE_SOURCE_REVISION,
                     ("status", "--short"): "",
                 }[arguments]
 
-            with mock.patch.object(recipe, "_run_checked", side_effect=run_checked) as run, mock.patch.object(
+            with mock.patch.object(
+                recipe, "_run_checked", side_effect=run_checked
+            ) as run, mock.patch.object(
                 recipe, "_git_output", side_effect=git_output
             ):
                 evidence = recipe.prepare_drone_workspace(drone_root)
@@ -610,11 +612,28 @@ profiles:
             clone = run.call_args_list[0].args[0]
             self.assertIn("--branch", clone)
             self.assertEqual(clone[clone.index("--branch") + 1], "main")
-            self.assertNotIn(recipe.PUBLIC_DRONE_RELEASE, clone)
+            self.assertNotIn("--depth", clone)
+            self.assertIn(
+                mock.call(
+                    [
+                        "git",
+                        "checkout",
+                        "--detach",
+                        recipe.PUBLIC_DRONE_SOURCE_REVISION,
+                    ],
+                    cwd=drone_root,
+                ),
+                run.call_args_list,
+            )
             self.assertEqual(evidence["mode"], "cloned")
-            self.assertEqual(evidence["resolved_revision"], "new-main-revision")
+            self.assertEqual(
+                evidence["requested_ref"], recipe.PUBLIC_DRONE_SOURCE_REVISION
+            )
+            self.assertEqual(
+                evidence["resolved_revision"], recipe.PUBLIC_DRONE_SOURCE_REVISION
+            )
 
-    def test_prepare_drone_workspace_reuses_current_main_and_reports_dirty(self) -> None:
+    def test_prepare_drone_workspace_reuses_verified_revision_and_reports_dirty(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             drone_root = Path(temporary).resolve() / "hakoniwa-drone-core"
             (drone_root / ".git").mkdir(parents=True)
@@ -625,9 +644,7 @@ profiles:
             def git_output(_root, *arguments):
                 return {
                     ("remote", "get-url", "origin"): "git@github.com:toppers/hakoniwa-drone-core.git",
-                    ("branch", "--show-current"): "main",
-                    ("rev-parse", "HEAD"): "same-revision",
-                    ("rev-parse", "origin/main"): "same-revision",
+                    ("rev-parse", "HEAD"): recipe.PUBLIC_DRONE_SOURCE_REVISION,
                     ("status", "--short"): " M config/generated.json",
                 }[arguments]
 
@@ -639,41 +656,78 @@ profiles:
             self.assertEqual(evidence["mode"], "reused")
             self.assertTrue(evidence["dirty"])
             self.assertEqual(evidence["dirty_path_count"], 1)
-            self.assertIn(
-                mock.call(["git", "fetch", "origin", "main"], cwd=drone_root),
+            self.assertEqual(
                 run.call_args_list,
+                [
+                    mock.call(
+                        ["git", "submodule", "update", "--init", "--recursive"],
+                        cwd=drone_root,
+                    )
+                ],
             )
 
-    def test_prepare_drone_workspace_fast_forwards_stale_main(self) -> None:
+    def test_prepare_drone_workspace_updates_clean_checkout_to_verified_revision(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             drone_root = Path(temporary).resolve() / "hakoniwa-drone-core"
             (drone_root / ".git").mkdir(parents=True)
             generator = drone_root / "tools" / "gen_fleet_scale_config.py"
             generator.parent.mkdir(parents=True)
             generator.touch()
-            revisions = iter(["old-revision", "new-revision", "new-revision"])
+            revisions = iter(
+                ["newer-main-revision", recipe.PUBLIC_DRONE_SOURCE_REVISION]
+            )
 
             def git_output(_root, *arguments):
                 if arguments == ("rev-parse", "HEAD"):
                     return next(revisions)
                 return {
                     ("remote", "get-url", "origin"): recipe.PUBLIC_DRONE_REPOSITORY,
-                    ("branch", "--show-current"): "main",
-                    ("rev-parse", "origin/main"): "new-revision",
                     ("status", "--short"): "",
+                    ("rev-parse", "--is-shallow-repository"): "false",
                 }[arguments]
 
             with mock.patch.object(recipe, "_run_checked") as run, mock.patch.object(
                 recipe, "_git_output", side_effect=git_output
-            ), mock.patch.object(recipe, "_git_is_ancestor", return_value=True):
+            ):
                 evidence = recipe.prepare_drone_workspace(drone_root)
 
             self.assertEqual(evidence["mode"], "updated")
-            self.assertEqual(evidence["resolved_revision"], "new-revision")
+            self.assertEqual(
+                evidence["resolved_revision"], recipe.PUBLIC_DRONE_SOURCE_REVISION
+            )
             self.assertIn(
-                mock.call(["git", "merge", "--ff-only", "origin/main"], cwd=drone_root),
+                mock.call(["git", "fetch", "origin", "main"], cwd=drone_root),
                 run.call_args_list,
             )
+            self.assertIn(
+                mock.call(
+                    [
+                        "git",
+                        "checkout",
+                        "--detach",
+                        recipe.PUBLIC_DRONE_SOURCE_REVISION,
+                    ],
+                    cwd=drone_root,
+                ),
+                run.call_args_list,
+            )
+
+    def test_prepare_drone_workspace_rejects_dirty_other_revision(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            drone_root = Path(temporary).resolve() / "hakoniwa-drone-core"
+            (drone_root / ".git").mkdir(parents=True)
+
+            def git_output(_root, *arguments):
+                return {
+                    ("remote", "get-url", "origin"): recipe.PUBLIC_DRONE_REPOSITORY,
+                    ("rev-parse", "HEAD"): "newer-main-revision",
+                    ("status", "--short"): " M config/generated.json",
+                }[arguments]
+
+            with mock.patch.object(
+                recipe, "_git_output", side_effect=git_output
+            ), self.assertRaisesRegex(recipe.RecipeError, "local changes"):
+                recipe.prepare_drone_workspace(drone_root)
 
     def test_prepare_drone_workspace_rejects_unrelated_checkout(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
