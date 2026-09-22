@@ -48,18 +48,35 @@ def repository_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def foundation_python_layout(
+    python_root: Path,
+    *,
+    windows: bool | None = None,
+) -> tuple[Path, Path]:
+    """Return the active Foundation Python executable and PATH directory.
+
+    Normal Windows development workspaces use the stdlib venv layout under
+    Scripts/. Portable release workspaces use the official embeddable Python
+    layout with python.exe at the runtime root.
+    """
+    use_windows_layout = os.name == "nt" if windows is None else windows
+    if use_windows_layout:
+        portable_python = python_root / "python.exe"
+        if portable_python.is_file():
+            return portable_python, python_root
+        return python_root / "Scripts" / "python.exe", python_root / "Scripts"
+    return python_root / "bin" / "python", python_root / "bin"
+
+
 def resolve_workspace(root: Path | None = None, work_dir: Path | str | None = None) -> WorkspacePaths:
     business_pack_root = (root or repository_root()).resolve()
     work_root = resolve_work_dir(business_pack_root, work_dir)
     foundation_root = work_root / "foundation"
     install_prefix = foundation_root / "install"
     foundation_python_root = install_prefix / "python"
-    if os.name == "nt":
-        foundation_python = foundation_python_root / "Scripts" / "python.exe"
-        foundation_python_bin = foundation_python_root / "Scripts"
-    else:
-        foundation_python = foundation_python_root / "bin" / "python"
-        foundation_python_bin = foundation_python_root / "bin"
+    foundation_python, foundation_python_bin = foundation_python_layout(
+        foundation_python_root
+    )
     return WorkspacePaths(
         business_pack_root=business_pack_root,
         work_root=work_root,

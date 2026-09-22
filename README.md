@@ -272,6 +272,13 @@ Catalog にある主要コンポーネントがエコシステムのどこに位
 ブラウザでPLATEAUの対象範囲を診断し、表示用GLBと物理用MuJoCo MJCFを生成・確認・取得する
 City World Web UIの起動方法と操作手順を説明します。
 
+### City World Windows Portable Workspace
+
+[`docs/windows-portable-city-world-workspace-ja.md`](docs/windows-portable-city-world-workspace-ja.md) は、
+Windows x64向けに構築済みBusiness Pack Workspace、Envsim、PDU JavaScript、
+portable Python runtimeを一つのZIPへまとめ、利用者が展開後
+`start-city-world.bat`だけでCity World Web UIを起動する配布方法を説明します。
+
 ---
 
 ## Building Blocks

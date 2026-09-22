@@ -74,6 +74,7 @@ GENERAL_USER_MAX_DRONES = 200
 PUBLIC_DRONE_RELEASE = "v4.0.0"
 PUBLIC_DRONE_REPOSITORY = "https://github.com/toppers/hakoniwa-drone-core.git"
 PUBLIC_DRONE_REPOSITORY_ID = "toppers/hakoniwa-drone-core"
+PUBLIC_DRONE_SOURCE_REVISION = "d2922adef42930aa75860fa673762635ad6781a0"
 DRONE_COMPONENT_ID = "hakoniwa-drone-core"
 DRONE_CATALOG = ROOT / "catalog" / "components" / f"{DRONE_COMPONENT_ID}.yaml"
 THREEJS_VIEWER_REPOSITORY = "https://github.com/hakoniwalab/hakoniwa-threejs-drone.git"
@@ -270,6 +271,12 @@ def _repository_id(remote_url: str) -> str | None:
 
 
 def prepare_drone_workspace(drone_root: Path) -> dict[str, Any]:
+    """Materialize the source revision verified for PUBLIC_DRONE_RELEASE.
+
+    The native archive is pinned to v4.0.0, so its source-side runtime contract
+    must not float with repository main.  The Catalog verification revision is
+    the authority for the matching source checkout.
+    """
     mode = "reused"
     if not drone_root.exists():
         drone_root.parent.mkdir(parents=True, exist_ok=True)
@@ -277,15 +284,16 @@ def prepare_drone_workspace(drone_root: Path) -> dict[str, Any]:
             [
                 "git",
                 "clone",
-                "--recurse-submodules",
                 "--branch",
                 "main",
-                "--depth",
-                "1",
                 PUBLIC_DRONE_REPOSITORY,
                 str(drone_root),
             ],
             cwd=drone_root.parent,
+        )
+        _run_checked(
+            ["git", "checkout", "--detach", PUBLIC_DRONE_SOURCE_REVISION],
+            cwd=drone_root,
         )
         mode = "cloned"
     elif not (drone_root / ".git").exists():
@@ -300,22 +308,38 @@ def prepare_drone_workspace(drone_root: Path) -> dict[str, Any]:
                 "existing Drone workspace has an unexpected origin: expected "
                 f"{PUBLIC_DRONE_REPOSITORY_ID}, got {remote_url}"
             )
-        branch = _git_output(drone_root, "branch", "--show-current")
-        if branch != "main":
-            raise RecipeError(
-                f"existing Drone workspace must be on main, got {branch or 'detached HEAD'}: "
-                f"{drone_root}"
-            )
-        _run_checked(["git", "fetch", "origin", "main"], cwd=drone_root)
         current = _git_output(drone_root, "rev-parse", "HEAD")
-        upstream = _git_output(drone_root, "rev-parse", "origin/main")
-        if current != upstream:
-            if not _git_is_ancestor(drone_root, current, upstream):
+        if current != PUBLIC_DRONE_SOURCE_REVISION:
+            dirty_paths = [
+                line
+                for line in _git_output(
+                    drone_root, "status", "--short"
+                ).splitlines()
+                if line
+            ]
+            if dirty_paths:
                 raise RecipeError(
-                    "existing Drone workspace is not a fast-forward ancestor of "
-                    f"origin/main: HEAD={current}, origin/main={upstream}"
+                    "existing Drone workspace has local changes and cannot be "
+                    "moved to the verified source revision "
+                    f"{PUBLIC_DRONE_SOURCE_REVISION}: {drone_root}"
                 )
-            _run_checked(["git", "merge", "--ff-only", "origin/main"], cwd=drone_root)
+            shallow = (
+                _git_output(
+                    drone_root, "rev-parse", "--is-shallow-repository"
+                ).strip()
+                == "true"
+            )
+            if shallow:
+                _run_checked(
+                    ["git", "fetch", "--unshallow", "origin", "main"],
+                    cwd=drone_root,
+                )
+            else:
+                _run_checked(["git", "fetch", "origin", "main"], cwd=drone_root)
+            _run_checked(
+                ["git", "checkout", "--detach", PUBLIC_DRONE_SOURCE_REVISION],
+                cwd=drone_root,
+            )
             mode = "updated"
 
     _run_checked(
@@ -329,6 +353,11 @@ def prepare_drone_workspace(drone_root: Path) -> dict[str, Any]:
             f"{PUBLIC_DRONE_REPOSITORY_ID}, got {remote_url}"
         )
     revision = _git_output(drone_root, "rev-parse", "HEAD")
+    if revision != PUBLIC_DRONE_SOURCE_REVISION:
+        raise RecipeError(
+            "Drone workspace did not resolve to the verified source revision: "
+            f"expected {PUBLIC_DRONE_SOURCE_REVISION}, got {revision}"
+        )
     dirty_paths = [
         line for line in _git_output(drone_root, "status", "--short").splitlines() if line
     ]
@@ -340,7 +369,7 @@ def prepare_drone_workspace(drone_root: Path) -> dict[str, Any]:
     return {
         "mode": mode,
         "repository": PUBLIC_DRONE_REPOSITORY_ID,
-        "requested_ref": "main",
+        "requested_ref": PUBLIC_DRONE_SOURCE_REVISION,
         "resolved_revision": revision,
         "dirty": bool(dirty_paths),
         "dirty_path_count": len(dirty_paths),

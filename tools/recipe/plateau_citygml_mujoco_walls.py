@@ -56,9 +56,22 @@ def python_environment() -> Path:
     return paths().root / "python"
 
 
+def _python_executable(
+    environment: Path,
+    *,
+    windows: bool | None = None,
+) -> Path:
+    use_windows_layout = os.name == "nt" if windows is None else windows
+    if use_windows_layout:
+        portable_python = environment / "python.exe"
+        if portable_python.is_file():
+            return portable_python
+        return environment / "Scripts" / "python.exe"
+    return environment / "bin" / "python"
+
+
 def recipe_python() -> Path:
-    relative = Path("Scripts/python.exe") if os.name == "nt" else Path("bin/python")
-    return python_environment() / relative
+    return _python_executable(python_environment())
 
 
 def paths() -> RecipePaths:
