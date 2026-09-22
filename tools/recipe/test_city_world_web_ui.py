@@ -22,6 +22,10 @@ class CityWorldWebUiToolTest(unittest.TestCase):
         self.assertEqual(recipe.RECIPE_PATH.name, "city-world-web-ui.yaml")
         self.assertTrue(hasattr(recipe.recipe_tool, "load_recipe"))
 
+    def test_recipe_exports_its_repository_for_launcher_cwd(self) -> None:
+        environment = recipe.recipe_data()["recipe_runtime"]["environment"]
+        self.assertEqual(environment["RECIPE_REPOSITORY"], "${RECIPE_REPOSITORY}")
+
     def test_start_uses_foundation_python_and_recipe_owned_state(self) -> None:
         paths = SimpleNamespace(
             foundation_python=Path("/foundation/python"),

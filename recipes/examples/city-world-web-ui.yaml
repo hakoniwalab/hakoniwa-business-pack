@@ -155,6 +155,7 @@ recipe_local_requirements:
 recipe_runtime_schema_version: 1
 recipe_runtime:
   environment:
+    RECIPE_REPOSITORY: ${RECIPE_REPOSITORY}
     HAKO_FOUNDATION_INSTALL: ${FOUNDATION_INSTALL}
     HAKO_FOUNDATION_PYTHON: ${FOUNDATION_PYTHON}
     HAKO_RECIPE_WORKSPACE: ${RECIPE_WORKSPACE}
