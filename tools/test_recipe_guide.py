@@ -816,6 +816,17 @@ class RecipeGuideTest(unittest.TestCase):
                 template.read_text(encoding="utf-8"),
             )
 
+    def test_recipe_repository_root_supports_gitless_portable_package(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repository = Path(temporary) / "portable-business-pack"
+            recipe_path = repository / "recipes" / "examples" / "demo.yaml"
+            recipe_path.parent.mkdir(parents=True)
+            recipe_path.write_text("id: demo\n", encoding="utf-8")
+            with mock.patch.object(guide, "root", return_value=repository):
+                self.assertEqual(
+                    guide.recipe_repository_root(recipe_path), repository.resolve()
+                )
+
     def test_launcher_environment_substitution_escapes_windows_paths(self) -> None:
         substituted = guide._substitute_launcher_environment(
             '{"cwd":"${RECIPE_REPOSITORY}"}',

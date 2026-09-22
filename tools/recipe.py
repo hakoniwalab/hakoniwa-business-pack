@@ -103,10 +103,18 @@ def load_recipe(path: Path) -> dict:
 
 
 def recipe_repository_root(recipe_path: Path) -> Path:
-    start = recipe_path.expanduser().resolve().parent
+    recipe = recipe_path.expanduser().resolve()
+    start = recipe.parent
     for candidate in (start, *start.parents):
         if (candidate / ".git").exists():
             return candidate.resolve()
+
+    # Portable packages deliberately omit Git metadata.  Recipes distributed
+    # with this tool still live below this checked-in package's recipes/ tree,
+    # so the tool location is the authoritative repository root in that form.
+    package_root = root().resolve()
+    if recipe.is_relative_to(package_root / "recipes"):
+        return package_root
     raise RecipeGuideError(
         f"Recipe repository root was not found from: {recipe_path}"
     )
