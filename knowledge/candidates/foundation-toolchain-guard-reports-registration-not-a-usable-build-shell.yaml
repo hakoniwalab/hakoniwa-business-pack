@@ -1,0 +1,222 @@
+id: foundation-toolchain-guard-reports-registration-not-a-usable-build-shell
+title: Independent Windows reproduction of the Foundation toolchain guard, and the scope its output implies
+
+status: candidate
+
+knowledge_type:
+  - verified_behaviour
+
+summary: >
+  The Windows-only Foundation doctor check added in 1815a23 was recorded as
+  verified on a single manual run whose host is identified only as "Windows 11
+  x64" and whose transcript was not kept, and its unit tests reach the code by
+  patching platform.system and building a vcpkg root out of two text files. This
+  candidate reproduces it on a second, fully identified Windows host with a real
+  vcpkg checkout and a real installed Foundation, and records what the output
+  does and does not tell the reader. Both behaviours hold: with the Component
+  Receipt and Foundation Python left satisfied, removing only toolchain.json
+  turns the verdict MISSING and the exit code 1, and restoring it returns
+  SATISFIED and 0. A registered root that has lost vcpkg.exe is reported
+  INCOMPATIBLE. What the check does not observe is the shell: its output is
+  byte-identical in an ordinary shell and inside VsDevCmd, although the athrill
+  component's own preflight fails in the first and passes in the second, so
+  "Foundation toolchain SATISFIED" is a statement about a registration rather
+  than about the environment it was run in.
+
+observation:
+  context: >
+    Second-host reproduction of the check added in 1815a23, run against an
+    installed Foundation left over from an earlier athrill-v850e2m-build Recipe
+    run on the same machine. Windows 11 x64 build 10.0.26200.9457, Visual Studio
+    2022 Community with no standalone CMake or Ninja on the ambient PATH, vcpkg
+    checkout 2475cc332a, Python 3.12.7. business-pack measured from a working tree
+    whose tools/ directory is byte-identical to 6c645d0 (git diff --stat against
+    that revision, restricted to tools/, is empty), athrill-target-v850e2m at
+    1c2cea9dd518dfad1388ef91c2c3068815702fc3.
+  details:
+    - >-
+      foundation_lib/runtime.py::inspect_foundation_toolchain gates on
+      platform.system() == "Windows" and on the recipe declaring a component
+      from the VCPKG_COMPONENTS set, then reads
+      prefix.parent/"config"/"toolchain.json" and stats two paths under the root
+      recorded in it, through _vcpkg_required_paths: vcpkg.exe and
+      scripts/buildsystems/vcpkg.cmake. A search of tools/ for vswhere, VsDevCmd,
+      vcvars, cl.exe and MSVC finds no toolchain detection anywhere, so the check
+      never consults the environment it is run in.
+    - >-
+      The single-variable control is the pair of runs on an installed
+      Foundation. Starting from Foundation SATISFIED with Foundation Python and
+      the athrill-target-v850e2m receipt both SATISFIED, moving
+      work/foundation/config/toolchain.json aside and changing nothing else
+      produced Foundation MISSING and exit 1 while both other entries stayed
+      SATISFIED; restoring the file returned SATISFIED and exit 0. That is the
+      behaviour 1815a23 set out to add, measured with the rest of the
+      inspection held constant.
+    - >-
+      The guard also catches a registered root that is no longer usable.
+      Rewriting toolchain.json to name a directory that holds
+      scripts/buildsystems/vcpkg.cmake but no vcpkg.exe produced INCOMPATIBLE,
+      naming the missing vcpkg.exe, exit 1. This is the control that
+      distinguishes a check that looks at something from a check that merely
+      reports the presence of a file.
+    - >-
+      The scope limit is visible in the same session. In an ordinary shell where
+      where.exe finds none of cmake, ninja and cl, Foundation doctor reports
+      SATISFIED and exits 0. The same invocation inside "VsDevCmd.bat -arch=x64
+      -host_arch=x64", where the component's preflight reports cmake and ninja
+      OK, prints the same three SATISFIED lines and exits 0. The reader cannot
+      tell the two shells apart from that output, although the component's own
+      preflight exits 1 in the first and 0 in the second.
+    - >-
+      That component-level difference is the separately tracked
+      toppers/athrill-target-v850e2m#43: its doctor decides the cmake and ninja
+      checks with shutil.which in the invoking shell while _run executes the
+      real commands inside VsDevCmd. 1815a23 neither claims nor attempts to
+      change that, and it does not. The two findings sit at different layers and
+      the point here is only that a green Foundation line does not stand in for
+      the component preflight.
+    - >-
+      One thing this does not show. The bare "python tools/hako.py doctor" used
+      for the comparison also printed NG vcpkg in the ambient shell, but that is
+      an artefact of invoking the component CLI without the manifest the Recipe
+      generates: _find_vcpkg_root searches the manifest's paths.vcpkg_root, the
+      VCPKG_ROOT environment variable and two fixed locations, never PATH, and
+      foundation_lib/build.py writes the registered root into the manifest it
+      passes with --config. Under the Recipe the registration does reach the
+      component. The NG vcpkg line is not evidence of a disagreement between the
+      two layers.
+    - >-
+      The alternate-prefix behaviour tracked as
+      hakoniwalab/hakoniwa-business-pack#179 is fixed and did not reappear here.
+      Registering with --install-dir <work>/foundation-alt/install wrote
+      <work>/foundation-alt/config/toolchain.json, and doctor run against that
+      same prefix reported the toolchain SATISFIED. A prefix that the
+      registration CLI would reject does produce a MISSING toolchain line from
+      doctor, but that is a prefix no registration could have been made for.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/foundation_lib/runtime.py
+      revision: 6c645d0
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: knowledge/candidates/foundation-doctor-must-report-missing-windows-toolchain.yaml
+      revision: 6c645d0
+    - repository: toppers/athrill-target-v850e2m
+      path: tools/hako.py
+      revision: 1c2cea9dd518dfad1388ef91c2c3068815702fc3
+  runtime_evidence:
+    - description: >
+        Windows 11 x64 build 10.0.26200.9457 on 2026-09-22, ordinary shell,
+        Foundation already installed: "python tools/foundation.py doctor
+        --recipe recipes/examples/athrill-v850e2m-build.yaml" printed
+        "Foundation: SATISFIED", "[SATISFIED] Foundation toolchain:
+        vcpkg_root=...\external\vcpkg", "[SATISFIED] Foundation Python: 3.12.7",
+        "[SATISFIED] athrill-target-v850e2m", and exited 0.
+    - description: >
+        Same tree, same shell, with work/foundation/config/toolchain.json moved
+        aside and nothing else changed: "Foundation: MISSING", "[MISSING]
+        Foundation toolchain: Foundation vcpkg toolchain is not registered",
+        "required by: athrill-target-v850e2m", the "python tools/foundation.py
+        toolchain --recipe-id ... --vcpkg-root <vcpkg-root>" remediation, and
+        still "[SATISFIED] Foundation Python" and "[SATISFIED]
+        athrill-target-v850e2m". Exit 1. Restoring the file reproduced the
+        SATISFIED run above.
+    - description: >
+        Same tree, toolchain.json rewritten to name a directory containing only
+        scripts/buildsystems/vcpkg.cmake: "Foundation: INCOMPATIBLE" and
+        "Foundation toolchain vcpkg_root is not usable; missing required files:
+        ...\fake-vcpkg\vcpkg.exe". Exit 1.
+    - description: >
+        Ordinary shell, same session: "where.exe cmake", "where.exe ninja" and
+        "where.exe cl" each reported that nothing matched, and "python
+        tools/hako.py doctor" in the athrill-target-v850e2m checkout printed "NG
+        cmake", "NG ninja", "OK athrill common CMake", "OK Visual Studio C++",
+        "NG vcpkg" and exited 1.
+    - description: >
+        A batch file that calls "VsDevCmd.bat -arch=x64 -host_arch=x64" and then
+        runs both commands: the component doctor printed OK for all five checks
+        with rc 0, and Foundation doctor printed the same three SATISFIED lines
+        as the ordinary shell with rc 0. The component doctor's INFO line shows
+        it resolved vcpkg_root to the Visual Studio copy at
+        "...\2022\Community\VC\vcpkg", not to the root Foundation has
+        registered, so the two shells differ in more than PATH; what the
+        comparison establishes is that the Foundation output does not move,
+        not that PATH alone is the variable.
+    - description: >
+        Registration and inspection against a legal alternate prefix: "python
+        tools/foundation.py toolchain --recipe-id athrill-v850e2m-build
+        --install-dir <work>\foundation-alt\install --vcpkg-root <vcpkg>"
+        wrote <work>\foundation-alt\config\toolchain.json with rc 0, and doctor
+        with that same --install-dir reported "[SATISFIED] Foundation toolchain"
+        reading that file. Issue #179 is closed and this path works.
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required: []
+  notes:
+    - >-
+      Measured on one Windows 11 x64 host on 2026-09-22. The missing, present
+      and unusable-registration runs were taken against the same installed
+      Foundation with only the toolchain configuration changing between them.
+    - >-
+      The ambient-versus-VsDevCmd pair shows that the Foundation output is
+      unchanged across two shells whose component preflight disagrees. No build
+      was attempted in either, so "can build" is inferred from that preflight
+      rather than measured. It is also not a controlled experiment on PATH: the
+      developer shell additionally changes which vcpkg root the component
+      resolves.
+    - >-
+      Not applicable on macOS or Linux, where inspect_foundation_toolchain
+      returns None before reading anything.
+
+tracking:
+  implementation_status: none
+  issues:
+    - repository: toppers/athrill-target-v850e2m
+      number: 43
+      relation: validation
+      status: open
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - athrill-v850e2m-build
+  executable_guardrails: []
+
+promotion_rationale:
+  - >-
+    The value here is evidence, not a defect. The upstream candidate's own
+    record carries no transcript and no host identification, so a second host
+    reproducing all three behaviours -- including the INCOMPATIBLE case, which
+    the upstream record does not mention -- is what makes its verified status
+    checkable by someone else.
+  - >-
+    The only change worth considering is wording. "Foundation toolchain
+    SATISFIED" is read as a statement about the build environment by anyone who
+    has just been told to register a toolchain, and the measurement above shows
+    it is a statement about a registration. Naming the registration in that line
+    would cost nothing and would stop the check from being credited with more
+    than it does.
+
+resolution:
+  status: documented
+  fixed_by: []
+  verified: true
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - >-
+      Nothing is asked of the maintainers here beyond the optional wording
+      change. The check behaves as its own candidate describes.
+    - >-
+      The host and the installed Foundation used for these runs are retained, so
+      any change to this check can be re-measured on the affected configuration
+      on request.
