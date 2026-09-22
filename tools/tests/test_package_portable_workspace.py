@@ -69,6 +69,23 @@ class PortableWorkspacePackageTest(unittest.TestCase):
             self.assertTrue((destination / "Lib" / "site-packages" / "demo" / "__init__.py").is_file())
             self.assertFalse((destination / "Lib" / "site-packages" / "demo" / "__pycache__").exists())
 
+    def test_site_package_copy_excludes_pip(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "source-python"
+            site_packages = source / "Lib" / "site-packages"
+            (site_packages / "pip" / "_vendor").mkdir(parents=True)
+            (site_packages / "pip" / "_vendor" / "installer.py").write_text(
+                "", encoding="utf-8"
+            )
+            (site_packages / "pip-24.0.dist-info").mkdir()
+            (site_packages / "runtime_module.py").write_text("", encoding="utf-8")
+            destination = Path(temporary) / "portable-python"
+            portable._copy_site_packages(source, destination)
+            target = destination / "Lib" / "site-packages"
+            self.assertTrue((target / "runtime_module.py").is_file())
+            self.assertFalse((target / "pip").exists())
+            self.assertFalse((target / "pip-24.0.dist-info").exists())
+
     def test_start_script_uses_packaged_python_and_web_ui_recipe(self) -> None:
         script = portable._render_start_batch()
         self.assertIn(

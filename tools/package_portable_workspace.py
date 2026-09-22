@@ -29,6 +29,11 @@ COMMON_IGNORES = {
     ".venv",
     "__pycache__",
 }
+# pip is only needed to build the Foundation Python environment.  The portable
+# package uses the official embeddable interpreter and never installs packages
+# at runtime, so carrying pip adds no runtime capability and can exceed
+# Windows MAX_PATH while staging the ZIP.
+PORTABLE_PYTHON_IGNORES = COMMON_IGNORES | {"pip", "pip-24.0.dist-info"}
 BUSINESS_PACK_IGNORES = COMMON_IGNORES | {"dist", "work"}
 SIBLING_IGNORES = COMMON_IGNORES | {"build", "dist", "work"}
 
@@ -227,13 +232,15 @@ def _copy_site_packages(source_root: Path, destination_root: Path) -> None:
         # Workspace prepare regenerates this path for the extraction directory.
         if item.name == "hakoniwa_workspace_bootstrap.pth":
             continue
+        if item.name in PORTABLE_PYTHON_IGNORES or item.name.startswith("pip-"):
+            continue
         target = destination / item.name
         if item.is_dir():
             shutil.copytree(
                 item,
                 target,
                 ignore=lambda _directory, names: {
-                    name for name in names if name in COMMON_IGNORES
+                    name for name in names if name in PORTABLE_PYTHON_IGNORES
                 },
                 dirs_exist_ok=True,
             )
