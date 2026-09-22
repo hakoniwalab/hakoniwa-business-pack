@@ -272,6 +272,9 @@ Catalog にある主要コンポーネントがエコシステムのどこに位
 ブラウザでPLATEAUの対象範囲を診断し、表示用GLBと物理用MuJoCo MJCFを生成・確認・取得する
 City World Web UIの起動方法と操作手順を説明します。
 
+City Worldの用途ごとに正しいRecipeを選ぶときは、まず
+[`docs/city-world-recipes-ja.md`](docs/city-world-recipes-ja.md)を参照してください。
+
 ### City World Windows Portable Workspace
 
 [`docs/windows-portable-city-world-workspace-ja.md`](docs/windows-portable-city-world-workspace-ja.md) は、

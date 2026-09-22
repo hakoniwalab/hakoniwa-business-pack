@@ -11,10 +11,14 @@ import time
 import webbrowser
 from pathlib import Path
 
+from tools.workdir import recipe_root
+
 
 ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_SERVICE_RUNTIME = ROOT / "work" / "remote-operation" / "city-world-worker"
-DEFAULT_LAUNCHER_RUNTIME = ROOT / "work" / "remote-operation" / "city-world-launcher"
+RECIPE_ID = "city-world-web-ui"
+DEFAULT_RECIPE_RUNTIME = recipe_root(ROOT, RECIPE_ID)
+DEFAULT_SERVICE_RUNTIME = DEFAULT_RECIPE_RUNTIME / "runtime"
+DEFAULT_LAUNCHER_RUNTIME = DEFAULT_RECIPE_RUNTIME / "launcher"
 
 
 class CityWorldLauncherError(RuntimeError):

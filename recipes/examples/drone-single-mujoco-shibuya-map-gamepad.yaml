@@ -79,7 +79,7 @@ validation:
       evidence:
         - source: tools/recipe/test_drone_shibuya_gamepad.py
           date: 2026-08-24
-        - source: work/remote-operation/city-world-worker/jobs/shizuoka-22203-lat35.099-lon138.859/build/world/city-world-receipt.json
+        - source: work/recipes/city-world-web-ui/runtime/jobs/shizuoka-22203-lat35.099-lon138.859/build/world/city-world-receipt.json
           date: 2026-08-24
         - source: native-drone-service-model-load
           date: 2026-08-24
@@ -461,7 +461,7 @@ artifacts:
     - path: hakoniwa-drone-core/config/drone/mujoco/drone.xml
       owner: hakoniwa-drone-core
       purpose: Clean single-Drone MuJoCo model used by generated City World mode.
-    - path: work/remote-operation/city-world-worker/jobs/<JOB_ID>/build/world/city-world-receipt.json
+    - path: work/recipes/city-world-web-ui/runtime/jobs/<JOB_ID>/build/world/city-world-receipt.json
       owner: hakoniwa-business-pack
       purpose: Selected City World MJCF, GLB, origin, extent, and hash authority.
     - path: hakoniwa-drone-core/config/drone/mujoco-shibuya-api-1/drone.xml
@@ -569,7 +569,7 @@ demo:
       logs: work/recipes/drone-single-mujoco-shibuya-map-gamepad/logs
   steps:
     - id: configure
-      command: python tools/recipe/drone_shibuya_gamepad.py configure --city-world work/remote-operation/city-world-worker/jobs/JOB_ID --spawn-altitude-m 20
+      command: python tools/recipe/drone_shibuya_gamepad.py configure --city-world work/recipes/city-world-web-ui/runtime/jobs/JOB_ID --spawn-altitude-m 20
       status: not_tested
       expected:
         - Source assets are copied and hashes recorded.

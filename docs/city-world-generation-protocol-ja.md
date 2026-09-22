@@ -254,7 +254,8 @@ receipt/city-world-receipt.json
 ```
 
 任意の出力パスをwire protocolで指定しない。Workerは
-`work/city-world-jobs/<job-id>/`等の管理領域をローカルポリシーから解決する。
+`work/recipes/city-world-web-ui/runtime/jobs/<job-id>/`等の管理領域を、
+選択されたWorkspace workdirから解決する。
 
 ## 12. v1 non-goals
 
@@ -298,11 +299,11 @@ Terminal 2（限定static server）:
 python3 -m tools.remote_operation.city_world.web_smoke --port 8008
 ```
 
-通常利用では、上記2プロセスを別Terminalで起動せず、Coreless City World Launcherを使う。
+通常利用では、上記2プロセスを別Terminalで起動せず、`city-world-web-ui` Recipeの
+専用入口を使う。
 
 ```bash
-python3 tools/workspace.py run -- \
-  python3 -m tools.remote_operation.city_world.launcher start \
+python tools/recipe/city_world_web_ui.py start \
   --parallel-workers 4 \
   --dem-parallel-workers 2 \
   --terrain-spacing-m 2 \
@@ -314,16 +315,14 @@ python3 tools/workspace.py run -- \
 状態確認と停止は次のとおり。
 
 ```bash
-python3 tools/workspace.py run -- \
-  python3 -m tools.remote_operation.city_world.launcher status
+python tools/recipe/city_world_web_ui.py status
 
-python3 tools/workspace.py run -- \
-  python3 -m tools.remote_operation.city_world.launcher stop
+python tools/recipe/city_world_web_ui.py stop
 ```
 
 生成されるLauncher設定、session、個別ログは
-`work/remote-operation/city-world-launcher/`に置く。CityGML cacheと生成jobは従来どおり
-`work/remote-operation/city-world-worker/`に置き、Launcherを停止しても削除しない。
+`work/recipes/city-world-web-ui/launcher/`に置く。CityGML cacheと生成jobは
+`work/recipes/city-world-web-ui/runtime/`に置き、Launcherを停止しても削除しない。
 `--open-browser`を省略した場合はブラウザを自動起動せず、表示されたURLを人間が開く。
 
 ### 13.1 並列worker数と地形解像度の設定
@@ -335,7 +334,7 @@ python3 tools/workspace.py run -- \
 次のファイルへ記録される。
 
 ```text
-work/remote-operation/city-world-worker/jobs/<job_id>/hakoniwa-envsim-build.yaml
+work/recipes/city-world-web-ui/runtime/jobs/<job_id>/hakoniwa-envsim-build.yaml
 ```
 
 生成時には、上記YAMLの`city_world.parallel_workers`と
@@ -344,11 +343,9 @@ work/remote-operation/city-world-worker/jobs/<job_id>/hakoniwa-envsim-build.yaml
 稼働中のLauncherを停止してから新しい値で起動し直す。
 
 ```bash
-python3 tools/workspace.py run -- \
-  python3 -m tools.remote_operation.city_world.launcher stop
+python tools/recipe/city_world_web_ui.py stop
 
-python3 tools/workspace.py run -- \
-  python3 -m tools.remote_operation.city_world.launcher start \
+python tools/recipe/city_world_web_ui.py start \
   --parallel-workers 6 \
   --dem-parallel-workers 4 \
   --terrain-spacing-m auto \
@@ -458,7 +455,7 @@ Capability結果として表示する。通信/API障害の生メッセージは
 生成物は次に配置される。
 
 ```text
-work/remote-operation/city-world-worker/jobs/<job-id>/
+work/recipes/city-world-web-ui/runtime/jobs/<job-id>/
   build/world/
     city-world.glb
     city-world.xml
@@ -473,7 +470,7 @@ work/remote-operation/city-world-worker/jobs/<job-id>/
     city-world-colliders-receipt.json
   generation.log
 
-work/remote-operation/city-world-worker/cache/plateau-citygml/
+work/recipes/city-world-web-ui/runtime/cache/plateau-citygml/
   objects/
     <source-identity-hash>/
       <citygml-file>
@@ -513,9 +510,9 @@ MJCF、ログは公開しない。
 Workerのruntime場所を変更した場合は、static serverにも同じ場所を指定する。
 
 ```bash
-python3 -m tools.remote_operation.city_world.web_smoke \
+python -m tools.remote_operation.city_world.web_smoke \
   --port 8008 \
-  --worker-runtime-dir work/remote-operation/city-world-worker
+  --worker-runtime-dir work/recipes/city-world-web-ui/runtime
 ```
 
 Workerは停止するまで複数回の診断・生成commandを受け付ける。`--once`は自動テスト用で、

@@ -18,7 +18,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RECIPE_ID = "plateau-citygml-mujoco-walls"
+RECIPE_ID = "city-world-web-ui"
 PACKAGE_ID = "hakoniwa-business-pack-city-world-windows-x64"
 COMMON_IGNORES = {
     ".git",
@@ -269,29 +269,6 @@ def _materialize_portable_python(
     _copy_site_packages(source_python_root, destination)
 
 
-def _prepare_recipe_python(foundation_python: Path) -> Path:
-    code = (
-        "from tools.recipe.plateau_citygml_mujoco_walls "
-        "import install_python_requirements;"
-        "print(install_python_requirements())"
-    )
-    completed = subprocess.run(
-        [str(foundation_python), "-c", code],
-        cwd=ROOT,
-        check=False,
-    )
-    if completed.returncode:
-        raise PortablePackageError(
-            "failed to prepare the City World Recipe Python environment"
-        )
-    recipe_root = ROOT / "work" / "recipes" / RECIPE_ID / "python"
-    if not _windows_python(recipe_root).is_file():
-        raise PortablePackageError(
-            f"Recipe Python was not created as expected: {recipe_root}"
-        )
-    return recipe_root
-
-
 def _git_revision(repository: Path) -> dict[str, object]:
     try:
         revision = subprocess.run(
@@ -333,14 +310,14 @@ if not exist "%HAKO_PYTHON%" (
 )
 
 pushd "%BUSINESS_PACK%"
-"%HAKO_PYTHON%" tools\workspace.py run -- "%HAKO_PYTHON%" -m tools.remote_operation.city_world.launcher start --terrain-spacing-m auto --open-browser
+"%HAKO_PYTHON%" tools\workspace.py run -- "%HAKO_PYTHON%" tools\recipe\city_world_web_ui.py start --terrain-spacing-m auto --open-browser
 set "RC=%ERRORLEVEL%"
 popd
 
 if not "%RC%"=="0" (
   echo.
   echo [ERROR] City World failed to start. Check:
-  echo         hakoniwa-business-pack\work\remote-operation\city-world-launcher\logs
+  echo         hakoniwa-business-pack\work\recipes\city-world-web-ui\launcher\logs
   pause
 )
 exit /b %RC%
@@ -357,7 +334,7 @@ set "BUSINESS_PACK=%PACKAGE_ROOT%hakoniwa-business-pack"
 set "HAKO_PYTHON=%BUSINESS_PACK%\work\foundation\install\python\python.exe"
 
 pushd "%BUSINESS_PACK%"
-"%HAKO_PYTHON%" tools\workspace.py run -- "%HAKO_PYTHON%" -m tools.remote_operation.city_world.launcher {command}
+"%HAKO_PYTHON%" tools\workspace.py run -- "%HAKO_PYTHON%" tools\recipe\city_world_web_ui.py {command}
 set "RC=%ERRORLEVEL%"
 popd
 if not "%RC%"=="0" pause
@@ -387,7 +364,7 @@ def _write_entrypoints(package_root: Path) -> None:
             "\n"
             "Python / Git / WSL / Docker の追加インストールは不要です。\n"
             "生成データと共有キャッシュは "
-            "hakoniwa-business-pack\\work\\remote-operation\\ に保存されます。\n"
+            "hakoniwa-business-pack\\work\\recipes\\city-world-web-ui\\runtime\\ に保存されます。\n"
         ),
         encoding="utf-8",
     )
@@ -402,19 +379,31 @@ def _run_checked(command: list[str], cwd: Path, label: str) -> None:
         )
 
 
+def _materialize_web_ui_recipe(foundation_python: Path, business_pack: Path) -> None:
+    """Render portable Recipe paths after the ZIP has its final directory layout."""
+    code = (
+        "import runpy; from pathlib import Path; "
+        "recipe=runpy.run_path('tools/recipe.py'); "
+        "path=Path('recipes/examples/city-world-web-ui.yaml').resolve(); "
+        "recipe['materialize_recipe_runtime'](path, recipe['load_recipe'](path))"
+    )
+    _run_checked(
+        [str(foundation_python), "-c", code],
+        business_pack,
+        "portable City World Web UI Recipe materialization",
+    )
+
+
 def _validate_staged_package(package_root: Path) -> None:
     business_pack = package_root / "hakoniwa-business-pack"
     foundation_python = (
         business_pack / "work" / "foundation" / "install" / "python" / "python.exe"
     )
-    recipe_python = (
-        business_pack / "work" / "recipes" / RECIPE_ID / "python" / "python.exe"
-    )
     required = (
         foundation_python,
-        recipe_python,
         package_root / "hakoniwa-envsim" / "tools" / "hako.py",
         package_root / "hakoniwa-pdu-javascript" / "src" / "index.js",
+        package_root / "hakoniwa-pdu-python" / "src" / "hakoniwa_pdu" / "apps" / "launcher" / "hako_launcher.py",
     )
     missing = [str(path) for path in required if not path.is_file()]
     if missing:
@@ -431,10 +420,11 @@ def _validate_staged_package(package_root: Path) -> None:
         business_pack,
         "portable Workspace doctor",
     )
+    _materialize_web_ui_recipe(foundation_python, business_pack)
     _run_checked(
-        [str(recipe_python), "-m", "pip", "check"],
+        [str(foundation_python), "tools/recipe/city_world_web_ui.py", "doctor"],
         business_pack,
-        "portable Recipe Python pip check",
+        "portable City World Web UI Recipe doctor",
     )
 
 
@@ -538,6 +528,7 @@ def build_package(
 
     envsim = ROOT.parent / "hakoniwa-envsim"
     pdu_javascript = ROOT.parent / "hakoniwa-pdu-javascript"
+    pdu_python = ROOT.parent / "hakoniwa-pdu-python"
     if not (envsim / "tools" / "hako.py").is_file():
         raise PortablePackageError(
             f"hakoniwa-envsim sibling checkout is missing: {envsim}"
@@ -545,6 +536,10 @@ def build_package(
     if not (pdu_javascript / "src" / "index.js").is_file():
         raise PortablePackageError(
             f"hakoniwa-pdu-javascript sibling checkout is missing: {pdu_javascript}"
+        )
+    if not (pdu_python / "src" / "hakoniwa_pdu" / "apps" / "launcher" / "hako_launcher.py").is_file():
+        raise PortablePackageError(
+            f"hakoniwa-pdu-python sibling checkout is missing: {pdu_python}"
         )
 
     _run_checked(
@@ -557,7 +552,11 @@ def build_package(
         ROOT,
         "source Workspace doctor",
     )
-    recipe_python_root = _prepare_recipe_python(foundation_python)
+    _run_checked(
+        [str(foundation_python), "tools/recipe/city_world_web_ui.py", "configure"],
+        ROOT,
+        "source City World Web UI Recipe configure",
+    )
 
     output = output.expanduser().resolve()
     staging_base = ROOT / "work" / "portable-package"
@@ -596,6 +595,11 @@ def build_package(
             package_root / "hakoniwa-pdu-javascript",
             SIBLING_IGNORES,
         )
+        _copy_tree(
+            pdu_python,
+            package_root / "hakoniwa-pdu-python",
+            SIBLING_IGNORES,
+        )
 
         embedded_zip = _embedded_python_archive(
             str(python_identity["version"]),
@@ -611,16 +615,6 @@ def build_package(
             / "install"
             / "python",
         )
-        _materialize_portable_python(
-            embedded_zip,
-            recipe_python_root,
-            business_pack_destination
-            / "work"
-            / "recipes"
-            / RECIPE_ID
-            / "python",
-        )
-
         _write_entrypoints(package_root)
         _write_manifest(
             package_root,
@@ -630,6 +624,7 @@ def build_package(
                 "hakoniwa-business-pack": ROOT,
                 "hakoniwa-envsim": envsim,
                 "hakoniwa-pdu-javascript": pdu_javascript,
+                "hakoniwa-pdu-python": pdu_python,
             },
         )
         _validate_staged_package(package_root)

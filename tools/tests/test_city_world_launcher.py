@@ -14,6 +14,17 @@ from tools.remote_operation.city_world import launcher
 
 
 class CityWorldLauncherTest(unittest.TestCase):
+    def test_default_runtime_paths_are_owned_by_the_web_ui_recipe(self) -> None:
+        self.assertEqual(
+            launcher.DEFAULT_SERVICE_RUNTIME,
+            launcher.DEFAULT_RECIPE_RUNTIME / "runtime",
+        )
+        self.assertEqual(
+            launcher.DEFAULT_LAUNCHER_RUNTIME,
+            launcher.DEFAULT_RECIPE_RUNTIME / "launcher",
+        )
+        self.assertEqual(launcher.DEFAULT_RECIPE_RUNTIME.name, "city-world-web-ui")
+
     def test_generated_launcher_is_core_free_activate_only_input(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -1,0 +1,40 @@
+{
+  "version": "0.1",
+  "runtime": { "cleanup_mmap_on_start": false },
+  "defaults": {
+    "cwd": "${RECIPE_REPOSITORY}",
+    "delay_sec": 0.0,
+    "stdout": "${HAKO_RECIPE_WORKSPACE}/logs/${asset}.out",
+    "stderr": "${HAKO_RECIPE_WORKSPACE}/logs/${asset}.err"
+  },
+  "assets": [
+    {
+      "name": "city-world-worker",
+      "command": "${HAKO_FOUNDATION_PYTHON}",
+      "args": [
+        "-m", "tools.remote_operation.city_world.worker",
+        "--listen-address", "127.0.0.1",
+        "--port", "54210",
+        "--runtime-dir", "${HAKO_RECIPE_WORKSPACE}/runtime",
+        "--max-download-gib", "8.0",
+        "--parallel-workers", "4",
+        "--dem-parallel-workers", "2",
+        "--terrain-spacing-m", "auto"
+      ],
+      "activation_timing": "before_start"
+    },
+    {
+      "name": "city-world-web",
+      "command": "${HAKO_FOUNDATION_PYTHON}",
+      "args": [
+        "-m", "tools.remote_operation.city_world.web_smoke",
+        "--listen-address", "127.0.0.1",
+        "--port", "8008",
+        "--worker-runtime-dir", "${HAKO_RECIPE_WORKSPACE}/runtime",
+        "--pdu-javascript-root", "${HAKONIWA_PDU_JAVASCRIPT_ROOT}"
+      ],
+      "depends_on": ["city-world-worker"],
+      "activation_timing": "before_start"
+    }
+  ]
+}

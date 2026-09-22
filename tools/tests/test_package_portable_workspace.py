@@ -43,7 +43,7 @@ class PortableWorkspacePackageTest(unittest.TestCase):
             with self.assertRaises(portable.PortablePackageError):
                 portable._reject_absolute_pth_entries(site_packages)
 
-    def test_start_script_uses_packaged_python_and_workspace_launcher(self) -> None:
+    def test_start_script_uses_packaged_python_and_web_ui_recipe(self) -> None:
         script = portable._render_start_batch()
         self.assertIn(
             r"work\foundation\install\python\python.exe",
@@ -51,7 +51,7 @@ class PortableWorkspacePackageTest(unittest.TestCase):
         )
         self.assertIn(r"tools\workspace.py run", script)
         self.assertIn(
-            "tools.remote_operation.city_world.launcher start",
+            r"tools\recipe\city_world_web_ui.py start",
             script,
         )
         self.assertIn("--open-browser", script)
@@ -60,7 +60,7 @@ class PortableWorkspacePackageTest(unittest.TestCase):
         for command in ("status", "stop"):
             script = portable._render_control_batch(command)
             self.assertIn(
-                f"tools.remote_operation.city_world.launcher {command}",
+                rf"tools\recipe\city_world_web_ui.py {command}",
                 script,
             )
             self.assertIn(

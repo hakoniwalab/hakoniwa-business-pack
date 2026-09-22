@@ -1,0 +1,259 @@
+id: city-world-web-ui
+title: PLATEAU City World Web UI (Core-free)
+recipe_version: 0.1
+
+goal:
+  user_request: ブラウザでPLATEAUの範囲を選択し、City Worldを診断・生成・確認・取得したい
+  description: >
+    Materialize a Core-free local Web UI runtime that connects the browser and
+    the fixed City World Worker through a WebSocket PDU Endpoint. The Worker
+    delegates only enumerated PLATEAU inspection and City World generation to
+    hakoniwa-envsim, preserving generated artifacts and provenance locally.
+
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - hakoniwa-pdu-endpoint provides the Core-free Python WebSocket transport.
+    - hakoniwa-pdu-python provides the activate-only Launcher without requiring a Core process for this Recipe.
+    - hakoniwa-envsim owns the fixed PLATEAU inspection and City World generation implementation.
+
+validation:
+  status: partially_verified
+  summary: >
+    Existing Worker, PDU transport, and Launcher unit tests cover static
+    contracts. This new Recipe has not yet received a clean-host Foundation
+    configure/doctor or browser E2E record.
+  steps:
+    - id: core_free_foundation_contract
+      status: partially_verified
+      evidence:
+        - repository: hakoniwalab/hakoniwa-business-pack
+          path: tools/foundation_lib/plan.py
+          revision: main
+      notes:
+        - An explicit Core-free Endpoint requirement removes hakoniwa-core-pro from its Foundation dependency closure.
+    - id: clean_host_recipe_smoke
+      status: not_tested
+      notes:
+        - Run configure, doctor, launch, endpoint import, and graceful stop on Windows, macOS, and Linux.
+    - id: browser_generation_e2e
+      status: not_tested
+      notes:
+        - Requires network access to PLATEAU and a human visual confirmation of generated artifacts.
+
+constraints:
+  - no-hakoniwa-core-process
+  - no-hakopy
+  - no-hako-cmd
+  - local-loopback-web-ui
+  - external-plateau-api-used-only-by-explicit-generation
+  - generated-data-remains-under-recipe-workspace
+
+target_environment:
+  required_for: interactive-city-world-generation
+  status: specified
+  os: macOS | Linux | Windows
+  os_version: current-supported-host
+  architecture: host-native
+  execution_mode: native
+  runtimes:
+    - name: Python
+      required: true
+      version: "3.12"
+      path: work/foundation/install/python
+
+execution_environment:
+  required_for: interactive-city-world-generation
+  status: specified
+  workspace:
+    mode: managed
+  os: macOS | Linux | Windows
+  os_version: current-supported-host
+  architecture: host-native
+  execution_mode: native
+  gui:
+    required: true
+    status: local-browser
+  shared_memory:
+    required: false
+    access: not-used
+  python:
+    environment: foundation-venv
+    hakopy_available: not-required
+  hakoniwa:
+    install_prefix: work/foundation/install
+    hako_cmd_access: not-required
+  notes:
+    - The Launcher is activate-only and owns only the City World Worker and static Web UI server.
+
+foundation_contract:
+  mode: required
+  reason: Foundation owns the Core-free native Endpoint and CPython runtime required by the WebSocket PDU Worker.
+
+foundation_requirements:
+  hakoniwa-pdu-endpoint:
+    capabilities:
+      hakoniwa_core: false
+      python_binding: true
+      websocket: true
+
+runtime_dependencies:
+  python:
+    interpreter: work/foundation/install/python
+    requirements: recipes/requirements/city-world-web-ui.txt
+    packages:
+      - name: pydantic
+        version: ">=2.7.0"
+        purpose: Validate the hakoniwa-pdu-python Launcher configuration.
+
+recipe_local_requirements_schema_version: 1
+recipe_local_requirements:
+  hakoniwa-envsim:
+    root:
+      default_path: ../hakoniwa-envsim
+      override_env: HAKONIWA_ENVSIM_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/hakoniwa-envsim.git
+      revision: main
+    required_artifacts:
+      - path: tools/hako.py
+        kind: file
+      - path: src/city_pipeline/city_world_composer.py
+        kind: file
+      - path: src/city_pipeline/mjcf_colliders2glb.py
+        kind: file
+  hakoniwa-pdu-javascript:
+    root:
+      default_path: ../hakoniwa-pdu-javascript
+      override_env: HAKONIWA_PDU_JAVASCRIPT_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/hakoniwa-pdu-javascript.git
+      revision: main
+    required_artifacts:
+      - path: src/index.js
+        kind: file
+  hakoniwa-pdu-python:
+    root:
+      default_path: ../hakoniwa-pdu-python
+      override_env: HAKONIWA_PDU_PYTHON_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/hakoniwa-pdu-python.git
+      revision: main
+    required_artifacts:
+      - path: src/hakoniwa_pdu/apps/launcher/hako_launcher.py
+        kind: file
+      - path: src/hakoniwa_pdu/apps/launcher/hako_launcher_ctl.py
+        kind: file
+
+recipe_runtime_schema_version: 1
+recipe_runtime:
+  environment:
+    HAKO_FOUNDATION_INSTALL: ${FOUNDATION_INSTALL}
+    HAKO_FOUNDATION_PYTHON: ${FOUNDATION_PYTHON}
+    HAKO_RECIPE_WORKSPACE: ${RECIPE_WORKSPACE}
+    HAKONIWA_ENVSIM_ROOT: ${DEPENDENCY:hakoniwa-envsim}
+    HAKONIWA_PDU_JAVASCRIPT_ROOT: ${DEPENDENCY:hakoniwa-pdu-javascript}
+    PYTHONPATH: ${DEPENDENCY:hakoniwa-pdu-python}/src
+  launcher:
+    template: recipes/launcher/city-world-web-ui.json
+    output: config/launcher.json
+    mode: activate-only
+
+components:
+  - id: hakoniwa-envsim
+    roles: [asset_generator, environment_model]
+    purpose: Performs fixed PLATEAU inspection and City World generation.
+  - id: hakoniwa-pdu-endpoint
+    roles: [communication_infrastructure]
+    purpose: Provides the Core-free Python WebSocket PDU endpoint for the Worker.
+  - id: hakoniwa-pdu-python
+    roles: [runtime_orchestrator]
+    purpose: Provides the activate-only process Launcher and lifecycle control.
+  - id: hakoniwa-pdu-javascript
+    roles: [browser_client]
+    purpose: Provides the browser-side WebSocket PDU client.
+
+connections:
+  - from: hakoniwa-pdu-javascript
+    to: hakoniwa-pdu-endpoint
+    interface: WebSocket PDU
+    contract:
+      status: partially_verified
+      requires:
+        - Browser and Worker use robot hako_city_world_job, PDU message, and channel 1.
+        - Endpoint is built with Python binding and Hakoniwa Core disabled.
+  - from: hakoniwa-pdu-endpoint
+    to: hakoniwa-envsim
+    interface: validated JSON job
+    contract:
+      status: partially_verified
+      requires:
+        - Worker maps only inspected and generated City World requests to fixed Envsim operations.
+
+data_flow:
+  - Browser -> PDU JavaScript -> Core-free WebSocket Endpoint -> City World Worker
+  - City World Worker -> Envsim fixed pipeline -> validated GLB/MJCF/receipt ZIP
+  - Worker runtime -> static Web UI -> browser preview and download
+
+time_model:
+  mode: wall-clock
+  notes:
+    - The Web UI manages local asynchronous jobs; simulation time is not used.
+
+artifact_sets:
+  - id: generated_city_world
+    kind: generated-directory
+    path: work/recipes/city-world-web-ui/runtime/jobs
+    ownership: recipe
+  - id: plateau_cache
+    kind: generated-directory
+    path: work/recipes/city-world-web-ui/runtime/cache/plateau-citygml
+    ownership: recipe
+
+agency_boundary:
+  agent_actions:
+    - id: materialize_core_free_runtime
+      description: Configure and validate local software dependencies.
+      autonomous: true
+  human_decisions:
+    - id: approve_generated_world
+      description: Decide whether generated PLATEAU coverage and physical fidelity are suitable for intended use.
+      required_before: [external_delivery]
+  required_permissions:
+    - id: plateau_network_access
+      description: Network access to the PLATEAU API is required only when the operator requests inspection or generation.
+      status: required-at-runtime
+
+missing_pieces:
+  - Record clean-host configure/doctor/launch evidence on Windows, macOS, and Linux.
+  - Move existing global City World runtime state and portable package flow in later refactor phases.
+
+demo:
+  prerequisites:
+    - id: enter_workspace
+      command: python tools/workspace.py enter
+      expected: Start a managed Workspace shell.
+  steps:
+    - id: inspect_plan
+      command: python tools/recipe.py plan --recipe recipes/examples/city-world-web-ui.yaml
+      expected: Show a Core-free Endpoint Foundation plan and the three source dependencies.
+    - id: configure_runtime
+      command: python tools/recipe.py configure --recipe recipes/examples/city-world-web-ui.yaml
+      expected: Materialize Foundation, dependencies, Recipe Python packages, and the activate-only Launcher.
+    - id: doctor_runtime
+      command: python tools/recipe/city_world_web_ui.py doctor
+      expected: Report Foundation and source contracts, then import the PDU Launcher and Core-free Endpoint from Foundation Python.
+    - id: launch_web_ui
+      command: python tools/recipe/city_world_web_ui.py start --open-browser
+      expected: Start the local Worker and Web UI at http://127.0.0.1:8008/ without Hakoniwa Core.
+  cleanup:
+    expected_behavior: Run python tools/recipe/city_world_web_ui.py stop before leaving the Workspace.
+    verification_checks:
+      - Worker and Web UI processes terminate together.

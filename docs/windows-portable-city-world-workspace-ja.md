@@ -44,14 +44,16 @@ hakoniwa-business-pack-city-world-windows-x64/
 │       │       └── python/
 │       │           └── python.exe
 │       └── recipes/
-│           └── plateau-citygml-mujoco-walls/
-│               └── python/
-│                   └── python.exe
+│           └── city-world-web-ui/
+│               ├── environment.json
+│               └── config/launcher.json
 ├── hakoniwa-envsim/
-└── hakoniwa-pdu-javascript/
+├── hakoniwa-pdu-javascript/
+└── hakoniwa-pdu-python/
 ```
 
-`hakoniwa-envsim` と `hakoniwa-pdu-javascript` は従来と同じ sibling
+`hakoniwa-envsim`、`hakoniwa-pdu-javascript`、`hakoniwa-pdu-python` は
+revisionを追跡するsource依存として sibling
 layout を維持するため、City World の既存 path 解決を変更しない。
 
 ## 3. なぜ venv をそのまま ZIP にしないか
@@ -62,16 +64,14 @@ Python の通常の venv は、作成元 Python の配置を `pyvenv.cfg` など
 package tool は Windows 公式 embeddable Python を基盤にし、構築済み Workspace から
 必要な `site-packages` を移植する。
 
-portable runtime は次の2箇所へ配置する。
+portable Python runtime はFoundationに一つだけ配置する。
 
 - Foundation runtime:
   `work/foundation/install/python/python.exe`
-- City World Recipe runtime:
-  `work/recipes/plateau-citygml-mujoco-walls/python/python.exe`
 
 通常の開発 Workspace は従来どおり
 `Scripts/python.exe` を使用する。
-`tools/workspace.py` と City World Recipe は、
+`tools/workspace.py` と `city-world-web-ui` Recipe は、
 portable runtime が存在する場合だけ root の `python.exe` を優先する。
 
 ## 4. package の作成条件
@@ -87,6 +87,7 @@ package は **Windows x64 上で作成する**。
 - CPython 3.12 の Foundation Workspace が構築済み
 - `../hakoniwa-envsim` が存在する
 - `../hakoniwa-pdu-javascript` が存在する
+- `../hakoniwa-pdu-python` が存在する
 - source Workspace の `python tools/workspace.py doctor` が成功する
 - Python package の取得と PLATEAU API 利用に必要なネットワーク接続がある
 
@@ -107,14 +108,14 @@ dist/hakoniwa-business-pack-city-world-windows-x64.zip
 package tool は次を行う。
 
 1. source Foundation の Workspace doctor
-2. City World Recipe Python requirements の準備
+2. `city-world-web-ui` RecipeのCore-free Endpoint、Python requirements、runtime設定の構成
 3. Python runtime のversion/architecture確認
 4. 同じversionの公式 Windows embeddable Python の取得
-5. Foundation / Recipe の `site-packages` 移植
-6. Business Pack / Envsim / PDU JavaScript の source 配置
+5. Foundationの `site-packages` 移植
+6. Business Pack / Envsim / PDU JavaScript / PDU Python の source 配置
 7. 過去の City World job / PLATEAU cache を除外
 8. staging 内の portable Workspace doctor
-9. Recipe Python の `pip check`
+9. portable `city-world-web-ui` RecipeのdoctorとCore-free import確認
 10. ZIP生成と SHA-256 表示
 
 既に公式 embeddable ZIP を取得済みなら、ネットワーク取得を避けられる。
@@ -144,7 +145,7 @@ python tools/package_portable_workspace.py --keep-staging
 
 ```text
 workspace.py run
-  -> city_world.launcher start
+  -> tools/recipe/city_world_web_ui.py start
   -> Worker + Web server
   -> browser open
 ```
@@ -173,6 +174,12 @@ Workspace bootstrap の `.pth` は利用時の展開先に合わせて
 ## 8. 保存データ
 
 利用者が生成した City World job と PLATEAU共有cacheは package 内の
+
+```text
+hakoniwa-business-pack/work/recipes/city-world-web-ui/runtime/
+```
+
+に保存される。旧 `work/remote-operation/` は新しいpackageでは使用しない。
 
 ```text
 hakoniwa-business-pack/work/remote-operation/

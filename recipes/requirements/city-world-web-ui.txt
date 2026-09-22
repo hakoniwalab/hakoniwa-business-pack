@@ -1,0 +1,2 @@
+# Launcher configuration models used by hakoniwa-pdu-python.
+pydantic>=2.7.0

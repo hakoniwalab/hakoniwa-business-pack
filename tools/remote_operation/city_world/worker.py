@@ -10,6 +10,8 @@ import threading
 from pathlib import Path
 from typing import Any, Callable
 
+from tools.workdir import recipe_root
+
 from ..pdu_transport import PduJsonTransport, TransportError, write_websocket_endpoint_config
 from .inspection import PlateauSelectionInspector, inspect_request
 from .generation import (
@@ -29,6 +31,12 @@ from .protocol import (
 PDU_ROBOT = "hako_city_world_job"
 PDU_CHANNEL_ID = 1
 DEFAULT_MAX_DOWNLOAD_BYTES = 8 * 1024 * 1024 * 1024
+
+
+def default_runtime_dir() -> Path:
+    """Return the Workspace-owned City World Web UI state directory."""
+    root = Path(__file__).resolve().parents[3]
+    return recipe_root(root, "city-world-web-ui") / "runtime"
 
 
 def _status(command: dict[str, Any], message_type: str, sequence: int, **payload: Any) -> dict[str, Any]:
@@ -335,7 +343,7 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=54210)
     parser.add_argument(
         "--runtime-dir", type=Path,
-        default=Path("work/remote-operation/city-world-worker"),
+        default=default_runtime_dir(),
     )
     parser.add_argument(
         "--once", action="store_true",

@@ -11,12 +11,19 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
+from tools.workdir import recipe_root
+
 from .protocol import validate_request, validate_result
 
 
 WEB_ROOT = Path(__file__).resolve().parent / "web"
 BUSINESS_PACK_ROOT = Path(__file__).resolve().parents[3]
 JOB_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+def default_worker_runtime_dir() -> Path:
+    """Return the Recipe-owned Worker state directory for standalone use."""
+    return recipe_root(BUSINESS_PACK_ROOT, "city-world-web-ui") / "runtime"
 
 
 def resolve_pdu_javascript_root(explicit: Path | None = None) -> Path:
@@ -33,7 +40,7 @@ def resolve_pdu_javascript_root(explicit: Path | None = None) -> Path:
 
 
 def resolve_worker_runtime_root(explicit: Path | None = None) -> Path:
-    candidate = explicit or Path("work/remote-operation/city-world-worker")
+    candidate = explicit or default_worker_runtime_dir()
     if not candidate.is_absolute():
         candidate = BUSINESS_PACK_ROOT / candidate
     return candidate.resolve()
@@ -281,7 +288,7 @@ def main() -> int:
     parser.add_argument("--pdu-javascript-root", type=Path)
     parser.add_argument(
         "--worker-runtime-dir", type=Path,
-        default=Path("work/remote-operation/city-world-worker"),
+        default=default_worker_runtime_dir(),
     )
     parser.add_argument("--ready-file", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args()

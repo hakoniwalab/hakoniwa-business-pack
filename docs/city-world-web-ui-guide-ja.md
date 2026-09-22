@@ -14,6 +14,7 @@ Hakoniwaで同じworld-frameを共有する次の成果物を生成するロー�
 範囲診断では公式PLATEAU APIのcatalogを参照し、`City Worldを生成`したときだけ
 対象のCityGMLとテクスチャを取得する。
 
+どのRecipeを使うべきかは[`city-world-recipes-ja.md`](city-world-recipes-ja.md)を参照する。
 プロトコル、生成処理、Collider分類などの詳細仕様は
 [`city-world-generation-protocol-ja.md`](city-world-generation-protocol-ja.md)を参照する。
 
@@ -35,14 +36,15 @@ Python、Git、WSL、Dockerの追加インストールも不要である。porta
 
 コマンドは`hakoniwa-business-pack`のルートで実行する。
 
-- Business PackのWorkspace環境が構成済みであること
-- `../hakoniwa-envsim/tools/hako.py`が存在すること
-- `../hakoniwa-pdu-javascript/src/index.js`が存在すること
+- CPython 3.12、C++ build toolchain、Gitを利用できること
 - PLATEAU API、CityGML、地図データへ接続できること
 - 既定のTCP port `54210`とHTTP port `8008`が空いていること
 
-別の配置を使う場合、Envsimは`HAKONIWA_ENVSIM_ROOT`、PDU JavaScriptは
-`HAKONIWA_PDU_JAVASCRIPT_ROOT`でルートを指定できる。
+`city-world-web-ui` Recipeの`configure`は、足りないEnvsim、PDU JavaScript、
+PDU Python sourceを sibling checkoutとして取得し、Core-free PDU Endpointと
+Foundation Pythonを構成する。既存checkoutを使う場合だけ、Envsimは
+`HAKONIWA_ENVSIM_ROOT`、PDU JavaScriptは`HAKONIWA_PDU_JAVASCRIPT_ROOT`、
+PDU Pythonは`HAKONIWA_PDU_PYTHON_ROOT`で指定できる。
 
 Workspace自体の準備方法は
 [`getting-started-ja.md`](getting-started-ja.md)と
@@ -50,15 +52,17 @@ Workspace自体の準備方法は
 
 ## 3. 起動
 
-通常は、WorkerとWeb serverをまとめて管理するLauncherを使う。
+通常は、Web UI専用Recipeを構成してから、その専用入口でWorkerとWeb serverを
+まとめて管理する。
 
 ```bash
-python3 tools/workspace.py run -- \
-  python3 -m tools.remote_operation.city_world.launcher start \
-  --parallel-workers 4 \
-  --dem-parallel-workers 2 \
-  --terrain-spacing-m 2 \
-  --open-browser
+python tools/workspace.py enter
+
+# (hako) shell内
+python tools/recipe.py plan --recipe recipes/examples/city-world-web-ui.yaml
+python tools/recipe/city_world_web_ui.py configure
+python tools/recipe/city_world_web_ui.py doctor
+python tools/recipe/city_world_web_ui.py start --open-browser
 ```
 
 起動に成功すると`Web UI : http://127.0.0.1:8008/`が表示される。
@@ -123,7 +127,7 @@ receipt/city-world-receipt.json
 サーバー上ではjobごとの全成果物を次に保存する。
 
 ```text
-work/remote-operation/city-world-worker/jobs/<job-id>/
+work/recipes/city-world-web-ui/runtime/jobs/<job-id>/
   build/world/
     city-world.glb
     city-world.xml
@@ -137,19 +141,17 @@ work/remote-operation/city-world-worker/jobs/<job-id>/
   generation.log
 ```
 
-共有cacheは`work/remote-operation/city-world-worker/cache/plateau-citygml/`に保存する。
+共有cacheは`work/recipes/city-world-web-ui/runtime/cache/plateau-citygml/`に保存する。
 Launcherを停止してもjobと共有cacheは残る。
 
 ## 6. 状態確認と停止
 
 ```bash
-python3 tools/workspace.py run -- \
-  python3 -m tools.remote_operation.city_world.launcher status
+python tools/recipe/city_world_web_ui.py status
 ```
 
 ```bash
-python3 tools/workspace.py run -- \
-  python3 -m tools.remote_operation.city_world.launcher stop
+python tools/recipe/city_world_web_ui.py stop
 ```
 
 このLauncherはCoreを必要としない`activate-only`構成であり、操作に
@@ -158,7 +160,7 @@ python3 tools/workspace.py run -- \
 Launcherのsession、設定、ログは次に保存する。
 
 ```text
-work/remote-operation/city-world-launcher/
+work/recipes/city-world-web-ui/launcher/
   city-world.launch.json
   launcher-session.json
   logs/
@@ -174,7 +176,7 @@ work/remote-operation/city-world-launcher/
 |---|---:|---|
 | `--parallel-workers` | `4` | source取得と独立component生成の並列数（1–16） |
 | `--dem-parallel-workers` | `2` | DEM source抽出のprocess数（1–4） |
-| `--terrain-spacing-m` | `2` | 地形grid間隔。`2`、`5`、`10`、`auto` |
+| `--terrain-spacing-m` | `auto` | 地形grid間隔。`2`、`5`、`10`、`auto` |
 | `--max-download-gib` | `8.0` | 1回の生成で許可する推定download量の上限 |
 | `--worker-port` | `54210` | WorkerのWebSocket port。現在の同梱UIでは既定値を使う |
 | `--web-port` | `8008` | Web UIのHTTP port |
@@ -184,8 +186,7 @@ work/remote-operation/city-world-launcher/
 新しいオプションで起動し直す。
 
 ```bash
-python3 tools/workspace.py run -- \
-  python3 -m tools.remote_operation.city_world.launcher start \
+python tools/recipe/city_world_web_ui.py start \
   --parallel-workers 6 \
   --dem-parallel-workers 4 \
   --terrain-spacing-m auto \
@@ -199,8 +200,8 @@ python3 tools/workspace.py run -- \
 `launcher status`を確認し、次のログを見る。
 
 ```text
-work/remote-operation/city-world-launcher/logs/worker.err
-work/remote-operation/city-world-launcher/logs/web.err
+work/recipes/city-world-web-ui/launcher/logs/worker.err
+work/recipes/city-world-web-ui/launcher/logs/web.err
 ```
 
 HTTP port `8008`が使用中なら、停止後に`--web-port`を変更して起動する。
@@ -228,7 +229,7 @@ Launcher起動時の`--max-download-gib`を明示的に変更する。
 画面の`通信ログ`とjobの`generation.log`を確認する。jobの記録は次にある。
 
 ```text
-work/remote-operation/city-world-worker/jobs/<job-id>/
+work/recipes/city-world-web-ui/runtime/jobs/<job-id>/
 ```
 
 詳細なstatus遷移、生成policy、手動2-terminal起動、成果物contractは
