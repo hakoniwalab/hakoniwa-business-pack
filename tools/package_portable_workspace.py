@@ -177,6 +177,7 @@ def _rewrite_embedded_python_pth(python_root: Path) -> Path:
     output: list[str] = []
     has_site_packages = False
     has_business_pack = False
+    has_pdu_python = False
     has_import_site = False
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
@@ -188,6 +189,8 @@ def _rewrite_embedded_python_pth(python_root: Path) -> Path:
             has_site_packages = True
         if line.replace("/", "\\") == r"..\..\..\..":
             has_business_pack = True
+        if line.replace("/", "\\") == r"..\..\..\..\..\hakoniwa-pdu-python\src":
+            has_pdu_python = True
         output.append(raw)
     if not has_site_packages:
         output.append(r"Lib\site-packages")
@@ -197,6 +200,11 @@ def _rewrite_embedded_python_pth(python_root: Path) -> Path:
         # root explicitly because ._pth mode does not add the working
         # directory to sys.path.
         output.append(r"..\..\..\..")
+    if not has_pdu_python:
+        # City World uses the bundled hakoniwa-pdu-python checkout directly.
+        # Its source is a sibling of hakoniwa-business-pack in the portable
+        # package root.
+        output.append(r"..\..\..\..\..\hakoniwa-pdu-python\src")
     if not has_import_site:
         output.append("import site")
     path.write_text("\n".join(output) + "\n", encoding="utf-8")

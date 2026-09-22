@@ -32,6 +32,7 @@ class PortableWorkspacePackageTest(unittest.TestCase):
             lines = path.read_text(encoding="utf-8").splitlines()
             self.assertIn(r"Lib\site-packages", lines)
             self.assertIn(r"..\..\..\..", lines)
+            self.assertIn(r"..\..\..\..\..\hakoniwa-pdu-python\src", lines)
             self.assertIn("import site", lines)
 
     def test_absolute_windows_pth_entry_is_rejected(self) -> None:
