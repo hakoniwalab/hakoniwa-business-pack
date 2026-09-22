@@ -123,9 +123,13 @@ class PortableWorkspacePackageTest(unittest.TestCase):
             r"work\foundation\install\python\python.exe",
             script,
         )
-        self.assertIn(r"tools\workspace.py run", script)
         self.assertIn(
-            r"tools\recipe\city_world_web_ui.py start",
+            r"-m tools.remote_operation.city_world.launcher start",
+            script,
+        )
+        self.assertIn(r"work\foundation\install\bin", script)
+        self.assertIn(
+            r'--launcher-runtime-dir "%BUSINESS_PACK%\work\recipes\city-world-web-ui\launcher"',
             script,
         )
         self.assertIn("--open-browser", script)
@@ -134,7 +138,7 @@ class PortableWorkspacePackageTest(unittest.TestCase):
         for command in ("status", "stop"):
             script = portable._render_control_batch(command)
             self.assertIn(
-                rf"tools\recipe\city_world_web_ui.py {command}",
+                rf"-m tools.remote_operation.city_world.launcher {command}",
                 script,
             )
             self.assertIn(

@@ -335,7 +335,9 @@ if not exist "%HAKO_PYTHON%" (
 )
 
 pushd "%BUSINESS_PACK%"
-"%HAKO_PYTHON%" tools\workspace.py run -- "%HAKO_PYTHON%" tools\recipe\city_world_web_ui.py start --terrain-spacing-m auto --open-browser
+set "PATH=%BUSINESS_PACK%\work\foundation\install\bin;%PATH%"
+set "PYTHONNOUSERSITE=1"
+"%HAKO_PYTHON%" -m tools.remote_operation.city_world.launcher start --runtime-dir "%BUSINESS_PACK%\work\recipes\city-world-web-ui\runtime" --launcher-runtime-dir "%BUSINESS_PACK%\work\recipes\city-world-web-ui\launcher" --terrain-spacing-m auto --open-browser
 set "RC=%ERRORLEVEL%"
 popd
 
@@ -359,7 +361,9 @@ set "BUSINESS_PACK=%PACKAGE_ROOT%hakoniwa-business-pack"
 set "HAKO_PYTHON=%BUSINESS_PACK%\work\foundation\install\python\python.exe"
 
 pushd "%BUSINESS_PACK%"
-"%HAKO_PYTHON%" tools\workspace.py run -- "%HAKO_PYTHON%" tools\recipe\city_world_web_ui.py {command}
+set "PATH=%BUSINESS_PACK%\work\foundation\install\bin;%PATH%"
+set "PYTHONNOUSERSITE=1"
+"%HAKO_PYTHON%" -m tools.remote_operation.city_world.launcher {command} --launcher-runtime-dir "%BUSINESS_PACK%\work\recipes\city-world-web-ui\launcher"
 set "RC=%ERRORLEVEL%"
 popd
 if not "%RC%"=="0" pause
