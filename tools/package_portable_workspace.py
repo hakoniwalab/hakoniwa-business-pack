@@ -119,7 +119,9 @@ def _copy_foundation(source: Path, destination: Path) -> None:
         )
 
     def ignore(directory: str, names: list[str]) -> set[str]:
-        ignored = {name for name in names if name in COMMON_IGNORES}
+        # CMake build trees are reproducible intermediates, not runtime assets.
+        # Excluding them also avoids Windows MAX_PATH failures while staging.
+        ignored = {name for name in names if name in COMMON_IGNORES | {"build"}}
         if Path(directory).resolve() == (source / "install").resolve():
             ignored.add("python")
         return ignored

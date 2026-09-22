@@ -43,6 +43,20 @@ class PortableWorkspacePackageTest(unittest.TestCase):
             with self.assertRaises(portable.PortablePackageError):
                 portable._reject_absolute_pth_entries(site_packages)
 
+    def test_foundation_copy_excludes_rebuildable_build_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "foundation"
+            (source / "build" / "deep" / "intermediate.txt").parent.mkdir(
+                parents=True
+            )
+            (source / "build" / "deep" / "intermediate.txt").write_text("x")
+            (source / "install" / "bin").mkdir(parents=True)
+            (source / "install" / "bin" / "runtime.dll").write_bytes(b"runtime")
+            destination = Path(temporary) / "package" / "foundation"
+            portable._copy_foundation(source, destination)
+            self.assertFalse((destination / "build").exists())
+            self.assertTrue((destination / "install" / "bin" / "runtime.dll").is_file())
+
     def test_start_script_uses_packaged_python_and_web_ui_recipe(self) -> None:
         script = portable._render_start_batch()
         self.assertIn(
