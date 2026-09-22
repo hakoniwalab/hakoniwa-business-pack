@@ -73,13 +73,13 @@ def doctor(data: dict) -> int:
         "from hakoniwa_pdu_endpoint.c_endpoint import Endpoint; "
         "print('City World Core-free runtime imports OK')"
     )
-    return _run([str(paths.foundation_python), "-c", probe], environment=environment)
+    return _run([environment["HAKO_FOUNDATION_PYTHON"], "-c", probe], environment=environment)
 
 
 def lifecycle(data: dict, command: str, args: argparse.Namespace) -> int:
     environment, paths = recipe_environment(data)
     launcher = [
-        str(paths.foundation_python),
+        environment["HAKO_FOUNDATION_PYTHON"],
         "-m",
         "tools.remote_operation.city_world.launcher",
         command,

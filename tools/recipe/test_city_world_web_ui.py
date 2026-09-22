@@ -35,13 +35,15 @@ class CityWorldWebUiToolTest(unittest.TestCase):
             "start", "--open-browser", "--terrain-spacing-m", "auto"
         ])
         with (
-            mock.patch.object(recipe, "recipe_environment", return_value=({}, paths)),
+            mock.patch.object(recipe, "recipe_environment", return_value=({
+                "HAKO_FOUNDATION_PYTHON": "/foundation/python/bin/python",
+            }, paths)),
             mock.patch.object(recipe, "_run", return_value=0) as run,
         ):
             self.assertEqual(recipe.lifecycle({}, "start", arguments), 0)
         command = run.call_args.args[0]
         self.assertEqual(command[:4], [
-            "/foundation/python", "-m",
+            "/foundation/python/bin/python", "-m",
             "tools.remote_operation.city_world.launcher", "start",
         ])
         self.assertIn("/selected-work/recipes/city-world-web-ui/runtime", command)
@@ -55,7 +57,9 @@ class CityWorldWebUiToolTest(unittest.TestCase):
         )
         arguments = recipe.parser().parse_args(["status"])
         with (
-            mock.patch.object(recipe, "recipe_environment", return_value=({}, paths)),
+            mock.patch.object(recipe, "recipe_environment", return_value=({
+                "HAKO_FOUNDATION_PYTHON": "/foundation/python/bin/python",
+            }, paths)),
             mock.patch.object(recipe, "_run", return_value=0) as run,
         ):
             self.assertEqual(recipe.lifecycle({}, "status", arguments), 0)
