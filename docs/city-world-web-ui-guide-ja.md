@@ -40,6 +40,22 @@ Python、Git、WSL、Dockerの追加インストールも不要である。porta
 - PLATEAU API、CityGML、地図データへ接続できること
 - 既定のTCP port `54210`とHTTP port `8008`が空いていること
 
+### Windows: vcpkgをFoundationへ先に登録する
+
+WindowsではCore-free PDU Endpointがvcpkgを必要とする。`configure`より**先**に、
+使用するvcpkgをFoundationのtoolchainとして登録する。PowerShellのパスは通常どおり
+バックスラッシュ1本で書く（`C:\\project\\vcpkg`ではなく`C:\project\vcpkg`）。
+
+```powershell
+python tools\foundation.py toolchain `
+  --recipe-id city-world-web-ui `
+  --vcpkg-root C:\project\vcpkg
+```
+
+この操作は`work\foundation\config\toolchain.json`へvcpkgの絶対パスを記録する。
+以降のEndpoint build、Receipt検証、Foundationを利用する下流componentは同じ選択を参照する。
+vcpkg未登録のWindows環境では、`configure`はComponent buildを開始する前に停止する。
+
 `city-world-web-ui` Recipeの`configure`は、足りないEnvsim、PDU JavaScript、
 PDU Python sourceを sibling checkoutとして取得し、Core-free PDU Endpointと
 Foundation Pythonを構成する。既存checkoutを使う場合だけ、Envsimは

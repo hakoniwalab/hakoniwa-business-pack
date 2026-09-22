@@ -105,6 +105,18 @@ def execute_build_plan(plan: dict, paths: WorkspacePaths) -> dict:
             "Foundation plan is blocked by UNKNOWN components: "
             + ", ".join(plan["blocked"])
         )
+    # A Windows component may otherwise find an ambient vcpkg installation
+    # during its own build.  Require the Foundation-owned selection first so
+    # the manifest, receipt, and downstream consumers share one provenance.
+    requirements = plan.get("requirements", {})
+    toolchain = inspect_foundation_toolchain(
+        Path(plan["recipe"]), paths.install_prefix, requirements
+    )
+    if toolchain is not None and toolchain["status"] != "SATISFIED":
+        raise FoundationError(
+            "Windows Foundation vcpkg toolchain must be registered before build: "
+            f"{toolchain['reason']}. {toolchain['remediation']}"
+        )
     validate_build_plan_sources(plan)
     python, python_contract = ensure_foundation_python(
         paths, Path(plan["recipe"])

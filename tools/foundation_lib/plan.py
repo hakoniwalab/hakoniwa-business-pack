@@ -262,6 +262,7 @@ def create_build_plan_impl(
         ),
         "dependency_order": order,
         "resolved_dependencies": resolved_dependencies,
+        "requirements": requirements,
         "blocked": blocked,
         "actions": actions,
         "inspection": {
