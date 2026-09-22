@@ -88,7 +88,7 @@ package は **Windows x64 上で作成する**。
 - `../hakoniwa-envsim` が存在する
 - `../hakoniwa-pdu-javascript` が存在する
 - `../hakoniwa-pdu-python` が存在する
-- source Workspace の `python tools/workspace.py doctor` が成功する
+- source Workspace の `python tools/recipe/city_world_web_ui.py doctor` が成功する
 - Python package の取得と PLATEAU API 利用に必要なネットワーク接続がある
 
 ## 5. package の作成
@@ -107,14 +107,14 @@ dist/hakoniwa-business-pack-city-world-windows-x64.zip
 
 package tool は次を行う。
 
-1. source Foundation の Workspace doctor
-2. `city-world-web-ui` RecipeのCore-free Endpoint、Python requirements、runtime設定の構成
+1. `city-world-web-ui` RecipeのCore-free Endpoint、Python requirements、runtime設定の構成とdoctor
+2. source / stagingの双方でCore-free Recipe doctorを実行（`hakopy`と`hakoniwa_pdu`は要求しない）
 3. Python runtime のversion/architecture確認
 4. 同じversionの公式 Windows embeddable Python の取得
 5. Foundationの `site-packages` 移植
 6. Business Pack / Envsim / PDU JavaScript / PDU Python の source 配置
 7. 過去の City World job / PLATEAU cache を除外
-8. staging 内の portable Workspace doctor
+8. staging内でportable runtime用のWorkspace activationを準備
 9. portable `city-world-web-ui` RecipeのdoctorとCore-free import確認
 10. ZIP生成と SHA-256 表示
 

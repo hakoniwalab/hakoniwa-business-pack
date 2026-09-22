@@ -415,11 +415,6 @@ def _validate_staged_package(package_root: Path) -> None:
         business_pack,
         "portable Workspace prepare",
     )
-    _run_checked(
-        [str(foundation_python), "tools/workspace.py", "doctor"],
-        business_pack,
-        "portable Workspace doctor",
-    )
     _materialize_web_ui_recipe(foundation_python, business_pack)
     _run_checked(
         [str(foundation_python), "tools/recipe/city_world_web_ui.py", "doctor"],
@@ -548,14 +543,14 @@ def build_package(
         "source Workspace prepare",
     )
     _run_checked(
-        [str(foundation_python), "tools/workspace.py", "doctor"],
-        ROOT,
-        "source Workspace doctor",
-    )
-    _run_checked(
         [str(foundation_python), "tools/recipe/city_world_web_ui.py", "configure"],
         ROOT,
         "source City World Web UI Recipe configure",
+    )
+    _run_checked(
+        [str(foundation_python), "tools/recipe/city_world_web_ui.py", "doctor"],
+        ROOT,
+        "source City World Web UI Recipe doctor",
     )
 
     output = output.expanduser().resolve()
