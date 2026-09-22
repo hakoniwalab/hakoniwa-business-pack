@@ -816,6 +816,16 @@ class RecipeGuideTest(unittest.TestCase):
                 template.read_text(encoding="utf-8"),
             )
 
+    def test_launcher_environment_substitution_escapes_windows_paths(self) -> None:
+        substituted = guide._substitute_launcher_environment(
+            '{"cwd":"${RECIPE_REPOSITORY}"}',
+            {"RECIPE_REPOSITORY": r"C:\project\hakoniwa-business-pack"},
+        )
+        self.assertEqual(
+            json.loads(substituted)["cwd"],
+            r"C:\project\hakoniwa-business-pack",
+        )
+
     def test_launch_recipe_uses_foundation_python_and_composed_environment(self) -> None:
         data = {
             "id": "demo",

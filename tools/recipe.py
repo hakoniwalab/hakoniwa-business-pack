@@ -1129,9 +1129,11 @@ def _substitute_launcher_environment(content: str, env: dict[str, str]) -> str:
         if name in {"asset", "timestamp"}:
             return match.group(0)
         if name in env:
-            return env[name]
+            # Launcher templates are JSON.  Windows paths contain backslashes,
+            # which must be escaped before the substituted document is parsed.
+            return json.dumps(env[name])[1:-1]
         default = match.group(2)
-        return default if default is not None else match.group(0)
+        return json.dumps(default)[1:-1] if default is not None else match.group(0)
 
     return pattern.sub(replace, content)
 
