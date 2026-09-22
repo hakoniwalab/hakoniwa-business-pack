@@ -127,6 +127,7 @@ class PortableWorkspacePackageTest(unittest.TestCase):
             r"-m tools.remote_operation.city_world.launcher start",
             script,
         )
+        self.assertIn(r"tools\workspace.py run --", script)
         self.assertIn(r"work\foundation\install\bin", script)
         self.assertIn(
             r'--launcher-runtime-dir "%BUSINESS_PACK%\work\recipes\city-world-web-ui\launcher"',
@@ -141,6 +142,7 @@ class PortableWorkspacePackageTest(unittest.TestCase):
                 rf"-m tools.remote_operation.city_world.launcher {command}",
                 script,
             )
+            self.assertIn(r"tools\workspace.py run --", script)
             self.assertIn(
                 r"work\foundation\install\python\python.exe",
                 script,
