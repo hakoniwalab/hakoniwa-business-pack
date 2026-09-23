@@ -6,6 +6,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest import mock
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -544,6 +545,14 @@ class CityWorldInspectionTest(unittest.TestCase):
             for invalid in ("1", "20", "invalid"):
                 with self.assertRaisesRegex(ValueError, "terrain_spacing_m"):
                     generation.CityWorldGenerator(root, terrain_spacing_m=invalid)
+
+    def test_portable_generator_uses_current_bundled_python(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            with mock.patch.dict(
+                "os.environ", {generation.PORTABLE_CITY_WORLD_ENV: "1"}, clear=False
+            ):
+                generator = generation.CityWorldGenerator(Path(raw_root))
+                self.assertEqual(generator._generation_python(), Path(sys.executable))
 
     def test_web_server_lists_and_resolves_only_generated_glb_and_zip(self) -> None:
         with tempfile.TemporaryDirectory() as raw_root:

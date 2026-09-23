@@ -11,6 +11,7 @@ import re
 import signal
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import zipfile
@@ -43,6 +44,7 @@ class CityWorldGenerationCanceled(RuntimeError):
 Progress = Callable[..., None]
 TERRAIN_SPACING_CHOICES_M = (2.0, 5.0, 10.0)
 AUTO_TERRAIN_SAMPLE_BUDGET = 120_000
+PORTABLE_CITY_WORLD_ENV = "HAKONIWA_PORTABLE_CITY_WORLD"
 
 
 def _check_canceled(cancel_event: threading.Event | None) -> None:
@@ -543,6 +545,12 @@ class CityWorldGenerator:
 
     def _generation_python(self) -> Path:
         if self._python is None:
+            if os.environ.get(PORTABLE_CITY_WORLD_ENV) == "1":
+                # The portable package bundles the complete fixed conversion
+                # dependency set.  It must never create a venv or invoke pip
+                # while an operator is generating a world.
+                self._python = Path(sys.executable)
+                return self._python
             # Reuse the Recipe-owned dependency environment. Installation is
             # performed only after the user explicitly requests Generate.
             from tools.recipe import plateau_citygml_mujoco_walls as recipe

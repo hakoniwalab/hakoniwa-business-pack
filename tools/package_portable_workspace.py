@@ -20,6 +20,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 RECIPE_ID = "city-world-web-ui"
 PACKAGE_ID = "hakoniwa-business-pack-city-world-windows-x64"
+GENERATION_REQUIREMENTS = (
+    ROOT / "recipes" / "requirements" / "plateau-citygml-mujoco-walls.txt"
+)
+PORTABLE_CITY_WORLD_ENV = "HAKONIWA_PORTABLE_CITY_WORLD"
 COMMON_IGNORES = {
     ".git",
     ".idea",
@@ -34,6 +38,17 @@ COMMON_IGNORES = {
 # at runtime, so carrying pip adds no runtime capability and can exceed
 # Windows MAX_PATH while staging the ZIP.
 PORTABLE_PYTHON_IGNORES = COMMON_IGNORES | {"pip", "setuptools"}
+FOUNDATION_PYTHON_STANDARD_ROOT_ENTRIES = {
+    "DLLs",
+    "Doc",
+    "include",
+    "Include",
+    "Lib",
+    "libs",
+    "Scripts",
+    "share",
+    "tcl",
+}
 BUSINESS_PACK_IGNORES = COMMON_IGNORES | {"dist", "work"}
 SIBLING_IGNORES = COMMON_IGNORES | {"build", "dist", "work"}
 
@@ -275,6 +290,42 @@ def _copy_site_packages(source_root: Path, destination_root: Path) -> None:
     _reject_absolute_pth_entries(destination)
 
 
+def _copy_foundation_python_runtime_packages(
+    source_root: Path, destination_root: Path
+) -> None:
+    """Copy Foundation-native Python packages installed beside python.exe.
+
+    Foundation-native modules use the ``hakoniwa_*`` namespace and may be
+    installed at the Python root rather than under Lib/site-packages.  The
+    embeddable interpreter keeps its own executable but must retain every
+    such package, not only the currently required Endpoint module.
+    """
+    found = False
+    for source in source_root.iterdir():
+        name = source.name
+        if name in FOUNDATION_PYTHON_STANDARD_ROOT_ENTRIES or not name.startswith(
+            "hakoniwa_"
+        ):
+            continue
+        if source.is_dir():
+            shutil.copytree(
+                source,
+                destination_root / name,
+                ignore=lambda _directory, names: {
+                    item for item in names if item in PORTABLE_PYTHON_IGNORES
+                },
+                dirs_exist_ok=True,
+            )
+            found = True
+        elif source.is_file() and source.suffix.lower() == ".pyd":
+            shutil.copy2(source, destination_root / name)
+            found = True
+    if not found:
+        raise PortablePackageError(
+            f"Foundation-native Python runtime package not found: {source_root}"
+        )
+
+
 def _extract_python_archive(archive_path: Path, destination: Path) -> None:
     try:
         with zipfile.ZipFile(archive_path) as archive:
@@ -309,6 +360,32 @@ def _materialize_portable_python(
         )
     _rewrite_embedded_python_pth(destination)
     _copy_site_packages(source_python_root, destination)
+    _copy_foundation_python_runtime_packages(source_python_root, destination)
+
+
+def _install_portable_generation_requirements(
+    source_python: Path, destination: Path
+) -> None:
+    if not GENERATION_REQUIREMENTS.is_file():
+        raise PortablePackageError(
+            f"City World generation requirements not found: {GENERATION_REQUIREMENTS}"
+        )
+    _run_checked(
+        [
+            str(source_python),
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            "--no-compile",
+            "--target",
+            str(_site_packages(destination)),
+            "-r",
+            str(GENERATION_REQUIREMENTS),
+        ],
+        ROOT,
+        "portable City World generation dependency installation",
+    )
 
 
 def _git_revision(repository: Path) -> dict[str, object]:
@@ -354,6 +431,7 @@ if not exist "%HAKO_PYTHON%" (
 pushd "%BUSINESS_PACK%"
 set "PATH=%BUSINESS_PACK%\work\foundation\install\bin;%PATH%"
 set "PYTHONNOUSERSITE=1"
+set "HAKONIWA_PORTABLE_CITY_WORLD=1"
 "%HAKO_PYTHON%" tools\workspace.py run -- "%HAKO_PYTHON%" -m tools.remote_operation.city_world.launcher start --runtime-dir "%BUSINESS_PACK%\work\recipes\city-world-web-ui\runtime" --launcher-runtime-dir "%BUSINESS_PACK%\work\recipes\city-world-web-ui\launcher" --terrain-spacing-m auto --open-browser
 set "RC=%ERRORLEVEL%"
 popd
@@ -380,6 +458,7 @@ set "HAKO_PYTHON=%BUSINESS_PACK%\work\foundation\install\python\python.exe"
 pushd "%BUSINESS_PACK%"
 set "PATH=%BUSINESS_PACK%\work\foundation\install\bin;%PATH%"
 set "PYTHONNOUSERSITE=1"
+set "HAKONIWA_PORTABLE_CITY_WORLD=1"
 "%HAKO_PYTHON%" tools\workspace.py run -- "%HAKO_PYTHON%" -m tools.remote_operation.city_world.launcher {command} --launcher-runtime-dir "%BUSINESS_PACK%\work\recipes\city-world-web-ui\launcher"
 set "RC=%ERRORLEVEL%"
 popd
@@ -463,6 +542,17 @@ def _validate_staged_package(package_root: Path) -> None:
     )
     _materialize_web_ui_recipe(foundation_python, business_pack)
     _run_checked(
+        [
+            str(foundation_python),
+            "-c",
+            "import PIL, mapbox_earcut, numpy, pyproj, shapely, trimesh; "
+            "import tools, hakoniwa_pdu, hakoniwa_pdu_endpoint; "
+            "print('portable runtime imports OK')",
+        ],
+        business_pack,
+        "portable runtime import validation",
+    )
+    _run_checked(
         [str(foundation_python), "tools/recipe/city_world_web_ui.py", "doctor"],
         business_pack,
         "portable City World Web UI Recipe doctor",
@@ -521,6 +611,8 @@ def _write_manifest(
             "requires_git": False,
             "requires_wsl": False,
             "requires_docker": False,
+            "installs_python_packages_at_runtime": False,
+            "includes_city_world_generation_dependencies": True,
             "includes_previous_city_world_jobs": False,
             "includes_previous_plateau_cache": False,
         },
@@ -650,6 +742,14 @@ def build_package(
         _materialize_portable_python(
             embedded_zip,
             foundation_python_root,
+            business_pack_destination
+            / "work"
+            / "foundation"
+            / "install"
+            / "python",
+        )
+        _install_portable_generation_requirements(
+            foundation_python,
             business_pack_destination
             / "work"
             / "foundation"

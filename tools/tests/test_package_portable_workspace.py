@@ -119,6 +119,23 @@ class PortableWorkspacePackageTest(unittest.TestCase):
             self.assertTrue((target / "METADATA").is_file())
             self.assertFalse((target / "sboms").exists())
 
+    def test_foundation_runtime_package_is_copied_beside_portable_python(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "source-python"
+            endpoint = source / "hakoniwa_pdu_endpoint"
+            endpoint.mkdir(parents=True)
+            (endpoint / "c_endpoint.pyd").write_bytes(b"native extension")
+            extra = source / "hakoniwa_example"
+            extra.mkdir()
+            (extra / "extension.pyd").write_bytes(b"native extension")
+            destination = Path(temporary) / "portable-python"
+            destination.mkdir()
+            portable._copy_foundation_python_runtime_packages(source, destination)
+            self.assertTrue(
+                (destination / "hakoniwa_pdu_endpoint" / "c_endpoint.pyd").is_file()
+            )
+            self.assertTrue((destination / "hakoniwa_example" / "extension.pyd").is_file())
+
     def test_start_script_uses_packaged_python_and_web_ui_recipe(self) -> None:
         script = portable._render_start_batch()
         self.assertIn(
