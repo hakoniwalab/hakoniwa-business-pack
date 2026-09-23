@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a relocatable Windows x64 City World workspace ZIP."""
+"""Build a relocatable Windows x64 workspace ZIP from a portable profile."""
 
 from __future__ import annotations
 
@@ -16,8 +16,14 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+try:
+    from tools.portable_package_profiles import PortableProfile, load_profile
+except ModuleNotFoundError:  # Direct execution: python tools/package_portable_workspace.py
+    from portable_package_profiles import PortableProfile, load_profile
+
 
 ROOT = Path(__file__).resolve().parents[1]
+WORKSPACE_ROOT = ROOT.parent
 RECIPE_ID = "city-world-web-ui"
 PACKAGE_ID = "hakoniwa-business-pack-city-world-windows-x64"
 GENERATION_REQUIREMENTS = (
@@ -132,6 +138,32 @@ def _copy_tree(source: Path, destination: Path, ignored_names: set[str]) -> None
     shutil.copytree(source, destination, ignore=ignore, dirs_exist_ok=True)
 
 
+def _copy_repository(
+    source: Path,
+    destination: Path,
+    include_paths: tuple[str, ...],
+) -> None:
+    if not include_paths:
+        _copy_tree(source, destination, SIBLING_IGNORES)
+    else:
+        destination.mkdir(parents=True, exist_ok=True)
+        for relative in include_paths:
+            item = source / relative
+            if not item.exists():
+                raise PortablePackageError(
+                    f"portable profile include path not found: {item}"
+                )
+            target = destination / relative
+            if item.is_dir():
+                _copy_tree(item, target, SIBLING_IGNORES)
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(item, target)
+    (destination / ".hakoniwa-repository-root").write_text(
+        "portable repository root\n", encoding="utf-8"
+    )
+
+
 def _copy_foundation(source: Path, destination: Path) -> None:
     if not source.is_dir():
         raise PortablePackageError(
@@ -182,7 +214,20 @@ def _embedded_python_archive(
     )
 
 
-def _rewrite_embedded_python_pth(python_root: Path) -> Path:
+def _relative_python_path(_python_root: Path, package_root_entry: str) -> str:
+    # The portable interpreter is always located at
+    # hakoniwa-business-pack/work/foundation/install/python.  Keep this
+    # calculation independent of the temporary staging directory depth.
+    normalized = package_root_entry.replace("\\", "/").strip("/")
+    if normalized == "hakoniwa-business-pack":
+        return r"..\..\..\.."
+    return "..\\..\\..\\..\\..\\" + normalized.replace("/", "\\")
+
+
+def _rewrite_embedded_python_pth(
+    python_root: Path,
+    package_paths: tuple[str, ...] | None = None,
+) -> Path:
     candidates = sorted(python_root.glob("python*._pth"))
     if len(candidates) != 1:
         raise PortablePackageError(
@@ -191,10 +236,16 @@ def _rewrite_embedded_python_pth(python_root: Path) -> Path:
     path = candidates[0]
     output: list[str] = []
     has_site_packages = False
-    has_business_pack = False
-    has_pdu_python = False
-    has_envsim_tools = False
-    has_envsim_pipeline = False
+    if package_paths is None:
+        package_paths = (
+            "hakoniwa-business-pack",
+            "hakoniwa-pdu-python/src",
+            "hakoniwa-envsim/tools",
+            "hakoniwa-envsim/src/city_pipeline",
+        )
+    relative_paths = tuple(
+        _relative_python_path(python_root, value) for value in package_paths
+    )
     has_import_site = False
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
@@ -204,32 +255,14 @@ def _rewrite_embedded_python_pth(python_root: Path) -> Path:
             has_import_site = True
         if line.replace("/", "\\").lower() == r"lib\site-packages":
             has_site_packages = True
-        if line.replace("/", "\\") == r"..\..\..\..":
-            has_business_pack = True
-        if line.replace("/", "\\") == r"..\..\..\..\..\hakoniwa-pdu-python\src":
-            has_pdu_python = True
-        if line.replace("/", "\\") == r"..\..\..\..\..\hakoniwa-envsim\tools":
-            has_envsim_tools = True
-        if line.replace("/", "\\") == r"..\..\..\..\..\hakoniwa-envsim\src\city_pipeline":
-            has_envsim_pipeline = True
         output.append(raw)
     if not has_site_packages:
         output.append(r"Lib\site-packages")
-    if not has_business_pack:
-        # The embeddable runtime sits at
-        # work/foundation/install/python.  Add the packaged Business Pack
-        # root explicitly because ._pth mode does not add the working
-        # directory to sys.path.
-        output.append(r"..\..\..\..")
-    if not has_pdu_python:
-        # City World uses the bundled hakoniwa-pdu-python checkout directly.
-        # Its source is a sibling of hakoniwa-business-pack in the portable
-        # package root.
-        output.append(r"..\..\..\..\..\hakoniwa-pdu-python\src")
-    if not has_envsim_tools:
-        output.append(r"..\..\..\..\..\hakoniwa-envsim\tools")
-    if not has_envsim_pipeline:
-        output.append(r"..\..\..\..\..\hakoniwa-envsim\src\city_pipeline")
+    existing = {line.replace("/", "\\").lower() for line in output}
+    for relative in relative_paths:
+        normalized = relative.replace("/", "\\")
+        if normalized.lower() not in existing:
+            output.append(normalized)
     if not has_import_site:
         output.append("import site")
     path.write_text("\n".join(output) + "\n", encoding="utf-8")
@@ -359,6 +392,7 @@ def _materialize_portable_python(
     embedded_zip: Path,
     source_python_root: Path,
     destination: Path,
+    package_paths: tuple[str, ...] | None = None,
 ) -> None:
     if destination.exists():
         shutil.rmtree(destination)
@@ -368,33 +402,46 @@ def _materialize_portable_python(
         raise PortablePackageError(
             f"embeddable Python archive did not contain python.exe: {embedded_zip}"
         )
-    _rewrite_embedded_python_pth(destination)
+    _rewrite_embedded_python_pth(destination, package_paths)
     _copy_site_packages(source_python_root, destination)
     _copy_foundation_python_runtime_packages(source_python_root, destination)
+
+
+def _install_portable_requirements(
+    source_python: Path,
+    destination: Path,
+    requirements: tuple[Path, ...],
+) -> None:
+    missing = [str(path) for path in requirements if not path.is_file()]
+    if missing:
+        raise PortablePackageError("portable requirements not found: " + ", ".join(missing))
+    if not requirements:
+        return
+    command = [
+        str(source_python),
+        "-m",
+        "pip",
+        "install",
+        "--disable-pip-version-check",
+        "--no-compile",
+        "--target",
+        str(_site_packages(destination)),
+    ]
+    for requirement in requirements:
+        command.extend(("-r", str(requirement)))
+    _run_checked(
+        command,
+        ROOT,
+        "portable Python dependency installation",
+    )
 
 
 def _install_portable_generation_requirements(
     source_python: Path, destination: Path
 ) -> None:
-    if not GENERATION_REQUIREMENTS.is_file():
-        raise PortablePackageError(
-            f"City World generation requirements not found: {GENERATION_REQUIREMENTS}"
-        )
-    _run_checked(
-        [
-            str(source_python),
-            "-m",
-            "pip",
-            "install",
-            "--disable-pip-version-check",
-            "--no-compile",
-            "--target",
-            str(_site_packages(destination)),
-            "-r",
-            str(GENERATION_REQUIREMENTS),
-        ],
-        ROOT,
-        "portable City World generation dependency installation",
+    """Backward-compatible City World helper retained for callers and tests."""
+    _install_portable_requirements(
+        source_python, destination, (GENERATION_REQUIREMENTS,)
     )
 
 
@@ -505,9 +552,82 @@ def _write_entrypoints(package_root: Path) -> None:
     )
 
 
-def _run_checked(command: list[str], cwd: Path, label: str) -> None:
+def _render_urban_batch(command: str) -> str:
+    if command not in {"start", "status", "stop"}:
+        raise ValueError(command)
+    prepare = ""
+    if command == "start":
+        prepare = r'''"%HAKO_PYTHON%" tools\portable_urban_car.py prepare
+if not "%ERRORLEVEL%"=="0" (
+  echo [ERROR] Urban Car portable workspace preparation failed.
+  popd
+  pause
+  exit /b 2
+)
+'''
+    return rf"""@echo off
+setlocal
+set "PACKAGE_ROOT=%~dp0"
+set "BUSINESS_PACK=%PACKAGE_ROOT%hakoniwa-business-pack"
+set "URBAN=%PACKAGE_ROOT%hakoniwa-urban-mobility"
+set "HAKO_PYTHON=%BUSINESS_PACK%\work\foundation\install\python\python.exe"
+
+if not exist "%HAKO_PYTHON%" (
+  echo [ERROR] Portable Hakoniwa Python was not found:
+  echo         %HAKO_PYTHON%
+  pause
+  exit /b 2
+)
+
+pushd "%URBAN%"
+set "PATH=%BUSINESS_PACK%\work\foundation\install\bin;%URBAN%\build\bin;%PATH%"
+set "PYTHONNOUSERSITE=1"
+set "HAKONIWA_PORTABLE_WORKSPACE=1"
+set "HAKONIWA_WORKSPACE_ROOT=%BUSINESS_PACK%"
+{prepare}"%HAKO_PYTHON%" tools\urban_mobility.py {command} --recipe recipes\usecases\urban-car-rc.yaml
+set "RC=%ERRORLEVEL%"
+popd
+if not "%RC%"=="0" pause
+exit /b %RC%
+"""
+
+
+def _write_urban_entrypoints(package_root: Path) -> None:
+    for command in ("start", "status", "stop"):
+        (package_root / f"{command}-urban-car.bat").write_text(
+            _render_urban_batch(command), encoding="utf-8", newline="\r\n"
+        )
+    (package_root / "README-WINDOWS.txt").write_text(
+        (
+            "Hakoniwa Urban Car RC - Windows Portable\n\n"
+            "1. このフォルダを任意の場所へ展開してください。\n"
+            "2. DualSense controllerをWindowsへ接続してください。\n"
+            "3. start-urban-car.batを実行してください。\n"
+            "4. 終了するときはstop-urban-car.batを実行してください。\n\n"
+            "Python / Git / WSL / Docker / C++ build toolchainは不要です。\n"
+            "初回start時と展開先変更後には、同梱City Worldを基準に設定を再生成します。\n"
+        ),
+        encoding="utf-8",
+    )
+
+
+def _write_profile_entrypoints(package_root: Path, profile: PortableProfile) -> None:
+    if profile.kind == "city-world-web-ui":
+        _write_entrypoints(package_root)
+    elif profile.kind == "urban-car-rc":
+        _write_urban_entrypoints(package_root)
+    else:
+        raise PortablePackageError(f"unsupported portable profile kind: {profile.kind}")
+
+
+def _run_checked(
+    command: list[str],
+    cwd: Path,
+    label: str,
+    env: dict[str, str] | None = None,
+) -> None:
     print(">", subprocess.list2cmdline(command))
-    completed = subprocess.run(command, cwd=cwd, check=False)
+    completed = subprocess.run(command, cwd=cwd, env=env, check=False)
     if completed.returncode:
         raise PortablePackageError(
             f"{label} failed with exit={completed.returncode}"
@@ -526,6 +646,160 @@ def _materialize_web_ui_recipe(foundation_python: Path, business_pack: Path) -> 
         [str(foundation_python), "-c", code],
         business_pack,
         "portable City World Web UI Recipe materialization",
+    )
+
+
+def _configured_urban_city_receipt(explicit: Path | None) -> Path:
+    if explicit is not None:
+        receipt = explicit.expanduser().resolve()
+    else:
+        composition = ROOT / "work/recipes/urban-car-rc/config/urban-composition.json"
+        try:
+            payload = json.loads(composition.read_text(encoding="utf-8"))
+            receipt = Path(
+                payload["inputs"]["business_pack_city_receipt"]["path"]
+            ).expanduser().resolve()
+        except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+            raise PortablePackageError(
+                "Urban Car profile requires --city-receipt or an existing "
+                f"configured composition: {composition}"
+            ) from exc
+    if not receipt.is_file():
+        raise PortablePackageError(f"City World receipt not found: {receipt}")
+    return receipt
+
+
+def _replace_json_path_root(value: object, source: str, replacement: str) -> object:
+    if isinstance(value, str):
+        source_path = source.rstrip("\\/")
+        if value.lower() == source_path.lower():
+            return replacement
+        for separator in ("\\", "/"):
+            prefix = source_path + separator
+            if value.lower().startswith(prefix.lower()):
+                suffix = value[len(prefix) :].replace("\\", "/")
+                return replacement.rstrip("/") + "/" + suffix
+        return value
+    if isinstance(value, list):
+        return [
+            _replace_json_path_root(item, source, replacement) for item in value
+        ]
+    if isinstance(value, dict):
+        return {
+            str(_replace_json_path_root(key, source, replacement)):
+            _replace_json_path_root(item, source, replacement)
+            for key, item in value.items()
+        }
+    return value
+
+
+def _scrub_bundled_city_paths(
+    portable_city_root: Path,
+    source_build_root: Path,
+    token: str = "__HAKONIWA_CITY_BUILD__",
+) -> None:
+    for path in portable_city_root.rglob("*.json"):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload = _replace_json_path_root(
+            payload, str(source_build_root), token
+        )
+        path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+
+def _prepare_source_profile(
+    profile: PortableProfile,
+    foundation_python: Path,
+    city_receipt: Path | None,
+) -> Path | None:
+    _run_checked(
+        [str(foundation_python), "tools/workspace.py", "prepare"],
+        ROOT,
+        "source Workspace prepare",
+    )
+    if profile.kind == "city-world-web-ui":
+        for operation in ("configure", "doctor"):
+            _run_checked(
+                [
+                    str(foundation_python),
+                    "tools/recipe/city_world_web_ui.py",
+                    operation,
+                ],
+                ROOT,
+                f"source City World Web UI Recipe {operation}",
+            )
+        return None
+    if profile.kind == "urban-car-rc":
+        receipt = _configured_urban_city_receipt(city_receipt)
+        urban = WORKSPACE_ROOT / "hakoniwa-urban-mobility"
+        _run_checked(
+            [
+                str(foundation_python),
+                "tools/urban_mobility.py",
+                "doctor",
+                "--recipe",
+                "recipes/usecases/urban-car-rc.yaml",
+            ],
+            urban,
+            "source Urban Car Recipe doctor",
+        )
+        return receipt
+    raise PortablePackageError(f"unsupported portable profile kind: {profile.kind}")
+
+
+def _bundle_urban_runtime(package_root: Path, receipt: Path) -> None:
+    urban_source = WORKSPACE_ROOT / "hakoniwa-urban-mobility"
+    source_bin = urban_source / "build/bin"
+    executable = source_bin / "urban-car-hakoniwa-asset.exe"
+    if not executable.is_file():
+        raise PortablePackageError(f"built Urban Car executable not found: {executable}")
+    _copy_tree(
+        source_bin,
+        package_root / "hakoniwa-urban-mobility/build/bin",
+        COMMON_IGNORES,
+    )
+
+    source_build_root = receipt.parent.parent.resolve()
+    if source_build_root.name.lower() != "build":
+        raise PortablePackageError(
+            "City World receipt must be located under <job>/build/world: "
+            f"{receipt}"
+        )
+    destination = package_root / "portable-data/city-world/build"
+    # The raw PLATEAU source can be many gigabytes and is not consumed by the
+    # Urban runtime.  Bundle only the generated world and its referenced
+    # components, plus the collider viewer artifact beside build/.
+    for name in ("world", "components"):
+        _copy_tree(
+            source_build_root / name,
+            destination / name,
+            COMMON_IGNORES,
+        )
+    source_viewer = source_build_root.parent / "viewer"
+    collider = source_viewer / "city-world-colliders.glb"
+    if not collider.is_file():
+        raise PortablePackageError(f"City World collider GLB not found: {collider}")
+    packaged_viewer = package_root / "portable-data/city-world/viewer"
+    packaged_viewer.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(collider, packaged_viewer / collider.name)
+    path_token = "__HAKONIWA_CITY_BUILD__"
+    _scrub_bundled_city_paths(
+        package_root / "portable-data/city-world",
+        source_build_root,
+        path_token,
+    )
+    metadata = {
+        "schema_version": 1,
+        "path_token": path_token,
+        "receipt_relative": receipt.relative_to(source_build_root).as_posix(),
+    }
+    metadata_path = package_root / "portable-data/city-world.json"
+    metadata_path.parent.mkdir(parents=True, exist_ok=True)
+    metadata_path.write_text(
+        json.dumps(metadata, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
     )
 
 
@@ -570,7 +844,89 @@ def _validate_staged_package(package_root: Path) -> None:
     )
 
 
-def _remove_staging_specific_workspace_files(package_root: Path) -> None:
+def _validate_urban_staged_package(package_root: Path) -> None:
+    business_pack = package_root / "hakoniwa-business-pack"
+    urban = package_root / "hakoniwa-urban-mobility"
+    foundation_python = (
+        business_pack / "work/foundation/install/python/python.exe"
+    )
+    required = (
+        foundation_python,
+        urban / "build/bin/urban-car-hakoniwa-asset.exe",
+        urban / "tools/portable_urban_car.py",
+        package_root / "portable-data/city-world.json",
+        package_root / "hakoniwa-threejs-drone/index.html",
+        package_root / "hakoniwa-map-viewer/src/client/index.html",
+    )
+    missing = [str(path) for path in required if not path.is_file()]
+    if missing:
+        raise PortablePackageError(
+            "portable package is missing required files: " + ", ".join(missing)
+        )
+    staged_env = os.environ.copy()
+    staged_env.update(
+        {
+            "HAKONIWA_WORKSPACE_ROOT": str(business_pack),
+            "HAKONIWA_WORK_DIR": str(business_pack / "work"),
+            "HAKONIWA_HOME": str(business_pack / "work/foundation/install"),
+            "HAKO_CONFIG_PATH": str(
+                business_pack / "work/foundation/config/cpp_core_config.json"
+            ),
+            "VIRTUAL_ENV": str(
+                business_pack / "work/foundation/install/python"
+            ),
+            "HAKO_PDU_ENDPOINT_RUNTIME_DIRS": str(
+                business_pack / "work/foundation/install/bin"
+            ),
+        }
+    )
+    staged_env["PATH"] = os.pathsep.join(
+        (
+            str(business_pack / "work/foundation/install/python"),
+            str(business_pack / "work/foundation/install/bin"),
+            staged_env.get("PATH", ""),
+        )
+    )
+    _run_checked(
+        [str(foundation_python), "tools/workspace.py", "prepare"],
+        business_pack,
+        "portable Workspace prepare",
+        staged_env,
+    )
+    _run_checked(
+        [str(foundation_python), "tools/portable_urban_car.py", "prepare"],
+        urban,
+        "portable Urban Car materialization",
+        staged_env,
+    )
+    _run_checked(
+        [
+            str(foundation_python),
+            "-c",
+            "import mujoco, pygame, yaml; import hakoniwa_pdu, "
+            "hakoniwa_pdu_endpoint; print('portable Urban runtime imports OK')",
+        ],
+        urban,
+        "portable Urban runtime import validation",
+        staged_env,
+    )
+
+
+def _validate_profile_package(
+    package_root: Path, profile: PortableProfile
+) -> None:
+    if profile.kind == "city-world-web-ui":
+        _validate_staged_package(package_root)
+    elif profile.kind == "urban-car-rc":
+        _validate_urban_staged_package(package_root)
+    else:
+        raise PortablePackageError(f"unsupported portable profile kind: {profile.kind}")
+
+
+def _remove_staging_specific_workspace_files(
+    package_root: Path,
+    profile: PortableProfile | None = None,
+) -> None:
     """Remove files whose contents were generated with the temporary staging path.
 
     workspace.py run regenerates them for the user's actual extraction path
@@ -590,6 +946,33 @@ def _remove_staging_specific_workspace_files(package_root: Path) -> None:
         / "hakoniwa_workspace_bootstrap.pth",
     ):
         path.unlink(missing_ok=True)
+    if profile is not None and profile.kind == "urban-car-rc":
+        generated = business_pack / "work/recipes/urban-car-rc"
+        if generated.is_dir():
+            shutil.rmtree(generated)
+        core_config = business_pack / "work/foundation/config/cpp_core_config.json"
+        payload = json.loads(core_config.read_text(encoding="utf-8"))
+        payload["core_mmap_path"] = "__HAKONIWA_PORTABLE_MMAP__"
+        core_config.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        portable_city = package_root / "portable-data/city-world"
+        current_build = portable_city / "build"
+        _scrub_bundled_city_paths(portable_city, current_build.resolve())
+        metadata_path = package_root / "portable-data/city-world.json"
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        metadata.pop("source_build_root", None)
+        metadata["path_token"] = "__HAKONIWA_CITY_BUILD__"
+        metadata_path.write_text(
+            json.dumps(metadata, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        viewer = portable_city / "viewer"
+        if viewer.is_dir():
+            for path in viewer.iterdir():
+                if path.name != "city-world-colliders.glb" and path.is_file():
+                    path.unlink()
 
 
 def _write_manifest(
@@ -597,10 +980,26 @@ def _write_manifest(
     python_identity: dict[str, object],
     embedded_zip: Path,
     sources: dict[str, Path],
+    profile: PortableProfile | None = None,
 ) -> None:
+    profile = profile or load_profile("city-world-web-ui", WORKSPACE_ROOT)
+    if profile.kind == "city-world-web-ui":
+        entrypoints = {
+            "start": "start-city-world.bat",
+            "status": "status-city-world.bat",
+            "stop": "stop-city-world.bat",
+        }
+    else:
+        entrypoints = {
+            "start": "start-urban-car.bat",
+            "status": "status-urban-car.bat",
+            "stop": "stop-urban-car.bat",
+        }
     manifest = {
         "schema_version": 1,
-        "package_id": PACKAGE_ID,
+        "package_id": profile.package_id,
+        "profile": profile.id,
+        "recipe_id": profile.recipe_id,
         "target": {"os": "windows", "arch": "x64"},
         "created_at": datetime.now(timezone.utc).isoformat(),
         "python": {
@@ -612,18 +1011,17 @@ def _write_manifest(
             name: _git_revision(path)
             for name, path in sources.items()
         },
-        "entrypoints": {
-            "start": "start-city-world.bat",
-            "status": "status-city-world.bat",
-            "stop": "stop-city-world.bat",
-        },
+        "entrypoints": entrypoints,
         "runtime_policy": {
             "requires_system_python": False,
             "requires_git": False,
             "requires_wsl": False,
             "requires_docker": False,
             "installs_python_packages_at_runtime": False,
-            "includes_city_world_generation_dependencies": True,
+            "includes_city_world_generation_dependencies": (
+                profile.kind == "city-world-web-ui"
+            ),
+            "includes_configured_city_world": profile.kind == "urban-car-rc",
             "includes_previous_city_world_jobs": False,
             "includes_previous_plateau_cache": False,
         },
@@ -650,15 +1048,22 @@ def _zip_tree(source: Path, destination: Path) -> None:
 
 
 def build_package(
-    output: Path,
+    output: Path | None,
     python_embed_zip: Path | None = None,
     keep_staging: bool = False,
+    profile_id: str = "city-world-web-ui",
+    city_receipt: Path | None = None,
 ) -> Path:
     if os.name != "nt":
         raise PortablePackageError(
             "Windows portable package must be built on Windows x64; "
             "Foundation binaries and Python wheels are platform-specific"
         )
+
+    try:
+        profile = load_profile(profile_id, WORKSPACE_ROOT)
+    except ValueError as exc:
+        raise PortablePackageError(str(exc)) from exc
 
     foundation_root = ROOT / "work" / "foundation"
     foundation_python_root = foundation_root / "install" / "python"
@@ -670,44 +1075,25 @@ def build_package(
     python_identity = _python_identity(foundation_python)
     _require_windows_x64(python_identity)
 
-    envsim = ROOT.parent / "hakoniwa-envsim"
-    pdu_javascript = ROOT.parent / "hakoniwa-pdu-javascript"
-    pdu_python = ROOT.parent / "hakoniwa-pdu-python"
-    if not (envsim / "tools" / "hako.py").is_file():
-        raise PortablePackageError(
-            f"hakoniwa-envsim sibling checkout is missing: {envsim}"
-        )
-    if not (pdu_javascript / "src" / "index.js").is_file():
-        raise PortablePackageError(
-            f"hakoniwa-pdu-javascript sibling checkout is missing: {pdu_javascript}"
-        )
-    if not (pdu_python / "src" / "hakoniwa_pdu" / "apps" / "launcher" / "hako_launcher.py").is_file():
-        raise PortablePackageError(
-            f"hakoniwa-pdu-python sibling checkout is missing: {pdu_python}"
-        )
+    for repository in profile.repositories:
+        artifact = repository.path / repository.required_artifact
+        if not artifact.exists():
+            raise PortablePackageError(
+                f"{repository.name} checkout or required artifact is missing: {artifact}"
+            )
 
-    _run_checked(
-        [str(foundation_python), "tools/workspace.py", "prepare"],
-        ROOT,
-        "source Workspace prepare",
-    )
-    _run_checked(
-        [str(foundation_python), "tools/recipe/city_world_web_ui.py", "configure"],
-        ROOT,
-        "source City World Web UI Recipe configure",
-    )
-    _run_checked(
-        [str(foundation_python), "tools/recipe/city_world_web_ui.py", "doctor"],
-        ROOT,
-        "source City World Web UI Recipe doctor",
+    selected_receipt = _prepare_source_profile(
+        profile, foundation_python, city_receipt
     )
 
+    if output is None:
+        output = ROOT / "dist" / f"{profile.package_id}.zip"
     output = output.expanduser().resolve()
     staging_base = ROOT / "work" / "portable-package"
     staging_base.mkdir(parents=True, exist_ok=True)
     temporary: tempfile.TemporaryDirectory[str] | None = None
     if keep_staging:
-        package_root = staging_base / PACKAGE_ID
+        package_root = staging_base / profile.package_id
         if package_root.exists():
             shutil.rmtree(package_root)
     else:
@@ -715,7 +1101,7 @@ def build_package(
         # Foundation Python site-packages hierarchy and Windows MAX_PATH still
         # applies to several stdlib copy operations.
         temporary = tempfile.TemporaryDirectory(prefix="hako-portable-")
-        package_root = Path(temporary.name) / PACKAGE_ID
+        package_root = Path(temporary.name) / profile.package_id
 
     try:
         package_root.mkdir(parents=True, exist_ok=True)
@@ -729,21 +1115,16 @@ def build_package(
             foundation_root,
             business_pack_destination / "work" / "foundation",
         )
-        _copy_tree(
-            envsim,
-            package_root / "hakoniwa-envsim",
-            SIBLING_IGNORES,
-        )
-        _copy_tree(
-            pdu_javascript,
-            package_root / "hakoniwa-pdu-javascript",
-            SIBLING_IGNORES,
-        )
-        _copy_tree(
-            pdu_python,
-            package_root / "hakoniwa-pdu-python",
-            SIBLING_IGNORES,
-        )
+        for repository in profile.repositories:
+            _copy_repository(
+                repository.path,
+                package_root / repository.name,
+                repository.include_paths,
+            )
+        if profile.kind == "urban-car-rc":
+            if selected_receipt is None:
+                raise PortablePackageError("Urban Car City World receipt was not selected")
+            _bundle_urban_runtime(package_root, selected_receipt)
 
         embedded_zip = _embedded_python_archive(
             str(python_identity["version"]),
@@ -758,29 +1139,28 @@ def build_package(
             / "foundation"
             / "install"
             / "python",
+            profile.python_paths,
         )
-        _install_portable_generation_requirements(
+        _install_portable_requirements(
             foundation_python,
             business_pack_destination
             / "work"
             / "foundation"
             / "install"
             / "python",
+            profile.requirements,
         )
-        _write_entrypoints(package_root)
+        _write_profile_entrypoints(package_root, profile)
         _write_manifest(
             package_root,
             python_identity,
             embedded_zip,
-            {
-                "hakoniwa-business-pack": ROOT,
-                "hakoniwa-envsim": envsim,
-                "hakoniwa-pdu-javascript": pdu_javascript,
-                "hakoniwa-pdu-python": pdu_python,
-            },
+            {"hakoniwa-business-pack": ROOT}
+            | {item.name: item.path for item in profile.repositories},
+            profile,
         )
-        _validate_staged_package(package_root)
-        _remove_staging_specific_workspace_files(package_root)
+        _validate_profile_package(package_root, profile)
+        _remove_staging_specific_workspace_files(package_root, profile)
         _zip_tree(package_root, output)
         print(f"[OK] Windows portable package: {output}")
         print(f"[OK] SHA-256: {_sha256(output)}")
@@ -794,14 +1174,19 @@ def build_package(
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
-        description=(
-            "Build a Windows x64 portable ZIP for the Business Pack City World Web UI"
-        )
+        description="Build a Windows x64 portable ZIP from a portable profile"
+    )
+    result.add_argument(
+        "--profile",
+        choices=("city-world-web-ui", "urban-car-rc"),
+        default="city-world-web-ui",
+        help="portable distribution profile (default: city-world-web-ui)",
     )
     result.add_argument(
         "--output",
         type=Path,
-        default=ROOT / "dist" / f"{PACKAGE_ID}.zip",
+        default=None,
+        help="output ZIP (default: dist/<profile package-id>.zip)",
     )
     result.add_argument(
         "--python-embed-zip",
@@ -816,6 +1201,14 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Keep assembled files under work/portable-package for inspection",
     )
+    result.add_argument(
+        "--city-receipt",
+        type=Path,
+        help=(
+            "City World receipt to bundle for the urban-car-rc profile; "
+            "defaults to the currently configured Urban composition"
+        ),
+    )
     return result
 
 
@@ -826,6 +1219,8 @@ def main(argv: list[str] | None = None) -> int:
             args.output,
             python_embed_zip=args.python_embed_zip,
             keep_staging=args.keep_staging,
+            profile_id=args.profile,
+            city_receipt=args.city_receipt,
         )
         return 0
     except (PortablePackageError, OSError, subprocess.SubprocessError) as exc:

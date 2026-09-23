@@ -106,7 +106,9 @@ def recipe_repository_root(recipe_path: Path) -> Path:
     recipe = recipe_path.expanduser().resolve()
     start = recipe.parent
     for candidate in (start, *start.parents):
-        if (candidate / ".git").exists():
+        if (candidate / ".git").exists() or (
+            candidate / ".hakoniwa-repository-root"
+        ).is_file():
             return candidate.resolve()
 
     # Portable packages deliberately omit Git metadata.  Recipes distributed

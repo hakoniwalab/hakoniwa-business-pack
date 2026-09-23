@@ -171,6 +171,30 @@ class PortableWorkspacePackageTest(unittest.TestCase):
                 script,
             )
 
+    def test_urban_profile_declares_runtime_repositories(self) -> None:
+        profile = portable.load_profile("urban-car-rc", portable.WORKSPACE_ROOT)
+        names = {item.name for item in profile.repositories}
+        self.assertEqual(profile.recipe_id, "urban-car-rc")
+        self.assertIn("hakoniwa-urban-mobility", names)
+        self.assertIn("hakoniwa-mbody-registry", names)
+        self.assertIn("hakoniwa-pdu-python", names)
+        self.assertIn("hakoniwa-pdu-python/src", profile.python_paths)
+
+    def test_urban_start_relocates_before_start(self) -> None:
+        script = portable._render_urban_batch("start")
+        prepare = r"tools\portable_urban_car.py prepare"
+        start = r"tools\urban_mobility.py start"
+        self.assertIn(prepare, script)
+        self.assertIn(start, script)
+        self.assertLess(script.index(prepare), script.index(start))
+        self.assertIn(r"work\foundation\install\python\python.exe", script)
+
+    def test_profile_controls_default_output_name(self) -> None:
+        args = portable.parser().parse_args(["--profile", "urban-car-rc"])
+        self.assertIsNone(args.output)
+        profile = portable.load_profile(args.profile, portable.WORKSPACE_ROOT)
+        self.assertEqual(profile.package_id, "hakoniwa-urban-car-rc-windows-x64")
+
 
 if __name__ == "__main__":
     unittest.main()
