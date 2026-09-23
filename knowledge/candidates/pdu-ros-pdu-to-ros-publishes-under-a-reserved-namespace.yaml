@@ -1,5 +1,5 @@
 id: pdu-ros-pdu-to-ros-publishes-under-a-reserved-namespace
-title: A pdu_to_ros binding does not publish on the topic it names, and the rewrite is undocumented at the point of configuration
+title: A pdu_to_ros binding does not publish on the topic it names -- the configured name is the ROS-owned one and the bridge publishes on its /pdu mirror
 status: candidate
 
 knowledge_type:
@@ -13,10 +13,13 @@ summary: >
   on `/pdu/hako_probe/pair`. The rule looks deliberate -- `/pdu` reads as reserved for
   PDU-owned mirror topics, which keeps the bridge from publishing onto a ROS-owned name.
   It constrains where the bridge publishes; it is not access control over subscribers,
-  and action bindings were not exercised. Nothing at the point of configuration says so, and the resulting failure is silent on both sides: the bridge
-  connects, receives, and publishes, while a subscriber on the configured name receives
-  nothing. `ros_to_pdu` is unaffected, which is why this surfaces only for whoever uses
-  the command direction first.
+  and action bindings were not exercised. The rule IS documented -- the README's "Minimal
+  Config" section states it at the revision measured here -- and an earlier version of
+  this candidate wrongly claimed otherwise; see the correction in `observation.details`.
+  What remains true is that the failure is silent on both sides: the bridge connects,
+  receives, and publishes, while a subscriber on the configured name receives nothing.
+  `ros_to_pdu` is unaffected, which is why this surfaces only for whoever uses the command
+  direction first.
 
 observation:
   context: >
@@ -41,8 +44,26 @@ observation:
       The reservation is worth keeping, and for the command-direction work it meant the
       bridge would not publish onto the vendor's own topic names. Stated precisely: the
       rule determines where the bridge publishes, it is not access control over
-      subscribers, and it was measured for topic bindings only. The gap is documentation
-      at the point of use, not the behaviour.
+      subscribers, and it was measured for topic bindings only.
+    - >-
+      CORRECTED, 2026-09-15. This candidate originally concluded that the rewrite was
+      undocumented at the point of configuration. That is wrong, and the maintainer said
+      so. At the same revision that was measured (8693f4d), README.md already carried it
+      in the "Minimal Config" section: "pdu_to_ros: /pdu/<robot>/<pdu>", "ros_to_pdu:
+      /<robot>/<pdu>", a two-row owner table, and "If topic is set, it is the ROS-owned
+      topic name; the PDU-owned topic is derived by adding /pdu in front." Verified by
+      reading README.md out of that revision directly. The runtime observation below is
+      unaffected -- what was wrong was the diagnosis of why we hit it, which was that the
+      binding was configured without reading that section, not that the contract was
+      unstated.
+    - >-
+      Diagnosability has since improved anyway. At 8693f4d, bridge_node.py created the
+      publisher and the subscription with no log line naming either
+      (`create_publisher(msg_cls, binding.topic, 10)`). On current main (f180e38) both
+      paths log the expanded name -- "publisher QoS for {binding.topic}" and
+      "subscription QoS for {binding.topic}" -- so the effective topic is visible at
+      startup. hakoniwalab/hakoniwa-pdu-ros#25, which we filed asking for exactly that,
+      was closed as already satisfied.
 
 sources:
   repositories:
@@ -65,22 +86,21 @@ validation:
   status: verified
   required:
     - >-
-      Decide where the rule should be stated: the binding schema description, the README's
-      binding section, or a log line at bridge startup naming the effective topic per
-      binding. A startup log line would have made this self-diagnosing.
-    - >-
       Confirm the same rewrite applies to action bindings, which were not exercised here.
   notes:
     - >-
       Measured on one host with one ROS distribution, against two message types.
+    - >-
+      The runtime measurement stands as recorded; only the documentation claim was wrong
+      and has been corrected in place rather than removed.
 
 tracking:
-  implementation_status: open
+  implementation_status: resolved
   issues:
     - repository: hakoniwalab/hakoniwa-pdu-ros
       number: 25
       relation: documentation
-      status: open
+      status: closed
 
 promotion_targets:
   catalog: []
@@ -92,16 +112,22 @@ promotion_targets:
 
 promotion_rationale:
   - >-
-    Anyone wiring the command direction for the first time hits this, and the failure mode
-    gives no signal at all -- the bridge looks healthy while the subscriber starves.
+    Anyone wiring the command direction for the first time can still hit this by not
+    reading the README section first, and at the measured revision the failure mode gave
+    no signal at all -- the bridge looked healthy while the subscriber starved.
 
 resolution:
-  status: pending
+  status: documented
   fixed_by: []
-  verified: false
+  verified: true
   promoted_to: []
   executable_guardrails: []
   notes:
     - >-
-      No code change is being proposed. The behaviour is correct; what is missing is that
-      the effective topic name is never surfaced where the user chooses it.
+      No code change was needed and none was made. The behaviour is correct and the
+      contract was already written down; hakoniwalab/hakoniwa-pdu-ros#25 was closed as
+      already satisfied. This entry records a correction of our diagnosis, not an
+      implemented fix -- which is why `fixed_by` is empty while the status is documented.
+    - >-
+      Verified by reading README.md at the measured revision 8693f4d and by diffing
+      bridge_node.py between that revision and current main, 2026-09-15.
