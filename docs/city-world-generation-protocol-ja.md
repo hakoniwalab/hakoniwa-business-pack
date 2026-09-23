@@ -330,7 +330,7 @@ python tools/recipe/city_world_web_ui.py stop
 
 ブラウザ版では、並列数をPythonソースへ直接記述せず、Launcher起動時の
 `--parallel-workers <1..16>`、`--dem-parallel-workers <1..4>`、`--building-physics-workers <1..8>`で指定する。
-既定値はそれぞれ`4`と`2`である。DEMは1 processごとにCityGMLを読み、抽出結果を保持するため、
+既定値は順に`8`、`4`、`4`である。DEMは1 processごとにCityGMLを読み、抽出結果を保持するため、
 メモリ暴走を防ぐ目的で上限を4に固定する。これらの値はLauncherからWorkerへ渡され、各jobの
 次のファイルへ記録される。
 
@@ -355,20 +355,21 @@ python tools/recipe/city_world_web_ui.py start \
 ```
 
 `parallel_workers`が上限として使われる工程は、PLATEAU source・LOD2 textureの取得、建物GML抽出と、出力先が独立した建物Visual、
-建物Physics、道路、路面標示、橋梁componentの生成である。ComposerとDataset Validatorは
+道路、路面標示、橋梁componentの生成である。Building Physicsのsource GML解析・三角形化は
+`building_physics_workers`で制御する。ComposerとDataset Validatorは
 依存componentの完了後に直列実行する。建物GML抽出は巨大XMLをprocessごとに保持するため、
 `parallel_workers`が5以上でも最大4processへ制限する。`dem_parallel_workers`はDEM source抽出だけに使われ、
 実際のprocess数はこの値と対象DEM source数の小さい方になる。
 
 値は次の順序で決める。
 
-1. まず既定値`4`で、CPU使用率、メモリ使用量、処理時間を確認する。
+1. まず既定値`8`で、CPU使用率、メモリ使用量、処理時間を確認する。過剰な場合は`4`へ下げる。
 2. source取得または独立component生成が律速し、CPUとメモリに余裕がある場合は`6`、次に`8`を試す。
 3. CPU使用率の飽和、メモリ圧迫、swap、ディスクI/O待ちが増えた場合は一段階戻す。
 4. `8`を超える値は、同じ入力範囲で実測して短縮を確認できた場合だけ使用する。
 
-DEMは既定値`2`から開始し、複数DEM sourceの抽出が律速し、CPUとメモリに余裕がある場合だけ
-`4`を試す。ラスタライズと小欠損補間はこの値では並列化されないため、DEM source抽出完了後の
+DEMは既定値`4`である。複数DEM sourceの抽出が律速していない場合やCPU・メモリを抑えたい場合は
+`2`へ下げる。ラスタライズと小欠損補間はこの値では並列化されないため、DEM source抽出完了後の
 待ち時間には効果がない。
 
 並列に実行できるcomponent数とsource数以上のworkerは待機するため、値を増やせば必ず速くなる
