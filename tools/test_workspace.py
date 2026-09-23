@@ -134,12 +134,10 @@ class WorkspaceEnvironmentTest(unittest.TestCase):
 
         pth_path = site_packages / "hakoniwa_workspace_bootstrap.pth"
         self.assertTrue(pth_path.is_file())
+        self.assertTrue((site_packages / "hakoniwa_workspace_bootstrap.py").is_file())
         self.assertEqual(
             pth_path.read_text(encoding="utf-8"),
-            (
-                f"{self.paths.business_pack_root / 'foundation' / 'python'}\n"
-                "import hakoniwa_workspace_bootstrap\n"
-            ),
+            "import hakoniwa_workspace_bootstrap\n",
         )
 
     def test_windows_site_packages_layout_is_detected(self) -> None:
@@ -170,10 +168,7 @@ class WorkspaceEnvironmentTest(unittest.TestCase):
         self.assertEqual(installed, [pth_path])
         self.assertEqual(
             pth_path.read_text(encoding="utf-8"),
-            (
-                f"{self.paths.business_pack_root / 'foundation' / 'python'}\n"
-                "import hakoniwa_workspace_bootstrap\n"
-            ),
+            "import hakoniwa_workspace_bootstrap\n",
         )
 
     @unittest.skipUnless(

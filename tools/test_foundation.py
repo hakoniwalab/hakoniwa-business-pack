@@ -114,7 +114,7 @@ class FoundationWorkspaceTest(unittest.TestCase):
             self.assertTrue(pth.is_file())
             self.assertEqual(
                 pth.read_text(encoding="utf-8"),
-                f"{bootstrap_source}\nimport hakoniwa_workspace_bootstrap\n",
+                "import hakoniwa_workspace_bootstrap\n",
             )
 
     def test_resolve_workspace_stays_under_business_pack_work(self) -> None:

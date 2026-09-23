@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
 
@@ -33,10 +34,11 @@ def install_workspace_python_bootstrap(
             f"Workspace Python bootstrap is missing: {bootstrap_module}"
         )
     installed: list[Path] = []
-    content = f"{bootstrap_source}\nimport hakoniwa_workspace_bootstrap\n"
+    content = "import hakoniwa_workspace_bootstrap\n"
     for site_packages in foundation_site_package_dirs(
         python_root, windows=windows
     ):
+        shutil.copy2(bootstrap_module, site_packages / bootstrap_module.name)
         pth_path = site_packages / "hakoniwa_workspace_bootstrap.pth"
         pth_path.write_text(content, encoding="utf-8")
         installed.append(pth_path)
