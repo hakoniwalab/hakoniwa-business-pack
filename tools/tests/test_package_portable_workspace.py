@@ -33,6 +33,10 @@ class PortableWorkspacePackageTest(unittest.TestCase):
             self.assertIn(r"Lib\site-packages", lines)
             self.assertIn(r"..\..\..\..", lines)
             self.assertIn(r"..\..\..\..\..\hakoniwa-pdu-python\src", lines)
+            self.assertIn(r"..\..\..\..\..\hakoniwa-envsim\tools", lines)
+            self.assertIn(
+                r"..\..\..\..\..\hakoniwa-envsim\src\city_pipeline", lines
+            )
             self.assertIn("import site", lines)
 
     def test_absolute_windows_pth_entry_is_rejected(self) -> None:

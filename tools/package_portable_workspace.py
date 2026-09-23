@@ -193,6 +193,8 @@ def _rewrite_embedded_python_pth(python_root: Path) -> Path:
     has_site_packages = False
     has_business_pack = False
     has_pdu_python = False
+    has_envsim_tools = False
+    has_envsim_pipeline = False
     has_import_site = False
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
@@ -206,6 +208,10 @@ def _rewrite_embedded_python_pth(python_root: Path) -> Path:
             has_business_pack = True
         if line.replace("/", "\\") == r"..\..\..\..\..\hakoniwa-pdu-python\src":
             has_pdu_python = True
+        if line.replace("/", "\\") == r"..\..\..\..\..\hakoniwa-envsim\tools":
+            has_envsim_tools = True
+        if line.replace("/", "\\") == r"..\..\..\..\..\hakoniwa-envsim\src\city_pipeline":
+            has_envsim_pipeline = True
         output.append(raw)
     if not has_site_packages:
         output.append(r"Lib\site-packages")
@@ -220,6 +226,10 @@ def _rewrite_embedded_python_pth(python_root: Path) -> Path:
         # Its source is a sibling of hakoniwa-business-pack in the portable
         # package root.
         output.append(r"..\..\..\..\..\hakoniwa-pdu-python\src")
+    if not has_envsim_tools:
+        output.append(r"..\..\..\..\..\hakoniwa-envsim\tools")
+    if not has_envsim_pipeline:
+        output.append(r"..\..\..\..\..\hakoniwa-envsim\src\city_pipeline")
     if not has_import_site:
         output.append("import site")
     path.write_text("\n".join(output) + "\n", encoding="utf-8")
@@ -545,7 +555,8 @@ def _validate_staged_package(package_root: Path) -> None:
         [
             str(foundation_python),
             "-c",
-            "import PIL, mapbox_earcut, numpy, pyproj, shapely, trimesh; "
+            "import PIL, mapbox_earcut, numpy, plateau_citygml, pyproj, "
+            "shapely, trimesh, city_world_composer; "
             "import tools, hakoniwa_pdu, hakoniwa_pdu_endpoint; "
             "print('portable runtime imports OK')",
         ],
