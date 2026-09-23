@@ -341,9 +341,10 @@ def _manifest_text(
     request: dict[str, Any],
     job_root: Path,
     cache_dir: Path,
-    parallel_workers: int = 4,
-    dem_parallel_workers: int = 2,
+    parallel_workers: int = 8,
+    dem_parallel_workers: int = 4,
     terrain_spacing_m: float = 2.0,
+    building_physics_workers: int = 4,
 ) -> str:
     center = request["selection"]["center"]
     extent = request["selection"]["half_extent_m"]
@@ -407,6 +408,7 @@ city_world:
   enabled: true
   parallel_workers: {parallel_workers}
   dem_parallel_workers: {dem_parallel_workers}
+  building_physics_workers: {building_physics_workers}
   terrain_spacing_m: {terrain_spacing_m:g}
   terrain_uncovered_policy: {terrain_uncovered_policy}
   terrain_uncovered_elevation_m: {terrain_uncovered_elevation_m:g}
@@ -523,8 +525,9 @@ class CityWorldGenerator:
         self,
         runtime_root: Path,
         *,
-        parallel_workers: int = 4,
-        dem_parallel_workers: int = 2,
+        parallel_workers: int = 8,
+        dem_parallel_workers: int = 4,
+        building_physics_workers: int = 4,
         terrain_spacing_m: str | float = 2.0,
     ) -> None:
         if (
@@ -539,6 +542,12 @@ class CityWorldGenerator:
             or not 1 <= dem_parallel_workers <= 4
         ):
             raise ValueError("dem_parallel_workers must be an integer in [1, 4]")
+        if (
+            isinstance(building_physics_workers, bool)
+            or not isinstance(building_physics_workers, int)
+            or not 1 <= building_physics_workers <= 8
+        ):
+            raise ValueError("building_physics_workers must be an integer in [1, 8]")
         if terrain_spacing_m != "auto":
             resolve_terrain_spacing({
                 "selection": {"half_extent_m": {
@@ -548,6 +557,7 @@ class CityWorldGenerator:
         self.runtime_root = runtime_root.resolve()
         self.parallel_workers = parallel_workers
         self.dem_parallel_workers = dem_parallel_workers
+        self.building_physics_workers = building_physics_workers
         self.terrain_spacing_policy = terrain_spacing_m
         self._python: Path | None = None
 
@@ -613,6 +623,7 @@ class CityWorldGenerator:
             self.parallel_workers,
             self.dem_parallel_workers,
             effective_terrain_spacing_m,
+            self.building_physics_workers,
         ), encoding="utf-8")
         (job_root / "job.json").write_text(json.dumps({
             "schema_version": 1,
@@ -624,6 +635,7 @@ class CityWorldGenerator:
             "generation_policy": {
                 "parallel_workers": self.parallel_workers,
                 "dem_parallel_workers": self.dem_parallel_workers,
+                "building_physics_workers": self.building_physics_workers,
                 "terrain_uncovered_policy": command["request"].get("options", {}).get(
                     "terrain_uncovered_policy", "error"
                 ),

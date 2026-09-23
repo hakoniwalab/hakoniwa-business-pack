@@ -304,8 +304,9 @@ python3 -m tools.remote_operation.city_world.web_smoke --port 8008
 
 ```bash
 python tools/recipe/city_world_web_ui.py start \
-  --parallel-workers 4 \
-  --dem-parallel-workers 2 \
+  --parallel-workers 8 \
+  --dem-parallel-workers 4 \
+  --building-physics-workers 4 \
   --terrain-spacing-m 2 \
   --open-browser
 ```
@@ -328,7 +329,7 @@ python tools/recipe/city_world_web_ui.py stop
 ### 13.1 並列worker数と地形解像度の設定
 
 ブラウザ版では、並列数をPythonソースへ直接記述せず、Launcher起動時の
-`--parallel-workers <1..16>`と`--dem-parallel-workers <1..4>`で指定する。
+`--parallel-workers <1..16>`、`--dem-parallel-workers <1..4>`、`--building-physics-workers <1..8>`で指定する。
 既定値はそれぞれ`4`と`2`である。DEMは1 processごとにCityGMLを読み、抽出結果を保持するため、
 メモリ暴走を防ぐ目的で上限を4に固定する。これらの値はLauncherからWorkerへ渡され、各jobの
 次のファイルへ記録される。
@@ -338,7 +339,7 @@ work/recipes/city-world-web-ui/runtime/jobs/<job_id>/hakoniwa-envsim-build.yaml
 ```
 
 生成時には、上記YAMLの`city_world.parallel_workers`と
-`city_world.dem_parallel_workers`としてEnvsimへ渡る。`job.json`の
+`city_world.dem_parallel_workers`、`city_world.building_physics_workers`としてEnvsimへ渡る。`job.json`の
 `generation_policy`にも同じ値を残す。値を変更する場合は、
 稼働中のLauncherを停止してから新しい値で起動し直す。
 
@@ -348,6 +349,7 @@ python tools/recipe/city_world_web_ui.py stop
 python tools/recipe/city_world_web_ui.py start \
   --parallel-workers 6 \
   --dem-parallel-workers 4 \
+  --building-physics-workers 4 \
   --terrain-spacing-m auto \
   --open-browser
 ```
@@ -379,6 +381,7 @@ EnvsimをブラウザWorker経由ではなく直接実行する場合は、実�
 city_world:
   parallel_workers: 6
   dem_parallel_workers: 4
+  building_physics_workers: 4
 ```
 
 `--terrain-spacing-m`は`2`、`5`、`10`、`auto`から選ぶ。既定値`2`は従来動作を維持する。

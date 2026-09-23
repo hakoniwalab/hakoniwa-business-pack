@@ -37,6 +37,7 @@ class CityWorldLauncherTest(unittest.TestCase):
                 max_download_gib=8.0,
                 parallel_workers=6,
                 dem_parallel_workers=4,
+                building_physics_workers=3,
                 terrain_spacing_m="auto",
             )
             config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -62,6 +63,9 @@ class CityWorldLauncherTest(unittest.TestCase):
             )
             self.assertEqual(
                 worker_args[worker_args.index("--dem-parallel-workers") + 1], "4"
+            )
+            self.assertEqual(
+                worker_args[worker_args.index("--building-physics-workers") + 1], "3"
             )
             self.assertEqual(
                 worker_args[worker_args.index("--terrain-spacing-m") + 1], "auto"

@@ -96,6 +96,7 @@ def lifecycle(data: dict, command: str, args: argparse.Namespace) -> int:
             "--max-download-gib", str(args.max_download_gib),
             "--parallel-workers", str(args.parallel_workers),
             "--dem-parallel-workers", str(args.dem_parallel_workers),
+            "--building-physics-workers", str(args.building_physics_workers),
             "--terrain-spacing-m", args.terrain_spacing_m,
             "--ready-timeout-sec", str(args.ready_timeout_sec),
         ])
@@ -113,8 +114,9 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--worker-port", type=int, default=54210)
     result.add_argument("--web-port", type=int, default=8008)
     result.add_argument("--max-download-gib", type=float, default=8.0)
-    result.add_argument("--parallel-workers", type=int, default=4)
-    result.add_argument("--dem-parallel-workers", type=int, default=2)
+    result.add_argument("--parallel-workers", type=int, default=8)
+    result.add_argument("--dem-parallel-workers", type=int, default=4)
+    result.add_argument("--building-physics-workers", type=int, default=4)
     result.add_argument("--terrain-spacing-m", choices=("2", "5", "10", "auto"), default="auto")
     result.add_argument("--ready-timeout-sec", type=float, default=15.0)
     result.add_argument("--open-browser", action="store_true")

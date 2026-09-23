@@ -192,8 +192,9 @@ def run_worker(
     *,
     once: bool = False,
     max_download_bytes: int = DEFAULT_MAX_DOWNLOAD_BYTES,
-    parallel_workers: int = 4,
-    dem_parallel_workers: int = 2,
+    parallel_workers: int = 8,
+    dem_parallel_workers: int = 4,
+    building_physics_workers: int = 4,
     terrain_spacing_m: str = "2",
     ready_file: Path | None = None,
 ) -> int:
@@ -202,6 +203,7 @@ def run_worker(
         endpoint_config.parent,
         parallel_workers=parallel_workers,
         dem_parallel_workers=dem_parallel_workers,
+        building_physics_workers=building_physics_workers,
         terrain_spacing_m=terrain_spacing_m,
     )
     inspections_by_request: dict[str, dict[str, Any]] = {}
@@ -354,12 +356,16 @@ def main() -> int:
         help="reject generation when the catalog estimate exceeds this many GiB (default: 8)",
     )
     parser.add_argument(
-        "--parallel-workers", type=int, default=4,
-        help="worker limit for Envsim source and component generation (1-16; default: 4)",
+        "--parallel-workers", type=int, default=8,
+        help="worker limit for Envsim source and component generation (1-16; default: 8)",
     )
     parser.add_argument(
-        "--dem-parallel-workers", type=int, default=2,
-        help="DEM source extraction process limit (1-4; default: 2)",
+        "--dem-parallel-workers", type=int, default=4,
+        help="DEM source extraction process limit (1-4; default: 4)",
+    )
+    parser.add_argument(
+        "--building-physics-workers", type=int, default=4,
+        help="Building Physics source-GML process limit (1-8; default: 4)",
     )
     parser.add_argument(
         "--terrain-spacing-m", choices=("2", "5", "10", "auto"), default="2",
@@ -373,6 +379,8 @@ def main() -> int:
         parser.error("--parallel-workers must be in [1, 16]")
     if not 1 <= args.dem_parallel_workers <= 4:
         parser.error("--dem-parallel-workers must be in [1, 4]")
+    if not 1 <= args.building_physics_workers <= 8:
+        parser.error("--building-physics-workers must be in [1, 8]")
     endpoint_config = write_websocket_endpoint_config(
         args.runtime_dir,
         role="server",
@@ -385,6 +393,7 @@ def main() -> int:
         max_download_bytes=int(args.max_download_gib * 1024 * 1024 * 1024),
         parallel_workers=args.parallel_workers,
         dem_parallel_workers=args.dem_parallel_workers,
+        building_physics_workers=args.building_physics_workers,
         terrain_spacing_m=args.terrain_spacing_m,
         ready_file=args.ready_file,
     )

@@ -475,7 +475,9 @@ class CityWorldInspectionTest(unittest.TestCase):
             self.assertIn(f"build_dir: {(root / 'jobs' / 'job-1' / 'build').resolve()}", manifest)
             self.assertIn("building_physics_level: 3", manifest)
             self.assertIn("building_collider_reduction: safe", manifest)
-            self.assertIn("parallel_workers: 4", manifest)
+            self.assertIn("parallel_workers: 8", manifest)
+            self.assertIn("dem_parallel_workers: 4", manifest)
+            self.assertIn("building_physics_workers: 4", manifest)
             self.assertIn("texture_mode: embedded-if-available", manifest)
             level_one = request()
             level_one["options"]["building_physics_level"] = 1
@@ -487,12 +489,14 @@ class CityWorldInspectionTest(unittest.TestCase):
                 6,
                 4,
                 5,
+                3,
             )
             self.assertIn("building_physics_level: 1", manifest)
             self.assertIn("building_collider_reduction: coplanar-union", manifest)
             self.assertIn("parallel_workers: 6", manifest)
             self.assertIn("dem_parallel_workers: 4", manifest)
             self.assertIn("terrain_spacing_m: 5", manifest)
+            self.assertIn("building_physics_workers: 3", manifest)
             self.assertIn("terrain_uncovered_policy: error", manifest)
             self.assertIn("terrain_uncovered_elevation_m: 0", manifest)
             self.assertIn("lod_policy: highest_available", manifest)

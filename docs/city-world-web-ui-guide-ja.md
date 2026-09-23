@@ -190,8 +190,9 @@ work/recipes/city-world-web-ui/launcher/
 
 | オプション | 既定値 | 用途 |
 |---|---:|---|
-| `--parallel-workers` | `4` | source取得と独立component生成の並列数（1–16） |
-| `--dem-parallel-workers` | `2` | DEM source抽出のprocess数（1–4） |
+| `--parallel-workers` | `8` | source取得と独立component生成の並列数（1–16） |
+| `--dem-parallel-workers` | `4` | DEM source抽出のprocess数（1–4） |
+| `--building-physics-workers` | `4` | 建物Physicsのsource GML解析・三角形化のprocess数（1–8） |
 | `--terrain-spacing-m` | `auto` | 地形grid間隔。`2`、`5`、`10`、`auto` |
 | `--max-download-gib` | `8.0` | 1回の生成で許可する推定download量の上限 |
 | `--worker-port` | `54210` | WorkerのWebSocket port。現在の同梱UIでは既定値を使う |
@@ -205,6 +206,7 @@ work/recipes/city-world-web-ui/launcher/
 python tools/recipe/city_world_web_ui.py start \
   --parallel-workers 6 \
   --dem-parallel-workers 4 \
+  --building-physics-workers 4 \
   --terrain-spacing-m auto \
   --open-browser
 ```

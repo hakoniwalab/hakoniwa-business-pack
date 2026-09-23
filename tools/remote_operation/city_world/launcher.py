@@ -66,6 +66,7 @@ def write_launcher_config(
     parallel_workers: int,
     dem_parallel_workers: int,
     terrain_spacing_m: str,
+    building_physics_workers: int = 4,
 ) -> Path:
     paths = launcher_paths(launcher_runtime)
     paths["logs"].mkdir(parents=True, exist_ok=True)
@@ -95,6 +96,7 @@ def write_launcher_config(
                     "--max-download-gib", str(max_download_gib),
                     "--parallel-workers", str(parallel_workers),
                     "--dem-parallel-workers", str(dem_parallel_workers),
+                    "--building-physics-workers", str(building_physics_workers),
                     "--terrain-spacing-m", terrain_spacing_m,
                     "--ready-file", str(worker_ready),
                 ],
@@ -169,6 +171,7 @@ def start(args: argparse.Namespace) -> int:
         max_download_gib=args.max_download_gib,
         parallel_workers=args.parallel_workers,
         dem_parallel_workers=args.dem_parallel_workers,
+        building_physics_workers=args.building_physics_workers,
         terrain_spacing_m=args.terrain_spacing_m,
     )
     completed = subprocess.run(
@@ -196,6 +199,7 @@ def start(args: argparse.Namespace) -> int:
             print(f"Logs   : {paths['logs']}")
             print(f"Parallel workers: {args.parallel_workers}")
             print(f"DEM parallel workers: {args.dem_parallel_workers}")
+            print(f"Building Physics workers: {args.building_physics_workers}")
             print(f"Terrain spacing: {args.terrain_spacing_m} m")
             if args.open_browser:
                 webbrowser.open(url)
@@ -235,12 +239,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--max-download-gib", type=float, default=8.0)
     parser.add_argument(
-        "--parallel-workers", type=int, default=4,
-        help="Envsim source/component worker limit (1-16; default: 4)",
+        "--parallel-workers", type=int, default=8,
+        help="Envsim source/component worker limit (1-16; default: 8)",
     )
     parser.add_argument(
-        "--dem-parallel-workers", type=int, default=2,
-        help="DEM source extraction process limit (1-4; default: 2)",
+        "--dem-parallel-workers", type=int, default=4,
+        help="DEM source extraction process limit (1-4; default: 4)",
+    )
+    parser.add_argument(
+        "--building-physics-workers", type=int, default=4,
+        help="Building Physics source-GML process limit (1-8; default: 4)",
     )
     parser.add_argument(
         "--terrain-spacing-m", choices=("2", "5", "10", "auto"), default="2",
@@ -259,6 +267,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--parallel-workers must be in [1, 16]")
     if not 1 <= args.dem_parallel_workers <= 4:
         parser.error("--dem-parallel-workers must be in [1, 4]")
+    if not 1 <= args.building_physics_workers <= 8:
+        parser.error("--building-physics-workers must be in [1, 8]")
     try:
         return start(args) if args.command == "start" else control(
             args.command, args.launcher_runtime_dir
