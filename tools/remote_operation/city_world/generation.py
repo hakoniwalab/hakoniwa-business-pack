@@ -47,6 +47,14 @@ AUTO_TERRAIN_SAMPLE_BUDGET = 120_000
 PORTABLE_CITY_WORLD_ENV = "HAKONIWA_PORTABLE_CITY_WORLD"
 
 
+def _source_cache_dir(runtime_root: Path) -> Path:
+    if os.environ.get(PORTABLE_CITY_WORLD_ENV) == "1" and os.name == "nt":
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if local_app_data:
+            return Path(local_app_data) / "Hakoniwa" / "cache" / "plateau-citygml"
+    return runtime_root / "cache" / "plateau-citygml"
+
+
 def _check_canceled(cancel_event: threading.Event | None) -> None:
     if cancel_event is not None and cancel_event.is_set():
         raise CityWorldGenerationCanceled("City World generation was canceled")
@@ -601,7 +609,7 @@ class CityWorldGenerator:
         manifest.write_text(_manifest_text(
             command["request"],
             job_root,
-            self.runtime_root / "cache" / "plateau-citygml",
+            _source_cache_dir(self.runtime_root),
             self.parallel_workers,
             self.dem_parallel_workers,
             effective_terrain_spacing_m,

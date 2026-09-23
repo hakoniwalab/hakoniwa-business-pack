@@ -442,7 +442,7 @@ pushd "%BUSINESS_PACK%"
 set "PATH=%BUSINESS_PACK%\work\foundation\install\bin;%PATH%"
 set "PYTHONNOUSERSITE=1"
 set "HAKONIWA_PORTABLE_CITY_WORLD=1"
-"%HAKO_PYTHON%" tools\workspace.py run -- "%HAKO_PYTHON%" -m tools.remote_operation.city_world.launcher start --runtime-dir "%BUSINESS_PACK%\work\recipes\city-world-web-ui\runtime" --launcher-runtime-dir "%BUSINESS_PACK%\work\recipes\city-world-web-ui\launcher" --terrain-spacing-m auto --open-browser
+"%HAKO_PYTHON%" tools\workspace.py run -- "%HAKO_PYTHON%" -m tools.remote_operation.city_world.launcher start --runtime-dir "%BUSINESS_PACK%\work\recipes\city-world-web-ui\runtime" --launcher-runtime-dir "%BUSINESS_PACK%\work\recipes\city-world-web-ui\launcher" --parallel-workers 8 --terrain-spacing-m auto --open-browser
 set "RC=%ERRORLEVEL%"
 popd
 
