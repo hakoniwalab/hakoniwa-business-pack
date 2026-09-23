@@ -584,6 +584,11 @@ set "PATH=%BUSINESS_PACK%\work\foundation\install\bin;%URBAN%\build\bin;%PATH%"
 set "PYTHONNOUSERSITE=1"
 set "HAKONIWA_PORTABLE_WORKSPACE=1"
 set "HAKONIWA_WORKSPACE_ROOT=%BUSINESS_PACK%"
+set "HAKONIWA_WORK_DIR=%BUSINESS_PACK%\work"
+set "HAKONIWA_HOME=%BUSINESS_PACK%\work\foundation\install"
+set "HAKO_CONFIG_PATH=%BUSINESS_PACK%\work\foundation\config\cpp_core_config.json"
+set "HAKO_PDU_ENDPOINT_RUNTIME_DIRS=%BUSINESS_PACK%\work\foundation\install\bin"
+set "VIRTUAL_ENV=%BUSINESS_PACK%\work\foundation\install\python"
 {prepare}"%HAKO_PYTHON%" tools\urban_mobility.py {command} --recipe recipes\usecases\urban-car-rc.yaml
 set "RC=%ERRORLEVEL%"
 popd

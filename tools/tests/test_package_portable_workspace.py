@@ -179,6 +179,9 @@ class PortableWorkspacePackageTest(unittest.TestCase):
         self.assertIn("hakoniwa-mbody-registry", names)
         self.assertIn("hakoniwa-pdu-python", names)
         self.assertIn("hakoniwa-pdu-python/src", profile.python_paths)
+        self.assertIn(
+            "hakoniwa-urban-mobility/apps/car", profile.python_paths
+        )
 
     def test_urban_start_relocates_before_start(self) -> None:
         script = portable._render_urban_batch("start")
@@ -188,6 +191,24 @@ class PortableWorkspacePackageTest(unittest.TestCase):
         self.assertIn(start, script)
         self.assertLess(script.index(prepare), script.index(start))
         self.assertIn(r"work\foundation\install\python\python.exe", script)
+        self.assertIn(
+            r'set "HAKONIWA_WORK_DIR=%BUSINESS_PACK%\work"', script
+        )
+        self.assertIn(
+            r'set "HAKO_CONFIG_PATH=%BUSINESS_PACK%\work\foundation\config\cpp_core_config.json"',
+            script,
+        )
+
+    def test_urban_control_scripts_override_ambient_workspace(self) -> None:
+        for command in ("status", "stop"):
+            script = portable._render_urban_batch(command)
+            self.assertIn(
+                r'set "HAKONIWA_WORK_DIR=%BUSINESS_PACK%\work"', script
+            )
+            self.assertIn(
+                r'set "HAKONIWA_HOME=%BUSINESS_PACK%\work\foundation\install"',
+                script,
+            )
 
     def test_profile_controls_default_output_name(self) -> None:
         args = portable.parser().parse_args(["--profile", "urban-car-rc"])

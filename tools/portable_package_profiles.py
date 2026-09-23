@@ -119,6 +119,7 @@ def profiles(workspace_root: Path) -> dict[str, PortableProfile]:
         python_paths=(
             "hakoniwa-business-pack",
             "hakoniwa-pdu-python/src",
+            "hakoniwa-urban-mobility/apps/car",
         ),
         # Recipe configure already installs these into Foundation Python.  The
         # packager copies that resolved environment and validates imports; it
