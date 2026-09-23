@@ -144,3 +144,13 @@ resolution:
       Windows re-verification of the fix is offered by the reporter, whose host
       is exactly the affected configuration: Visual Studio 2022 with no
       standalone CMake or Ninja on PATH.
+    - >-
+      Still open at business-pack 6c645d0, re-measured 2026-09-22. This
+      component's doctor still reports NG cmake and NG ninja in an ordinary
+      shell on the same host and OK for both inside VsDevCmd, so nothing merged
+      since has changed it. The Windows Foundation toolchain check added in
+      1815a23 sits nearby but is a different layer: it reads a registered vcpkg
+      root off disk and never consults PATH or a developer environment, and its
+      output is identical in both shells. It neither claims nor makes any
+      difference to this finding. Recorded separately as
+      foundation-toolchain-guard-reports-registration-not-a-usable-build-shell.

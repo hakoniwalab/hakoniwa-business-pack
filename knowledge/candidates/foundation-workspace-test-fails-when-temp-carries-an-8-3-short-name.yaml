@@ -1,0 +1,159 @@
+id: foundation-workspace-test-fails-when-temp-carries-an-8-3-short-name
+title: A Foundation workspace test fails on any Windows host whose TEMP carries an 8.3 short name
+
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+
+summary: >
+  tools/test_foundation.py passes 65 of its 66 tests on a native Windows
+  workstation. The one failure,
+  FoundationWorkspaceTest.test_resolve_workspace_accepts_symlinked_workdir_and_override,
+  is a defect in the test rather than in resolve_workspace: its fixture creates
+  a symlink whose target directory is never created, and on Windows
+  Path.resolve() expands an 8.3 short component for a plain path but leaves it
+  in place when resolving a symlink to a target that does not exist. The
+  assertion then compares a long-form expected value against a short-form actual
+  one. The condition is a TEMP path containing a shortened component, which is
+  what this host has because its account name does not fit 8.3. The
+  windows-latest job runs this same file and passes: its TMPDIR is D:\a\_temp,
+  so the job exercises the test without ever meeting the condition.
+
+observation:
+  context: >
+    Noticed while running the repository's own checks before submitting an
+    unrelated documentation change, on Windows 11 x64 build 10.0.26200.9457 with
+    Python 3.12.7, against a working tree whose tools/ directory is
+    byte-identical to 6c645d0. The account name is eleven characters, so TEMP
+    resolves to C:\Users\YUTAKI~1\AppData\Local\Temp.
+  details:
+    - >-
+      The fixture at tools/test_foundation.py:155-166 creates
+      base/"linked-work" as a symlink to base/"real-work" and never creates
+      real-work itself, then sets HAKONIWA_WORK_DIR to the link and asserts
+      paths.work_root == real_work.resolve().
+    - >-
+      On Windows the two sides of that comparison normalise differently.
+      Measured in the same interpreter: real_work.resolve() returns
+      C:\Users\YutaKikuchi\...\real-work, while link_work.resolve() returns
+      C:\Users\YUTAKI~1\...\real-work as long as the target does not exist.
+      Creating the target directory makes both return the long form. The code
+      under test resolves through the link, so it produces the short form and
+      the assertion fails on the user-name component alone.
+    - >-
+      The failure itself is a property of the fixture: resolve_workspace
+      returned a usable path and the other 65 tests pass. That is not the same
+      as the spelling being harmless everywhere. inspection.py compares receipt
+      prefixes with string equality and resolve_workspace checks containment
+      lexically, so a work_root that keeps a short-form component could in
+      principle fail to match a long-form one recorded elsewhere. No such
+      downstream failure was produced here and none is claimed; the point is
+      only that the fixture should not be repaired by assuming the spelling
+      never matters.
+    - >-
+      The condition is a shortened TEMP, not a symlink permission or a
+      developer-mode setting. Re-running only this test with TMP and TEMP
+      pointed at a long path, changing nothing else, turns it green.
+    - >-
+      The windows-latest job in .github/workflows/validate-business-pack.yml
+      runs "python -m unittest tools/test_foundation.py -v", so the test is
+      executed on every PR. It stays green because the runner's temporary
+      directory is D:\a\_temp. The job therefore exercises the test without
+      meeting the condition, and a contributor whose TEMP is shortened sees a
+      red suite that CI reports as green.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/test_foundation.py
+      revision: 6c645d0
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: .github/workflows/validate-business-pack.yml
+      revision: 6c645d0
+  runtime_evidence:
+    - description: >
+        Windows 11 x64 build 10.0.26200.9457 on 2026-09-22, TEMP =
+        C:\Users\YUTAKI~1\AppData\Local\Temp: "python -m unittest
+        tools/test_foundation.py" reported "Ran 66 tests", "FAILED
+        (failures=1)", with
+        "AssertionError: WindowsPath('C:/Users/YUTAKI~1/AppData/Local/Temp/tmpy7wfjq70/real-work')
+        != WindowsPath('C:/Users/YutaKikuchi/AppData/Local/Temp/tmpy7wfjq70/real-work')"
+        at tools/test_foundation.py:165.
+    - description: >
+        Same command restricted to that test, run twice in the same shell with
+        only TMP and TEMP changed: with the inherited
+        C:\Users\YUTAKI~1\AppData\Local\Temp it reported "FAILED (failures=1)",
+        and with TMP and TEMP set to a path containing no shortened component it
+        reported "OK".
+    - description: >
+        Mechanism probe in one interpreter, reproducing the fixture: tempdir
+        C:\Users\YUTAKI~1\AppData\Local\Temp\tmpg2ahqtwy, resolve_workspace
+        returned ...\YUTAKI~1\...\real-work, real_work.resolve() returned
+        ...\YutaKikuchi\...\real-work, link_work.resolve() returned
+        ...\YUTAKI~1\...\real-work while the target did not exist, and after
+        creating the target both resolve() calls returned the long form.
+    - description: >
+        The windows-latest job of the run for pull request 206 (run
+        35677268896, job 106586301362) logs "TMPDIR: D:\a\_temp", so the
+        shortened component the failure depends on is absent on the runner.
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required: []
+  notes:
+    - >-
+      Measured on one Windows 11 x64 host on 2026-09-22. The A/B differed only
+      in TMP and TEMP, and the mechanism was reproduced directly rather than
+      inferred from the assertion message.
+    - >-
+      Not applicable on macOS or Linux, which have no 8.3 short names.
+    - >-
+      Measured on one account on one host. How commonly a Windows profile
+      directory ends up shortened was not surveyed, and 8.3 creation can be
+      disabled per volume, so the population this affects is not established
+      here -- only that a short-form TEMP is sufficient to fail the test and a
+      long-form one is sufficient to pass it.
+
+tracking:
+  implementation_status: none
+  issues: []
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes: []
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      kind: test
+      path: tools/test_foundation.py
+      mode: detect-and-suggest-remediation
+      notes:
+        - >-
+          Create the symlink target in the fixture, or compare
+          os.path.realpath of both sides, so the assertion does not depend on
+          how Windows spells a path component.
+
+promotion_rationale:
+  - >-
+    A one-line fixture change removes a failure that a Windows contributor with
+    a shortened TEMP meets on the first run of the repository's own checks, and
+    that the windows-latest job does not reproduce because its temporary
+    directory has no shortened component.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes:
+    - >-
+      The reporter's host reproduces this by default, so a fix can be
+      re-measured there on request.
