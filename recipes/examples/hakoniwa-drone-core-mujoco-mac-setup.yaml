@@ -20,25 +20,28 @@ feasibility:
     - The fetch, install, and link flow was exercised locally on macOS arm64.
 
 validation:
-  status: partially_verified
-  verified_at: 2026-07-29
+  status: verified
+  verified_at: 2026-09-25
   summary: >
-    The macOS release binaries and MuJoCo 3.9.0 runtime were present under
-    hakoniwa-drone-core/lib and hakoniwa-drone-core/vendor/mujoco. The Drone
-    Three.js runtime successfully loaded the drone service and visual-state
-    publisher. The current-checkout absolute link command and exact post-link
-    otool assertion are now specified, but have not yet been re-executed as
-    this standalone Recipe.
+    For the v4.1.1 release, mac.zip extracts to hakoniwa-drone-core/mac, not
+    ./lib. On macOS arm64 the release archive was extracted into a fresh v4.1.1
+    checkout, MuJoCo 3.13.0 was installed under vendor/mujoco, and the
+    binaries were relinked; otool confirmed @rpath/libmujoco.3.13.0.dylib and
+    the checkout's vendor/mujoco/lib in LC_RPATH. The linked drone service and
+    visual-state publisher then ran a PS5 flight with the Three.js viewer
+    through hakoniwa-fpv-drone. The 2026-07-29 run used the earlier ./lib
+    layout with MuJoCo 3.9.0.
   steps:
     - id: mac_release_binaries
       status: verified
       evidence:
         - repository: toppers/hakoniwa-drone-core
-          path: tools/fetch_libs.sh
-          revision: local-research-2026-07-20
+          path: https://github.com/toppers/hakoniwa-drone-core/releases/tag/v4.1.1
+          revision: 109d3a944908b185f79d554cfe08a8e2f0def205
       notes:
-        - The tool installs OS-specific release binaries under ./lib.
-        - Required macOS executables are mac-main_hako_drone_service and mac-drone_visual_state_publisher.
+        - The v4.1.1 mac.zip (SHA-256 9f604b4ce8f5d083ce0eacad72b04dd433a6fb4664e3883e808eec30ffc43530) extracts to ./mac.
+        - tools/fetch_libs.sh still copies release binaries into ./lib, which does not match the mac/ binary roles in the Catalog native_runtime profile.
+        - Required macOS executables are mac/mac-main_hako_drone_service and mac/mac-drone_visual_state_publisher.
     - id: repository_local_mujoco
       status: verified
       evidence:
@@ -46,7 +49,7 @@ validation:
           path: tools/install-mujoco-mac.bash
           revision: local-research-2026-07-20
       notes:
-        - MuJoCo 3.9.0 is installed under ./vendor/mujoco.
+        - The MuJoCo version comes from MUJOCO_VERSION.txt; v4.1.1 installs MuJoCo 3.13.0 under ./vendor/mujoco.
         - No /usr/local or other system installation prefix is required for MuJoCo.
     - id: mac_binary_mujoco_link
       status: verified
@@ -58,12 +61,15 @@ validation:
         - The current checkout's absolute vendor/mujoco/lib path is passed to avoid retaining a build-machine-only RPATH as the active path.
         - The operation is safe to repeat for the same resolved path.
     - id: macho_link_verification
-      status: not_tested
+      status: verified
       evidence:
         - repository: toppers/hakoniwa-drone-core
           path: tools/link-mujoco-mac.bash
-          revision: local-research-2026-07-20
+          revision: 109d3a944908b185f79d554cfe08a8e2f0def205
+        - source: local macOS arm64 otool inspection
+          date: 2026-09-25
       notes:
+        - The shipped binaries also carry build-machine LC_RPATH entries; the added checkout path is what resolves MuJoCo.
         - otool -L must show the expected @rpath/libmujoco dependency.
         - otool -l must contain the current checkout's resolved vendor/mujoco/lib directory.
 
@@ -85,7 +91,7 @@ target_environment:
   runtimes:
     - name: MuJoCo
       required: true
-      version: "3.9.0"
+      version: "3.13.0"
       path: vendor/mujoco
   hakoniwa:
     install_prefix: not-applicable
@@ -138,17 +144,17 @@ data_flow:
     Mach-O binaries are patched and inspected.
   steps:
     - from: hakoniwa-drone-core release archive
-      to: hakoniwa-drone-core/lib
+      to: hakoniwa-drone-core/mac
       data:
         - macOS arm64 executables
-      description: Install the distributed Drone executables under the repository-local lib directory.
+      description: Extract the distributed Drone executables into the repository-local mac directory.
     - from: MuJoCo distribution
       to: hakoniwa-drone-core/vendor/mujoco
       data:
-        - libmujoco.3.9.0.dylib
+        - libmujoco.3.13.0.dylib
       description: Install MuJoCo without using a system installation prefix.
     - from: hakoniwa-drone-core/vendor/mujoco/lib
-      to: hakoniwa-drone-core/lib
+      to: hakoniwa-drone-core/mac
       data:
         - Mach-O RPATH contract
       description: Link the distributed executables to the current checkout's MuJoCo library directory.
@@ -163,17 +169,17 @@ time_model:
 artifact_sets:
   physics_artifacts:
     description: macOS Drone service and repository-local MuJoCo runtime.
-    status: partially_verified
+    status: verified
     artifacts:
-      - lib/mac-main_hako_drone_service
-      - vendor/mujoco/lib/libmujoco.3.9.0.dylib
+      - mac/mac-main_hako_drone_service
+      - vendor/mujoco/lib/libmujoco.3.13.0.dylib
     notes:
       - The binary must resolve MuJoCo through the post-distribution link contract.
   visualization_artifacts:
     description: macOS DroneVisualStatePublisher distributed with Drone Core.
-    status: partially_verified
+    status: verified
     artifacts:
-      - lib/mac-drone_visual_state_publisher
+      - mac/mac-drone_visual_state_publisher
     notes:
       - This Recipe prepares the binary but does not configure a viewer.
   pdu_artifacts:
@@ -184,9 +190,8 @@ artifact_sets:
       - PDU definitions remain the responsibility of the consuming Demo Recipe.
   runtime_artifacts:
     description: Component-owned setup and verification tools.
-    status: partially_verified
+    status: verified
     artifacts:
-      - tools/fetch_libs.sh
       - tools/install-mujoco-mac.bash
       - tools/link-mujoco-mac.bash
       - otool verification output
@@ -199,23 +204,23 @@ artifacts:
     producer: hakoniwa-drone-core
     consumer:
       - hakoniwa-drone-core
-    path: lib/mac-main_hako_drone_service
+    path: mac/mac-main_hako_drone_service
   - name: mac-visual-state-publisher-binary
     kind: command
     producer: hakoniwa-drone-core
     consumer:
       - hakoniwa-drone-core
-    path: lib/mac-drone_visual_state_publisher
+    path: mac/mac-drone_visual_state_publisher
   - name: repository-local-mujoco
     kind: source
     producer: hakoniwa-drone-core
     consumer:
       - hakoniwa-drone-core
-    path: vendor/mujoco/lib/libmujoco.3.9.0.dylib
+    path: vendor/mujoco/lib/libmujoco.3.13.0.dylib
 
 missing_pieces:
-  - Re-run the absolute-path link command and exact otool assertions as this standalone Recipe.
-  - Automate this setup Recipe with a Business Pack entrypoint if multiple consuming Recipes need machine-readable prerequisite evaluation.
+  - Align tools/fetch_libs.sh in hakoniwa-drone-core with the mac/ release layout, or stop referencing it.
+  - Consolidate the automated equivalents (tools/recipe/drone_fleet_single_host.py prepare-native in this repository and tools/fpv-drone-core.py prepare in hakoniwa-fpv-drone) behind one shared Business Pack entrypoint.
 
 demo:
   objective: >
@@ -224,12 +229,14 @@ demo:
   steps:
     - order: 1
       component: hakoniwa-drone-core
-      action: Download the macOS release binaries when they are not already present.
-      command: bash tools/fetch_libs.sh
+      action: Download the v4.1.1 macOS release archive and extract it into ./mac.
+      command: curl -L -o /tmp/hakoniwa-drone-core-mac.zip https://github.com/toppers/hakoniwa-drone-core/releases/download/v4.1.1/mac.zip && unzip -o /tmp/hakoniwa-drone-core-mac.zip -d .
       evidence:
         - repository: toppers/hakoniwa-drone-core
-          path: tools/fetch_libs.sh
-          revision: local-research-2026-07-20
+          path: https://github.com/toppers/hakoniwa-drone-core/releases/tag/v4.1.1
+          revision: 109d3a944908b185f79d554cfe08a8e2f0def205
+      notes:
+        - Re-extracting replaces the binaries, so run the link step again afterwards.
     - order: 2
       component: hakoniwa-drone-core
       action: Install MuJoCo under the repository-local vendor directory.
@@ -241,7 +248,7 @@ demo:
     - order: 3
       component: hakoniwa-drone-core
       action: Patch the distributed binaries using the current checkout's absolute MuJoCo library path.
-      command: bash tools/link-mujoco-mac.bash ./lib --lib-dir "$PWD/vendor/mujoco/lib"
+      command: bash tools/link-mujoco-mac.bash ./mac --lib-dir "$PWD/vendor/mujoco/lib"
       evidence:
         - repository: toppers/hakoniwa-drone-core
           path: tools/link-mujoco-mac.bash
@@ -249,22 +256,22 @@ demo:
     - order: 4
       component: hakoniwa-drone-core
       action: Verify the Drone service dependency and active MuJoCo RPATH.
-      command: otool -L ./lib/mac-main_hako_drone_service && otool -l ./lib/mac-main_hako_drone_service
+      command: otool -L ./mac/mac-main_hako_drone_service && otool -l ./mac/mac-main_hako_drone_service
       notes:
-        - The dependency must use @rpath/libmujoco.3.9.0.dylib.
+        - The dependency must use @rpath/libmujoco.3.13.0.dylib.
         - LC_RPATH must contain the current checkout's resolved vendor/mujoco/lib path.
     - order: 5
       component: hakoniwa-drone-core
       action: Verify the visual-state publisher link contract.
-      command: otool -L ./lib/mac-drone_visual_state_publisher && otool -l ./lib/mac-drone_visual_state_publisher
+      command: otool -L ./mac/mac-drone_visual_state_publisher && otool -l ./mac/mac-drone_visual_state_publisher
       notes:
         - Core libraries may be supplied later by the consuming Foundation-aware Recipe.
         - No Drone process is started by this setup Recipe.
   observability:
     success_signals:
       - Both required macOS executables exist and are executable.
-      - vendor/mujoco/lib/libmujoco.3.9.0.dylib exists.
-      - Drone service uses @rpath/libmujoco.3.9.0.dylib.
+      - vendor/mujoco/lib/libmujoco.3.13.0.dylib exists.
+      - Drone service uses @rpath/libmujoco.3.13.0.dylib.
       - Drone service LC_RPATH contains the current checkout's vendor/mujoco/lib directory.
     failure_signals:
       - A required release executable is absent.
@@ -287,7 +294,7 @@ demo:
 
 expected_result: >
   The macOS arm64 Drone service and visual-state publisher are present under
-  hakoniwa-drone-core/lib, MuJoCo 3.9.0 is present under vendor/mujoco, and the
+  hakoniwa-drone-core/mac, MuJoCo 3.13.0 is present under vendor/mujoco, and the
   Drone service's Mach-O link contract resolves that repository-local runtime.
 
 source_catalogs:
@@ -296,9 +303,9 @@ source_catalogs:
 
 source_artifacts:
   - repository: toppers/hakoniwa-drone-core
-    path: tools/fetch_libs.sh
-    revision: local-research-2026-07-20
-    description: Downloads OS-specific Hakoniwa Drone release binaries into ./lib.
+    path: https://github.com/toppers/hakoniwa-drone-core/releases/tag/v4.1.1
+    revision: 109d3a944908b185f79d554cfe08a8e2f0def205
+    description: Public v4.1.1 release; mac.zip extracts the macOS executables into ./mac.
   - repository: toppers/hakoniwa-drone-core
     path: tools/install-mujoco-mac.bash
     revision: local-research-2026-07-20
