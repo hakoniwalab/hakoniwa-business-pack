@@ -1280,7 +1280,10 @@ def _require_staging_path_budget(source_site_packages: Path, staged_site_package
 
 def _report_extraction_budget(package_root: Path) -> int:
     """Print how long the user's extraction folder path may be; return that budget."""
-    length, relative = _longest_relative_path(package_root.parent)
+    # Walk only this package; the staging parent may hold older packages.
+    inner_length, inner_relative = _longest_relative_path(package_root)
+    relative = f"{package_root.name}\\{inner_relative}"
+    length = len(relative)
     # The user's folder is followed by a separator before the package folder.
     budget = WINDOWS_MAX_PATH_CHARS - length - 1
     print(f"[OK] Deepest packaged path: {length} characters ({relative})")

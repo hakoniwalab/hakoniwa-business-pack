@@ -352,6 +352,10 @@ class PortableWorkspacePackageTest(unittest.TestCase):
             package_root = Path(temporary) / "pkg"
             (package_root / "a").mkdir(parents=True)
             (package_root / "a" / "b.txt").write_text("x", encoding="utf-8")
+            # An older package left beside it must not affect the budget.
+            older = Path(temporary) / "older-package-with-a-long-name" / "deep" / ("x" * 80)
+            older.parent.mkdir(parents=True)
+            older.write_text("x", encoding="utf-8")
             budget = portable._report_extraction_budget(package_root)
             self.assertEqual(budget, portable.WINDOWS_MAX_PATH_CHARS - len("pkg\\a\\b.txt") - 1)
 
