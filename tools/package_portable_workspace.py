@@ -1231,6 +1231,51 @@ def _write_manifest(
     )
 
 
+# Windows MAX_PATH is 260 including the terminating NUL.
+WINDOWS_MAX_PATH_CHARS = 259
+# Room a user needs for an extraction folder such as C:\Users\<name>\Downloads\<zip name>\.
+MIN_EXTRACTION_BUDGET_CHARS = 60
+
+
+def _longest_relative_path(root: Path) -> tuple[int, str]:
+    """Length (Windows separators) and value of the deepest file path under root."""
+    longest = (0, "")
+    for directory, _dirs, files in os.walk(root):
+        for name in files:
+            relative = str(Path(directory, name).relative_to(root)).replace("/", "\\")
+            if len(relative) > longest[0]:
+                longest = (len(relative), relative)
+    return longest
+
+
+def _require_staging_path_budget(source_site_packages: Path, staged_site_packages: Path) -> None:
+    """Fail before copying when the deepest Python file would exceed MAX_PATH."""
+    length, relative = _longest_relative_path(source_site_packages)
+    total = len(str(staged_site_packages)) + 1 + length
+    if total > WINDOWS_MAX_PATH_CHARS:
+        raise PortablePackageError(
+            f"staging path would be {total} characters (Windows limit {WINDOWS_MAX_PATH_CHARS}): "
+            f"{staged_site_packages}\\{relative}. Use a shorter package_id, drop --keep-staging "
+            "(a short temporary directory is used), or move the Business Pack checkout to a shorter path."
+        )
+
+
+def _report_extraction_budget(package_root: Path) -> int:
+    """Print how long the user's extraction folder path may be; return that budget."""
+    length, relative = _longest_relative_path(package_root.parent)
+    # The user's folder is followed by a separator before the package folder.
+    budget = WINDOWS_MAX_PATH_CHARS - length - 1
+    print(f"[OK] Deepest packaged path: {length} characters ({relative})")
+    if budget < MIN_EXTRACTION_BUDGET_CHARS:
+        print(
+            f"[WARN] Users must extract into a folder path of at most {budget} characters; "
+            "shorten the package_id or the deepest bundled paths."
+        )
+    else:
+        print(f"[OK] Extraction folder path may be up to {budget} characters")
+    return budget
+
+
 def _zip_tree(source: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.exists():
@@ -1303,6 +1348,12 @@ def build_package(
         package_root = Path(temporary.name) / profile.package_id
 
     try:
+        _require_staging_path_budget(
+            _site_packages(foundation_python_root),
+            _site_packages(
+                package_root / "hakoniwa-business-pack" / "work" / "foundation" / "install" / "python"
+            ),
+        )
         package_root.mkdir(parents=True, exist_ok=True)
         business_pack_destination = package_root / "hakoniwa-business-pack"
         _copy_tree(
@@ -1360,6 +1411,7 @@ def build_package(
         )
         _validate_profile_package(package_root, profile)
         _remove_staging_specific_workspace_files(package_root, profile)
+        _report_extraction_budget(package_root)
         _zip_tree(package_root, output)
         print(f"[OK] Windows portable package: {output}")
         print(f"[OK] SHA-256: {_sha256(output)}")

@@ -322,6 +322,27 @@ class PortableWorkspacePackageTest(unittest.TestCase):
             )
             self.assertEqual(payload["core_mmap_path"], portable.PORTABLE_MMAP_TOKEN)
 
+    def test_staging_path_budget_rejects_paths_over_windows_max_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            site = Path(temporary) / "site-packages"
+            deep = site / "pkg" / ("m" * 40 + ".py")
+            deep.parent.mkdir(parents=True)
+            deep.write_text("x", encoding="utf-8")
+            self.assertEqual(
+                portable._longest_relative_path(site), (len("pkg\\" + "m" * 40 + ".py"), "pkg\\" + "m" * 40 + ".py")
+            )
+            portable._require_staging_path_budget(site, Path("C:/short"))
+            with self.assertRaisesRegex(portable.PortablePackageError, "Windows limit"):
+                portable._require_staging_path_budget(site, Path("C:/" + "s" * 220))
+
+    def test_extraction_budget_accounts_for_package_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            package_root = Path(temporary) / "pkg"
+            (package_root / "a").mkdir(parents=True)
+            (package_root / "a" / "b.txt").write_text("x", encoding="utf-8")
+            budget = portable._report_extraction_budget(package_root)
+            self.assertEqual(budget, portable.WINDOWS_MAX_PATH_CHARS - len("pkg\\a\\b.txt") - 1)
+
     def test_profile_controls_default_output_name(self) -> None:
         args = portable.parser().parse_args(["--profile", "urban-car-rc"])
         self.assertIsNone(args.output)
