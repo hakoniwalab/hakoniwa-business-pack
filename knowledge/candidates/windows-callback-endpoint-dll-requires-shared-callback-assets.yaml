@@ -1,6 +1,6 @@
 id: windows-callback-endpoint-dll-requires-shared-callback-assets
 title: On Windows, an asset EXE that loads the Endpoint core_callback DLL needs Core PRO callback_assets_shared
-status: validating
+status: candidate
 
 knowledge_type:
   - runtime_rule
@@ -91,6 +91,13 @@ sources:
         workspace, Windows 11): hakoniwa-pdu-web-bridge.exe crashed in
         hakoniwa_pdu_endpoint_core_callback.dll with 0xc0000005 at offset
         0x132097, recorded in the Windows Application event log.
+    - description: >-
+        2026-09-26, FPV drone workspace on Windows 11 after hakoniwa-fpv-drone
+        f0dae56: forced Foundation rebuild of hakoniwa-core-pro,
+        hakoniwa-pdu-endpoint, and hakoniwa-pdu-bridge-core with
+        callback_assets_shared: true, then configure --threejs, start, and
+        open-viewer. The simulation reached Running, WebBridge no longer crashed,
+        and the browser viewer showed the vehicle (maintainer-confirmed).
   expert_input:
     - source: Hakoniwa maintainer
       statement: >-
@@ -110,22 +117,18 @@ contradictions:
       the WebBridge crashes right after "building bridge core".
 
 validation:
-  status: partially_verified
+  status: verified
   required:
-    - >-
-      Re-run the FPV Three.js Recipe on Windows after the forced Foundation rebuild,
-      confirm `HAKO_CALLBACK_ASSETS_SHARED:BOOL=ON` in the Core PRO CMakeCache, and
-      confirm the WebBridge reaches `initialized asset=WebBridge` and the browser
-      shows the vehicle.
     - >-
       Decide which Business Pack example Recipes with WebBridge/core_callback are
       meant to run on Windows and add the capability to them.
   notes:
-    - The Urban Windows port was fixed with this option (maintainer statement); the FPV re-run is pending.
+    - The Urban Windows port was fixed with this option (maintainer statement).
+    - 2026-09-26 the FPV Three.js Recipe was re-verified on Windows with the option enabled.
     - The option is `experimental` in Core PRO's own manifest wording.
 
 tracking:
-  implementation_status: in_progress
+  implementation_status: resolved
   issues: []
 
 promotion_targets:
@@ -159,16 +162,17 @@ promotion_rationale:
     the Recipe's declared capabilities and the host OS.
 
 resolution:
-  status: pending
+  status: fixed
   fixed_by:
     - repository: hakoniwalab/hakoniwa-fpv-drone
       issue: null
       pull_request: null
       revision: f0dae56
-  verified: false
+  verified: true
   promoted_to:
     - docs/hakoniwa-runtime-primer.md#windows-runtime-notes
     - docs/hakoniwa-runtime-primer-ja.md#windows-runtime-notes
   executable_guardrails: []
   notes:
-    - The FPV Recipe declares the capability as of f0dae56.
+    - The FPV Recipe declares the capability as of f0dae56 and was re-verified on Windows on 2026-09-26.
+    - Upstream issues (doctor guardrail, other Windows WebBridge Recipes) are left to the maintainer to file.
