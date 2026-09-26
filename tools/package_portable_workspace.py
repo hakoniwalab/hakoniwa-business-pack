@@ -668,6 +668,8 @@ set "PYTHONHOME="
 rem Deep __pycache__ paths would count against MAX_PATH in the user's folder.
 set "PYTHONDONTWRITEBYTECODE=1"
 set "HAKONIWA_PORTABLE_WORKSPACE=1"
+rem The Workspace bootstrap registers Foundation DLL directories only when active.
+set "HAKONIWA_WORKSPACE_ACTIVE=1"
 set "HAKONIWA_WORKSPACE_ROOT=%BUSINESS_PACK%"
 set "HAKONIWA_WORK_DIR=%BUSINESS_PACK%\work"
 set "HAKONIWA_HOME=%BUSINESS_PACK%\work\foundation\install"
@@ -950,6 +952,7 @@ def _staged_environment(business_pack: Path) -> dict[str, str]:
         {
             "PYTHONNOUSERSITE": "1",
             "HAKONIWA_PORTABLE_WORKSPACE": "1",
+            "HAKONIWA_WORKSPACE_ACTIVE": "1",
             "HAKONIWA_WORKSPACE_ROOT": str(business_pack),
             "HAKONIWA_WORK_DIR": str(business_pack / "work"),
             "HAKONIWA_HOME": str(business_pack / "work/foundation/install"),

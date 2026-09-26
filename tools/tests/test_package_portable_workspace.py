@@ -289,6 +289,7 @@ class PortableWorkspacePackageTest(unittest.TestCase):
             )
             self.assertIn(r'set "APP_ROOT=%PACKAGE_ROOT%hakoniwa-example-app"', script)
             self.assertIn('set "HAKONIWA_PORTABLE_WORKSPACE=1"', script)
+            self.assertIn('set "HAKONIWA_WORKSPACE_ACTIVE=1"', script)
             self.assertIn(
                 r'set "HAKO_CONFIG_PATH=%BUSINESS_PACK%\work\foundation\config\cpp_core_config.json"',
                 script,
