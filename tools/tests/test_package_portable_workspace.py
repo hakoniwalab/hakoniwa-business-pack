@@ -335,6 +335,17 @@ class PortableWorkspacePackageTest(unittest.TestCase):
             with self.assertRaisesRegex(portable.PortablePackageError, "Windows limit"):
                 portable._require_staging_path_budget(site, Path("C:/" + "s" * 220))
 
+    def test_staging_path_budget_skips_trees_the_copy_excludes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            site = Path(temporary) / "site-packages"
+            (site / "pkg").mkdir(parents=True)
+            (site / "pkg" / "m.py").write_text("x", encoding="utf-8")
+            for excluded in ("pkg/__pycache__", "pip", "demo-1.0.dist-info/sboms"):
+                deep = site / excluded / ("n" * 200 + ".pyc")
+                deep.parent.mkdir(parents=True)
+                deep.write_text("x", encoding="utf-8")
+            portable._require_staging_path_budget(site, Path("C:/" + "s" * 200))
+
     def test_extraction_budget_accounts_for_package_folder(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             package_root = Path(temporary) / "pkg"

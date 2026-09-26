@@ -665,6 +665,8 @@ set "PATH=%BUSINESS_PACK%\work\foundation\install\python;%BUSINESS_PACK%\work\fo
 set "PYTHONNOUSERSITE=1"
 set "PYTHONPATH="
 set "PYTHONHOME="
+rem Deep __pycache__ paths would count against MAX_PATH in the user's folder.
+set "PYTHONDONTWRITEBYTECODE=1"
 set "HAKONIWA_PORTABLE_WORKSPACE=1"
 set "HAKONIWA_WORKSPACE_ROOT=%BUSINESS_PACK%"
 set "HAKONIWA_WORK_DIR=%BUSINESS_PACK%\work"
@@ -1237,10 +1239,23 @@ WINDOWS_MAX_PATH_CHARS = 259
 MIN_EXTRACTION_BUDGET_CHARS = 60
 
 
-def _longest_relative_path(root: Path) -> tuple[int, str]:
-    """Length (Windows separators) and value of the deepest file path under root."""
+def _longest_relative_path(
+    root: Path, ignored: set[str] | frozenset[str] = frozenset()
+) -> tuple[int, str]:
+    """Length (Windows separators) and value of the deepest file path under root.
+
+    ``ignored`` mirrors the copy filters so excluded trees such as
+    ``__pycache__`` do not count against the budget.
+    """
     longest = (0, "")
-    for directory, _dirs, files in os.walk(root):
+    for directory, dirs, files in os.walk(root):
+        dirs[:] = [
+            name
+            for name in dirs
+            if name not in ignored
+            and not (name == "sboms" and Path(directory).name.endswith(".dist-info"))
+            and not name.startswith(("pip-", "setuptools-"))
+        ]
         for name in files:
             relative = str(Path(directory, name).relative_to(root)).replace("/", "\\")
             if len(relative) > longest[0]:
@@ -1250,7 +1265,7 @@ def _longest_relative_path(root: Path) -> tuple[int, str]:
 
 def _require_staging_path_budget(source_site_packages: Path, staged_site_packages: Path) -> None:
     """Fail before copying when the deepest Python file would exceed MAX_PATH."""
-    length, relative = _longest_relative_path(source_site_packages)
+    length, relative = _longest_relative_path(source_site_packages, PORTABLE_PYTHON_IGNORES)
     total = len(str(staged_site_packages)) + 1 + length
     if total > WINDOWS_MAX_PATH_CHARS:
         raise PortablePackageError(
