@@ -4,16 +4,64 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import ctypes
 import hashlib
 import json
 import os
 import sys
+import threading
+import time
 from pathlib import Path
+
+
+# A large City World compiles for minutes in one blocking MuJoCo call, so a
+# background thread reports that it is still running. ctypes releases the
+# GIL during the call, which lets the thread print.
+HEARTBEAT_SEC = 10.0
+PROGRESS_PHASE = "mujoco_compile"
 
 
 class MujocoCompileError(RuntimeError):
     pass
+
+
+def _progress(message: str, **event: object) -> None:
+    """Print a plain line and a [HAKO_PROGRESS] event (the City World job format)."""
+    print(message, flush=True)
+    print(
+        "[HAKO_PROGRESS] " + json.dumps({"phase": PROGRESS_PHASE, **event}, separators=(",", ":")),
+        flush=True,
+    )
+
+
+@contextmanager
+def _compile_progress(source: Path):
+    started = time.monotonic()
+    stop = threading.Event()
+    size_mb = source.stat().st_size / (1024 * 1024)
+    _progress(f"MuJoCo compile: {source.name} ({size_mb:.1f} MB) started", model=source.name, elapsed_sec=0)
+
+    def heartbeat() -> None:
+        while not stop.wait(HEARTBEAT_SEC):
+            elapsed = int(time.monotonic() - started)
+            _progress(
+                f"MuJoCo compile: {source.name} still compiling, {elapsed}s elapsed",
+                model=source.name, elapsed_sec=elapsed,
+            )
+
+    thread = threading.Thread(target=heartbeat, name="mujoco-compile-progress", daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        thread.join()
+    elapsed = time.monotonic() - started
+    _progress(
+        f"MuJoCo compile: {source.name} done in {elapsed:.1f}s",
+        model=source.name, elapsed_sec=int(elapsed), done=True,
+    )
 
 
 def _sha256(path: Path) -> str:
@@ -87,7 +135,8 @@ def compile_mujoco_xml(xml_path: Path, mjb_path: Path, library_path: Path) -> di
     library.mj_versionString.restype = ctypes.c_char_p
 
     error = ctypes.create_string_buffer(4096)
-    model = library.mj_loadXML(os.fsencode(source), None, error, len(error))
+    with _compile_progress(source):
+        model = library.mj_loadXML(os.fsencode(source), None, error, len(error))
     if not model:
         detail = error.value.decode("utf-8", errors="replace")
         raise MujocoCompileError(f"MuJoCo XML compile failed for {source}: {detail}")
