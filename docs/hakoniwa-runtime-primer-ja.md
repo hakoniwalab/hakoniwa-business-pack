@@ -547,6 +547,39 @@ Launcherが存在しない、あるいはRecipeが意図的にmanual runbookを�
 
 外部連携は有効な構成ですが、実際のproducer、runtime、PDU設定、観測可能なvalidationが必要であることに変わりはありません。
 
+<a id="windows-runtime-notes"></a>
+
+## Windowsランタイムの注意点
+
+ネイティブWindowsには、Linux/macOSで動くRecipeが動かなくなる違いが2つあります。どちらもビルドは通り、実行時に初めて失敗します。
+
+### Core対応のアセットEXEとEndpointのcallback DLL
+
+Windowsでは、Core PROはcallbackの `assets` ランタイムを既定でstaticライブラリとしてビルドします。このため、`hakoniwa-pdu-web-bridge.exe` のようなアセットEXEと、それが読み込む `hakoniwa_pdu_endpoint_core_callback.dll` が、アセットランタイムの状態をそれぞれ別に持ちます。EXEは自分の側でアセットを登録しますが、DLLの中から呼ぶ `hako_asset_*`（たとえば `hakoniwa_callback` time source）は、DLL側の未初期化の状態を参照し、0xc0000005で落ちます。
+
+ルール：Windowsで、Core対応のアセットEXEとEndpointの `core_callback` を組み合わせるRecipeは、次を宣言します。
+
+```yaml
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      callback_assets_shared: true
+```
+
+FoundationはこれをCore PROの `features.callback_assets_shared` に渡します。Windowsでは `assets` がDLLとしてビルドされ（`HAKO_CALLBACK_ASSETS_SHARED=ON`）、Linux/macOSでは無視されます。既存のWindows Foundationに後から追加した場合は、DLLとEXEを共有の `assets` にリンクし直すため、`hakoniwa-core-pro`、`hakoniwa-pdu-endpoint`、`hakoniwa-pdu-bridge-core` を再ビルドします。
+
+症状：LauncherはRUNNINGと答えるのに、他のアセットは `WAIT RUNNING` のままになります。WebBridgeのログは `building bridge core` で止まり、Windowsのアプリケーションイベントログに、`hakoniwa-pdu-web-bridge.exe` が `hakoniwa_pdu_endpoint_core_callback.dll` で落ちた記録が残ります。bridge側にローカルなtime sourceを実装して回避しないでください。
+
+これは、Endpointのasset contextのルール（アセットが所有するSHM callback Endpointは `Endpoint::open(config_path, asset_name)` で開く）とは別に、追加で必要です。
+
+### 前回の実行で残ったmmapファイル
+
+Windowsのmmapバックエンドは、既存の `mmap-*.bin` をサイズ変更せず、古いサイズのまま再利用します（POSIXは、サイズが足りないファイルを作り直します）。PDU構成が小さかった前回の実行のファイルが残っていると、次の実行で `hako-cmd` が落ちたり（VCRUNTIME140.dllで0xc0000005）、アセットが `WAIT RUNNING` のまま止まったりします。
+
+ルール：シミュレーションが動いていない状態で、start前にCore configの `core_mmap_path`（Business Packでは `work/foundation/runtime/mmap`）にある `mmap-*.bin` を削除します。ロックファイルは残します。Windowsで削除できないファイルは、まだ動いているシミュレーション（別のWorkspaceのものも含む）がmmapしています。強制的に消さず、そちらを停止してください。
+
+出典：`knowledge/candidates/windows-callback-endpoint-dll-requires-shared-callback-assets.yaml`、`knowledge/candidates/windows-mmap-runtime-state-persists-across-runs.yaml`
+
 ## Recipe起動チェックリスト
 
 実行可能な手順を書く前に、次の問いに答えてください。

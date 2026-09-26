@@ -25,10 +25,45 @@ observation:
     - Stale mmap runtime files left over from a previous run can make a producer-absent negative test reach an unexpected "already initialized" state instead of the expected failure/absence signal.
     - Verify scripts were changed to call a common cleanup step (removing generated mmap runtime state, not source files) before both positive and negative runs.
     - This is also why running two verify passes concurrently on the same machine is unsafe -- both would eventually contend for and observe overlapping mmap runtime state.
+    - >-
+      Stale files are also a crash source, not only a test-validity problem. The
+      Windows `hako_mmap_create()` opens an existing `mmap-*.bin` and maps it at its
+      old size; only a missing file is created with the requested size. The POSIX
+      implementation instead recreates and truncates the file when it is smaller
+      than requested. On Windows, a segment left by a run with a smaller PDU layout
+      (for example a MuJoCo-only run before a Three.js run that adds WebBridge
+      channels) is therefore undersized for the next run.
+    - >-
+      Observed effects of an undersized stale segment: `hako-cmd` crashes with
+      0xc0000005 in VCRUNTIME140.dll, or the Launcher reports RUNNING while the
+      assets stay at `WAIT RUNNING`. Deleting `mmap-*.bin` under the Core config's
+      `core_mmap_path` (Business Pack: `work/foundation/runtime/mmap`) with no
+      simulation running restores normal start.
+    - >-
+      Only the `mmap-*.bin` segments need removal; lock files (`flock.bin`,
+      `*_init.lock`) can stay. On Windows a segment still mapped by a running
+      simulation cannot be deleted (PermissionError), which is a usable signal that
+      another simulation, possibly from another Workspace sharing the same
+      `core_mmap_path`, is still alive.
 
 sources:
-  repositories: []
+  repositories:
+    - repository: hakoniwalab/hakoniwa-core-cpp
+      path: src/hako/utils/hako_share/impl/win/hako_mmap.cpp
+      revision: b8f6b38
+    - repository: hakoniwalab/hakoniwa-core-cpp
+      path: src/hako/utils/hako_share/impl/posix/hako_mmap.cpp
+      revision: b8f6b38
+    - repository: hakoniwalab/hakoniwa-fpv-drone
+      path: tools/fpv.py
+      revision: f0dae56
   runtime_evidence:
+    - description: >-
+        2026-09-26, FPV drone Workspace on native Windows 11: after switching the
+        FPV runtime to the Three.js configuration, `hako-cmd` crashed twice with
+        0xc0000005 in VCRUNTIME140.dll (Windows Application event log). Removing
+        work/foundation/runtime/mmap/mmap-*.bin with the simulation stopped removed
+        that crash.
     - description: >-
         External contributor's Windows 11 x86_64 native verification environment:
         a negative test (no producer running) intermittently reached an
@@ -61,18 +96,42 @@ promotion_targets:
   runtime_primer: true
   base_ecosystem_guide: false
   component_asset_guide: false
-  recipes: []
+  recipes:
+    - fpv-drone-design-angle-flight
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-fpv-drone
+      kind: validator
+      path: tools/fpv.py
+      mode: detect-and-suggest-remediation
+      notes:
+        - >-
+          `fpv.py start` refuses to start while its own runtime is RUNNING, then
+          removes `mmap-*.bin` from the Core config's `core_mmap_path` and reports a
+          segment that cannot be removed as held by another simulation.
 
 promotion_rationale:
   - Any negative-path validation built on Hakoniwa's Windows mmap backend needs this cleanup discipline, since a false-negative (or false-positive) outcome from stale runtime state undermines the meaning of the negative test itself.
+  - >-
+    Normal Windows runs need it too: an undersized stale segment crashes hako-cmd or
+    blocks start, so a Recipe start step on Windows should clear stale segments
+    before launching. A Launcher- or Core-level fix (resize on create) would make
+    per-Recipe cleanup unnecessary.
 
 resolution:
   status: documented
   fixed_by: []
   verified: false
-  promoted_to: []
-  executable_guardrails: []
+  promoted_to:
+    - docs/hakoniwa-runtime-primer.md#windows-runtime-notes
+    - docs/hakoniwa-runtime-primer-ja.md#windows-runtime-notes
+  executable_guardrails:
+    - hakoniwalab/hakoniwa-fpv-drone tools/fpv.py (f0dae56)
   notes:
+    - >-
+      2026-09-26: the Windows `hako_mmap_create()` no-resize behavior was confirmed
+      in source (hakoniwa-core-cpp b8f6b38). No upstream issue has been filed yet;
+      the candidate fix is to recreate or extend an existing file smaller than the
+      requested size, as the POSIX implementation does.
     - Candidate only. No upstream implementation issue has been filed; the
       stale-mmap-file behavior was observed, and a cleanup-before-run
       convention was adopted, only inside a private workspace's own tooling.

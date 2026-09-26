@@ -671,6 +671,63 @@ For external participants, state:
 External integration is valid, but it does not remove the need for a real
 producer, runtime, PDU config, and observable validation.
 
+## Windows Runtime Notes
+
+Native Windows differs from Linux/macOS in two ways that break a Recipe which
+works elsewhere. Both fail at runtime, not at build time.
+
+### Core-aware asset EXE plus Endpoint callback DLL
+
+On Windows, Core PRO builds the callback `assets` runtime as a static library
+by default. An asset executable such as `hakoniwa-pdu-web-bridge.exe` and the
+`hakoniwa_pdu_endpoint_core_callback.dll` it loads then each carry their own
+asset runtime state. The EXE registers the asset on its copy; `hako_asset_*`
+calls made inside the DLL (for example the `hakoniwa_callback` time source) use
+the DLL's uninitialized copy and crash with 0xc0000005.
+
+Rule: a Recipe that runs a Core-aware asset EXE with Endpoint `core_callback`
+on Windows declares
+
+```yaml
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      callback_assets_shared: true
+```
+
+The Foundation passes it to Core PRO `features.callback_assets_shared`, which
+builds `assets` as a DLL on Windows (`HAKO_CALLBACK_ASSETS_SHARED=ON`) and is
+ignored on Linux/macOS. After adding it to an existing Windows Foundation,
+rebuild `hakoniwa-core-pro`, `hakoniwa-pdu-endpoint`, and
+`hakoniwa-pdu-bridge-core` so the DLL and the EXE relink against the shared
+`assets`.
+
+Symptom: the Launcher reports RUNNING, the other assets stay at
+`WAIT RUNNING`, the WebBridge log stops at `building bridge core`, and the
+Windows Application event log shows `hakoniwa-pdu-web-bridge.exe` faulting in
+`hakoniwa_pdu_endpoint_core_callback.dll`. Do not work around it with a local
+time source in the bridge.
+
+This is separate from, and in addition to, the Endpoint asset-context rule
+(`Endpoint::open(config_path, asset_name)` for an asset-owned SHM callback
+Endpoint).
+
+### Stale mmap segments
+
+The Windows mmap backend reuses an existing `mmap-*.bin` at its old size
+instead of resizing it; POSIX recreates an undersized file. A segment left by a
+run with a smaller PDU layout makes the next run crash `hako-cmd`
+(0xc0000005 in VCRUNTIME140.dll) or leaves assets at `WAIT RUNNING`.
+
+Rule: with no simulation running, remove `mmap-*.bin` under the Core config's
+`core_mmap_path` (Business Pack: `work/foundation/runtime/mmap`) before start.
+Keep lock files. A segment that cannot be deleted on Windows is still mapped by
+a running simulation, possibly from another Workspace; stop it instead of
+forcing removal.
+
+Sources: `knowledge/candidates/windows-callback-endpoint-dll-requires-shared-callback-assets.yaml`,
+`knowledge/candidates/windows-mmap-runtime-state-persists-across-runs.yaml`.
+
 ## Recipe Startup Checklist
 
 Before writing executable steps, answer these questions:

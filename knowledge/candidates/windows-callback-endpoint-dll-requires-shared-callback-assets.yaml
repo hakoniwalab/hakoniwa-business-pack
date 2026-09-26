@@ -1,0 +1,174 @@
+id: windows-callback-endpoint-dll-requires-shared-callback-assets
+title: On Windows, an asset EXE that loads the Endpoint core_callback DLL needs Core PRO callback_assets_shared
+status: validating
+
+knowledge_type:
+  - runtime_rule
+  - known_pitfall
+  - usage_pattern
+
+summary: >
+  On Windows, hakoniwa-core-pro builds the callback `assets` runtime as a static
+  library by default. A Hakoniwa asset executable (for example
+  hakoniwa-pdu-web-bridge.exe) and the hakoniwa-pdu-endpoint core_callback DLL it
+  loads then each embed their own copy of the asset runtime state. The EXE calls
+  `hako_asset_register()` on its copy; any `hako_asset_*` call made from inside the
+  DLL (notably the `hakoniwa_callback` time source) hits the DLL's uninitialized
+  copy and crashes with 0xc0000005. The existing fix is a build choice, not a code
+  change: the Recipe declares `callback_assets_shared: true` on
+  `foundation_requirements.hakoniwa-core-pro.capabilities`, the Foundation passes
+  it to Core PRO's `features.callback_assets_shared`, and Core PRO builds `assets`
+  as a DLL on Windows (HAKO_CALLBACK_ASSETS_SHARED=ON). The option is ignored on
+  Linux/macOS, where `assets` is already a shared library.
+
+observation:
+  context: >
+    Running the hakoniwa-fpv-drone Three.js Recipe (Drone Core + WebBridge) on
+    native Windows 11 through the Business Pack Foundation. The same failure had
+    already occurred in the Urban Windows port the week before and was solved there
+    with the same Core PRO option.
+  details:
+    - >-
+      Symptom seen by the operator: `fpv.py start` reports the Launcher as RUNNING,
+      but the simulation never reaches Running. Drone service, pacer, and visual
+      state publisher stay at `WAIT RUNNING`; the WebBridge log stops at
+      `[web_bridge][info] building bridge core`; the native `.exe` assets are gone
+      from the process list.
+    - >-
+      Windows Application event log (Id 1000): faulting application
+      hakoniwa-pdu-web-bridge.exe, faulting module
+      hakoniwa_pdu_endpoint_core_callback.dll, exception 0xc0000005, the same fault
+      offset on every run.
+    - >-
+      Call chain: web_bridge_daemon.cpp `create_time_source("hakoniwa_callback")` ->
+      `BridgeCore::start()` -> `time_source_->get_microseconds()` ->
+      `HakoniwaTimeSourceCallbackImpl::get_microseconds()` (compiled into the
+      Endpoint DLL) -> `hako_asset_simulation_time()` on the DLL's never-registered
+      asset instance.
+    - >-
+      The Endpoint and WebBridge were correctly built with Hakoniwa Core support
+      (`hakoniwa_core: true`, `core_callback: true`, `hakoniwa_app: true`); the
+      core_callback DLL only exists in that configuration. This is not the
+      "Endpoint built without SHM support" failure mode (hakoniwalab/hakoniwa-pdu-endpoint#76).
+    - >-
+      This is the build-time counterpart of
+      pdu-endpoint-windows-shm-callback-requires-asset-context: passing the asset
+      name to `Endpoint::open()` fixes the Endpoint's SHM attach, but other
+      `hako_asset_*` calls made from the DLL still need one shared asset runtime.
+    - >-
+      The Foundation only turns the option on when a Recipe asks for it; its
+      default is `false`. None of the Business Pack example Recipes that use
+      WebBridge or `core_callback` declare it yet.
+    - >-
+      Changing the capability makes an existing Windows Foundation INCOMPATIBLE.
+      Core PRO, hakoniwa-pdu-endpoint, and hakoniwa-pdu-bridge-core must all be
+      rebuilt (`foundation.py build --force` for each) so the Endpoint DLL and the
+      WebBridge relink against the new assets DLL.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-core-pro
+      path: sources/assets/callback/CMakeLists.txt
+      revision: 984b531
+    - repository: hakoniwalab/hakoniwa-core-pro
+      path: tools/hako.py
+      revision: e56655e
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/foundation_lib/build.py
+      revision: d86603c
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      path: src/hakoniwa_time_source_callback.cpp
+      revision: 12230c9
+    - repository: hakoniwalab/hakoniwa-pdu-bridge-core
+      path: src/web_bridge_daemon.cpp
+      revision: e071902
+    - repository: hakoniwalab/hakoniwa-fpv-drone
+      path: recipes/business-pack/fpv-drone-design-angle-flight.yaml
+      revision: f0dae56
+  runtime_evidence:
+    - description: >-
+        2026-09-23 (Urban workspace, Windows 11) and 2026-09-26 (FPV drone
+        workspace, Windows 11): hakoniwa-pdu-web-bridge.exe crashed in
+        hakoniwa_pdu_endpoint_core_callback.dll with 0xc0000005 at offset
+        0x132097, recorded in the Windows Application event log.
+  expert_input:
+    - source: Hakoniwa maintainer
+      statement: >-
+        The Urban Windows port hit the same crash and it was resolved without code
+        changes by enabling Core PRO `callback_assets_shared`. Do not add a local
+        time source to hakoniwa-pdu-bridge-core as a workaround.
+
+confidence: high
+
+contradictions:
+  - target: Windows WebBridge Recipes built through the Foundation defaults
+    existing_claim: >-
+      A Recipe that declares Endpoint `hakoniwa_core`/`core_callback` and WebBridge
+      `hakoniwa_app` gets a working Core-aware WebBridge on every OS.
+    new_evidence: >-
+      On Windows it also needs Core PRO `callback_assets_shared: true`; without it
+      the WebBridge crashes right after "building bridge core".
+
+validation:
+  status: partially_verified
+  required:
+    - >-
+      Re-run the FPV Three.js Recipe on Windows after the forced Foundation rebuild,
+      confirm `HAKO_CALLBACK_ASSETS_SHARED:BOOL=ON` in the Core PRO CMakeCache, and
+      confirm the WebBridge reaches `initialized asset=WebBridge` and the browser
+      shows the vehicle.
+    - >-
+      Decide which Business Pack example Recipes with WebBridge/core_callback are
+      meant to run on Windows and add the capability to them.
+  notes:
+    - The Urban Windows port was fixed with this option (maintainer statement); the FPV re-run is pending.
+    - The option is `experimental` in Core PRO's own manifest wording.
+
+tracking:
+  implementation_status: in_progress
+  issues: []
+
+promotion_targets:
+  catalog:
+    - hakoniwa-core-pro
+  runtime_primer: true
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - fpv-drone-design-angle-flight
+    - drone-single-mujoco-threejs-gamepad
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      kind: doctor
+      path: tools/foundation_lib/inspection.py
+      mode: detect-and-suggest-remediation
+      notes:
+        - >-
+          On Windows, when a Recipe requires Endpoint `core_callback` together with
+          a Core-aware asset EXE (WebBridge `hakoniwa_app`) but not Core PRO
+          `callback_assets_shared`, report it before build instead of letting the
+          WebBridge crash at runtime.
+
+promotion_rationale:
+  - >-
+    Runtime Primer: the rule is an operational contract for every Windows user of a
+    Core-aware asset EXE plus an Endpoint callback DLL, not a property of one
+    Recipe. The failure is silent at build time and looks like a hang at runtime.
+  - >-
+    A doctor guardrail is appropriate because the condition is fully determined by
+    the Recipe's declared capabilities and the host OS.
+
+resolution:
+  status: pending
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-fpv-drone
+      issue: null
+      pull_request: null
+      revision: f0dae56
+  verified: false
+  promoted_to:
+    - docs/hakoniwa-runtime-primer.md#windows-runtime-notes
+    - docs/hakoniwa-runtime-primer-ja.md#windows-runtime-notes
+  executable_guardrails: []
+  notes:
+    - The FPV Recipe declares the capability as of f0dae56.
