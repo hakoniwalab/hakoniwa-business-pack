@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -209,6 +210,117 @@ class PortableWorkspacePackageTest(unittest.TestCase):
                 r'set "HAKONIWA_HOME=%BUSINESS_PACK%\work\foundation\install"',
                 script,
             )
+
+    def _write_repository_profile(self, workspace: Path, **overrides) -> Path:
+        owner = workspace / "hakoniwa-example-app"
+        (owner / "portable").mkdir(parents=True)
+        payload = {
+            "schema_version": 1,
+            "id": "example-app",
+            "package_id": "hakoniwa-example-app-windows-x64",
+            "recipe_id": "example-recipe",
+            "title": "Example App",
+            "tool": "tools/example_portable.py",
+            "entrypoint_name": "example-app",
+            "readme": "portable/README-WINDOWS.txt",
+            "repositories": [
+                {
+                    "name": "hakoniwa-example-app",
+                    "required_artifact": "tools/example_portable.py",
+                    "include_paths": ["tools", "portable"],
+                }
+            ],
+            "python_paths": ["hakoniwa-business-pack"],
+            "validation_imports": ["yaml"],
+            "staging_cleanup": ["hakoniwa-example-app/build/generated"],
+        }
+        payload.update(overrides)
+        path = owner / "portable" / "windows-profile.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return path
+
+    def test_repository_profile_is_discovered_from_sibling(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            self._write_repository_profile(workspace)
+            profile = portable.load_profile("example-app", workspace)
+            self.assertEqual(profile.kind, "repository")
+            self.assertEqual(profile.package_id, "hakoniwa-example-app-windows-x64")
+            self.assertEqual(profile.repositories[0].path, workspace / "hakoniwa-example-app")
+            self.assertEqual(profile.repository_tool.repository, "hakoniwa-example-app")
+            self.assertEqual(profile.repository_tool.validation_imports, ("yaml",))
+            self.assertEqual(profile.requirements, ())
+            # Built-in profiles stay available beside repository profiles.
+            self.assertEqual(
+                portable.load_profile("urban-car-rc", workspace).kind, "urban-car-rc"
+            )
+
+    def test_repository_profile_rejects_paths_outside_the_package(self) -> None:
+        for override in (
+            {"tool": "../escape.py"},
+            {"staging_cleanup": ["/abs/path"]},
+            {"python_paths": ["..\\escape"]},
+            {"repositories": [{"name": "other", "required_artifact": "x", "include_paths": []}]},
+            {"schema_version": 2},
+        ):
+            with self.subTest(override=override), tempfile.TemporaryDirectory() as temporary:
+                workspace = Path(temporary)
+                self._write_repository_profile(workspace, **override)
+                with self.assertRaises(ValueError):
+                    portable.load_profile("example-app", workspace)
+
+    def test_repository_entrypoints_select_packaged_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            self._write_repository_profile(workspace)
+            profile = portable.load_profile("example-app", workspace)
+        self.assertEqual(
+            portable._repository_entrypoints(profile),
+            {
+                "start": "start-example-app.bat",
+                "status": "status-example-app.bat",
+                "stop": "stop-example-app.bat",
+            },
+        )
+        for command in ("start", "status", "stop"):
+            script = portable._render_repository_batch(profile, command)
+            self.assertIn(
+                rf'"%HAKO_PYTHON%" tools\example_portable.py {command}', script
+            )
+            self.assertIn(r'set "APP_ROOT=%PACKAGE_ROOT%hakoniwa-example-app"', script)
+            self.assertIn('set "HAKONIWA_PORTABLE_WORKSPACE=1"', script)
+            self.assertIn(
+                r'set "HAKO_CONFIG_PATH=%BUSINESS_PACK%\work\foundation\config\cpp_core_config.json"',
+                script,
+            )
+            self.assertIn('set "PYTHONPATH="', script)
+
+    def test_repository_staging_cleanup_drops_generated_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            self._write_repository_profile(workspace)
+            profile = portable.load_profile("example-app", workspace)
+            package_root = workspace / "package"
+            foundation = package_root / "hakoniwa-business-pack/work/foundation"
+            (foundation / "config").mkdir(parents=True)
+            (foundation / "config/cpp_core_config.json").write_text(
+                json.dumps({"shm_type": "mmap", "core_mmap_path": "C:/staging/mmap"}),
+                encoding="utf-8",
+            )
+            (foundation / "runtime/mmap").mkdir(parents=True)
+            (foundation / "runtime/mmap/mmap-0x100.bin").write_bytes(b"x")
+            generated = package_root / "hakoniwa-example-app/build/generated"
+            generated.mkdir(parents=True)
+            (generated / "launcher.json").write_text("{}", encoding="utf-8")
+
+            portable._remove_staging_specific_workspace_files(package_root, profile)
+
+            self.assertFalse(generated.exists())
+            self.assertFalse((foundation / "runtime/mmap").exists())
+            payload = json.loads(
+                (foundation / "config/cpp_core_config.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(payload["core_mmap_path"], portable.PORTABLE_MMAP_TOKEN)
 
     def test_profile_controls_default_output_name(self) -> None:
         args = portable.parser().parse_args(["--profile", "urban-car-rc"])

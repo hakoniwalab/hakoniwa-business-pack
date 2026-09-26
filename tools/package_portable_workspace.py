@@ -616,11 +616,91 @@ def _write_urban_entrypoints(package_root: Path) -> None:
     )
 
 
+REPOSITORY_COMMANDS = ("start", "status", "stop")
+
+
+def _repository_entrypoints(profile: PortableProfile) -> dict[str, str]:
+    tool = _require_repository_tool(profile)
+    return {
+        command: f"{command}-{tool.entrypoint_name}.bat"
+        for command in REPOSITORY_COMMANDS
+    }
+
+
+def _require_repository_tool(profile: PortableProfile):
+    if profile.repository_tool is None:
+        raise PortablePackageError(
+            f"portable profile {profile.id} has no repository tool contract"
+        )
+    return profile.repository_tool
+
+
+def _render_repository_batch(profile: PortableProfile, command: str) -> str:
+    """Entrypoint for a repository-owned profile.
+
+    The repository tool owns relocation and first-start configuration
+    (``start`` runs its own ``prepare``); the batch only selects the packaged
+    Foundation and Workspace, overriding any ambient Hakoniwa environment.
+    """
+    if command not in REPOSITORY_COMMANDS:
+        raise ValueError(command)
+    tool = _require_repository_tool(profile)
+    tool_path = tool.tool.replace("/", "\\")
+    return rf"""@echo off
+setlocal
+set "PACKAGE_ROOT=%~dp0"
+set "BUSINESS_PACK=%PACKAGE_ROOT%hakoniwa-business-pack"
+set "APP_ROOT=%PACKAGE_ROOT%{tool.repository}"
+set "HAKO_PYTHON=%BUSINESS_PACK%\work\foundation\install\python\python.exe"
+
+if not exist "%HAKO_PYTHON%" (
+  echo [ERROR] Portable Hakoniwa Python was not found:
+  echo         %HAKO_PYTHON%
+  pause
+  exit /b 2
+)
+
+pushd "%APP_ROOT%"
+set "PATH=%BUSINESS_PACK%\work\foundation\install\python;%BUSINESS_PACK%\work\foundation\install\bin;%PATH%"
+set "PYTHONNOUSERSITE=1"
+set "PYTHONPATH="
+set "PYTHONHOME="
+set "HAKONIWA_PORTABLE_WORKSPACE=1"
+set "HAKONIWA_WORKSPACE_ROOT=%BUSINESS_PACK%"
+set "HAKONIWA_WORK_DIR=%BUSINESS_PACK%\work"
+set "HAKONIWA_HOME=%BUSINESS_PACK%\work\foundation\install"
+set "HAKO_CONFIG_PATH=%BUSINESS_PACK%\work\foundation\config\cpp_core_config.json"
+set "HAKO_PDU_ENDPOINT_RUNTIME_DIRS=%BUSINESS_PACK%\work\foundation\install\bin"
+set "VIRTUAL_ENV=%BUSINESS_PACK%\work\foundation\install\python"
+"%HAKO_PYTHON%" {tool_path} {command}
+set "RC=%ERRORLEVEL%"
+popd
+if not "%RC%"=="0" pause
+exit /b %RC%
+"""
+
+
+def _write_repository_entrypoints(package_root: Path, profile: PortableProfile) -> None:
+    tool = _require_repository_tool(profile)
+    for command, name in _repository_entrypoints(profile).items():
+        (package_root / name).write_text(
+            _render_repository_batch(profile, command), encoding="utf-8", newline="\r\n"
+        )
+    readme = package_root / tool.repository / tool.readme
+    if not readme.is_file():
+        raise PortablePackageError(f"portable README declared by {profile.id} not found: {readme}")
+    (package_root / "README-WINDOWS.txt").write_text(
+        readme.read_text(encoding="utf-8"), encoding="utf-8", newline="\r\n"
+    )
+
+
 def _write_profile_entrypoints(package_root: Path, profile: PortableProfile) -> None:
     if profile.kind == "city-world-web-ui":
         _write_entrypoints(package_root)
     elif profile.kind == "urban-car-rc":
         _write_urban_entrypoints(package_root)
+    elif profile.kind == "repository":
+        _write_repository_entrypoints(package_root, profile)
     else:
         raise PortablePackageError(f"unsupported portable profile kind: {profile.kind}")
 
@@ -751,6 +831,16 @@ def _prepare_source_profile(
             "source Urban Car Recipe doctor",
         )
         return receipt
+    if profile.kind == "repository":
+        tool = _require_repository_tool(profile)
+        owner = WORKSPACE_ROOT / tool.repository
+        for operation in ("collect", "doctor"):
+            _run_checked(
+                [str(foundation_python), tool.tool, operation],
+                owner,
+                f"source {profile.id} portable {operation}",
+            )
+        return None
     raise PortablePackageError(f"unsupported portable profile kind: {profile.kind}")
 
 
@@ -849,6 +939,80 @@ def _validate_staged_package(package_root: Path) -> None:
     )
 
 
+def _staged_environment(business_pack: Path) -> dict[str, str]:
+    """Process environment matching the package entrypoints, for staging checks."""
+    staged_env = os.environ.copy()
+    for name in ("PYTHONPATH", "PYTHONHOME"):
+        staged_env.pop(name, None)
+    staged_env.update(
+        {
+            "PYTHONNOUSERSITE": "1",
+            "HAKONIWA_PORTABLE_WORKSPACE": "1",
+            "HAKONIWA_WORKSPACE_ROOT": str(business_pack),
+            "HAKONIWA_WORK_DIR": str(business_pack / "work"),
+            "HAKONIWA_HOME": str(business_pack / "work/foundation/install"),
+            "HAKO_CONFIG_PATH": str(
+                business_pack / "work/foundation/config/cpp_core_config.json"
+            ),
+            "VIRTUAL_ENV": str(business_pack / "work/foundation/install/python"),
+            "HAKO_PDU_ENDPOINT_RUNTIME_DIRS": str(
+                business_pack / "work/foundation/install/bin"
+            ),
+        }
+    )
+    staged_env["PATH"] = os.pathsep.join(
+        (
+            str(business_pack / "work/foundation/install/python"),
+            str(business_pack / "work/foundation/install/bin"),
+            staged_env.get("PATH", ""),
+        )
+    )
+    return staged_env
+
+
+def _validate_repository_staged_package(
+    package_root: Path, profile: PortableProfile
+) -> None:
+    tool = _require_repository_tool(profile)
+    business_pack = package_root / "hakoniwa-business-pack"
+    owner = package_root / tool.repository
+    foundation_python = business_pack / "work/foundation/install/python/python.exe"
+    required = [foundation_python, owner / tool.tool]
+    required.extend(
+        package_root / repository.name / repository.required_artifact
+        for repository in profile.repositories
+    )
+    missing = [str(path) for path in required if not path.exists()]
+    if missing:
+        raise PortablePackageError(
+            "portable package is missing required files: " + ", ".join(missing)
+        )
+    staged_env = _staged_environment(business_pack)
+    _run_checked(
+        [str(foundation_python), "tools/workspace.py", "prepare"],
+        business_pack,
+        "portable Workspace prepare",
+        staged_env,
+    )
+    _run_checked(
+        [str(foundation_python), tool.tool, "prepare"],
+        owner,
+        f"portable {profile.id} prepare",
+        staged_env,
+    )
+    _run_checked(
+        [
+            str(foundation_python),
+            "-c",
+            "import " + ", ".join(tool.validation_imports)
+            + f"; print('portable {profile.id} runtime imports OK')",
+        ],
+        owner,
+        f"portable {profile.id} runtime import validation",
+        staged_env,
+    )
+
+
 def _validate_urban_staged_package(package_root: Path) -> None:
     business_pack = package_root / "hakoniwa-business-pack"
     urban = package_root / "hakoniwa-urban-mobility"
@@ -924,8 +1088,24 @@ def _validate_profile_package(
         _validate_staged_package(package_root)
     elif profile.kind == "urban-car-rc":
         _validate_urban_staged_package(package_root)
+    elif profile.kind == "repository":
+        _validate_repository_staged_package(package_root, profile)
     else:
         raise PortablePackageError(f"unsupported portable profile kind: {profile.kind}")
+
+
+PORTABLE_MMAP_TOKEN = "__HAKONIWA_PORTABLE_MMAP__"
+
+
+def _replace_core_mmap_path(business_pack: Path) -> None:
+    """Drop the staging mmap path; the package tool relocates it on first start."""
+    core_config = business_pack / "work/foundation/config/cpp_core_config.json"
+    payload = json.loads(core_config.read_text(encoding="utf-8"))
+    payload["core_mmap_path"] = PORTABLE_MMAP_TOKEN
+    core_config.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
 
 def _remove_staging_specific_workspace_files(
@@ -951,6 +1131,18 @@ def _remove_staging_specific_workspace_files(
         / "hakoniwa_workspace_bootstrap.pth",
     ):
         path.unlink(missing_ok=True)
+    if profile is not None and profile.kind == "repository":
+        tool = _require_repository_tool(profile)
+        for relative in tool.staging_cleanup:
+            target = package_root / relative
+            if target.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.unlink(missing_ok=True)
+        mmap_dir = business_pack / "work/foundation/runtime/mmap"
+        if mmap_dir.is_dir():
+            shutil.rmtree(mmap_dir)
+        _replace_core_mmap_path(business_pack)
     if profile is not None and profile.kind == "urban-car-rc":
         generated = business_pack / "work/recipes/urban-car-rc"
         if generated.is_dir():
@@ -994,6 +1186,8 @@ def _write_manifest(
             "status": "status-city-world.bat",
             "stop": "stop-city-world.bat",
         }
+    elif profile.kind == "repository":
+        entrypoints = _repository_entrypoints(profile)
     else:
         entrypoints = {
             "start": "start-urban-car.bat",
@@ -1183,9 +1377,12 @@ def parser() -> argparse.ArgumentParser:
     )
     result.add_argument(
         "--profile",
-        choices=("city-world-web-ui", "urban-car-rc"),
         default="city-world-web-ui",
-        help="portable distribution profile (default: city-world-web-ui)",
+        help=(
+            "portable distribution profile: city-world-web-ui (default), "
+            "urban-car-rc, or a repository-owned profile declared in "
+            "<sibling>/portable/windows-profile.json"
+        ),
     )
     result.add_argument(
         "--output",

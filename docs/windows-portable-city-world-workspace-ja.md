@@ -210,3 +210,53 @@ user launcher
 今後、他の Recipe でも同じ方式を採用する場合は、
 Recipeごとの runtime dependency と entrypoint を宣言して
 general-purpose package command へ拡張する。
+
+## 10. リポジトリが持つprofile（repository profile）
+
+City World と Urban Car の profile は `tools/portable_package_profiles.py` に組み込まれている。
+それ以外のアプリは、Business Pack を変更せずに、自分のリポジトリへ profile を置ける。
+
+```text
+<sibling repository>/portable/windows-profile.json
+```
+
+package tool は、Business Pack の親ディレクトリにある sibling repository から
+このファイルを探し、`--profile <id>` で選べるようにする。
+
+```powershell
+python tools/package_portable_workspace.py --profile fpv-drone-master3x
+```
+
+profile は次を宣言する（`schema_version: 1`）。
+
+| key | 内容 |
+|---|---|
+| `id` / `package_id` / `recipe_id` / `title` | profile ID、ZIP名、元の Recipe、表示名 |
+| `repositories` | 同梱する sibling repository。`name`、`required_artifact`、`include_paths`。所有リポジトリ自身を含める |
+| `python_paths` | portable Python の `._pth` に加える、package root からの相対パス |
+| `tool` | 所有リポジトリからの相対パスで書いた portable tool |
+| `entrypoint_name` | `start-<name>.bat` / `status-<name>.bat` / `stop-<name>.bat` の名前 |
+| `readme` | ZIP root の `README-WINDOWS.txt` になるファイル |
+| `validation_imports` | staging で import を確認する Python module |
+| `staging_cleanup` | staging の検証で生成され、ZIPに入れないパス（package root からの相対パス） |
+
+パスはすべて package 内の相対 POSIX パスで書き、絶対パスや `..` は拒否する。
+Python 依存は Recipe configure が Foundation Python へ入れたものを移植し、
+package 作成時にネットワークから追加しない。
+
+portable tool は次のコマンドを実装する。
+
+| コマンド | 実行場所 | 役割 |
+|---|---|---|
+| `collect` | 作成元 Workspace | 作成元にしかない実行時ファイル（vcpkg の DLL など）を、同梱するパスへ集める |
+| `doctor` | 作成元 Workspace | 同梱する入力がそろっているか確認し、足りなければ非0で終わる |
+| `prepare` | package（staging 検証と初回 start） | `core_mmap_path` などを展開先に合わせ、アプリの runtime を展開先向けに構成する |
+| `start` / `status` / `stop` | package | 起動バッチから呼ばれる。`start` は自分で `prepare` を行う |
+
+起動バッチは、同梱した Foundation と Workspace を選ぶ環境変数
+（`HAKONIWA_PORTABLE_WORKSPACE=1`、`HAKONIWA_HOME`、`HAKO_CONFIG_PATH`、`VIRTUAL_ENV` など）を設定し、
+既存の `PYTHONPATH` / `PYTHONHOME` を消してから、ポータブル Python で portable tool を実行する。
+ZIP 化の前に、`staging_cleanup` のパスと `work/foundation/runtime/mmap` を削除し、
+`core_mmap_path` を `__HAKONIWA_PORTABLE_MMAP__` に置き換える。
+
+例: `hakoniwa-fpv-drone/portable/windows-profile.json` と `hakoniwa-fpv-drone/tools/fpv_portable.py`。
