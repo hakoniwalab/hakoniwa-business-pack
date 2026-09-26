@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 
 REPOSITORY_PROFILE = Path("portable") / "windows-profile.json"
@@ -74,8 +74,17 @@ def _string(payload: dict, key: str, source: Path) -> str:
 
 
 def _relative(value: str, source: Path, key: str) -> str:
-    path = Path(value)
-    if path.is_absolute() or ".." in path.parts or "\\" in value:
+    # Judge with both path flavours so the result does not depend on the host
+    # OS: "/abs" is not absolute for Windows Path, "C:/abs" not for POSIX Path.
+    posix = PurePosixPath(value)
+    windows = PureWindowsPath(value)
+    if (
+        "\\" in value
+        or posix.is_absolute()
+        or windows.is_absolute()
+        or windows.drive
+        or ".." in posix.parts
+    ):
         raise ProfileError(f"{source}: {key} must be a relative POSIX path inside the package: {value}")
     return value
 

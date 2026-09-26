@@ -259,6 +259,8 @@ class PortableWorkspacePackageTest(unittest.TestCase):
         for override in (
             {"tool": "../escape.py"},
             {"staging_cleanup": ["/abs/path"]},
+            {"staging_cleanup": ["C:/abs/path"]},
+            {"readme": "D:relative-to-drive.txt"},
             {"python_paths": ["..\\escape"]},
             {"repositories": [{"name": "other", "required_artifact": "x", "include_paths": []}]},
             {"schema_version": 2},
