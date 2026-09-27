@@ -1,0 +1,126 @@
+id: mujoco-compose-must-reconcile-compiler-angle-units
+title: Merging MuJoCo models must reconcile compiler angle units (degree vs radian)
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+  - runtime_rule
+  - validation_rule
+
+summary: >
+  MuJoCo interprets euler, axisangle, and hinge joint angles in the unit set by
+  <compiler angle="...">, whose default is degree. When one MJCF is merged into
+  another and only one <compiler> survives, the merged-in elements are read in
+  the surviving unit. City World MJCF (no <compiler>, so degrees) merged into a
+  vehicle model with angle="radian" had every building wall's euler yaw read as
+  radians: the walls came out arbitrarily rotated in the composed physics model
+  only, so Cars hit walls lying across roads while the Viewer, the collider
+  view, spawn heights, and Drones (which read the City World MJCF directly or
+  use degrees) all looked correct.
+
+observation:
+  context: >
+    hakoniwa-urban-mobility city-car-hexa on a Sapporo City World (2026-09-27): an
+    API Car on a route stopped with full commanded speed at the same point every
+    run, on flat ground, while the collider Viewer showed no contact.
+  details:
+    - >-
+      Placing the Car at its logged stop pose in the composed MJCF and running
+      mj_forward listed a contact between its front-left tire and a building
+      wall box (geom_bldg_..._edge6).
+    - >-
+      That wall runs north-south along the building outline in City World
+      (city-world-walls.json yaw 100.55 deg, and in city-world.xml), but lay
+      east-west across the road in the composed urban-cars-city.xml.
+    - >-
+      All 41 walls were aligned in city-world.xml and none in the composed model.
+      The wall XML was byte-identical (euler="0 0 100.553037"); the composed model
+      carried <compiler angle="radian"> from the golf cart MJCF, while the City
+      World MJCF has no <compiler> (degree default).
+    - >-
+      hakoniwa-mbody-registry tools/compose_mujoco_world.py ignores the world's
+      <compiler> section and copied world elements unchanged.
+    - >-
+      Scope: Car (radian) x City World only. The EAMS Hexa and FPV drone models
+      use angle="degree"; plain Worlds have no walls. Present since Cars were
+      first composed with a City World (hakoniwa-urban-mobility 738ed22,
+      2026-09-16); the composer CI used same-unit fixtures only.
+    - >-
+      A downward-ray height model and a top-down collider view both miss this:
+      verify orientation-sensitive geometry in the composed model itself.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-mbody-registry
+      path: tools/compose_mujoco_world.py
+      revision: bda6f54
+    - repository: hakoniwalab/hakoniwa-mbody-registry
+      path: bodies/generic_ackermann_golf_cart/generated/model.minimal_world.xml
+      revision: bda6f54
+    - repository: hakoniwalab/hakoniwa-urban-mobility
+      path: tools/multi_car.py
+      revision: 738ed22
+  runtime_evidence:
+    - description: >-
+        Before the fix: 0 of 41 composed walls aligned with city-world-walls.json;
+        Car-2's tire contacted geom_bldg_377d0cb8-..._edge6 at its stop pose. After
+        bda6f54: 41 of 41 aligned and only plateau_ground contacts the Car there.
+  expert_input: []
+
+confidence: high
+
+contradictions:
+  - target: MJCF composition assumption
+    existing_claim: >-
+      Copying world elements into a robot model preserves their geometry.
+    new_evidence: >-
+      Angles are unit-dependent through <compiler angle>; copied elements take the
+      destination unit unless converted.
+
+validation:
+  status: verified
+  required: []
+  notes:
+    - >-
+      Fixed in hakoniwa-mbody-registry bda6f54: when the units differ, euler, the
+      axisangle angle, and hinge joint range/ref/springref of the copied world
+      elements are rescaled; a differing eulerseq is rejected.
+
+tracking:
+  implementation_status: resolved
+  issues: []
+
+promotion_targets:
+  catalog:
+    - hakoniwa-mbody-registry
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: true
+  recipes: []
+  executable_guardrails:
+    - repository: hakoniwalab/hakoniwa-mbody-registry
+      kind: test
+      path: tests/test_compose_mujoco_world.py
+      mode: detect-only
+      notes:
+        - Mixed-unit composition tests (radian robot, degree world) now run in CI.
+
+promotion_rationale:
+  - >-
+    Component asset guide: any tool that merges MJCF from different generators
+    (City World, mbody registry, vehicle generators) must reconcile compiler
+    settings, not only names and asset paths.
+
+resolution:
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-mbody-registry
+      issue: null
+      pull_request: null
+      revision: bda6f54
+  verified: true
+  promoted_to: []
+  executable_guardrails:
+    - hakoniwalab/hakoniwa-mbody-registry tests/test_compose_mujoco_world.py (bda6f54)
+  notes:
+    - Re-run configure for Car x City World compositions to rebuild the composed model.
