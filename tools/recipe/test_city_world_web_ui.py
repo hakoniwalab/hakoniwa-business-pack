@@ -67,6 +67,23 @@ class CityWorldWebUiToolTest(unittest.TestCase):
         self.assertNotIn("--open-browser", command)
         self.assertIn(str(paths.recipe_root / "runtime"), command)
 
+    def test_cache_clean_is_a_dry_run_on_the_recipe_owned_runtime(self) -> None:
+        paths = SimpleNamespace(recipe_root=Path("/selected-work/recipes/city-world-web-ui"))
+        arguments = recipe.parser().parse_args(["cache-clean", "--job-sources"])
+        self.assertFalse(arguments.apply)
+        from tools.remote_operation.city_world import cache_cleanup
+
+        with (
+            mock.patch.object(recipe, "recipe_environment", return_value=({}, paths)),
+            mock.patch.object(cache_cleanup, "run", return_value=0) as run,
+        ):
+            self.assertEqual(recipe.cache({}, "cache-clean", arguments), 0)
+        runtime, command, forwarded = run.call_args.args
+        self.assertEqual(runtime, paths.recipe_root / "runtime")
+        self.assertEqual(command, "clean")
+        self.assertTrue(forwarded.job_sources)
+        self.assertFalse(forwarded.source_cache)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -41,6 +41,11 @@ Worker、Launcher、job、PLATEAU cache は、選択した workdir の次の位�
     cache/       # 再利用するPLATEAU source cache
 ```
 
+生成済みjobの生CityGMLと共有cacheは数GB規模になる。
+`python tools/recipe/city_world_web_ui.py cache-status`で実際に空く容量を確認し、
+`cache-clean`で整理できる（既定はdry run）。詳細は
+[`city-world-web-ui-guide-ja.md`](city-world-web-ui-guide-ja.md)の5.1節を参照。
+
 この Recipe は Hakoniwa Core、`hakopy`、`hako-cmd` を使わない。Foundation は
 Core-free PDU Endpoint の native/Python runtime を管理し、PDU Python、PDU JavaScript、
 Envsim はrevisionを追跡するsource依存として解決する。

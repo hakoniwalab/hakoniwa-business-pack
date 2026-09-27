@@ -173,19 +173,27 @@ Workspace bootstrap の `.pth` は利用時の展開先に合わせて
 
 ## 8. 保存データ
 
-利用者が生成した City World job と PLATEAU共有cacheは package 内の
+利用者が生成した City World job は package 内の次の場所に保存される。
 
 ```text
-hakoniwa-business-pack/work/recipes/city-world-web-ui/runtime/
+hakoniwa-business-pack/work/recipes/city-world-web-ui/runtime/jobs/<job-id>/
 ```
 
-に保存される。旧 `work/remote-operation/` は新しいpackageでは使用しない。
+PLATEAU共有cacheは package の外、利用者ごとの次の場所に保存される。
 
 ```text
-hakoniwa-business-pack/work/remote-operation/
+%LOCALAPPDATA%\Hakoniwa\cache\plateau-citygml\
 ```
 
-以下へ保存する。
+portable の起動スクリプトは `HAKONIWA_PORTABLE_CITY_WORLD=1` を設定する。
+この設定があるとき、生成処理（`tools/remote_operation/city_world/generation.py`）は共有cacheに上記の場所を使う。
+`LOCALAPPDATA` が未設定の場合だけ、package 内の
+`hakoniwa-business-pack/work/recipes/city-world-web-ui/runtime/cache/plateau-citygml/` を使う。
+共有cacheは package を削除・再展開しても残り、別の展開先の package からも再利用される。
+不要になった場合は `python tools/recipe/city_world_web_ui.py cache-clean` で整理する
+（[`city-world-web-ui-guide-ja.md`](city-world-web-ui-guide-ja.md) 5.1節）。
+
+旧 `hakoniwa-business-pack/work/remote-operation/` は新しいpackageでは使用しない。
 
 配布用ZIPには、package作成PCで過去に生成したjobやPLATEAU cacheを含めない。
 

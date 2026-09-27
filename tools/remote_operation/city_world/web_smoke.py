@@ -13,6 +13,7 @@ from urllib.parse import unquote, urlsplit
 
 from tools.workdir import recipe_root
 
+from .generation import _source_cache_dir
 from .protocol import validate_request, validate_result
 
 
@@ -98,7 +99,7 @@ def list_generated_jobs(worker_runtime_root: Path) -> list[dict]:
 
 
 def shared_cache_summary(worker_runtime_root: Path) -> dict:
-    cache_root = (worker_runtime_root / "cache" / "plateau-citygml").resolve()
+    cache_root = _source_cache_dir(worker_runtime_root).resolve()
     try:
         relative = cache_root.relative_to(BUSINESS_PACK_ROOT).as_posix()
     except ValueError:
