@@ -159,6 +159,48 @@ work/recipes/city-world-web-ui/runtime/jobs/<job-id>/
 
 共有cacheは`work/recipes/city-world-web-ui/runtime/cache/plateau-citygml/`に保存する。
 Launcherを停止してもjobと共有cacheは残る。
+Windows Portable版では共有cacheを`%LOCALAPPDATA%\Hakoniwa\cache\plateau-citygml\`に置く。
+
+### 5.1 ディスク容量を整理する
+
+生成後に必要なのは`build/world/`、`build/components/`、`viewer/`、`artifacts/`だけである。
+Urban MobilityのCity登録やPortable packageも`build/source/`は参照しない。
+PLATEAUの生CityGML（jobの`build/source/`）と共有cacheは生成時にだけ使う。
+
+`build/source/`のGMLは可能な限り共有cacheへのhardlinkとして作られる。
+両者は同じディスク領域を共有するため、片方だけ削除してもほとんど空かない。
+次のコマンドはhardlinkを考慮した「実際に空く容量」を表示する。
+
+```bash
+python tools/recipe/city_world_web_ui.py cache-status
+```
+
+`cache-clean`は既定でdry runであり、`--apply`を付けたときだけ削除する。
+
+```bash
+# 何が削除されるかを確認する
+python tools/recipe/city_world_web_ui.py cache-clean --job-sources --source-cache
+# 実際に削除する
+python tools/recipe/city_world_web_ui.py cache-clean --job-sources --source-cache --apply
+```
+
+| オプション | 削除対象 | 影響 |
+|---|---|---|
+| `--job-sources` | 完了jobの`build/source/` | 生成済みWorld、ZIP、Viewer表示、City登録に影響しない。`hako.py build --offline`による再buildはできなくなる |
+| `--source-cache` | 共有cacheの`objects/`（CityGMLと建物テクスチャ） | 次回生成時に再downloadする |
+
+安全のため次の規則を守る。
+
+- `artifacts/result-manifest.json`が無いjob、または`.job-backups/`に退避中のjobは
+  生成中とみなし、そのjobの`build/source/`を削除しない。
+- 生成中のjob、`.job-backups/`、共有cache内の`.part`（download中）が一つでもあれば、
+  共有cacheは削除しない。
+- `build/world/`、`build/components/`、`viewer/`、`artifacts/`は削除対象に含めない。
+
+`--json`を付けると同じ内容をJSONで出力する。
+jobそのものを消す場合はWeb UIの`生成結果を削除`を使う。
+Urban Mobility側の高さcacheは`hakoniwa-urban-mobility`の
+`tools/urban_assets.py prune-cache`で整理する。
 
 ## 6. 状態確認と停止
 

@@ -105,11 +105,24 @@ def lifecycle(data: dict, command: str, args: argparse.Namespace) -> int:
     return _run(launcher, environment=environment)
 
 
+def cache(data: dict, command: str, args: argparse.Namespace) -> int:
+    from tools.remote_operation.city_world import cache_cleanup
+
+    _, paths = recipe_environment(data)
+    return cache_cleanup.run(
+        paths.recipe_root / "runtime",
+        "status" if command == "cache-status" else "clean",
+        args,
+    )
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         description="Configure and operate the Core-free City World Web UI Recipe"
     )
-    result.add_argument("command", choices=("configure", "doctor", "start", "status", "stop"))
+    result.add_argument("command", choices=(
+        "configure", "doctor", "start", "status", "stop", "cache-status", "cache-clean",
+    ))
     result.add_argument("--listen-address", default="127.0.0.1")
     result.add_argument("--worker-port", type=int, default=54210)
     result.add_argument("--web-port", type=int, default=8008)
@@ -120,6 +133,19 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--terrain-spacing-m", choices=("2", "5", "10", "auto"), default="auto")
     result.add_argument("--ready-timeout-sec", type=float, default=15.0)
     result.add_argument("--open-browser", action="store_true")
+    cache_options = result.add_argument_group(
+        "cache-status / cache-clean (dry run unless --apply)"
+    )
+    cache_options.add_argument(
+        "--job-sources", action="store_true",
+        help="remove build/source (raw PLATEAU CityGML) of finished jobs",
+    )
+    cache_options.add_argument(
+        "--source-cache", action="store_true",
+        help="remove the shared PLATEAU download cache (re-downloaded on next generation)",
+    )
+    cache_options.add_argument("--apply", action="store_true", help="delete instead of a dry run")
+    cache_options.add_argument("--json", action="store_true", help="print a JSON report")
     return result
 
 
@@ -131,6 +157,8 @@ def main(argv: list[str] | None = None) -> int:
             return configure(data)
         if args.command == "doctor":
             return doctor(data)
+        if args.command in {"cache-status", "cache-clean"}:
+            return cache(data, args.command, args)
         return lifecycle(data, args.command, args)
     except (CityWorldWebUiError, OSError, RuntimeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
