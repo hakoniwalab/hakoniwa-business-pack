@@ -76,6 +76,45 @@ class PortableWorkspaceRuntimeTest(unittest.TestCase):
                 self.assertIn(f"  prefix: {json.dumps(expected)}", text)
                 self.assertNotIn("C:\\\\source", text)
 
+    def test_prepare_and_doctor_runs_in_order(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "hakoniwa-business-pack"
+            python = root / "work/foundation/install/python/python.exe"
+            python.parent.mkdir(parents=True)
+            python.write_bytes(b"python")
+            receipts = root / "work/foundation/install/share/hakoniwa/receipts"
+            receipts.mkdir(parents=True)
+            (receipts / "component.yaml").write_text(
+                "schema_version: 1\n"
+                "component:\n"
+                "  id: component\n"
+                "install:\n"
+                "  prefix: old\n",
+                encoding="utf-8",
+            )
+
+            completed = mock.Mock(returncode=0)
+            with mock.patch.object(runtime.subprocess, "run", return_value=completed) as run:
+                runtime.prepare_and_doctor(
+                    root,
+                    configure_command=("configure-tool.py", "configure"),
+                    doctor_command=("configure-tool.py", "doctor"),
+                    extra_environment={"PORTABLE_PROFILE": "example"},
+                    label="example portable profile",
+                )
+
+            commands = [call.args[0][1:] for call in run.call_args_list]
+            self.assertEqual(
+                commands,
+                [
+                    ["tools/workspace.py", "prepare"],
+                    ["configure-tool.py", "configure"],
+                    ["configure-tool.py", "doctor"],
+                ],
+            )
+            for call in run.call_args_list:
+                self.assertEqual(call.kwargs["env"]["PORTABLE_PROFILE"], "example")
+
     def test_prepare_city_world_relocates_before_configure(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "hakoniwa-business-pack"
@@ -101,15 +140,16 @@ class PortableWorkspaceRuntimeTest(unittest.TestCase):
             with mock.patch.object(runtime.subprocess, "run", return_value=completed) as run:
                 runtime.prepare_city_world(root)
 
-            self.assertEqual(run.call_count, 2)
-            first = run.call_args_list[0]
-            second = run.call_args_list[1]
+            self.assertEqual(run.call_count, 3)
+            prepare = run.call_args_list[0]
+            configure = run.call_args_list[1]
+            doctor = run.call_args_list[2]
             self.assertEqual(
-                first.args[0],
+                prepare.args[0],
                 [str(python.resolve()), "tools/workspace.py", "prepare"],
             )
             self.assertEqual(
-                second.args[0],
+                configure.args[0],
                 [
                     str(python.resolve()),
                     "tools/recipe/city_world_web_ui.py",
@@ -117,14 +157,23 @@ class PortableWorkspaceRuntimeTest(unittest.TestCase):
                 ],
             )
             self.assertEqual(
-                first.kwargs["env"]["HAKONIWA_WORK_DIR"],
+                doctor.args[0],
+                [
+                    str(python.resolve()),
+                    "tools/recipe/city_world_web_ui.py",
+                    "doctor",
+                ],
+            )
+            self.assertEqual(
+                prepare.kwargs["env"]["HAKONIWA_WORK_DIR"],
                 str((root / "work").resolve()),
             )
             self.assertEqual(
-                first.kwargs["env"]["HAKONIWA_PORTABLE_CITY_WORLD"], "1"
+                prepare.kwargs["env"]["HAKONIWA_PORTABLE_CITY_WORLD"], "1"
             )
-            self.assertEqual(first.kwargs["cwd"], root.resolve())
-            self.assertEqual(second.kwargs["cwd"], root.resolve())
+            self.assertEqual(prepare.kwargs["cwd"], root.resolve())
+            self.assertEqual(configure.kwargs["cwd"], root.resolve())
+            self.assertEqual(doctor.kwargs["cwd"], root.resolve())
 
 
 if __name__ == "__main__":
