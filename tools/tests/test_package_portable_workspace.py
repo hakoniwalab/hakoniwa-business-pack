@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tools import package_portable_workspace as portable
 
@@ -141,45 +142,35 @@ class PortableWorkspacePackageTest(unittest.TestCase):
             )
             self.assertTrue((destination / "hakoniwa_example" / "extension.pyd").is_file())
 
-    def test_start_script_prepares_relocated_city_world_before_launch(self) -> None:
+    def test_start_script_delegates_portable_lifecycle_to_runtime_module(self) -> None:
         script = portable._render_start_batch()
         self.assertIn(
             r"work\foundation\install\python\python.exe",
             script,
         )
-        prepare = r"tools\portable_workspace_runtime.py prepare-city-world"
-        launch = r"-m tools.remote_operation.city_world.launcher start"
-        self.assertIn(prepare, script)
-        self.assertIn(launch, script)
-        self.assertLess(script.index(prepare), script.index(launch))
-        self.assertIn(r"tools\workspace.py run --", script)
-        self.assertIn(r"work\foundation\install\bin", script)
         self.assertIn(
-            r'set "HAKONIWA_WORK_DIR=%BUSINESS_PACK%\work"', script
-        )
-        self.assertIn('set "PYTHONPATH="', script)
-        self.assertIn(
-            r'--launcher-runtime-dir "%BUSINESS_PACK%\work\recipes\city-world-web-ui\launcher"',
+            r'tools\portable_workspace_runtime.py start-city-world --root "%BUSINESS_PACK%"',
             script,
         )
-        self.assertIn("--open-browser", script)
+        self.assertNotIn("HAKONIWA_WORK_DIR", script)
+        self.assertNotIn("PYTHONPATH", script)
+        self.assertNotIn("tools\workspace.py run", script)
+        self.assertNotIn("tools.remote_operation.city_world.launcher", script)
 
-    def test_control_scripts_use_same_portable_runtime(self) -> None:
+    def test_control_scripts_delegate_to_portable_runtime_module(self) -> None:
         for command in ("status", "stop"):
             script = portable._render_control_batch(command)
             self.assertIn(
-                rf"-m tools.remote_operation.city_world.launcher {command}",
+                rf'tools\portable_workspace_runtime.py {command}-city-world --root "%BUSINESS_PACK%"',
                 script,
             )
-            self.assertIn(r"tools\workspace.py run --", script)
             self.assertIn(
                 r"work\foundation\install\python\python.exe",
                 script,
             )
-            self.assertIn(
-                r'set "HAKONIWA_WORK_DIR=%BUSINESS_PACK%\work"', script
-            )
-            self.assertIn('set "PYTHONPATH="', script)
+            self.assertNotIn("HAKONIWA_WORK_DIR", script)
+            self.assertNotIn("PYTHONPATH", script)
+            self.assertNotIn("tools\workspace.py run", script)
 
     def test_urban_profile_declares_runtime_repositories(self) -> None:
         profile = portable.load_profile("urban-car-rc", portable.WORKSPACE_ROOT)
