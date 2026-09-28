@@ -307,6 +307,69 @@ class PortableWorkspacePackageTest(unittest.TestCase):
             )
             self.assertIn('set "PYTHONPATH="', script)
 
+    def test_city_world_staged_validation_uses_only_packaged_environment(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            package_root = Path(temporary) / "package"
+            business_pack = package_root / "hakoniwa-business-pack"
+            python = business_pack / "work/foundation/install/python/python.exe"
+            python.parent.mkdir(parents=True)
+            python.write_bytes(b"python")
+            required = (
+                package_root / "hakoniwa-envsim/tools/hako.py",
+                package_root / "hakoniwa-pdu-javascript/src/index.js",
+                package_root
+                / "hakoniwa-pdu-python/src/hakoniwa_pdu/apps/launcher/hako_launcher.py",
+            )
+            for path in required:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("", encoding="utf-8")
+
+            receipts = (
+                business_pack
+                / "work/foundation/install/share/hakoniwa/receipts"
+            )
+            receipts.mkdir(parents=True)
+            (receipts / "component.yaml").write_text(
+                "schema_version: 1\n"
+                "component:\n"
+                "  id: component\n"
+                "install:\n"
+                "  prefix: old\n",
+                encoding="utf-8",
+            )
+
+            calls = []
+
+            def record(command, cwd, label, env=None):
+                calls.append((command, cwd, label, env))
+
+            with mock.patch.dict(
+                portable.os.environ,
+                {
+                    "HAKONIWA_WORK_DIR": "C:/source/work",
+                    "HAKONIWA_HOME": "C:/source/install",
+                    "PYTHONPATH": "C:/source/python",
+                },
+                clear=False,
+            ), mock.patch.object(
+                portable, "_run_checked", side_effect=record
+            ), mock.patch.object(
+                portable, "_materialize_web_ui_recipe"
+            ) as materialize:
+                portable._validate_staged_package(package_root)
+
+            self.assertEqual(len(calls), 3)
+            expected_work = str((business_pack / "work").resolve())
+            for _command, cwd, _label, env in calls:
+                self.assertEqual(cwd, business_pack)
+                self.assertEqual(env["HAKONIWA_WORK_DIR"], expected_work)
+                self.assertNotEqual(env["HAKONIWA_WORK_DIR"], "C:/source/work")
+                self.assertNotIn("PYTHONPATH", env)
+            materialize.assert_called_once()
+            materialize_env = materialize.call_args.args[2]
+            self.assertEqual(materialize_env["HAKONIWA_WORK_DIR"], expected_work)
+            self.assertNotIn("PYTHONPATH", materialize_env)
+
     def test_city_world_staging_cleanup_drops_generated_recipe_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             package_root = Path(temporary) / "package"
