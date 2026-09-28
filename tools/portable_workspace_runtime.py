@@ -101,15 +101,21 @@ def _run(command: list[str], cwd: Path, env: dict[str, str], label: str) -> None
         raise PortableRuntimeError(f"{label} failed with exit={completed.returncode}")
 
 
-def prepare_city_world(business_pack: Path) -> None:
-    """Relocate and regenerate City World runtime for the current extraction path."""
+def prepare_workspace(
+    business_pack: Path,
+    *,
+    extra_environment: Mapping[str, str] | None = None,
+) -> tuple[Path, dict[str, str]]:
+    """Relocate one portable Workspace and rebuild its path-dependent state."""
     root = business_pack.expanduser().resolve()
     python = root / "work" / "foundation" / "install" / "python" / "python.exe"
     if not python.is_file():
         raise PortableRuntimeError(f"portable Foundation Python was not found: {python}")
 
     env = portable_environment(root)
-    env["HAKONIWA_PORTABLE_CITY_WORLD"] = "1"
+    if extra_environment:
+        env.update(extra_environment)
+
     relocate_foundation_receipts(root)
     _run(
         [str(python), "tools/workspace.py", "prepare"],
@@ -117,11 +123,45 @@ def prepare_city_world(business_pack: Path) -> None:
         env,
         "portable Workspace prepare",
     )
+    return python, env
+
+
+def prepare_and_doctor(
+    business_pack: Path,
+    *,
+    configure_command: tuple[str, ...],
+    doctor_command: tuple[str, ...],
+    extra_environment: Mapping[str, str] | None = None,
+    label: str,
+) -> None:
+    """Relocate, regenerate and validate a portable runtime before start."""
+    root = business_pack.expanduser().resolve()
+    python, env = prepare_workspace(
+        root,
+        extra_environment=extra_environment,
+    )
     _run(
-        [str(python), "tools/recipe/city_world_web_ui.py", "configure"],
+        [str(python), *configure_command],
         root,
         env,
-        "portable City World Recipe configure",
+        f"{label} configure",
+    )
+    _run(
+        [str(python), *doctor_command],
+        root,
+        env,
+        f"{label} doctor",
+    )
+
+
+def prepare_city_world(business_pack: Path) -> None:
+    """Prepare and validate City World for the current extraction path."""
+    prepare_and_doctor(
+        business_pack,
+        configure_command=("tools/recipe/city_world_web_ui.py", "configure"),
+        doctor_command=("tools/recipe/city_world_web_ui.py", "doctor"),
+        extra_environment={"HAKONIWA_PORTABLE_CITY_WORLD": "1"},
+        label="portable City World Recipe",
     )
 
 
