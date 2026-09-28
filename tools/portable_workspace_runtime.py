@@ -52,7 +52,7 @@ def portable_environment(
     return env
 
 
-def _rewrite_receipt_install_prefix(path: Path, prefix: Path) -> bool:
+def _rewrite_receipt_install_prefix(path: Path, prefix: Path) -> None:
     """Rewrite one receipt's install.prefix while preserving the rest verbatim."""
     lines = path.read_text(encoding="utf-8").splitlines()
     output: list[str] = []
@@ -74,7 +74,6 @@ def _rewrite_receipt_install_prefix(path: Path, prefix: Path) -> bool:
     if not replaced:
         raise PortableRuntimeError(f"receipt has no install.prefix: {path}")
     path.write_text("\n".join(output) + "\n", encoding="utf-8")
-    return True
 
 
 def relocate_foundation_receipts(business_pack: Path) -> int:
@@ -133,7 +132,7 @@ def prepare_and_doctor(
     doctor_command: tuple[str, ...],
     extra_environment: Mapping[str, str] | None = None,
     label: str,
-) -> None:
+) -> tuple[Path, dict[str, str]]:
     """Relocate, regenerate and validate a portable runtime before start."""
     root = business_pack.expanduser().resolve()
     python, env = prepare_workspace(
@@ -152,16 +151,67 @@ def prepare_and_doctor(
         env,
         f"{label} doctor",
     )
+    return python, env
 
 
-def prepare_city_world(business_pack: Path) -> None:
+def prepare_city_world(business_pack: Path) -> tuple[Path, dict[str, str]]:
     """Prepare and validate City World for the current extraction path."""
-    prepare_and_doctor(
+    return prepare_and_doctor(
         business_pack,
         configure_command=("tools/recipe/city_world_web_ui.py", "configure"),
         doctor_command=("tools/recipe/city_world_web_ui.py", "doctor"),
         extra_environment={"HAKONIWA_PORTABLE_CITY_WORLD": "1"},
         label="portable City World Recipe",
+    )
+
+
+def _city_world_runtime(
+    business_pack: Path,
+) -> tuple[Path, Path, dict[str, str]]:
+    root = business_pack.expanduser().resolve()
+    python = root / "work" / "foundation" / "install" / "python" / "python.exe"
+    if not python.is_file():
+        raise PortableRuntimeError(f"portable Foundation Python was not found: {python}")
+    env = portable_environment(root)
+    env["HAKONIWA_PORTABLE_CITY_WORLD"] = "1"
+    return root, python, env
+
+
+def run_city_world(business_pack: Path, command: str) -> None:
+    """Run one City World lifecycle command from the portable Workspace."""
+    if command not in {"start", "status", "stop"}:
+        raise PortableRuntimeError(f"unsupported City World command: {command}")
+
+    root, python, env = _city_world_runtime(business_pack)
+    if command == "start":
+        python, env = prepare_city_world(root)
+
+    launcher_runtime = root / "work" / "recipes" / "city-world-web-ui" / "launcher"
+    command_line = [
+        str(python),
+        "-m",
+        "tools.remote_operation.city_world.launcher",
+        command,
+        "--launcher-runtime-dir",
+        str(launcher_runtime),
+    ]
+    if command == "start":
+        command_line.extend(
+            [
+                "--runtime-dir",
+                str(root / "work" / "recipes" / "city-world-web-ui" / "runtime"),
+                "--parallel-workers",
+                "8",
+                "--terrain-spacing-m",
+                "auto",
+                "--open-browser",
+            ]
+        )
+    _run(
+        command_line,
+        root,
+        env,
+        f"portable City World {command}",
     )
 
 
@@ -171,7 +221,7 @@ def parser() -> argparse.ArgumentParser:
     )
     result.add_argument(
         "command",
-        choices=("prepare-city-world",),
+        choices=("prepare-city-world", "start-city-world", "status-city-world", "stop-city-world"),
     )
     result.add_argument(
         "--root",
@@ -187,6 +237,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "prepare-city-world":
             prepare_city_world(args.root)
+            return 0
+        if args.command in {"start-city-world", "status-city-world", "stop-city-world"}:
+            run_city_world(args.root, args.command.removesuffix("-city-world"))
             return 0
         raise PortableRuntimeError(f"unsupported command: {args.command}")
     except (PortableRuntimeError, OSError, subprocess.SubprocessError) as exc:
