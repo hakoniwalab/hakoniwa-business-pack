@@ -1,0 +1,158 @@
+#!/usr/bin/env python3
+"""Portable Workspace relocation helpers shared by packaging and runtime."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+from typing import Mapping
+
+
+class PortableRuntimeError(RuntimeError):
+    pass
+
+
+def portable_environment(
+    business_pack: Path,
+    *,
+    base: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """Return an environment isolated to one portable Business Pack tree."""
+    root = business_pack.expanduser().resolve()
+    work = root / "work"
+    install = (work / "foundation" / "install").resolve()
+    python_root = install / "python"
+    bin_dir = install / "bin"
+
+    env = dict(os.environ if base is None else base)
+    for name in ("PYTHONPATH", "PYTHONHOME"):
+        env.pop(name, None)
+    env.update(
+        {
+            "PYTHONNOUSERSITE": "1",
+            "HAKONIWA_PORTABLE_WORKSPACE": "1",
+            "HAKONIWA_WORKSPACE_ACTIVE": "1",
+            "HAKONIWA_WORKSPACE_ROOT": str(root),
+            "HAKONIWA_WORK_DIR": str(work.resolve()),
+            "HAKONIWA_HOME": str(install),
+            "HAKO_CONFIG_PATH": str(
+                (work / "foundation" / "config" / "cpp_core_config.json").resolve()
+            ),
+            "VIRTUAL_ENV": str(python_root),
+            "HAKO_PDU_ENDPOINT_RUNTIME_DIRS": str(bin_dir),
+        }
+    )
+    env["PATH"] = os.pathsep.join(
+        (str(python_root), str(bin_dir), env.get("PATH", ""))
+    )
+    return env
+
+
+def _rewrite_receipt_install_prefix(path: Path, prefix: Path) -> bool:
+    """Rewrite one receipt's install.prefix while preserving the rest verbatim."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    output: list[str] = []
+    in_install = False
+    replaced = False
+    encoded_prefix = json.dumps(str(prefix), ensure_ascii=False)
+
+    for line in lines:
+        stripped = line.strip()
+        indent = len(line) - len(line.lstrip(" "))
+        if indent == 0:
+            in_install = stripped == "install:"
+        if in_install and indent == 2 and stripped.startswith("prefix:"):
+            output.append(f"  prefix: {encoded_prefix}")
+            replaced = True
+        else:
+            output.append(line)
+
+    if not replaced:
+        raise PortableRuntimeError(f"receipt has no install.prefix: {path}")
+    path.write_text("\n".join(output) + "\n", encoding="utf-8")
+    return True
+
+
+def relocate_foundation_receipts(business_pack: Path) -> int:
+    """Relocate copied Foundation receipts to the current Workspace prefix."""
+    root = business_pack.expanduser().resolve()
+    prefix = (root / "work" / "foundation" / "install").resolve()
+    receipt_dir = prefix / "share" / "hakoniwa" / "receipts"
+    if not receipt_dir.is_dir():
+        raise PortableRuntimeError(
+            f"Foundation receipt directory was not found: {receipt_dir}"
+        )
+
+    receipts = sorted(receipt_dir.glob("*.yaml"))
+    if not receipts:
+        raise PortableRuntimeError(f"Foundation receipts were not found: {receipt_dir}")
+    for path in receipts:
+        _rewrite_receipt_install_prefix(path, prefix)
+    return len(receipts)
+
+
+def _run(command: list[str], cwd: Path, env: dict[str, str], label: str) -> None:
+    completed = subprocess.run(command, cwd=cwd, env=env, check=False)
+    if completed.returncode:
+        raise PortableRuntimeError(f"{label} failed with exit={completed.returncode}")
+
+
+def prepare_city_world(business_pack: Path) -> None:
+    """Relocate and regenerate City World runtime for the current extraction path."""
+    root = business_pack.expanduser().resolve()
+    python = root / "work" / "foundation" / "install" / "python" / "python.exe"
+    if not python.is_file():
+        raise PortableRuntimeError(f"portable Foundation Python was not found: {python}")
+
+    env = portable_environment(root)
+    env["HAKONIWA_PORTABLE_CITY_WORLD"] = "1"
+    relocate_foundation_receipts(root)
+    _run(
+        [str(python), "tools/workspace.py", "prepare"],
+        root,
+        env,
+        "portable Workspace prepare",
+    )
+    _run(
+        [str(python), "tools/recipe/city_world_web_ui.py", "configure"],
+        root,
+        env,
+        "portable City World Recipe configure",
+    )
+
+
+def parser() -> argparse.ArgumentParser:
+    result = argparse.ArgumentParser(
+        description="Prepare a relocated Hakoniwa portable Workspace"
+    )
+    result.add_argument(
+        "command",
+        choices=("prepare-city-world",),
+    )
+    result.add_argument(
+        "--root",
+        type=Path,
+        default=Path(__file__).resolve().parents[1],
+        help="Business Pack root",
+    )
+    return result
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parser().parse_args(argv)
+    try:
+        if args.command == "prepare-city-world":
+            prepare_city_world(args.root)
+            return 0
+        raise PortableRuntimeError(f"unsupported command: {args.command}")
+    except (PortableRuntimeError, OSError, subprocess.SubprocessError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
