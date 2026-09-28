@@ -106,11 +106,15 @@ class PortableWorkspaceRuntimeTest(unittest.TestCase):
             second = run.call_args_list[1]
             self.assertEqual(
                 first.args[0],
-                [str(python), "tools/workspace.py", "prepare"],
+                [str(python.resolve()), "tools/workspace.py", "prepare"],
             )
             self.assertEqual(
                 second.args[0],
-                [str(python), "tools/recipe/city_world_web_ui.py", "configure"],
+                [
+                    str(python.resolve()),
+                    "tools/recipe/city_world_web_ui.py",
+                    "configure",
+                ],
             )
             self.assertEqual(
                 first.kwargs["env"]["HAKONIWA_WORK_DIR"],
