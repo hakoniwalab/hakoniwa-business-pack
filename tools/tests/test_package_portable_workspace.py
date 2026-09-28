@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tools import package_portable_workspace as portable
 
@@ -141,36 +142,35 @@ class PortableWorkspacePackageTest(unittest.TestCase):
             )
             self.assertTrue((destination / "hakoniwa_example" / "extension.pyd").is_file())
 
-    def test_start_script_uses_packaged_python_and_web_ui_recipe(self) -> None:
+    def test_start_script_delegates_portable_lifecycle_to_runtime_module(self) -> None:
         script = portable._render_start_batch()
         self.assertIn(
             r"work\foundation\install\python\python.exe",
             script,
         )
         self.assertIn(
-            r"-m tools.remote_operation.city_world.launcher start",
+            r'tools\portable_workspace_runtime.py start-city-world --root "%BUSINESS_PACK%"',
             script,
         )
-        self.assertIn(r"tools\workspace.py run --", script)
-        self.assertIn(r"work\foundation\install\bin", script)
-        self.assertIn(
-            r'--launcher-runtime-dir "%BUSINESS_PACK%\work\recipes\city-world-web-ui\launcher"',
-            script,
-        )
-        self.assertIn("--open-browser", script)
+        self.assertNotIn("HAKONIWA_WORK_DIR", script)
+        self.assertNotIn("PYTHONPATH", script)
+        self.assertNotIn("tools\workspace.py run", script)
+        self.assertNotIn("tools.remote_operation.city_world.launcher", script)
 
-    def test_control_scripts_use_same_portable_runtime(self) -> None:
+    def test_control_scripts_delegate_to_portable_runtime_module(self) -> None:
         for command in ("status", "stop"):
             script = portable._render_control_batch(command)
             self.assertIn(
-                rf"-m tools.remote_operation.city_world.launcher {command}",
+                rf'tools\portable_workspace_runtime.py {command}-city-world --root "%BUSINESS_PACK%"',
                 script,
             )
-            self.assertIn(r"tools\workspace.py run --", script)
             self.assertIn(
                 r"work\foundation\install\python\python.exe",
                 script,
             )
+            self.assertNotIn("HAKONIWA_WORK_DIR", script)
+            self.assertNotIn("PYTHONPATH", script)
+            self.assertNotIn("tools\workspace.py run", script)
 
     def test_urban_profile_declares_runtime_repositories(self) -> None:
         profile = portable.load_profile("urban-car-rc", portable.WORKSPACE_ROOT)
@@ -297,6 +297,94 @@ class PortableWorkspacePackageTest(unittest.TestCase):
                 script,
             )
             self.assertIn('set "PYTHONPATH="', script)
+
+    def test_city_world_staged_validation_uses_only_packaged_environment(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            package_root = Path(temporary) / "package"
+            business_pack = package_root / "hakoniwa-business-pack"
+            python = business_pack / "work/foundation/install/python/python.exe"
+            python.parent.mkdir(parents=True)
+            python.write_bytes(b"python")
+            required = (
+                package_root / "hakoniwa-envsim/tools/hako.py",
+                package_root / "hakoniwa-pdu-javascript/src/index.js",
+                package_root
+                / "hakoniwa-pdu-python/src/hakoniwa_pdu/apps/launcher/hako_launcher.py",
+            )
+            for path in required:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("", encoding="utf-8")
+
+            receipts = (
+                business_pack
+                / "work/foundation/install/share/hakoniwa/receipts"
+            )
+            receipts.mkdir(parents=True)
+            (receipts / "component.yaml").write_text(
+                "schema_version: 1\n"
+                "component:\n"
+                "  id: component\n"
+                "install:\n"
+                "  prefix: old\n",
+                encoding="utf-8",
+            )
+
+            calls = []
+
+            def record(command, cwd, label, env=None):
+                calls.append((command, cwd, label, env))
+
+            with mock.patch.dict(
+                portable.os.environ,
+                {
+                    "HAKONIWA_WORK_DIR": "C:/source/work",
+                    "HAKONIWA_HOME": "C:/source/install",
+                    "PYTHONPATH": "C:/source/python",
+                },
+                clear=False,
+            ), mock.patch.object(
+                portable, "_run_checked", side_effect=record
+            ), mock.patch.object(
+                portable, "_materialize_web_ui_recipe"
+            ) as materialize:
+                portable._validate_staged_package(package_root)
+
+            self.assertEqual(len(calls), 3)
+            expected_work = str((business_pack / "work").resolve())
+            for _command, cwd, _label, env in calls:
+                self.assertEqual(cwd, business_pack)
+                self.assertEqual(env["HAKONIWA_WORK_DIR"], expected_work)
+                self.assertNotEqual(env["HAKONIWA_WORK_DIR"], "C:/source/work")
+                self.assertNotIn("PYTHONPATH", env)
+            materialize.assert_called_once()
+            materialize_env = materialize.call_args.args[2]
+            self.assertEqual(materialize_env["HAKONIWA_WORK_DIR"], expected_work)
+            self.assertNotIn("PYTHONPATH", materialize_env)
+
+    def test_city_world_staging_cleanup_drops_generated_recipe_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            package_root = Path(temporary) / "package"
+            generated = (
+                package_root
+                / "hakoniwa-business-pack"
+                / "work"
+                / "recipes"
+                / "city-world-web-ui"
+            )
+            generated.mkdir(parents=True)
+            (generated / "environment.json").write_text(
+                '{"RECIPE_REPOSITORY": "C:/staging"}',
+                encoding="utf-8",
+            )
+            profile = portable.load_profile(
+                "city-world-web-ui", portable.WORKSPACE_ROOT
+            )
+
+            portable._remove_staging_specific_workspace_files(
+                package_root, profile
+            )
+
+            self.assertFalse(generated.exists())
 
     def test_repository_staging_cleanup_drops_generated_state(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

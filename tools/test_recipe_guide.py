@@ -75,6 +75,7 @@ class RecipeGuideTest(unittest.TestCase):
             "mujoco_model_compiler.py",
             "portable_package_profiles.py",
             "package_portable_workspace.py",
+            "portable_workspace_runtime.py",
             "recipe.py",
             "recipe_portal.py",
             "result_layout.py",

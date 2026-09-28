@@ -21,6 +21,17 @@ try:
 except ModuleNotFoundError:  # Direct execution: python tools/package_portable_workspace.py
     from portable_package_profiles import PortableProfile, load_profile
 
+try:
+    from tools.portable_workspace_runtime import (
+        portable_environment,
+        relocate_foundation_receipts,
+    )
+except ModuleNotFoundError:  # Direct execution from tools/
+    from portable_workspace_runtime import (
+        portable_environment,
+        relocate_foundation_receipts,
+    )
+
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE_ROOT = ROOT.parent
@@ -486,10 +497,7 @@ if not exist "%HAKO_PYTHON%" (
 )
 
 pushd "%BUSINESS_PACK%"
-set "PATH=%BUSINESS_PACK%\work\foundation\install\bin;%PATH%"
-set "PYTHONNOUSERSITE=1"
-set "HAKONIWA_PORTABLE_CITY_WORLD=1"
-"%HAKO_PYTHON%" tools\workspace.py run -- "%HAKO_PYTHON%" -m tools.remote_operation.city_world.launcher start --runtime-dir "%BUSINESS_PACK%\work\recipes\city-world-web-ui\runtime" --launcher-runtime-dir "%BUSINESS_PACK%\work\recipes\city-world-web-ui\launcher" --parallel-workers 8 --terrain-spacing-m auto --open-browser
+"%HAKO_PYTHON%" tools\portable_workspace_runtime.py start-city-world --root "%BUSINESS_PACK%"
 set "RC=%ERRORLEVEL%"
 popd
 
@@ -513,10 +521,7 @@ set "BUSINESS_PACK=%PACKAGE_ROOT%hakoniwa-business-pack"
 set "HAKO_PYTHON=%BUSINESS_PACK%\work\foundation\install\python\python.exe"
 
 pushd "%BUSINESS_PACK%"
-set "PATH=%BUSINESS_PACK%\work\foundation\install\bin;%PATH%"
-set "PYTHONNOUSERSITE=1"
-set "HAKONIWA_PORTABLE_CITY_WORLD=1"
-"%HAKO_PYTHON%" tools\workspace.py run -- "%HAKO_PYTHON%" -m tools.remote_operation.city_world.launcher {command} --launcher-runtime-dir "%BUSINESS_PACK%\work\recipes\city-world-web-ui\launcher"
+"%HAKO_PYTHON%" tools\portable_workspace_runtime.py {command}-city-world --root "%BUSINESS_PACK%"
 set "RC=%ERRORLEVEL%"
 popd
 if not "%RC%"=="0" pause
@@ -723,8 +728,12 @@ def _run_checked(
         )
 
 
-def _materialize_web_ui_recipe(foundation_python: Path, business_pack: Path) -> None:
-    """Render portable Recipe paths after the ZIP has its final directory layout."""
+def _materialize_web_ui_recipe(
+    foundation_python: Path,
+    business_pack: Path,
+    env: dict[str, str] | None = None,
+) -> None:
+    """Render portable Recipe paths for the selected Workspace."""
     code = (
         "import runpy; from pathlib import Path; "
         "recipe=runpy.run_path('tools/recipe.py'); "
@@ -735,6 +744,7 @@ def _materialize_web_ui_recipe(foundation_python: Path, business_pack: Path) -> 
         [str(foundation_python), "-c", code],
         business_pack,
         "portable City World Web UI Recipe materialization",
+        env,
     )
 
 
@@ -918,12 +928,16 @@ def _validate_staged_package(package_root: Path) -> None:
         raise PortablePackageError(
             "portable package is missing required files: " + ", ".join(missing)
         )
+
+    staged_env = portable_environment(business_pack)
+    relocate_foundation_receipts(business_pack)
     _run_checked(
         [str(foundation_python), "tools/workspace.py", "prepare"],
         business_pack,
         "portable Workspace prepare",
+        staged_env,
     )
-    _materialize_web_ui_recipe(foundation_python, business_pack)
+    _materialize_web_ui_recipe(foundation_python, business_pack, staged_env)
     _run_checked(
         [
             str(foundation_python),
@@ -935,44 +949,14 @@ def _validate_staged_package(package_root: Path) -> None:
         ],
         business_pack,
         "portable runtime import validation",
+        staged_env,
     )
     _run_checked(
         [str(foundation_python), "tools/recipe/city_world_web_ui.py", "doctor"],
         business_pack,
         "portable City World Web UI Recipe doctor",
+        staged_env,
     )
-
-
-def _staged_environment(business_pack: Path) -> dict[str, str]:
-    """Process environment matching the package entrypoints, for staging checks."""
-    staged_env = os.environ.copy()
-    for name in ("PYTHONPATH", "PYTHONHOME"):
-        staged_env.pop(name, None)
-    staged_env.update(
-        {
-            "PYTHONNOUSERSITE": "1",
-            "HAKONIWA_PORTABLE_WORKSPACE": "1",
-            "HAKONIWA_WORKSPACE_ACTIVE": "1",
-            "HAKONIWA_WORKSPACE_ROOT": str(business_pack),
-            "HAKONIWA_WORK_DIR": str(business_pack / "work"),
-            "HAKONIWA_HOME": str(business_pack / "work/foundation/install"),
-            "HAKO_CONFIG_PATH": str(
-                business_pack / "work/foundation/config/cpp_core_config.json"
-            ),
-            "VIRTUAL_ENV": str(business_pack / "work/foundation/install/python"),
-            "HAKO_PDU_ENDPOINT_RUNTIME_DIRS": str(
-                business_pack / "work/foundation/install/bin"
-            ),
-        }
-    )
-    staged_env["PATH"] = os.pathsep.join(
-        (
-            str(business_pack / "work/foundation/install/python"),
-            str(business_pack / "work/foundation/install/bin"),
-            staged_env.get("PATH", ""),
-        )
-    )
-    return staged_env
 
 
 def _validate_repository_staged_package(
@@ -992,7 +976,7 @@ def _validate_repository_staged_package(
         raise PortablePackageError(
             "portable package is missing required files: " + ", ".join(missing)
         )
-    staged_env = _staged_environment(business_pack)
+    staged_env = portable_environment(business_pack)
     _run_checked(
         [str(foundation_python), "tools/workspace.py", "prepare"],
         business_pack,
@@ -1037,30 +1021,7 @@ def _validate_urban_staged_package(package_root: Path) -> None:
         raise PortablePackageError(
             "portable package is missing required files: " + ", ".join(missing)
         )
-    staged_env = os.environ.copy()
-    staged_env.update(
-        {
-            "HAKONIWA_WORKSPACE_ROOT": str(business_pack),
-            "HAKONIWA_WORK_DIR": str(business_pack / "work"),
-            "HAKONIWA_HOME": str(business_pack / "work/foundation/install"),
-            "HAKO_CONFIG_PATH": str(
-                business_pack / "work/foundation/config/cpp_core_config.json"
-            ),
-            "VIRTUAL_ENV": str(
-                business_pack / "work/foundation/install/python"
-            ),
-            "HAKO_PDU_ENDPOINT_RUNTIME_DIRS": str(
-                business_pack / "work/foundation/install/bin"
-            ),
-        }
-    )
-    staged_env["PATH"] = os.pathsep.join(
-        (
-            str(business_pack / "work/foundation/install/python"),
-            str(business_pack / "work/foundation/install/bin"),
-            staged_env.get("PATH", ""),
-        )
-    )
+    staged_env = portable_environment(business_pack)
     _run_checked(
         [str(foundation_python), "tools/workspace.py", "prepare"],
         business_pack,
@@ -1119,8 +1080,7 @@ def _remove_staging_specific_workspace_files(
 ) -> None:
     """Remove files whose contents were generated with the temporary staging path.
 
-    workspace.py run regenerates them for the user's actual extraction path
-    before starting any City World process.
+    Portable entrypoints regenerate these files for the user's extraction path.
     """
     business_pack = package_root / "hakoniwa-business-pack"
     for path in (
@@ -1136,6 +1096,10 @@ def _remove_staging_specific_workspace_files(
         / "hakoniwa_workspace_bootstrap.pth",
     ):
         path.unlink(missing_ok=True)
+    if profile is not None and profile.kind == "city-world-web-ui":
+        generated = business_pack / "work/recipes/city-world-web-ui"
+        if generated.is_dir():
+            shutil.rmtree(generated)
     if profile is not None and profile.kind == "repository":
         tool = _require_repository_tool(profile)
         for relative in tool.staging_cleanup:
