@@ -115,6 +115,59 @@ class PortableWorkspaceRuntimeTest(unittest.TestCase):
             for call in run.call_args_list:
                 self.assertEqual(call.kwargs["env"]["PORTABLE_PROFILE"], "example")
 
+    def test_city_world_start_runs_prepare_doctor_before_launcher(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "hakoniwa-business-pack"
+            python = root / "work/foundation/install/python/python.exe"
+            python.parent.mkdir(parents=True)
+            python.write_bytes(b"python")
+            env = runtime.portable_environment(root)
+            env["HAKONIWA_PORTABLE_CITY_WORLD"] = "1"
+
+            with mock.patch.object(
+                runtime,
+                "prepare_city_world",
+                return_value=(python.resolve(), env),
+            ) as prepare, mock.patch.object(runtime, "_run") as run:
+                runtime.run_city_world(root, "start")
+
+            prepare.assert_called_once_with(root.resolve())
+            command = run.call_args.args[0]
+            self.assertEqual(command[0], str(python.resolve()))
+            self.assertEqual(
+                command[1:5],
+                ["-m", "tools.remote_operation.city_world.launcher", "start", "--launcher-runtime-dir"],
+            )
+            self.assertIn("--runtime-dir", command)
+            self.assertIn("--parallel-workers", command)
+            self.assertIn("--terrain-spacing-m", command)
+            self.assertIn("--open-browser", command)
+            self.assertEqual(
+                run.call_args.args[2]["HAKONIWA_WORK_DIR"],
+                str((root / "work").resolve()),
+            )
+
+    def test_city_world_status_does_not_reconfigure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "hakoniwa-business-pack"
+            python = root / "work/foundation/install/python/python.exe"
+            python.parent.mkdir(parents=True)
+            python.write_bytes(b"python")
+
+            with mock.patch.object(runtime, "prepare_city_world") as prepare, mock.patch.object(
+                runtime, "_run"
+            ) as run:
+                runtime.run_city_world(root, "status")
+
+            prepare.assert_not_called()
+            command = run.call_args.args[0]
+            self.assertEqual(command[0], str(python.resolve()))
+            self.assertEqual(
+                command[1:4],
+                ["-m", "tools.remote_operation.city_world.launcher", "status"],
+            )
+            self.assertNotIn("--runtime-dir", command)
+
     def test_prepare_city_world_relocates_before_configure(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "hakoniwa-business-pack"
