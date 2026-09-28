@@ -497,29 +497,7 @@ if not exist "%HAKO_PYTHON%" (
 )
 
 pushd "%BUSINESS_PACK%"
-set "PATH=%BUSINESS_PACK%\work\foundation\install\python;%BUSINESS_PACK%\work\foundation\install\bin;%PATH%"
-set "PYTHONNOUSERSITE=1"
-set "PYTHONPATH="
-set "PYTHONHOME="
-set "HAKONIWA_PORTABLE_WORKSPACE=1"
-set "HAKONIWA_PORTABLE_CITY_WORLD=1"
-set "HAKONIWA_WORKSPACE_ACTIVE=1"
-set "HAKONIWA_WORKSPACE_ROOT=%BUSINESS_PACK%"
-set "HAKONIWA_WORK_DIR=%BUSINESS_PACK%\work"
-set "HAKONIWA_HOME=%BUSINESS_PACK%\work\foundation\install"
-set "HAKO_CONFIG_PATH=%BUSINESS_PACK%\work\foundation\config\cpp_core_config.json"
-set "HAKO_PDU_ENDPOINT_RUNTIME_DIRS=%BUSINESS_PACK%\work\foundation\install\bin"
-set "VIRTUAL_ENV=%BUSINESS_PACK%\work\foundation\install\python"
-
-"%HAKO_PYTHON%" tools\portable_workspace_runtime.py prepare-city-world --root "%BUSINESS_PACK%"
-if not "%ERRORLEVEL%"=="0" (
-  echo [ERROR] Portable City World workspace preparation failed.
-  popd
-  pause
-  exit /b 2
-)
-
-"%HAKO_PYTHON%" tools\workspace.py run -- "%HAKO_PYTHON%" -m tools.remote_operation.city_world.launcher start --runtime-dir "%BUSINESS_PACK%\work\recipes\city-world-web-ui\runtime" --launcher-runtime-dir "%BUSINESS_PACK%\work\recipes\city-world-web-ui\launcher" --parallel-workers 8 --terrain-spacing-m auto --open-browser
+"%HAKO_PYTHON%" tools\portable_workspace_runtime.py start-city-world --root "%BUSINESS_PACK%"
 set "RC=%ERRORLEVEL%"
 popd
 
@@ -543,20 +521,7 @@ set "BUSINESS_PACK=%PACKAGE_ROOT%hakoniwa-business-pack"
 set "HAKO_PYTHON=%BUSINESS_PACK%\work\foundation\install\python\python.exe"
 
 pushd "%BUSINESS_PACK%"
-set "PATH=%BUSINESS_PACK%\work\foundation\install\python;%BUSINESS_PACK%\work\foundation\install\bin;%PATH%"
-set "PYTHONNOUSERSITE=1"
-set "PYTHONPATH="
-set "PYTHONHOME="
-set "HAKONIWA_PORTABLE_WORKSPACE=1"
-set "HAKONIWA_PORTABLE_CITY_WORLD=1"
-set "HAKONIWA_WORKSPACE_ACTIVE=1"
-set "HAKONIWA_WORKSPACE_ROOT=%BUSINESS_PACK%"
-set "HAKONIWA_WORK_DIR=%BUSINESS_PACK%\work"
-set "HAKONIWA_HOME=%BUSINESS_PACK%\work\foundation\install"
-set "HAKO_CONFIG_PATH=%BUSINESS_PACK%\work\foundation\config\cpp_core_config.json"
-set "HAKO_PDU_ENDPOINT_RUNTIME_DIRS=%BUSINESS_PACK%\work\foundation\install\bin"
-set "VIRTUAL_ENV=%BUSINESS_PACK%\work\foundation\install\python"
-"%HAKO_PYTHON%" tools\workspace.py run -- "%HAKO_PYTHON%" -m tools.remote_operation.city_world.launcher {command} --launcher-runtime-dir "%BUSINESS_PACK%\work\recipes\city-world-web-ui\launcher"
+"%HAKO_PYTHON%" tools\portable_workspace_runtime.py {command}-city-world --root "%BUSINESS_PACK%"
 set "RC=%ERRORLEVEL%"
 popd
 if not "%RC%"=="0" pause
