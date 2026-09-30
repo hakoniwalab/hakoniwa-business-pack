@@ -232,7 +232,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("command", choices=("start", "status", "stop"))
     parser.add_argument("--listen-address", default="127.0.0.1")
     parser.add_argument("--worker-port", type=int, default=54210)
-    parser.add_argument("--web-port", type=int, default=8008)
+    parser.add_argument("--web-port", type=int, default=28008)
     parser.add_argument("--runtime-dir", type=Path, default=DEFAULT_SERVICE_RUNTIME)
     parser.add_argument(
         "--launcher-runtime-dir", type=Path, default=DEFAULT_LAUNCHER_RUNTIME

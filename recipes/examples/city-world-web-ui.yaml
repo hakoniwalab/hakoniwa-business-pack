@@ -261,7 +261,7 @@ demo:
       expected: Report Foundation and source contracts, then import the PDU Launcher and Core-free Endpoint from Foundation Python.
     - id: launch_web_ui
       command: python tools/recipe/city_world_web_ui.py start --open-browser
-      expected: Start the local Worker and Web UI at http://127.0.0.1:8008/ without Hakoniwa Core.
+      expected: Start the local Worker and Web UI at http://127.0.0.1:28008/ without Hakoniwa Core.
   cleanup:
     expected_behavior:
       - Run python tools/recipe/city_world_web_ui.py stop before leaving the Workspace.

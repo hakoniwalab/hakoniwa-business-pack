@@ -33,7 +33,7 @@ class CityWorldLauncherTest(unittest.TestCase):
                 service_runtime=root / "worker",
                 listen_address="127.0.0.1",
                 worker_port=54210,
-                web_port=8008,
+                web_port=28008,
                 max_download_gib=8.0,
                 parallel_workers=6,
                 dem_parallel_workers=4,

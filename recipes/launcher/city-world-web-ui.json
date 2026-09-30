@@ -29,7 +29,7 @@
       "args": [
         "-m", "tools.remote_operation.city_world.web_smoke",
         "--listen-address", "127.0.0.1",
-        "--port", "8008",
+        "--port", "28008",
         "--worker-runtime-dir", "${HAKO_RECIPE_WORKSPACE}/runtime",
         "--pdu-javascript-root", "${HAKONIWA_PDU_JAVASCRIPT_ROOT}"
       ],

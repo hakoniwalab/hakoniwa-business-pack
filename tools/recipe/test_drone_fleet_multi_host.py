@@ -494,9 +494,10 @@ class DroneFleetMultiHostTest(unittest.TestCase):
             self.assertEqual(recipe.open_viewer_local(Path("/output")), 0)
 
         urlopen.assert_called_once_with(
-            "http://127.0.0.1:8000/index.html", timeout=2.0
+            f"http://127.0.0.1:{recipe.fleet_runtime.VIEWER_HTTP_PORT}/index.html", timeout=2.0
         )
         viewer_url = browser.call_args.args[0]
+        self.assertIn(f"ws://127.0.0.1:{recipe.fleet_runtime.WEB_BRIDGE_PORT}", viewer_url)
         self.assertIn("dynamicSpawn=true", viewer_url)
         self.assertIn("maxDynamicDrones=256", viewer_url)
 

@@ -112,7 +112,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("command", choices=("configure", "doctor", "start", "status", "stop"))
     result.add_argument("--listen-address", default="127.0.0.1")
     result.add_argument("--worker-port", type=int, default=54210)
-    result.add_argument("--web-port", type=int, default=8008)
+    result.add_argument("--web-port", type=int, default=28008)
     result.add_argument("--max-download-gib", type=float, default=8.0)
     result.add_argument("--parallel-workers", type=int, default=8)
     result.add_argument("--dem-parallel-workers", type=int, default=4)

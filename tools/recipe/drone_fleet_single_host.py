@@ -53,16 +53,8 @@ ROOT = Path(__file__).absolute().parents[2]
 DEFAULT_EXPERIMENT = (
     ROOT / "recipes" / "experiments" / "drone-fleet-single-host-mvp.yaml"
 )
-VIEWER_URL_BASE = (
-    "http://127.0.0.1:8000/index.html"
-    "?viewerConfigPath=/config/viewer-config-fleets.json"
-    "&wsUri=ws://127.0.0.1:8765&wireVersion=v2"
-)
-MAP_VIEWER_URL_BASE = (
-    "http://127.0.0.1:8000/src/client/index.html"
-    "?threejsRoot=/thirdparty/hakoniwa-threejs-drone"
-    "&viewerConfigName=viewer-config-fleets.json"
-)
+VIEWER_HTTP_PORT = fleet_runtime.VIEWER_HTTP_PORT
+WEB_BRIDGE_PORT = fleet_runtime.WEB_BRIDGE_PORT
 HAKONIWA_STROKE_COUNT = 26
 RECOMMENDED_DRONES_PER_STROKE = 2
 # The public Drone Core distribution and the default Foundation build limits
@@ -1595,12 +1587,20 @@ def web_bridge_path(paths, system_name: str) -> Path:
 
 
 def bridge_config_root(paths) -> Path:
+    """The installed fleet WebBridge configuration (hakoniwa-pdu-bridge-core)."""
     return (
         paths.install_prefix
         / "share"
         / "hakoniwa-pdu-bridge"
         / "config"
         / "web_bridge_fleets"
+    )
+
+
+def web_bridge_config(paths, port: int = WEB_BRIDGE_PORT) -> Path:
+    """The Recipe's WebBridge configuration: the installed one listening on port."""
+    return fleet_runtime.materialize_web_bridge_config(
+        bridge_config_root(paths), paths.recipe_config / "web_bridge_fleets", port
     )
 
 
@@ -1649,7 +1649,7 @@ def resolve_foundation_python(paths, system_name: str) -> Path:
     raise RecipeError("Foundation Python not found: " + ", ".join(map(str, candidates)))
 
 
-def materialize_mujoco_city_viewer(paths, viewer_root: Path) -> Path:
+def materialize_mujoco_city_viewer(paths, viewer_root: Path, websocket_port: int = WEB_BRIDGE_PORT) -> Path:
     """Create a Recipe-local Map Viewer with a City-backed Three.js pane."""
     marker_path = paths.recipe_config / "mujoco-city-fleet.json"
     try:
@@ -1732,6 +1732,7 @@ def materialize_mujoco_city_viewer(paths, viewer_root: Path) -> Path:
     except (OSError, json.JSONDecodeError) as exc:
         raise RecipeError(f"invalid Three.js fleet viewer config: {exc}") from exc
     viewer_config["three"]["sceneConfigPath"] = "./drone_config-city-fleet.json"
+    viewer_config.setdefault("pdu", {})["wsUri"] = f"ws://127.0.0.1:{websocket_port}"
     fleet_options = viewer_config.setdefault("stateInput", {}).setdefault(
         "fleets", {}
     )
@@ -1776,6 +1777,9 @@ def write_launcher(
     viewer_root: Path,
     experiment: Experiment,
     system_name: str,
+    *,
+    http_port: int = VIEWER_HTTP_PORT,
+    websocket_port: int = WEB_BRIDGE_PORT,
 ) -> Path:
     drone_binary = resolve_drone_binary(drone_root, system_name)
     python = resolve_foundation_python(paths, system_name)
@@ -1799,7 +1803,7 @@ def write_launcher(
     )
     mujoco_city_mode = (paths.recipe_config / "mujoco-city-fleet.json").is_file()
     runtime_viewer_root = (
-        materialize_mujoco_city_viewer(paths, viewer_root)
+        materialize_mujoco_city_viewer(paths, viewer_root, websocket_port)
         if mujoco_city_mode and experiment.visualization
         else viewer_root
     )
@@ -1823,6 +1827,7 @@ def write_launcher(
                 # Keep the non-ICRA City demo at its final formation so its
                 # browser viewer remains available until an explicit stop.
                 final_hold_extra_sec=86400.0 if mujoco_city_mode else 0.0,
+                viewer_http_port=http_port,
             ),
             drone_binary=drone_binary,
             python=python,
@@ -1835,7 +1840,7 @@ def write_launcher(
                 else None
             ),
             web_bridge_config_root=(
-                bridge_config_root(paths) if experiment.visualization else None
+                web_bridge_config(paths, websocket_port) if experiment.visualization else None
             ),
             performance_config=(
                 paths.recipe_config / "measurement.json"
@@ -2232,7 +2237,8 @@ def doctor(
                 + f"; run '{operator_command('prepare-viewer')}'",
             )
         )
-    for port in ((8000, 8765, 54111) if experiment.visualization else (54111,)):
+    # The Launcher's control endpoint takes a free port itself (recorded in its session).
+    for port in ((VIEWER_HTTP_PORT, WEB_BRIDGE_PORT) if experiment.visualization else ()):
         available = _port_available(port)
         if available is None:
             print(f"[WARN] port {port}: unavailable in this execution environment")
@@ -2481,8 +2487,25 @@ def smoke(
     return 1
 
 
-def viewer_url(drone_count: int, *, map_viewer: bool = False) -> str:
-    base = MAP_VIEWER_URL_BASE if map_viewer else VIEWER_URL_BASE
+def viewer_url(
+    drone_count: int,
+    *,
+    map_viewer: bool = False,
+    http_port: int = VIEWER_HTTP_PORT,
+    websocket_port: int = WEB_BRIDGE_PORT,
+) -> str:
+    if map_viewer:
+        base = (
+            f"http://127.0.0.1:{http_port}/src/client/index.html"
+            "?threejsRoot=/thirdparty/hakoniwa-threejs-drone"
+            "&viewerConfigName=viewer-config-fleets.json"
+        )
+    else:
+        base = (
+            f"http://127.0.0.1:{http_port}/index.html"
+            "?viewerConfigPath=/config/viewer-config-fleets.json"
+            f"&wsUri=ws://127.0.0.1:{websocket_port}&wireVersion=v2"
+        )
     return (
         f"{base}&dynamicSpawn=true"
         f"&templateDroneIndex=0&maxDynamicDrones={drone_count}"
@@ -2505,7 +2528,7 @@ def open_browser(url: str) -> bool:
     if is_wsl():
         print(
             "WSL2: open the URL in a Windows browser. WSL localhost forwarding "
-            "exposes HTTP port 8000 and WebSocket port 8765 to the host."
+            f"exposes HTTP port {VIEWER_HTTP_PORT} and WebSocket port {WEB_BRIDGE_PORT} to the host."
         )
         return True
     if platform.system() == "Darwin":

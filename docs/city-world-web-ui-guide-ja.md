@@ -38,7 +38,7 @@ Python、Git、WSL、Dockerの追加インストールも不要である。porta
 
 - CPython 3.12、C++ build toolchain、Gitを利用できること
 - PLATEAU API、CityGML、地図データへ接続できること
-- 既定のTCP port `54210`とHTTP port `8008`が空いていること
+- 既定のTCP port `54210`とHTTP port `28008`が空いていること
 
 ### Windows: vcpkgをFoundationへ先に登録する
 
@@ -81,7 +81,7 @@ python tools/recipe/city_world_web_ui.py doctor
 python tools/recipe/city_world_web_ui.py start --open-browser
 ```
 
-起動に成功すると`Web UI : http://127.0.0.1:8008/`が表示される。
+起動に成功すると`Web UI : http://127.0.0.1:28008/`が表示される。
 `--open-browser`で開かなかった場合は、このURLを手動で開く。
 
 画面上部が`Worker接続済み`になれば操作できる。
@@ -196,7 +196,7 @@ work/recipes/city-world-web-ui/launcher/
 | `--terrain-spacing-m` | `auto` | 地形grid間隔。`2`、`5`、`10`、`auto` |
 | `--max-download-gib` | `8.0` | 1回の生成で許可する推定download量の上限 |
 | `--worker-port` | `54210` | WorkerのWebSocket port。現在の同梱UIでは既定値を使う |
-| `--web-port` | `8008` | Web UIのHTTP port |
+| `--web-port` | `28008` | Web UIのHTTP port |
 
 広い範囲では、まず`--terrain-spacing-m auto`を使う。`auto`は推定sample数に応じて
 `2 m`、`5 m`、`10 m`から選択する。並列数や地形間隔を変える場合は、Launcherを一度停止して
@@ -222,7 +222,7 @@ work/recipes/city-world-web-ui/launcher/logs/worker.err
 work/recipes/city-world-web-ui/launcher/logs/web.err
 ```
 
-HTTP port `8008`が使用中なら、停止後に`--web-port`を変更して起動する。
+HTTP port `28008`が使用中なら、停止後に`--web-port`を変更して起動する。
 同梱UIの接続先WebSocketは現在`127.0.0.1:54210`であるため、`--worker-port`だけを
 変更しても画面は接続できない。Worker側の`54210`を空けてから再起動する。
 

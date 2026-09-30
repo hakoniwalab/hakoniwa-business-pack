@@ -284,7 +284,7 @@ def handler_factory(pdu_js_root: Path, worker_runtime_root: Path):
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--listen-address", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8008)
+    parser.add_argument("--port", type=int, default=28008)
     parser.add_argument("--pdu-javascript-root", type=Path)
     parser.add_argument(
         "--worker-runtime-dir", type=Path,
