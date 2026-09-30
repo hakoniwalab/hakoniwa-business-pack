@@ -1,0 +1,403 @@
+id: hakoniwa-environment-studio
+name: Hakoniwa Environment Studio
+repository:
+  owner: hakoniwalab
+  name: hakoniwa-environment-studio
+  url: https://github.com/hakoniwalab/hakoniwa-environment-studio
+  visibility: public
+
+distribution:
+  channel: oss
+  notes:
+    - The Environment Studio software, Types, Catalogs, Recipes, and documentation are provided under the MIT License (Copyright (c) 2026 Hakoniwa Lab, LLC).
+    - Browser libraries loaded at runtime from unpkg (three.js, Leaflet), dependent repositories (hakoniwa-envsim, hakoniwa-urban-mobility), MuJoCo, and Python packages retain their own license terms.
+    - Imported map data (OpenStreetMap under ODbL, map tiles, PLATEAU data and textures) keeps its provider's terms; the Studio records the source in each Recipe's geo block but the MIT License does not grant rights to that data.
+
+verification:
+  verified_at: 2026-10-01
+  source_revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+  source_ref: main
+
+summary: >-
+  Browser authoring tool for static Car / Drone test environments. It separates
+  environment parts into Type / Catalog / Recipe, edits layouts in a 2D plan view
+  with a 3D preview, validates Recipes with MuJoCo and returns machine-readable
+  diagnostics, generates GLB and MuJoCo MJCF from the same resolved Recipe, turns
+  CityGML (PLATEAU, or OpenStreetMap converted by hakoniwa-envsim) and hakoniwa-envsim
+  City Worlds into editable parts, and exports an environment as a
+  hakoniwa-urban-mobility City World job.
+
+category:
+  primary: tool
+  secondary:
+    - asset-generation
+    - environment-model
+    - browser
+    - integration
+
+status:
+  maturity: experimental
+  catalog_confidence: high
+  notes:
+    - The component-owned Business Pack Recipe records partial verification on macOS arm64 (configure, doctor, Studio unit tests with Foundation Python, browser start, and Urban export plus register-city); Linux, Windows, and a clean host are not recorded.
+    - Round-trip equivalence with hakoniwa-envsim output is checked by tools/env_roundtrip.py; the repository reports three workspace City Worlds (two Sapporo, one Numazu) passing.
+    - The Studio authors static environments only; it does not implement vehicles, controllers, traffic rules, or scenarios.
+
+capabilities:
+  - name: Type / Catalog / Recipe environment contract
+    description: Separates part structure, parameters, physical attributes, and shape rules (Type) from concrete presets (Catalog Item) and per-environment placement (Recipe), in ENU metres with the origin at the environment centre.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: docs/data-contract.md
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: types/environment-types.yaml
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: catalogs/starter/catalog.yaml
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+
+  - name: Starter Catalog for Car / Drone test environments
+    description: Provides flat, hfield hills, and envsim DEM ground; walls, building blocks, box obstacles, pylons, gates, ramps, platforms, and landing pads; road surfaces, markings, paths and areas, guard rails, road signs, and traffic signals (appearance, placement, and collision only).
+    evidence:
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: catalogs/starter/catalog.yaml
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: recipes/examples/drone-practice-field.yaml
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+
+  - name: Browser 2D compose editor with 3D preview
+    description: Local web Studio for 2D plan-view placement (drag, rotate, snap, multi-select, duplicate, undo/redo) with parameter forms generated from item definitions and a 3D view that renders the generator's GLB from overview, car-eye, and drone-eye cameras.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: README.md
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: tools/env_studio.py
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: web/studio.js
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+
+  - name: MuJoCo physical validation with machine-readable diagnostics
+    description: Validates a Recipe in two stages (schema, then MuJoCo) and reports every problem with path, code, expected, and actual values, including overlap, outside, below_terrain, and compile_error at 1 mm tolerance.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: docs/data-contract.md
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: tools/env_validate.py
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: tests/test_env_validate.py
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+
+  - name: Deterministic GLB and MJCF generation
+    description: Generates environment.glb (Three.js frame), environment.xml (MuJoCo, ENU, hfield or flat terrain, visual-only shapes excluded from contact), and environment.json (mapping, extent, terrain, sha256, fingerprint) from one resolved Recipe; the same Recipe yields the same files.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: tools/env_generate.py
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: tests/test_env_generate.py
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+
+  - name: AI authoring contract
+    description: Exposes contract, types, describe-type, catalog, describe-item, validate, resolve, inspect, and generate as JSON commands (and the equivalent Studio HTTP API) so an agent can run a generate / validate / repair loop on the same schema and validation a human uses.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: docs/ai-contract.md
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: tools/envstudio.py
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: tests/test_ai_contract.py
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+
+  - name: Map and CityGML import as editable parts
+    description: Converts CityGML into a Recipe of parts, one building-footprint per bldg:Building and road-area road surfaces, with source provenance; OpenStreetMap (Overpass API) or GeoJSON is first converted to CityGML LOD1 by hakoniwa-envsim's osm2citygml.py, and PLATEAU CityGML is read directly.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: docs/citygml-parts.md
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: tools/env_citygml.py
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: tests/test_env_citygml.py
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+
+  - name: Lossless import of hakoniwa-envsim City Worlds
+    description: Imports an existing envsim City World build as parts while passing through envsim's terrain hfield and GLB, per-building P0-P3 colliders, and road-network layers unchanged; an unedited import regenerates the envsim world, and tools/env_roundtrip.py compares geoms, hfield data, and GLB vertices against envsim's own output.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: docs/citygml-parts.md
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: tools/env_roundtrip.py
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: tests/test_env_passthrough.py
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+
+  - name: PLATEAU City World builds through hakoniwa-envsim
+    description: Builds a City World for a map selection by running envsim's tools/hako.py with the Business Pack visual-physics profile in the background under the Studio Recipe workspace, reusing a shared CityGML cache, with progress, cancel, and offline rebuild, then imports the result as parts.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: tools/env_cityworld.py
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: tests/test_env_cityworld.py
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+
+  - name: Export and registration to hakoniwa-urban-mobility
+    description: Writes an environment as a City World job (receipt, World MJCF in Urban's frame, GLB, terrain hfield, collider-view GLB), runs Urban's city_world_job.py check, and registers it with urban_assets.py register-city; Recipes with a map origin become kind city, others kind plain.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: docs/urban-export.md
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: tools/env_urban.py
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: tests/test_env_urban.py
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+
+limitations:
+  - Authors static environments only; Car, Drone, and Robot control, traffic-signal logic, traffic rules, and scenarios are out of scope and delegated to other Hakoniwa components.
+  - Not a 3D CAD replacement and not a general mesh modeling tool.
+  - Terrain is flat ground or a MuJoCo hfield (generated hills or an envsim DEM); rough ground is not approximated with primitives.
+  - Placement validation (overlap, outside) uses LOD1 footprints; imported envsim colliders are passed through and are not re-derived from the footprint.
+  - Map import fidelity depends on the source data; OpenStreetMap buildings become CityGML LOD1, and PLATEAU feature availability follows the dataset.
+  - Overlapping source footprints are auto-clipped only within documented limits; remaining overlaps are reported for human judgement.
+  - The Studio runs only inside the Business Pack Workspace and refuses to start outside it.
+  - Recorded runtime evidence is macOS arm64 only; Linux, Windows, and clean-host configure are not recorded.
+  - Physical validation checks geometric consistency in MuJoCo; it does not establish real-world safety of an environment.
+
+interfaces:
+  inputs:
+    - name: Environment Types
+      kind: config
+      description: types/environment-types.yaml defining part structure, parameters with kind, unit, range, and level, and shape-generation rules.
+    - name: Environment Catalog
+      kind: config
+      description: Catalog items that fix Type parameter values and declare which parameters stay adjustable per placement.
+    - name: Environment Recipe
+      kind: config
+      description: Size, terrain, and object placements of one environment, edited in the Studio or written by hand or by an AI agent.
+    - name: CityGML or map selection
+      kind: file
+      description: PLATEAU CityGML, OpenStreetMap / GeoJSON converted by envsim, an existing envsim City World build, or a map selection (centre and half extents) for a new City World build.
+  outputs:
+    - name: Generated environment
+      kind: file
+      description: environment.glb, environment.xml (MuJoCo), and environment.json with mapping, extent, terrain, hashes, and fingerprint.
+    - name: Validation diagnostics
+      kind: api
+      description: JSON {ok, stage, diagnostics} from envstudio.py validate or POST /api/validate.
+    - name: Urban City World job
+      kind: file
+      description: build/world/city-world-receipt.json, city-world.xml, city-world.glb, terrain components, and viewer GLBs under the Recipe workspace urban/<Recipe ID>/ folder.
+    - name: Environment Studio CLI
+      kind: command
+      description: tools/envstudio.py (AI contract), tools/env_citygml.py, tools/env_roundtrip.py, tools/env_urban.py, and tools/env_studio.py start / status / open / stop.
+  protocols:
+    - name: HTTP
+      role: server
+      notes: Local loopback Studio at http://127.0.0.1:28097/ by default with a JSON API (/api/validate, /api/resolve, /api/glb, /api/recipes, /api/city-worlds, /api/map/import).
+    - name: OpenStreetMap Overpass API and PLATEAU
+      role: client
+      notes: Reached only when the operator imports a map area or builds a City World (through hakoniwa-envsim).
+    - name: City World job contract
+      role: file
+      notes: Export follows hakoniwa-urban-mobility schemas/city-world-job.yaml.
+  configuration:
+    - path: recipes/business-pack/environment-studio.yaml
+      description: Component-owned Business Pack Recipe (foundation_contract not_required) that declares hakoniwa-envsim and hakoniwa-urban-mobility as recipe_local_requirements and the Python packages installed into Foundation Python.
+    - path: recipes/requirements/environment-studio.txt
+      description: Python requirements (PyYAML, mujoco 3.13.0, numpy, shapely, lxml, mapbox-earcut, trimesh, Pillow).
+    - path: types/environment-types.yaml
+      description: Environment part Types.
+    - path: catalogs/starter/catalog.yaml
+      description: Starter Catalog.
+    - path: recipes/examples/
+      description: Example environments (drone practice field, car test course, hills field).
+
+dependencies:
+  required:
+    - name: Python 3.12
+      type: runtime
+      notes: Business Pack Foundation Python; the Studio does not create its own virtual environment.
+    - name: MuJoCo
+      type: package
+      notes: mujoco 3.13.0 Python package for physical validation and collider GLB compilation, shared with the Urban Recipes.
+    - name: hakoniwa-envsim
+      type: repository
+      notes: CityGML extraction, OpenStreetMap to CityGML conversion, PLATEAU City World builds, and the MJCF collider GLB converter (recipe_local_requirements, HAKONIWA_ENVSIM_ROOT).
+    - name: Hakoniwa Business Pack Workspace
+      type: tool
+      notes: Provides HAKONIWA_WORK_DIR and the Recipe workspace work/recipes/environment-studio; the Studio refuses to start outside it.
+  optional:
+    - name: hakoniwa-urban-mobility
+      type: repository
+      notes: Declared by the Recipe and required for the Urban export and registration path (HAKONIWA_URBAN_MOBILITY_ROOT); authoring and validation do not use it.
+    - name: Python geometry packages
+      type: package
+      notes: shapely, lxml, mapbox-earcut, trimesh, and Pillow for CityGML parts, envsim extractors, GLB generation, and PLATEAU textures.
+
+platforms:
+  supported:
+    - macOS
+  notes:
+    - The Studio is a Python-only local web tool and Linux and Windows are design targets in its Recipe, but only macOS arm64 runtime evidence is recorded.
+
+connects_to:
+  - component_id: hakoniwa-envsim
+    direction: uses
+    interface: CityGML extractors, osm2citygml.py, tools/hako.py City World build outputs, and mjcf_colliders2glb.py
+    notes: Imports envsim pipeline modules from its checkout and passes envsim terrain, colliders, and layers through unchanged on City World import.
+  - component_id: hakoniwa-urban-mobility
+    direction: uses
+    interface: City World job (schemas/city-world-job.yaml), tools/city_world_job.py check, tools/urban_assets.py register-city
+    notes: Exports an authored environment as an Urban World and registers it as a City Asset.
+
+data_contracts:
+  - name: Type / Catalog / Recipe
+    description: Environment data layers, ENU coordinates in metres and degrees with the origin at the environment centre, terrain kinds, and diagnostics.
+    source:
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: docs/data-contract.md
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+  - name: CityGML to parts conversion
+    description: Part units, building and road mapping, ID and provenance rules, envsim pass-through anchors, and overlap clipping.
+    source:
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: docs/citygml-parts.md
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+  - name: Urban export
+    description: City World job layout, frame rotation to Urban's X=North, Y=-East, terrain grid order, kind city or plain, and producer fingerprint.
+    source:
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: docs/urban-export.md
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+
+recipe_roles:
+  - role: environment_model
+    description: Owns the authored static environment (terrain, structures, roadside parts) as a Recipe.
+  - role: asset_generator
+    description: Generates GLB and MuJoCo MJCF environments and Urban City World jobs from one resolved Recipe.
+  - role: visualizer
+    description: Provides the browser 2D plan and 3D preview of the environment.
+  - role: integration_boundary
+    description: Bridges envsim City World outputs into editable Recipes and Recipes into hakoniwa-urban-mobility Worlds.
+
+typical_usecases:
+  - Build a small Car or Drone test field (course, practice field, hills) in the browser without editing MuJoCo XML directly.
+  - Let an AI agent draft an environment Recipe and repair it from machine-readable diagnostics.
+  - Turn a real map area (OpenStreetMap or PLATEAU) into editable building and road parts.
+  - Edit an existing envsim PLATEAU City World (move, remove, duplicate buildings) while keeping envsim's terrain and collider fidelity.
+  - Register an authored environment as a World in hakoniwa-urban-mobility and drive a car on it.
+
+anti_usecases:
+  - Implementing vehicle dynamics, controllers, traffic-signal control, or scenarios inside the Studio.
+  - Treating MuJoCo validation of an authored environment as real-world safety evidence.
+  - Assuming imported map data is covered by the Studio's MIT License.
+  - Running the Studio outside the Business Pack Workspace or with a separate virtual environment.
+
+demo_candidates:
+  - name: Environment Studio in the Business Pack Workspace
+    description: Configure and doctor the component-owned Recipe, run the Studio unit tests with Foundation Python, start the Studio at http://127.0.0.1:28097/, and validate an example Recipe.
+    required_components:
+      - hakoniwa-environment-studio
+      - hakoniwa-envsim
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: recipes/business-pack/environment-studio.yaml
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+  - name: Author an environment and drive a car on it in Urban Mobility
+    description: Save an environment in the Studio, export and register it with the urban-mobility button, then compose it with a Golf Cart in Urban Studio and simulate.
+    required_components:
+      - hakoniwa-environment-studio
+      - hakoniwa-urban-mobility
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: README.md
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: docs/urban-export.md
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+
+operations:
+  build:
+    commands:
+      - python tools/recipe.py configure --recipe ../hakoniwa-environment-studio/recipes/business-pack/environment-studio.yaml
+      - python tools/recipe.py doctor --recipe ../hakoniwa-environment-studio/recipes/business-pack/environment-studio.yaml
+    notes:
+      - Run in the (hako) Workspace shell from hakoniwa-business-pack; configure clones missing source repositories and installs the Recipe Python packages into Foundation Python.
+  test:
+    commands:
+      - python -m unittest discover -s ../hakoniwa-environment-studio/tests
+    notes:
+      - Run with Foundation Python in the Workspace.
+  run:
+    commands:
+      - python ../hakoniwa-environment-studio/tools/env_studio.py start
+      - python ../hakoniwa-environment-studio/tools/env_studio.py status
+      - python ../hakoniwa-environment-studio/tools/env_studio.py open
+      - python ../hakoniwa-environment-studio/tools/env_studio.py stop
+    notes:
+      - Stop the Studio before leaving the Workspace; exit does not stop a background Studio.
+
+known_gaps:
+  - Record configure, doctor, unit tests, and browser authoring evidence on Linux, Windows, and a clean host.
+  - The component-owned Recipe still lists the missing Catalog entries as a missing piece and records its browser check at port 8097 before the default moved to 28097; refresh it now that the Catalog entries exist.
+
+source_refs:
+  - repository: hakoniwalab/hakoniwa-environment-studio
+    path: LICENSE
+    revision: f1a7bc95a4b4c06777b071bb65f494a53dd15925
+    description: MIT License (Copyright (c) 2026 Hakoniwa Lab, LLC) covering this repository's software, Types, Catalogs, Recipes, and documentation.
+  - repository: hakoniwalab/hakoniwa-environment-studio
+    path: README.md
+    revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+    description: Concept, design principles, Workspace quick start, end-to-end Urban flow, map import, generated outputs, and license boundaries.
+  - repository: hakoniwalab/hakoniwa-environment-studio
+    path: docs/data-contract.md
+    revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+    description: Type / Catalog / Recipe, coordinates, terrain, and diagnostics contract.
+  - repository: hakoniwalab/hakoniwa-environment-studio
+    path: docs/citygml-parts.md
+    revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+    description: CityGML to parts, envsim City World pass-through, map import, and City World build.
+  - repository: hakoniwalab/hakoniwa-environment-studio
+    path: docs/urban-export.md
+    revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+    description: Export to the hakoniwa-urban-mobility City World job and what was checked.
+  - repository: hakoniwalab/hakoniwa-environment-studio
+    path: docs/ai-contract.md
+    revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+    description: AI authoring contract and generate / validate / repair loop.
+  - repository: hakoniwalab/hakoniwa-environment-studio
+    path: recipes/business-pack/environment-studio.yaml
+    revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+    description: Component-owned Business Pack Recipe with partial macOS arm64 validation evidence.
+
+tags:
+  - hakoniwa
+  - environment
+  - authoring
+  - browser
+  - mujoco
+  - glb
+  - mjcf
+  - hfield
+  - citygml
+  - plateau
+  - openstreetmap
+  - city-world
+  - urban-mobility
+  - ai-contract
+  - oss
+  - mit

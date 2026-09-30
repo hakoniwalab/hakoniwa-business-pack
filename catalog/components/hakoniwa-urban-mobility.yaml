@@ -1,0 +1,532 @@
+id: hakoniwa-urban-mobility
+name: Hakoniwa Urban Mobility
+repository:
+  owner: hakoniwalab
+  name: hakoniwa-urban-mobility
+  url: https://github.com/hakoniwalab/hakoniwa-urban-mobility
+  visibility: public
+
+distribution:
+  channel: oss
+  notes:
+    - The repository LICENSE is the MIT License (Copyright (c) 2026 Hakoniwa Lab, LLC), and GitHub reports the repository as public with an MIT license.
+    - The README has no license section; the terms here come from the LICENSE file only.
+    - Integrated components such as hakoniwa-drone-core (public v4.1.1 native distribution), hakoniwa-fpv-drone, MuJoCo, PLATEAU City World data, and third-party packages retain their own license terms.
+
+verification:
+  verified_at: 2026-10-01
+  source_revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+  source_ref: main
+
+summary: >-
+  Integration suite for ground vehicles and drones in a shared World. A Composition
+  selects one World (a registered PLATEAU City World or a plain World) and places
+  vehicle Assets (Golf Cart, EAMS Hexa, FPV Drone, Drone Core quad fleet) with rc or
+  api control. Urban Studio, the browser UI, and one CLI entrypoint then configure,
+  start, and stop the simulation through a managed Recipe for each route. It owns the
+  Urban Car application, the City World job contract, and City registration. Vehicle
+  dynamics, flight control, and physics stay in their owning components.
+
+category:
+  primary: tool
+  secondary:
+    - integration
+    - simulator
+    - browser
+    - control-plane
+
+status:
+  maturity: experimental
+  catalog_confidence: medium
+  notes:
+    - The README status (2026-09-28) records Car + Drone on a Sapporo City World at real time (RTF 1.0) on macOS, and 10-drone Drone Core fleets at RTF 1.0; the integrated route is reported to start on Windows.
+    - The Asset / Composition contract is declared the target contract; the Recipes in recipes/experiments/ do not follow it yet and are mapped onto it by a migration plan.
+    - The integrated Drone + multi-Car managed Recipe records partial verification on macOS arm64; rooftop takeoff and operator-controlled flight remain manual acceptance items.
+    - Catalog confidence is medium because this entry summarizes a broad repository whose contracts are still being migrated; the component Recipes and docs are the source of truth.
+
+capabilities:
+  - name: Asset and Composition contract
+    description: Separates Asset manifests (what a vehicle or World is, owned by its source repository) from Compositions (the user's World, vehicles, controls, and placement), so browser and CLI produce the same Composition and Recipe workspace artifacts.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: docs/asset-contract.md
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: tools/urban_composition.py
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: recipes/compositions/city-car-hexa.yaml
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+
+  - name: Vehicle Assets with rc and api control
+    description: Provides Golf Cart (Ackermann MuJoCo, PS5 rc or route-scenario api), Urban EAMS Hexa and FPV Drone (Drone Core, PS4/PS5 rc), and a Drone Core quad fleet Asset; each control is a program with an argument template started by the Launcher.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: assets/golf-cart.asset.yaml
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: assets/eams-hexa.asset.yaml
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: assets/drone-core-quad.asset.yaml
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: tests/test_control_modes.py
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+
+  - name: Urban Studio browser UI
+    description: Local web UI (default http://127.0.0.1:28090/) with City, Assets, Compose, Route, and Simulation tabs; it registers City World jobs, places vehicles on a map or 3D view at ground-plus-clearance spawn heights, draws Car route loops, and runs configure / start / stop / status with progress and an embedded Viewer.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: tools/urban_studio.py
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: web/studio.js
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: tests/test_urban_studio.py
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+
+  - name: Managed Recipe per simulation route
+    description: Plans each Composition onto a route (car, drone, integrated, fleet, fpv) and runs that route's managed Business Pack Recipe first, so only the dependencies of the selected Assets are materialized; urban.manifest.yaml names the Recipes, contracts, catalog locations, and ports.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: urban.manifest.yaml
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: docs/urban-manifest.md
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: tools/urban_simulation.py
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: recipes/usecases/urban-car-rc.yaml
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+
+  - name: City World job contract and City registration
+    description: Publishes the machine-readable City World job contract (layout, frames, receipt, terrain hfield, World MJCF rules) with a checker, and registers City World receipts or plain World YAML as World Assets, including a precompiled spawn-height model.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: schemas/city-world-job.yaml
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: tools/city_world_job.py
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: tools/urban_assets.py
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: tests/test_city_world_job.py
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+
+  - name: Plain Worlds
+    description: Runs Cars and the EAMS Hexa on a plain ground with optional FPV World obstacles by generating a City World job with kind plain; the default World is a 200 m x 200 m flat ground.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: tools/plain_world.py
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: worlds/plain-ground.yaml
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+
+  - name: Urban Car application
+    description: Builds the Urban-owned Ackermann Car Hakoniwa asset on the generic Robot Runtime and shared MuJoCo backend, composes multiple Golf Carts into one City World model compiled to a version-bound MJB, and drives them by PS5 or by pure-pursuit route scenarios.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: apps/car/urban-car-hakoniwa-asset.cpp
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: tools/multi_car.py
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: apps/car/scenario_executor.py
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+
+  - name: Drone Core drones and fleets in a City World
+    description: Places one Drone Core vehicle or an automatically laid-out quad fleet in a City World (fleet MJCF, per-process MJBs, spawn layout, fleet configuration) without importing hakoniwa-drone-show tools.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: tools/drone_fleet_city.py
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: tools/drone_one.py
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: tests/test_drone_fleet_city.py
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+
+  - name: Car + Drone in one simulation with a Drone Mirror
+    description: Runs separate Car and Drone MuJoCo worlds under one Hakoniwa clock and Conductor, with the Drone mirrored into the Car world as a pose-driven body.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: README.md
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: recipes/experiments/urban-mobility-rc.yaml
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+
+  - name: EAMS Hexa fault injection
+    description: Sends per-rotor thrust scale and wind direction and speed to the Drone disturb PDU from the Viewer; the controller does not reallocate thrust.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: tools/urban_fault_injection.py
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: tests/test_urban_fault_injection.py
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+
+limitations:
+  - No collision avoidance between route Cars; crossing routes can collide.
+  - Drone-Car contact is limited to the one-way Drone Mirror; it is not a momentum-conserving two-body co-simulation.
+  - A Drone Core quad fleet runs alone; a fleet Composition cannot contain other vehicles yet.
+  - The Asset / Composition contract is the target contract; recipes/experiments/ Recipes do not follow it yet.
+  - End-to-end runtime evidence is recorded on macOS; on Windows the integrated route is only reported to start.
+  - A running Urban simulation exclusively owns the shared Foundation runtime; do not run another Foundation shared-memory simulation at the same time.
+  - The Drone Core v4 Land RPC assumes a local Z=0 landing datum; on elevated PLATEAU surfaces the adapter confirms landing with a follow-up GetState.
+  - City fidelity comes from the City World receipt; Urban neither downloads nor regenerates PLATEAU data, and uses bounded static colliders rather than full-city high-density meshes.
+  - Urban does not implement flight controllers or vehicle dynamics; those remain in their owning components.
+  - Urban tools that resolve the Business Pack work directory stop outside the Business Pack Workspace.
+
+interfaces:
+  inputs:
+    - name: Composition
+      kind: config
+      description: hakoniwa.composition/v1 YAML selecting one World Asset, vehicle Assets, control per vehicle, parameters, and placement.
+    - name: Asset manifests
+      kind: config
+      description: hakoniwa.asset/v1 manifests from this repository, sibling repositories' assets/ folders, and registered Cities / Worlds under the Business Pack work directory.
+    - name: City World job or receipt
+      kind: file
+      description: A folder conforming to schemas/city-world-job.yaml, produced by the Business Pack City World Web UI with hakoniwa-envsim, tools/plain_world.py, or an authoring tool such as hakoniwa-environment-studio.
+    - name: Car route scenario
+      kind: config
+      description: Closed ENU waypoint loops with dwell, speed, loops, and assigned Cars (schema version 2).
+    - name: Game controller
+      kind: api
+      description: PS5 for Cars and PS4/PS5 for Drones in rc control.
+  outputs:
+    - name: Recipe workspace
+      kind: file
+      description: Generated Launcher, vehicle, WebBridge, and viewer configuration plus composed MJCF/MJB under the Business Pack work directory.
+    - name: Registered World Assets
+      kind: file
+      description: City and World asset manifests under work/urban/assets with the precompiled spawn-height model cache.
+    - name: Urban CLI
+      kind: command
+      description: tools/urban_mobility.py plan / doctor / configure / start / status / open-viewer / stop, tools/urban_assets.py, tools/city_world_job.py check, and tools/urban_studio.py start / open / status / stop.
+  protocols:
+    - name: HTTP
+      role: server
+      notes: Urban Studio on 127.0.0.1:28090 and the viewer file server on 28100 by default; ports are declared in urban.manifest.yaml.
+    - name: WebSocket (WebBridge)
+      role: server
+      notes: hakoniwa-pdu-bridge-core WebBridge on 28865 / 28866 / 28867 for the integrated, Car-only, and fleet viewers.
+    - name: Hakoniwa PDU
+      role: pubsub
+      notes: AckermannDrive, JointState, MultiDOF vehicle state, Drone control and disturbance PDUs over the Foundation shared-memory endpoint.
+    - name: City World job contract
+      role: file
+      notes: schemas/city-world-job.yaml, hakoniwa.city-world-job/v1.
+  configuration:
+    - path: urban.manifest.yaml
+      description: Root manifest naming contracts, Asset and Composition locations, managed Recipes per route, and ports.
+    - path: recipes/usecases/
+      description: Managed Business Pack Recipes for the car, drone, fleet, and fpv routes.
+    - path: recipes/experiments/urban-mobility-rc.yaml
+      description: Managed Recipe of the integrated Drone + multi-Car route.
+    - path: recipes/compositions/
+      description: Example Compositions (City or plain World with Car, Hexa, FPV, or fleet).
+    - path: schemas/city-world-job.yaml
+      description: City World job contract.
+
+dependencies:
+  required:
+    - name: hakoniwa-core-pro
+      type: repository
+      notes: Foundation lifecycle, shared memory, hako-cmd, and simulation time (foundation_contract required).
+    - name: hakoniwa-pdu-python
+      type: repository
+      notes: Foundation Python and the background Launcher lifecycle.
+    - name: hakoniwa-pdu-endpoint
+      type: repository
+      notes: Foundation shared-memory PDU endpoint.
+    - name: hakoniwa-pdu-bridge-core
+      type: repository
+      notes: WebBridge for the browser viewers.
+    - name: Python 3.12
+      type: runtime
+      notes: Business Pack Foundation Python.
+    - name: MuJoCo
+      type: runtime
+      notes: mujoco 3.13.0 for composed World + vehicle validation, MJB compile, and spawn heights.
+    - name: Hakoniwa Business Pack Workspace
+      type: tool
+      notes: Provides HAKONIWA_WORKSPACE_ROOT and HAKONIWA_WORK_DIR, recipe.py, the City World Web UI that Urban Studio links to, and the drone-fleet-single-host workspace the fleet route materializes into.
+  optional:
+    - name: hakoniwa-robot-runtime
+      type: repository
+      notes: Generic actuator runtime and Ackermann controller; required by Car routes.
+    - name: hakoniwa-mujoco-robots
+      type: repository
+      notes: MuJoCo physics and Viewer backend and mirror bodies; required by Car routes.
+    - name: hakoniwa-pdu-registry
+      type: repository
+      notes: PDU contracts for Car routes.
+    - name: hakoniwa-mbody-registry
+      type: repository
+      notes: Golf Cart model and hako_viewer_model geometry.
+    - name: hakoniwa-drone-core
+      type: repository
+      notes: Public v4.1.1 native Drone service and RC client; required by Drone, fleet, integrated, and FPV routes.
+    - name: hakoniwa-fpv-drone
+      type: repository
+      notes: FPV Drone Asset and tools/fpv.py for the fpv route.
+    - name: hakoniwa-threejs-drone
+      type: repository
+      notes: Three.js browser viewer.
+    - name: hakoniwa-map-viewer
+      type: repository
+      notes: Map Viewer for City World routes.
+    - name: hakoniwa-envsim
+      type: repository
+      notes: Produces PLATEAU City Worlds through the Business Pack City World Web UI and the mjcf_colliders2glb.py collider view; tools/route_surface_preview.py imports its city_pipeline.
+    - name: Game controller
+      type: runtime
+      notes: PS5 or PS4 controller for rc control (pygame 2.6.1).
+
+platforms:
+  supported:
+    - macOS
+    - Windows
+  notes:
+    - End-to-end Car + Drone real-time evidence is recorded on macOS; on Windows the integrated route is reported to start, and a portable Urban Car package path exists (tools/portable_urban_car.py).
+    - Linux is not recorded as verified.
+
+connects_to:
+  - component_id: hakoniwa-environment-studio
+    direction: used_by
+    interface: City World job (schemas/city-world-job.yaml), tools/city_world_job.py check, tools/urban_assets.py register-city
+    notes: Environment Studio exports authored environments as Urban Worlds and registers them as City Assets.
+  - component_id: hakoniwa-envsim
+    direction: uses
+    interface: PLATEAU City World receipts, MJCF, GLB, terrain hfield, and mjcf_colliders2glb.py collider view
+    notes: Urban consumes envsim City World outputs as World Assets and does not regenerate the city.
+  - component_id: hakoniwa-drone-core
+    direction: uses
+    interface: public v4.1.1 Drone service, RC client, fleet MJCF generator, and Drone PDUs
+    notes: Drone, fleet, integrated, and FPV routes run Drone Core as the Drone physics and flight-control owner.
+  - component_id: hakoniwa-robot-runtime
+    direction: uses
+    interface: Ackermann controller and JointState / MultiDOF state contracts
+    notes: The Urban Car application is built on the generic Robot Runtime mobile-base extension.
+  - component_id: hakoniwa-mujoco-robots
+    direction: uses
+    interface: MuJoCo physics and Viewer backend, mirror bodies
+    notes: Car worlds and the Drone Mirror use the shared MuJoCo backend.
+  - component_id: hakoniwa-mbody-registry
+    direction: uses
+    interface: Golf Cart model and hako_viewer_model
+    notes: Vehicle geometry for physics and the browser viewer.
+  - component_id: hakoniwa-pdu-registry
+    direction: uses
+    interface: PDU definitions
+    notes: Car routes materialize AckermannDrive, JointState, and MultiDOF contracts.
+  - component_id: hakoniwa-core-pro
+    direction: uses
+    interface: lifecycle, shared-memory PDU, and simulation time
+    notes: One Hakoniwa clock and one Conductor owner per simulation.
+  - component_id: hakoniwa-pdu-python
+    direction: uses
+    interface: Launcher and background session control
+    notes: start, status, and stop use the Launcher session.
+  - component_id: hakoniwa-pdu-endpoint
+    direction: uses
+    interface: shared-memory PDU endpoint
+    notes: Foundation requirement of every managed Urban Recipe.
+  - component_id: hakoniwa-pdu-bridge-core
+    direction: uses
+    interface: WebBridge WebSocket
+    notes: Carries vehicle state to the browser viewers.
+  - component_id: hakoniwa-threejs-drone
+    direction: uses
+    interface: Three.js browser viewer
+    notes: Viewer for plain Worlds and Drone routes.
+  - component_id: hakoniwa-map-viewer
+    direction: uses
+    interface: Map Viewer
+    notes: Viewer for City World routes.
+  - component_id: hakoniwa-fpv-drone
+    direction: uses
+    interface: FPV Drone Asset and tools/fpv.py
+    notes: The fpv route delegates vehicle generation and configuration to hakoniwa-fpv-drone.
+  - component_id: hakoniwa-drone-show
+    direction: related
+    interface: Drone fleet ownership boundary
+    notes: drone_fleet_city.py started as a copy of a drone-show tool; Urban does not import drone-show tools, and show planning stays in hakoniwa-drone-show.
+
+data_contracts:
+  - name: Asset / Composition
+    description: hakoniwa.asset/v1 and hakoniwa.composition/v1, controls, derived runtime, spawn height, placement loop, Urban Studio, and World Assets.
+    source:
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: docs/asset-contract.md
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+  - name: City World job
+    description: hakoniwa.city-world-job/v1 layout, frames, receipt, terrain hfield, World MJCF rules, and serving requirement that any World producer follows.
+    source:
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: schemas/city-world-job.yaml
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+  - name: Urban root manifest
+    description: hakoniwa.urban-manifest/v1 paths, managed Recipes per route, and port defaults with override order.
+    source:
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: docs/urban-manifest.md
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+
+recipe_roles:
+  - role: integration_boundary
+    description: Composes independently owned Car and Drone simulators, Worlds, and viewers into one Urban scenario.
+  - role: control_plane
+    description: Drives Composition planning and the managed Recipe lifecycle from Urban Studio and the CLI.
+  - role: registry
+    description: Catalogs World and vehicle Assets and registers City World jobs as City Assets.
+  - role: simulation_core
+    description: Owns the concrete Urban Car application and its vehicle configuration.
+  - role: visualizer
+    description: Provides the Urban Studio browser UI and viewer configuration.
+
+typical_usecases:
+  - Drive a Golf Cart by PS5 on a registered PLATEAU City World or on a plain World.
+  - Run route-following Golf Carts together with a PS-controlled EAMS Hexa in one City World.
+  - Fly a Drone Core quad fleet laid out automatically over a City World.
+  - Inject rotor thrust loss and wind into an EAMS Hexa and observe the response.
+  - Register an environment made in hakoniwa-environment-studio or the City World Web UI and compose vehicles on it.
+
+anti_usecases:
+  - Treating the one-way Drone Mirror as physically exact vehicle-drone impact simulation.
+  - Relying on Urban for collision avoidance between route Cars.
+  - Using Urban as a flight controller or vehicle dynamics implementation.
+  - Running another Foundation shared-memory simulation alongside an active Urban simulation.
+
+demo_candidates:
+  - name: One RC Golf Cart in a City World
+    description: Configure the managed urban-car-rc Recipe with a City World receipt and drive one Golf Cart with a PS5 controller in the browser viewer.
+    required_components:
+      - hakoniwa-urban-mobility
+      - hakoniwa-core-pro
+      - hakoniwa-pdu-python
+      - hakoniwa-pdu-endpoint
+      - hakoniwa-pdu-bridge-core
+      - hakoniwa-robot-runtime
+      - hakoniwa-mujoco-robots
+      - hakoniwa-mbody-registry
+      - hakoniwa-pdu-registry
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: recipes/usecases/urban-car-rc.yaml
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: recipes/compositions/city-golf-cart-rc.yaml
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+  - name: City Car + Hexa from Urban Studio
+    description: Compose route Golf Carts and an EAMS Hexa on a City World in Urban Studio, then configure, start, and stop from the Simulation tab.
+    required_components:
+      - hakoniwa-urban-mobility
+      - hakoniwa-drone-core
+      - hakoniwa-core-pro
+      - hakoniwa-pdu-python
+      - hakoniwa-pdu-bridge-core
+      - hakoniwa-robot-runtime
+      - hakoniwa-mujoco-robots
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: recipes/compositions/city-car-hexa.yaml
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+      - repository: hakoniwalab/hakoniwa-urban-mobility
+        path: recipes/experiments/urban-mobility-rc.yaml
+        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+  - name: Environment Studio World with a Golf Cart
+    description: Register an environment exported by hakoniwa-environment-studio and compose it with a Golf Cart in Urban Studio.
+    required_components:
+      - hakoniwa-urban-mobility
+      - hakoniwa-environment-studio
+    source_examples:
+      - repository: hakoniwalab/hakoniwa-environment-studio
+        path: docs/urban-export.md
+        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+
+operations:
+  build:
+    commands:
+      - cmake -S . -B build
+      - cmake --build build -j
+      - python tools/urban_mobility.py configure --composition recipes/compositions/plain-hexa-rc.yaml
+    notes:
+      - The CMake build produces the Urban Car application; configure runs the route's managed Recipe and materializes the Recipe workspace.
+  test:
+    commands:
+      - ../hakoniwa-business-pack/work/foundation/install/python/bin/python3 -m unittest discover -s tests -p 'test_*.py'
+      - ctest --test-dir build --output-on-failure
+      - python tools/city_world_job.py check <job folder | receipt>
+    notes:
+      - Catalog does not infer CI status from these commands.
+  run:
+    commands:
+      - python ../hakoniwa-urban-mobility/tools/urban_studio.py start --open-browser
+      - python ../hakoniwa-urban-mobility/tools/urban_studio.py stop
+      - python tools/urban_mobility.py plan --composition recipes/compositions/plain-hexa-rc.yaml
+      - python tools/urban_mobility.py start --composition recipes/compositions/plain-hexa-rc.yaml
+    notes:
+      - Run from the Business Pack Workspace shell so simulations inherit the Workspace environment; stop Urban Studio before leaving the Workspace.
+
+known_gaps:
+  - Collision avoidance between route Cars and Drone-Car contact beyond the one-way Mirror.
+  - Mixed fleet Compositions (a fleet together with other vehicles).
+  - JSON Schema files for hakoniwa.asset/v1 and hakoniwa.composition/v1.
+  - Retiring recipes/experiments/ Recipes once Compositions reproduce them.
+  - Recorded end-to-end evidence on Windows and Linux.
+
+source_refs:
+  - repository: hakoniwalab/hakoniwa-urban-mobility
+    path: LICENSE
+    revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+    description: MIT License, Copyright (c) 2026 Hakoniwa Lab, LLC.
+  - repository: hakoniwalab/hakoniwa-urban-mobility
+    path: README.md
+    revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+    description: Status, Compositions and Urban Studio, ownership boundaries, coordinate and contact scope, Car application, and non-goals.
+  - repository: hakoniwalab/hakoniwa-urban-mobility
+    path: docs/asset-contract.md
+    revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+    description: Asset / Composition contract, Urban Studio, World Assets, and City World job.
+  - repository: hakoniwalab/hakoniwa-urban-mobility
+    path: docs/urban-manifest.md
+    revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+    description: Root manifest paths, parts, and ports.
+  - repository: hakoniwalab/hakoniwa-urban-mobility
+    path: schemas/city-world-job.yaml
+    revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+    description: Machine-readable City World job contract.
+  - repository: hakoniwalab/hakoniwa-urban-mobility
+    path: urban.manifest.yaml
+    revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+    description: Root manifest with managed Recipes per route and port defaults.
+
+tags:
+  - hakoniwa
+  - urban-mobility
+  - plateau
+  - city-world
+  - golf-cart
+  - ackermann
+  - drone
+  - hexa
+  - fleet
+  - fpv
+  - composition
+  - urban-studio
+  - browser
+  - mujoco
+  - oss
+  - mit

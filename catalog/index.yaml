@@ -213,6 +213,49 @@ components:
   - hakoniwa-map-viewer
   tags: []
   catalog_path: components/hakoniwa-drone-show.yaml
+- id: hakoniwa-environment-studio
+  name: Hakoniwa Environment Studio
+  category: tool
+  secondary_categories:
+  - asset-generation
+  - environment-model
+  - browser
+  - integration
+  maturity: experimental
+  distribution: oss
+  summary: Browser authoring tool for static Car / Drone test environments. It separates
+    environment parts into Type / Catalog / Recipe, edits layouts in a 2D plan view
+    with a 3D preview, validates Recipes with MuJoCo and returns machine-readable
+    diagnostics, generates GLB and MuJoCo MJCF from the same resolved Recipe, turns
+    CityGML (PLATEAU, or OpenStreetMap converted by hakoniwa-envsim) and hakoniwa-envsim
+    City Worlds into editable parts, and exports an environment as a hakoniwa-urban-mobility
+    City World job.
+  recipe_roles:
+  - environment_model
+  - asset_generator
+  - visualizer
+  - integration_boundary
+  connects_to:
+  - hakoniwa-envsim
+  - hakoniwa-urban-mobility
+  tags:
+  - hakoniwa
+  - environment
+  - authoring
+  - browser
+  - mujoco
+  - glb
+  - mjcf
+  - hfield
+  - citygml
+  - plateau
+  - openstreetmap
+  - city-world
+  - urban-mobility
+  - ai-contract
+  - oss
+  - mit
+  catalog_path: components/hakoniwa-environment-studio.yaml
 - id: hakoniwa-envsim
   name: Hakoniwa Envsim
   category: physics-environment
@@ -862,6 +905,63 @@ components:
   - multi-drone
   - 100-drones
   catalog_path: components/hakoniwa-threejs-drone.yaml
+- id: hakoniwa-urban-mobility
+  name: Hakoniwa Urban Mobility
+  category: tool
+  secondary_categories:
+  - integration
+  - simulator
+  - browser
+  - control-plane
+  maturity: experimental
+  distribution: oss
+  summary: Integration suite for ground vehicles and drones in a shared World. A Composition
+    selects one World (a registered PLATEAU City World or a plain World) and places
+    vehicle Assets (Golf Cart, EAMS Hexa, FPV Drone, Drone Core quad fleet) with rc
+    or api control. Urban Studio, the browser UI, and one CLI entrypoint then configure,
+    start, and stop the simulation through a managed Recipe for each route. It owns
+    the Urban Car application, the City World job contract, and City registration.
+    Vehicle dynamics, flight control, and physics stay in their owning components.
+  recipe_roles:
+  - integration_boundary
+  - control_plane
+  - registry
+  - simulation_core
+  - visualizer
+  connects_to:
+  - hakoniwa-environment-studio
+  - hakoniwa-envsim
+  - hakoniwa-drone-core
+  - hakoniwa-robot-runtime
+  - hakoniwa-mujoco-robots
+  - hakoniwa-mbody-registry
+  - hakoniwa-pdu-registry
+  - hakoniwa-core-pro
+  - hakoniwa-pdu-python
+  - hakoniwa-pdu-endpoint
+  - hakoniwa-pdu-bridge-core
+  - hakoniwa-threejs-drone
+  - hakoniwa-map-viewer
+  - hakoniwa-fpv-drone
+  - hakoniwa-drone-show
+  tags:
+  - hakoniwa
+  - urban-mobility
+  - plateau
+  - city-world
+  - golf-cart
+  - ackermann
+  - drone
+  - hexa
+  - fleet
+  - fpv
+  - composition
+  - urban-studio
+  - browser
+  - mujoco
+  - oss
+  - mit
+  catalog_path: components/hakoniwa-urban-mobility.yaml
 - id: hakoniwa-zenoh-topology-viewer
   name: Hakoniwa Zenoh Topology Viewer
   category: visualization
