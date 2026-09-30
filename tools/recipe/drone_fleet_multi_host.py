@@ -721,7 +721,7 @@ def open_viewer_local(output_root: Path) -> int:
         raise RecipeError("open-viewer is server-only")
     if not state["resolved"]["runtime"]["visualization"]:
         raise RecipeError("open-viewer is unavailable for a headless experiment")
-    health_url = "http://127.0.0.1:8000/index.html"
+    health_url = f"http://127.0.0.1:{fleet_runtime.VIEWER_HTTP_PORT}/index.html"
     try:
         with urllib.request.urlopen(health_url, timeout=2.0) as response:
             if response.status >= 400:
@@ -802,7 +802,7 @@ def prepare_host_launcher(
                 else None
             ),
             web_bridge_config_root=(
-                yaml_support.bridge_config_root(paths) if spec.web_bridge else None
+                yaml_support.web_bridge_config(paths) if spec.web_bridge else None
             ),
             leading_assets=[leading],
             performance_config=(measurement[0] if measurement is not None else None),

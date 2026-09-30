@@ -190,6 +190,54 @@ class DroneFleetRuntimeTest(unittest.TestCase):
                 show["args"][show["args"].index("--z-offset-m") + 1], "2.0"
             )
 
+    def test_viewer_and_web_bridge_use_the_selected_ports(self) -> None:
+        self.assertEqual((runtime.VIEWER_HTTP_PORT, runtime.WEB_BRIDGE_PORT), (28100, 28865))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            installed = root / "installed"
+            (installed / "comm").mkdir(parents=True)
+            (installed / "bridge").mkdir()
+            (installed / "bridge" / "bridge.json").write_text("{}", encoding="utf-8")
+            (installed / runtime.WEB_BRIDGE_SERVER_CONFIG).write_text(
+                json.dumps({"protocol": "websocket", "local": {"port": 8765}}), encoding="utf-8"
+            )
+            config = runtime.materialize_web_bridge_config(installed, root / "recipe" / "bridge", 29001)
+            server = json.loads((config / runtime.WEB_BRIDGE_SERVER_CONFIG).read_text())
+            self.assertEqual(server["local"]["port"], 29001)
+            self.assertTrue((config / "bridge" / "bridge.json").is_file())
+            # The installed configuration is left as installed.
+            installed_server = json.loads((installed / runtime.WEB_BRIDGE_SERVER_CONFIG).read_text())
+            self.assertEqual(installed_server["local"]["port"], 8765)
+            output = runtime.prepare_launcher(
+                self.launcher_paths(root),
+                root / "drone",
+                root / "viewer",
+                runtime.LauncherRuntimeSpec(
+                    local_drone_count=1,
+                    process_count=1,
+                    visualization=True,
+                    external_conductor=False,
+                    web_bridge=True,
+                    viewer=True,
+                    show_runner_real_time_sync=False,
+                    land=False,
+                    speed_m_s=5.0,
+                    timeout_sec=60.0,
+                    viewer_http_port=29000,
+                ),
+                drone_binary=root / "drone-service",
+                python=root / "python",
+                show_runner=root / "show.py",
+                summary=root / "summary.json",
+                visual_state_publisher=root / "vsp",
+                web_bridge_binary=root / "bridge",
+                web_bridge_config_root=config,
+            )
+            assets = {asset["name"]: asset for asset in json.loads(output.read_text())["assets"]}
+            self.assertEqual(assets["threejs-viewer-webserver"]["args"], ["-m", "http.server", "29000"])
+            bridge_args = assets["web-bridge-fleets"]["args"]
+            self.assertEqual(bridge_args[bridge_args.index("--config-root") + 1], str(config))
+
     def test_builtin_conductor_keeps_first_process_as_owner(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

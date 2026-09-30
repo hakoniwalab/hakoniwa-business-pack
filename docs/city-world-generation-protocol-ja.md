@@ -296,7 +296,7 @@ request schemaの上限（各方向のhalf extent 1000 m）でも制限される
 Terminal 2（限定static server）:
 
 ```bash
-python3 -m tools.remote_operation.city_world.web_smoke --port 8008
+python3 -m tools.remote_operation.city_world.web_smoke --port 28008
 ```
 
 通常利用では、上記2プロセスを別Terminalで起動せず、`city-world-web-ui` Recipeの
@@ -400,7 +400,7 @@ requested値、effective値、推定sample数、autoのsample上限を記録す�
 後から検証しても、自動選択された実効解像度を確認できる。Envsimを直接実行する場合、`auto`は
 Business Pack Workerの方針なので、YAMLには決定後の数値を書く。
 
-ブラウザで`http://127.0.0.1:8008/`を開き、次の順に実行する。
+ブラウザで`http://127.0.0.1:28008/`を開き、次の順に実行する。
 
 生成条件の「DEM未被覆領域」は既定で「停止する（厳密）」である。海・河川を含み、PLATEAU
 DEMが選択矩形を完全には覆わない場合は「標高0 mで補完（水面向け）」を選択してから、
@@ -515,7 +515,7 @@ Workerのruntime場所を変更した場合は、static serverにも同じ場所
 
 ```bash
 python -m tools.remote_operation.city_world.web_smoke \
-  --port 8008 \
+  --port 28008 \
   --worker-runtime-dir work/recipes/city-world-web-ui/runtime
 ```
 

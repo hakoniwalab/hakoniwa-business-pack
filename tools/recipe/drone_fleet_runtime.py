@@ -19,6 +19,28 @@ from typing import Any, Callable
 RunChecked = Callable[..., None]
 ScenarioWriter = Callable[[], Path]
 
+# The fleet viewer's HTTP server and WebBridge. Uncommon ports below the OS
+# ephemeral ranges (Linux 32768+, macOS/Windows 49152+), clear of common
+# services (8000, 8765: development servers, Docker containers, WSL proxies).
+VIEWER_HTTP_PORT = 28100
+WEB_BRIDGE_PORT = 28865
+# The WebBridge server endpoint inside the installed fleet configuration
+# (hakoniwa-pdu-bridge-core share/hakoniwa-pdu-bridge/config/web_bridge_fleets).
+WEB_BRIDGE_SERVER_CONFIG = Path("comm") / "visual-state-websocket-server.json"
+
+
+def materialize_web_bridge_config(installed_root: Path, target_root: Path, port: int) -> Path:
+    """A Recipe-local copy of the installed fleet WebBridge configuration that
+    listens on port. Its files reference each other relatively, so the copy is
+    complete; the installed configuration is left untouched."""
+    shutil.rmtree(target_root, ignore_errors=True)
+    shutil.copytree(installed_root, target_root)
+    server = target_root / WEB_BRIDGE_SERVER_CONFIG
+    config = json.loads(server.read_text(encoding="utf-8"))
+    config["local"]["port"] = int(port)
+    server.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    return target_root
+
 
 @dataclass(frozen=True)
 class FleetRuntimeSpec:
@@ -88,6 +110,7 @@ class LauncherRuntimeSpec:
     z_offset_m: float = 0.0
     viewer_activation_timing: str = "after_start"
     final_hold_extra_sec: float = 0.0
+    viewer_http_port: int = VIEWER_HTTP_PORT
 
     def __post_init__(self) -> None:
         if self.local_drone_count < 1:
@@ -270,7 +293,7 @@ def prepare_launcher(
                 "name": "threejs-viewer-webserver",
                 "activation_timing": spec.viewer_activation_timing,
                 "command": str(python),
-                "args": ["-m", "http.server", "8000"],
+                "args": ["-m", "http.server", str(spec.viewer_http_port)],
                 "cwd": str(viewer_root),
                 "depends_on": ["web-bridge-fleets"],
             }

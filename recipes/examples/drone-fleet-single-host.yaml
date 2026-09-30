@@ -342,7 +342,7 @@ process_topology:
     - id: web-bridge-fleets
       purpose: Publish fleet visualization packets over localhost WebSocket.
     - id: threejs-viewer-webserver
-      purpose: Serve the browser viewer on localhost port 8000.
+      purpose: Serve the browser viewer on localhost port 28100.
   visualization_condition: runtime.visualization=true
   notes:
     - All processes run on one native host and use one Foundation Core mmap domain.
@@ -479,7 +479,7 @@ artifact_sets:
     artifacts:
       - config/assets/visual_state_publisher/visual_state_publisher.runtime.json
       - config/scenario/formations/formation-HAKONIWA.json
-      - http://127.0.0.1:8000/index.html?viewerConfigPath=/config/viewer-config-fleets.json&wsUri=ws://127.0.0.1:8765&wireVersion=v2&dynamicSpawn=true&templateDroneIndex=0&maxDynamicDrones=26
+      - http://127.0.0.1:28100/index.html?viewerConfigPath=/config/viewer-config-fleets.json&wsUri=ws://127.0.0.1:28865&wireVersion=v2&dynamicSpawn=true&templateDroneIndex=0&maxDynamicDrones=26
     notes:
       - These artifacts and processes are required only when runtime.visualization=true.
       - WebBridge uses the Foundation-installed web_bridge_fleets configuration.
@@ -693,7 +693,7 @@ demo:
       - Launcher session reaches RUNNING and later TERMINATED.
     behavior:
       - Every configured drone completes SetReady, TakeOff, and GoTo before the HAKONIWA hold completes.
-      - When runtime.visualization=true, the browser receives fleet state over ws://127.0.0.1:8765.
+      - When runtime.visualization=true, the browser receives fleet state over ws://127.0.0.1:28865.
     logs:
       - Inspect per-asset logs and execution-summary.json.
   cleanup:
