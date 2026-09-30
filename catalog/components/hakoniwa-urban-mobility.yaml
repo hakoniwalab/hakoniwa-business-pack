@@ -15,7 +15,7 @@ distribution:
 
 verification:
   verified_at: 2026-10-01
-  source_revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+  source_revision: e1ef87734e25f3203ee694a247ac72b9564df95d
   source_ref: main
 
 summary: >-
@@ -50,130 +50,130 @@ capabilities:
     evidence:
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: docs/asset-contract.md
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: tools/urban_composition.py
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: recipes/compositions/city-car-hexa.yaml
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
 
   - name: Vehicle Assets with rc and api control
     description: Provides Golf Cart (Ackermann MuJoCo, PS5 rc or route-scenario api), Urban EAMS Hexa and FPV Drone (Drone Core, PS4/PS5 rc), and a Drone Core quad fleet Asset; each control is a program with an argument template started by the Launcher.
     evidence:
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: assets/golf-cart.asset.yaml
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: assets/eams-hexa.asset.yaml
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: assets/drone-core-quad.asset.yaml
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: tests/test_control_modes.py
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
 
   - name: Urban Studio browser UI
-    description: Local web UI (default http://127.0.0.1:28090/) with City, Assets, Compose, Route, and Simulation tabs; it registers City World jobs, places vehicles on a map or 3D view at ground-plus-clearance spawn heights, draws Car route loops, and runs configure / start / stop / status with progress and an embedded Viewer.
+    description: Local web UI (default http://127.0.0.1:28090/) with City, Assets, Compose, Route, and Simulation tabs; its City page starts Environment Studio with Urban's export folder and registers the City World jobs written there, places vehicles on a map or 3D view at ground-plus-clearance spawn heights, draws Car route loops, and runs configure / start / stop / status with progress and an embedded Viewer.
     evidence:
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: tools/urban_studio.py
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: web/studio.js
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: tests/test_urban_studio.py
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
 
   - name: Managed Recipe per simulation route
     description: Plans each Composition onto a route (car, drone, integrated, fleet, fpv) and runs that route's managed Business Pack Recipe first, so only the dependencies of the selected Assets are materialized; urban.manifest.yaml names the Recipes, contracts, catalog locations, and ports.
     evidence:
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: urban.manifest.yaml
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: docs/urban-manifest.md
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: tools/urban_simulation.py
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: recipes/usecases/urban-car-rc.yaml
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
 
   - name: City World job contract and City registration
     description: Publishes the machine-readable City World job contract (layout, frames, receipt, terrain hfield, World MJCF rules) with a checker, and registers City World receipts or plain World YAML as World Assets, including a precompiled spawn-height model.
     evidence:
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: schemas/city-world-job.yaml
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: tools/city_world_job.py
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: tools/urban_assets.py
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: tests/test_city_world_job.py
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
 
   - name: Plain Worlds
     description: Runs Cars and the EAMS Hexa on a plain ground with optional FPV World obstacles by generating a City World job with kind plain; the default World is a 200 m x 200 m flat ground.
     evidence:
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: tools/plain_world.py
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: worlds/plain-ground.yaml
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
 
   - name: Urban Car application
     description: Builds the Urban-owned Ackermann Car Hakoniwa asset on the generic Robot Runtime and shared MuJoCo backend, composes multiple Golf Carts into one City World model compiled to a version-bound MJB, and drives them by PS5 or by pure-pursuit route scenarios.
     evidence:
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: apps/car/urban-car-hakoniwa-asset.cpp
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: tools/multi_car.py
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: apps/car/scenario_executor.py
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
 
   - name: Drone Core drones and fleets in a City World
     description: Places one Drone Core vehicle or an automatically laid-out quad fleet in a City World (fleet MJCF, per-process MJBs, spawn layout, fleet configuration) without importing hakoniwa-drone-show tools.
     evidence:
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: tools/drone_fleet_city.py
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: tools/drone_one.py
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: tests/test_drone_fleet_city.py
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
 
   - name: Car + Drone in one simulation with a Drone Mirror
     description: Runs separate Car and Drone MuJoCo worlds under one Hakoniwa clock and Conductor, with the Drone mirrored into the Car world as a pose-driven body.
     evidence:
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: README.md
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: recipes/experiments/urban-mobility-rc.yaml
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
 
   - name: EAMS Hexa fault injection
     description: Sends per-rotor thrust scale and wind direction and speed to the Drone disturb PDU from the Viewer; the controller does not reallocate thrust.
     evidence:
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: tools/urban_fault_injection.py
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: tests/test_urban_fault_injection.py
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
 
 limitations:
   - No collision avoidance between route Cars; crossing routes can collide.
@@ -304,9 +304,9 @@ platforms:
 
 connects_to:
   - component_id: hakoniwa-environment-studio
-    direction: used_by
-    interface: City World job (schemas/city-world-job.yaml), tools/city_world_job.py check, tools/urban_assets.py register-city
-    notes: Environment Studio exports authored environments as Urban Worlds and registers them as City Assets.
+    direction: uses
+    interface: tools/urban_city_authoring.py (configure, env_studio.py start --export-dir work/urban/studio-cities), City World jobs in that folder, tools/urban_assets.py register-city
+    notes: Urban starts Environment Studio to make Cities (PLATEAU City Worlds, edited environments) and registers the City World jobs it writes to Urban's export folder; the Studio does not call Urban (recipes/usecases/urban-city-authoring.yaml).
   - component_id: hakoniwa-envsim
     direction: uses
     interface: PLATEAU City World receipts, MJCF, GLB, terrain hfield, and mjcf_colliders2glb.py collider view
@@ -370,19 +370,19 @@ data_contracts:
     source:
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: docs/asset-contract.md
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
   - name: City World job
     description: hakoniwa.city-world-job/v1 layout, frames, receipt, terrain hfield, World MJCF rules, and serving requirement that any World producer follows.
     source:
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: schemas/city-world-job.yaml
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
   - name: Urban root manifest
     description: hakoniwa.urban-manifest/v1 paths, managed Recipes per route, and port defaults with override order.
     source:
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: docs/urban-manifest.md
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
 
 recipe_roles:
   - role: integration_boundary
@@ -401,7 +401,7 @@ typical_usecases:
   - Run route-following Golf Carts together with a PS-controlled EAMS Hexa in one City World.
   - Fly a Drone Core quad fleet laid out automatically over a City World.
   - Inject rotor thrust loss and wind into an EAMS Hexa and observe the response.
-  - Register an environment made in hakoniwa-environment-studio or the City World Web UI and compose vehicles on it.
+  - Make a PLATEAU City with hakoniwa-environment-studio from Urban Studio and compose vehicles on it.
 
 anti_usecases:
   - Treating the one-way Drone Mirror as physically exact vehicle-drone impact simulation.
@@ -425,10 +425,10 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: recipes/usecases/urban-car-rc.yaml
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: recipes/compositions/city-golf-cart-rc.yaml
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
   - name: City Car + Hexa from Urban Studio
     description: Compose route Golf Carts and an EAMS Hexa on a City World in Urban Studio, then configure, start, and stop from the Simulation tab.
     required_components:
@@ -442,19 +442,19 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: recipes/compositions/city-car-hexa.yaml
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
       - repository: hakoniwalab/hakoniwa-urban-mobility
         path: recipes/experiments/urban-mobility-rc.yaml
-        revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+        revision: e1ef87734e25f3203ee694a247ac72b9564df95d
   - name: Environment Studio World with a Golf Cart
-    description: Register an environment exported by hakoniwa-environment-studio and compose it with a Golf Cart in Urban Studio.
+    description: Start Environment Studio from Urban Studio's City page, make a PLATEAU City, let Urban register it, and compose it with a Golf Cart in Urban Studio (docs/quickstart-ja.md).
     required_components:
       - hakoniwa-urban-mobility
       - hakoniwa-environment-studio
     source_examples:
       - repository: hakoniwalab/hakoniwa-environment-studio
         path: docs/urban-export.md
-        revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
+        revision: 6ff00db579a4f80e4f00806b9eefdc8f48622b47
 
 operations:
   build:
@@ -490,27 +490,27 @@ known_gaps:
 source_refs:
   - repository: hakoniwalab/hakoniwa-urban-mobility
     path: LICENSE
-    revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+    revision: e1ef87734e25f3203ee694a247ac72b9564df95d
     description: MIT License, Copyright (c) 2026 Hakoniwa Lab, LLC.
   - repository: hakoniwalab/hakoniwa-urban-mobility
     path: README.md
-    revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+    revision: e1ef87734e25f3203ee694a247ac72b9564df95d
     description: Status, Compositions and Urban Studio, ownership boundaries, coordinate and contact scope, Car application, and non-goals.
   - repository: hakoniwalab/hakoniwa-urban-mobility
     path: docs/asset-contract.md
-    revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+    revision: e1ef87734e25f3203ee694a247ac72b9564df95d
     description: Asset / Composition contract, Urban Studio, World Assets, and City World job.
   - repository: hakoniwalab/hakoniwa-urban-mobility
     path: docs/urban-manifest.md
-    revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+    revision: e1ef87734e25f3203ee694a247ac72b9564df95d
     description: Root manifest paths, parts, and ports.
   - repository: hakoniwalab/hakoniwa-urban-mobility
     path: schemas/city-world-job.yaml
-    revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+    revision: e1ef87734e25f3203ee694a247ac72b9564df95d
     description: Machine-readable City World job contract.
   - repository: hakoniwalab/hakoniwa-urban-mobility
     path: urban.manifest.yaml
-    revision: 83a0ac00bcf59aad4ed62db9c251b54cdff6ed0b
+    revision: e1ef87734e25f3203ee694a247ac72b9564df95d
     description: Root manifest with managed Recipes per route and port defaults.
 
 tags:
