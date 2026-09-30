@@ -1096,6 +1096,24 @@ profiles:
             with self.assertRaisesRegex(recipe.RecipeError, "unsafe path"):
                 recipe._safe_extract(archive_path, root / "destination")
 
+    @staticmethod
+    def _installed_web_bridge_config(paths) -> None:
+        """The fleet WebBridge configuration hakoniwa-pdu-bridge-core installs (port 8765)."""
+        installed = recipe.bridge_config_root(paths)
+        (installed / "comm").mkdir(parents=True)
+        (installed / "comm" / "visual-state-websocket-server.json").write_text(
+            json.dumps({"protocol": "websocket", "local": {"port": 8765}}), encoding="utf-8"
+        )
+
+    def _assert_recipe_web_bridge(self, paths, payload: dict) -> None:
+        bridge = next(a for a in payload["assets"] if a["name"] == "web-bridge-fleets")
+        config_root = Path(bridge["args"][bridge["args"].index("--config-root") + 1])
+        self.assertEqual(config_root, paths.recipe_config / "web_bridge_fleets")
+        server = json.loads((config_root / "comm" / "visual-state-websocket-server.json").read_text())
+        self.assertEqual(server["local"]["port"], recipe.WEB_BRIDGE_PORT)
+        viewer = next(a for a in payload["assets"] if a["name"] == "threejs-viewer-webserver")
+        self.assertEqual(viewer["args"], ["-m", "http.server", str(recipe.VIEWER_HTTP_PORT)])
+
     def test_generated_launcher_uses_one_builtin_conductor_owner(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
@@ -1116,6 +1134,7 @@ profiles:
             python = paths.foundation_python / "bin" / "python3"
             python.parent.mkdir(parents=True)
             python.touch()
+            self._installed_web_bridge_config(paths)
             (paths.recipe_config / "scenario").mkdir(parents=True)
             (paths.recipe_validation).mkdir(parents=True, exist_ok=True)
             viewer_root = root / "hakoniwa-threejs-drone"
@@ -1131,6 +1150,7 @@ profiles:
             payload = json.loads(launcher.read_text(encoding="utf-8"))
             serialized = json.dumps(payload)
             services = [a for a in payload["assets"] if a["name"].startswith("drone-service-")]
+            self._assert_recipe_web_bridge(paths, payload)
 
             self.assertEqual(len(services), 10)
             self.assertNotIn("--disable-conductor", services[0]["args"])
@@ -1191,6 +1211,7 @@ profiles:
             python = paths.foundation_python / "bin" / "python3"
             python.parent.mkdir(parents=True)
             python.touch()
+            self._installed_web_bridge_config(paths)
             (paths.recipe_config / "scenario").mkdir(parents=True)
             paths.recipe_validation.mkdir(parents=True, exist_ok=True)
             city_glb = root / "city-world.glb"
@@ -1305,6 +1326,10 @@ profiles:
                 generated_viewer["three"]["sceneConfigPath"],
                 "./drone_config-city-fleet.json",
             )
+            # The installed viewer config says 8765; the Recipe's copy follows its WebBridge.
+            self.assertEqual(
+                generated_viewer["pdu"]["wsUri"], f"ws://127.0.0.1:{recipe.WEB_BRIDGE_PORT}"
+            )
             self.assertTrue(
                 generated_viewer["stateInput"]["fleets"]["dynamicSpawn"]
             )
@@ -1350,6 +1375,7 @@ profiles:
             python = paths.foundation_python / "bin" / "python3"
             python.parent.mkdir(parents=True)
             python.touch()
+            self._installed_web_bridge_config(paths)
             (paths.recipe_config / "scenario").mkdir(parents=True)
             paths.recipe_validation.mkdir(parents=True, exist_ok=True)
             launcher = recipe.write_launcher(
