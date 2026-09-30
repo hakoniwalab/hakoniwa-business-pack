@@ -9,7 +9,7 @@ repository:
 distribution:
   channel: oss
   notes:
-    - The Environment Studio software, Types, Catalogs, Recipes, and documentation are provided under the MIT License (Copyright (c) 2026 Hakoniwa Lab).
+    - The Environment Studio software, Types, Catalogs, Recipes, and documentation are provided under the MIT License (Copyright (c) 2026 Hakoniwa Lab, LLC).
     - Browser libraries loaded at runtime from unpkg (three.js, Leaflet), dependent repositories (hakoniwa-envsim, hakoniwa-urban-mobility), MuJoCo, and Python packages retain their own license terms.
     - Imported map data (OpenStreetMap under ODbL, map tiles, PLATEAU data and textures) keeps its provider's terms; the Studio records the source in each Recipe's geo block but the MIT License does not grant rights to that data.
 
@@ -357,8 +357,8 @@ known_gaps:
 source_refs:
   - repository: hakoniwalab/hakoniwa-environment-studio
     path: LICENSE
-    revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
-    description: MIT License covering this repository's software, Types, Catalogs, Recipes, and documentation.
+    revision: f1a7bc95a4b4c06777b071bb65f494a53dd15925
+    description: MIT License (Copyright (c) 2026 Hakoniwa Lab, LLC) covering this repository's software, Types, Catalogs, Recipes, and documentation.
   - repository: hakoniwalab/hakoniwa-environment-studio
     path: README.md
     revision: 292cd67e08e42ecbe29c2408a445d09b8e578811
