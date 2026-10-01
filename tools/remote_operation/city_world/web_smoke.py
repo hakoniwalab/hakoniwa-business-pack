@@ -7,10 +7,11 @@ import json
 import os
 import re
 import shutil
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from http.server import SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
+from tools.recipe.viewer_http_server import ViewerHTTPServer
 from tools.workdir import recipe_root
 
 from .generation import _source_cache_dir
@@ -295,7 +296,8 @@ def main() -> int:
     args = parser.parse_args()
     pdu_js_root = resolve_pdu_javascript_root(args.pdu_javascript_root)
     worker_runtime_root = resolve_worker_runtime_root(args.worker_runtime_dir)
-    server = ThreadingHTTPServer(
+    # The page loads its modules at once: a long listen backlog (tools/recipe/viewer_http_server.py).
+    server = ViewerHTTPServer(
         (args.listen_address, args.port), handler_factory(pdu_js_root, worker_runtime_root),
     )
     print(f"City World smoke UI: http://{args.listen_address}:{args.port}/")

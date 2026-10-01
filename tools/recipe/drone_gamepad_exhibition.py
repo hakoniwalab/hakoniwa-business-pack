@@ -15,6 +15,9 @@ import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
 
+# The viewer's web server: http.server with a long listen backlog (viewer_http_server.py).
+VIEWER_HTTP_SERVER = Path(__file__).resolve().with_name("viewer_http_server.py")
+
 RECIPE_TOOLS_DIR = Path(__file__).absolute().parent
 TOOLS_DIR = RECIPE_TOOLS_DIR.parent
 if str(TOOLS_DIR) not in sys.path:
@@ -347,7 +350,7 @@ def write_launcher(paths, drone_root: Path, viewer_root: Path, runtime: RuntimeP
                 "name": "threejs-viewer-webserver",
                 "activation_timing": "after_start",
                 "command": str(runtime.foundation_python),
-                "args": ["-m", "http.server", "8000"],
+                "args": [str(VIEWER_HTTP_SERVER), "--port", "8000"],
                 "cwd": str(viewer_root),
                 "depends_on": ["web-bridge-disturb"],
             },

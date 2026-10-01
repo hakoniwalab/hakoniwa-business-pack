@@ -19,6 +19,9 @@ from typing import Any, Callable
 RunChecked = Callable[..., None]
 ScenarioWriter = Callable[[], Path]
 
+# The viewer's web server: http.server with a long listen backlog (viewer_http_server.py).
+VIEWER_HTTP_SERVER = Path(__file__).resolve().with_name("viewer_http_server.py")
+
 # The fleet viewer's HTTP server and WebBridge. Uncommon ports below the OS
 # ephemeral ranges (Linux 32768+, macOS/Windows 49152+), clear of common
 # services (8000, 8765: development servers, Docker containers, WSL proxies).
@@ -293,7 +296,7 @@ def prepare_launcher(
                 "name": "threejs-viewer-webserver",
                 "activation_timing": spec.viewer_activation_timing,
                 "command": str(python),
-                "args": ["-m", "http.server", str(spec.viewer_http_port)],
+                "args": [str(VIEWER_HTTP_SERVER), "--port", str(spec.viewer_http_port)],
                 "cwd": str(viewer_root),
                 "depends_on": ["web-bridge-fleets"],
             }
