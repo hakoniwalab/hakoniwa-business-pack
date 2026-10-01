@@ -11,6 +11,9 @@ import sys
 from pathlib import Path
 
 
+# The viewer's web server: http.server with a long listen backlog (viewer_http_server.py).
+VIEWER_HTTP_SERVER = Path(__file__).resolve().with_name("viewer_http_server.py")
+
 TOOLS_DIR = Path(__file__).resolve().parents[1]
 RECIPE_ID = "drone-single-mujoco-threejs-mac"
 VIEWER_URL = (
@@ -204,7 +207,7 @@ def write_launcher(
                 "name": "threejs-viewer-webserver",
                 "activation_timing": "after_start",
                 "command": str(paths.foundation_python / "bin" / "python"),
-                "args": ["-m", "http.server", "8000"],
+                "args": [str(VIEWER_HTTP_SERVER), "--port", "8000"],
                 "cwd": str(viewer_root),
                 "depends_on": ["web-bridge-fleets"],
             },

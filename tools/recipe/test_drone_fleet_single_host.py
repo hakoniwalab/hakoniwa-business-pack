@@ -1112,7 +1112,7 @@ profiles:
         server = json.loads((config_root / "comm" / "visual-state-websocket-server.json").read_text())
         self.assertEqual(server["local"]["port"], recipe.WEB_BRIDGE_PORT)
         viewer = next(a for a in payload["assets"] if a["name"] == "threejs-viewer-webserver")
-        self.assertEqual(viewer["args"], ["-m", "http.server", str(recipe.VIEWER_HTTP_PORT)])
+        self.assertEqual(viewer["args"], [str(SCRIPT.resolve().with_name("viewer_http_server.py")), "--port", str(recipe.VIEWER_HTTP_PORT)])
 
     def test_generated_launcher_uses_one_builtin_conductor_owner(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

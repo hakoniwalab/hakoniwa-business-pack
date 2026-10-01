@@ -234,7 +234,7 @@ class DroneFleetRuntimeTest(unittest.TestCase):
                 web_bridge_config_root=config,
             )
             assets = {asset["name"]: asset for asset in json.loads(output.read_text())["assets"]}
-            self.assertEqual(assets["threejs-viewer-webserver"]["args"], ["-m", "http.server", "29000"])
+            self.assertEqual(assets["threejs-viewer-webserver"]["args"], [str(runtime.VIEWER_HTTP_SERVER), "--port", "29000"])
             bridge_args = assets["web-bridge-fleets"]["args"]
             self.assertEqual(bridge_args[bridge_args.index("--config-root") + 1], str(config))
 
