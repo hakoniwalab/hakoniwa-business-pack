@@ -1,0 +1,274 @@
+id: portable-city-world-staging-validation-does-not-inspect-the-staged-package
+title: The City World portable packager's staging validation inspects the source Workspace when run inside it, and rejects the copied Receipt when run outside it
+
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+
+summary: >
+  tools/package_portable_workspace.py validates the staged City World package
+  by running workspace.py prepare, materialize_recipe_runtime and the Recipe
+  doctor inside staging. Those subprocesses are started without an environment
+  of their own, so they inherit the caller's. The packager already has a
+  _staged_environment() helper that points HAKONIWA_WORK_DIR and related
+  variables at staging, but only the repository-profile validator uses it.
+  Two outcomes follow on Windows, depending on where the command is run.
+  Inside the managed Workspace, HAKONIWA_WORK_DIR still names the source work
+  directory, so the "staged" doctor's Foundation and Recipe runtime checks
+  inspect the source (the file-presence, import and Recipe dependency checks do
+  use staging). Packaging passes and a ZIP is written, but three things go
+  wrong: those checks do not test the package, the staged materialization
+  writes staging paths into the source Workspace's environment.json, and the
+  ZIP ships without environment.json, the Launcher config or the activation
+  scripts. Outside the Workspace, the doctor does inspect staging, where the
+  Receipt copied from the source still records the source install.prefix, so
+  hakoniwa-pdu-endpoint is INCOMPATIBLE and packaging exits 2. The ZIP from
+  the in-Workspace run was extracted and its start, status and stop
+  entrypoints worked, because they call the Launcher directly.
+
+observation:
+  context: >
+    Following docs/windows-portable-city-world-workspace-ja.md on one native
+    Windows 11 x64 host after configuring the city-world-web-ui Recipe
+    (business-pack b909f95, hakoniwa-pdu-endpoint 12230c9). The source
+    configure ended in "Foundation: SATISFIED" and the source doctor exited 0.
+  details:
+    - >-
+      Code path. _validate_staged_package
+      (tools/package_portable_workspace.py:905-942) calls _run_checked without
+      an env argument for workspace.py prepare, _materialize_web_ui_recipe and
+      city_world_web_ui.py doctor, and _run_checked passes env=None to
+      subprocess.run (:712-719). _staged_environment (:946-975) sets
+      HAKONIWA_WORK_DIR, HAKONIWA_HOME, VIRTUAL_ENV and related variables to
+      staging, and its only caller is the repository-profile validator (:995).
+      workspace.py run exports HAKONIWA_WORK_DIR for the source work directory
+      (tools/workspace.py:161), and resolve_work_dir prefers that variable
+      over the checkout-relative default (tools/workdir.py:31-38).
+    - >-
+      Inside the Workspace ("python tools/workspace.py run python
+      tools/package_portable_workspace.py --output <scratch>/dist/in-workspace.zip",
+      unmodified packager), the command exits 0 and writes a ZIP. The third,
+      staged doctor run reports SATISFIED for Foundation toolchain, Foundation
+      Python, hakoniwa-pdu-endpoint and Recipe runtime at the source paths
+      (sanitized: "executable=<checkout>\\hakoniwa-business-pack\\work\\foundation\\install\\python\\Scripts\\python.exe").
+      Only the three Recipe dependency lines name the staging tree. The
+      packager's own staged file-presence check and staged-Python import check
+      also ran and passed.
+    - >-
+      That run also rewrites the source Workspace. A repeat of the same run with
+      snapshots recorded the source work/recipes/city-world-web-ui/environment.json
+      before and after: its mtime and SHA-256 changed, RECIPE_REPOSITORY and
+      HAKONIWA_ENVSIM_ROOT moved from the source checkout to
+      <TEMP>\\hako-portable-<id>\\..., and that staging directory did not
+      exist afterwards. The source doctor then exits 1 with
+      "[MISSING] Recipe runtime" and "- environment.json is stale; rerun
+      configure". In the first run the source start and stop still exited 0.
+      Running city_world_web_ui.py configure restores the file to the
+      pre-packaging SHA-256 and the doctor exits 0 again.
+    - >-
+      The ZIPs from both in-Workspace runs contain no
+      work/recipes/city-world-web-ui/environment.json, config/launcher.json,
+      activate or Activate.ps1 (checked with unzip -l for the repeat run, and
+      reported missing by the doctor inside the extracted first ZIP).
+    - >-
+      Outside the Workspace ("python tools/package_portable_workspace.py" from
+      a plain shell), the staged doctor inspects staging and fails with
+      "[INCOMPATIBLE] hakoniwa-pdu-endpoint", an install.prefix reason whose
+      required value is the staging install and whose installed value is the
+      source install, and "ERROR: portable City World Web UI Recipe doctor
+      failed with exit=1". The command exits 2. hakoniwa-pdu-endpoint writes an
+      absolute install.prefix (tools/hako.py:982), _copy_foundation copies the
+      receipts unchanged (tools/package_portable_workspace.py:167-181), and
+      evaluate_component compares the field by exact string equality
+      (tools/foundation_lib/inspection.py:315-318).
+    - >-
+      Single-variable control for the outside case. A harness outside the
+      checkout imported the packager unchanged and rewrote only the staged
+      Receipt's install.prefix to the staging prefix after the copy. The staged
+      doctor then reported "Foundation: SATISFIED" and the packager wrote a ZIP.
+      The first attempt wrote the tempfile path as returned, which carries the
+      8.3 short name of the user directory on this host, and the doctor still
+      reported INCOMPATIBLE. The comparison is against the long form, so a
+      rewrite has to use the resolved path.
+    - >-
+      Extracted package. The ZIP from the in-Workspace run was extracted with
+      Expand-Archive to a 25-character folder outside any git working tree.
+      With PATH set to C:\Windows\system32;C:\Windows, where python, git, ruby
+      and cmake all resolve to "not found", start-city-world.bat,
+      status-city-world.bat and stop-city-world.bat each exit 0. The three
+      service processes run from the packaged python.exe. The Web UI shows
+      "Worker接続済み" and the shared cache
+      %LOCALAPPDATA%\Hakoniwa\cache\plateau-citygml (the portable branch of
+      generation.py:50-55; LOCALAPPDATA was set). With the port check repeated
+      as a TCP listener query, port 8008 has one listener after start and none
+      after stop, and a process query finds no python.exe under the package.
+    - >-
+      A Capability inspection from the extracted package first stayed at
+      "PLATEAU catalogを確認中" for over 40 s. At that point worker.err was
+      empty, the Worker's cumulative CPU time was 0.77 s and it had no child
+      processes (a single sample, not a trace). After a page reload it returned
+      the same result as the source Workspace for the same bbox. The start
+      bat's --open-browser had opened a second Web UI client; its connection
+      state was not recorded. The first attempt's cause was not investigated.
+    - >-
+      The extracted package's own doctor fails (run with host Ruby added to the
+      minimal PATH, since recipe.py needs it). Besides the missing runtime
+      files above, it reports hakoniwa-pdu-endpoint INCOMPATIBLE on
+      install.prefix against the extraction path. The entrypoints do not call
+      the doctor, so this did not stop the tested lifecycle. Any Recipe command
+      that does check the runtime would see it, for example the doctor itself
+      and the generic launch path in tools/recipe.py, which refuses an
+      unsatisfied runtime.
+    - >-
+      Extraction location matters for Recipe commands. recipe_repository_root
+      (tools/recipe.py:105-122) walks up looking for .git or a
+      .hakoniwa-repository-root file before falling back to the package
+      location. In the package, the three sibling repositories carry a
+      .hakoniwa-repository-root file but the hakoniwa-business-pack directory,
+      which holds the Recipes, carries neither marker. In an earlier run whose
+      package (the harness ZIP) was extracted inside an unrelated git working
+      tree, the doctor resolved the Recipe dependencies against that outer
+      repository instead of the package.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/package_portable_workspace.py
+      revision: b909f950e8f6300483cbdacb7982c1dbfe26db0d
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/foundation_lib/inspection.py
+      revision: b909f950e8f6300483cbdacb7982c1dbfe26db0d
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/recipe.py
+      revision: b909f950e8f6300483cbdacb7982c1dbfe26db0d
+    - repository: hakoniwalab/hakoniwa-pdu-endpoint
+      path: tools/hako.py
+      revision: 12230c9540bc865210e5133873a0b7aeac799ad5
+  runtime_evidence:
+    - description: >
+        Native Windows 11 Business x64, build 26200, Visual Studio 2022
+        Community, CPython 3.12.7, Ruby 3.2.11, ja-JP locale,
+        LongPathsEnabled=1, git core.longpaths unset globally and system-wide.
+        Measured 2026-09-28/29. Sibling revisions: hakoniwa-envsim 0b02d6c,
+        hakoniwa-pdu-javascript 1d98d4d, hakoniwa-pdu-python f3bb5d6.
+    - description: >
+        Two host-side steps were needed before configure passed, and they are
+        unrelated to this candidate. CMake came from the Visual Studio
+        installation by running inside VsDevCmd (getting-started-ja.md lists
+        CMake as a prerequisite). core.longpaths=true was set for that one
+        invocation through GIT_CONFIG_COUNT/KEY_0/VALUE_0 in the calling shell,
+        for the known nlohmann/json fetch
+        (endpoint-nlohmann-fetch-exhausts-max-path-on-windows).
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - >-
+      Whether the ZIP should keep the staging install.prefix in its Receipt is
+      a maintainer call. The 2026-10-02 run found the archived Receipt still
+      names <TEMP>\\hako-portable-<id>\\..., because the staged validation
+      relocates it to staging before the archive is written. The entrypoint
+      relocates it again before use, so the lifecycle is unaffected. A doctor
+      run on a fresh extraction before the first start reports
+      hakoniwa-pdu-endpoint INCOMPATIBLE on install.prefix.
+  notes:
+    - >-
+      Measured on one Windows host. --keep-staging was run; it passed the source
+      doctor but did not reach the staged doctor on this checkout depth,
+      because the packager's own MAX_PATH guard stopped it ("staging path would
+      be 261 characters").
+    - >-
+      The extraction budget the packager reports (61 characters here) was not
+      probed. With LongPathsEnabled=1, Expand-Archive also extracted into an
+      83-character folder, so the limit did not bind with that tool on this
+      host. This held again at c4fac99. Tools without long-path support were
+      not tried.
+    - >-
+      The urban-car-rc validator was not examined.
+    - >-
+      Two open questions from the first report were settled by #215 and are
+      kept here for the record. Which mode the maintainer's packaging run used
+      no longer matters, since both modes now isolate staging. On where the
+      fixes belong, #215 did both: a shared portable_environment() for every
+      validator, and Receipt relocation during staging and again at extraction.
+
+tracking:
+  implementation_status: resolved
+  issues:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      number: 213
+      relation: fix
+      status: closed
+    - repository: hakoniwalab/hakoniwa-business-pack
+      number: 224
+      relation: follow_up
+      status: open
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - city-world-web-ui
+  executable_guardrails: []
+
+promotion_rationale:
+  - >-
+    The defect sits in the portable packaging flow for the city-world-web-ui
+    Recipe. The Receipt contract and the Workspace environment each behave as
+    written; the packager combines them without isolating staging.
+
+resolution:
+  status: fixed
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      issue: 213
+      pull_request: 215
+      revision: ecdbdf7
+  verified: true
+  promoted_to: []
+  executable_guardrails:
+    - tools/tests/test_package_portable_workspace.py
+    - tools/tests/test_portable_workspace_runtime.py
+  notes:
+    - >-
+      Re-measured on 2026-10-02 at business-pack c4fac99, which contains
+      ecdbdf7. The host and sibling revisions were the same as in the first
+      report, with the OS at build 26300. The two reported layers no longer
+      reproduce. Outside the Workspace the packager exits 0 where it exited 2.
+      Inside the Workspace it exits 0, and its staged doctor now reports
+      Foundation Python, hakoniwa-pdu-endpoint and Recipe runtime at the
+      staging paths, where before it reported them at the source paths.
+      Snapshots taken before and after packaging, in both modes, show the
+      source environment.json, config/launcher.json and Foundation Receipt with
+      the same SHA-256 (the first 16 hex digits were recorded); before the fix
+      the environment.json hash changed.
+      environment.json and launcher.json get a new mtime, because the packager
+      also runs the source configure (its trace lists city_world_web_ui.py
+      configure with the source Python). No hako-portable-*
+      directory is left in TEMP.
+    - >-
+      The ZIP still has no work/recipes/city-world-web-ui/ entries, but that
+      is now by design: #215 removes the staging-specific runtime and the
+      entrypoint regenerates it at extraction. On the extracted package, the
+      packaged start-city-world.bat rewrote the Receipt's install.prefix to
+      the extraction path before it failed (see the last note). With the
+      entrypoint's configure step replaced by the staging materialize step
+      and Ruby on PATH, the extracted doctor reported Foundation SATISFIED and
+      Recipe runtime SATISFIED, and the packaged status and stop batch files
+      exited 0.
+    - >-
+      resolution.verified is true for the two layers this candidate describes,
+      based on the measurements above and not on the merge. The same run
+      found that the packaged start-city-world.bat no longer starts on a host
+      without Ruby, because the extraction-time step now runs the full Recipe
+      configure. That is a new finding introduced by #215 and is recorded as
+      its own candidate,
+      portable-city-world-extraction-configure-needs-ruby-and-pip, and
+      reported as #224.

@@ -1,0 +1,175 @@
+id: portable-city-world-extraction-configure-needs-ruby-and-pip
+title: The City World portable start entrypoint runs the full Recipe configure at extraction time, which needs Ruby and pip that the package does not ship
+
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+
+summary: >
+  Since #215, start-city-world.bat calls tools/portable_workspace_runtime.py
+  start-city-world. That command relocates the Foundation Receipt, runs
+  workspace.py prepare, and then runs tools/recipe/city_world_web_ui.py
+  configure and doctor before starting the Launcher. The configure step is the
+  full configure_recipe. It loads the Recipe through a Ruby exporter, and it
+  installs the Recipe's Python requirements with pip. The package ships an
+  embeddable Python without pip, and it does not ship Ruby. On a Windows host
+  without Ruby on PATH, start exits 2 with FileNotFoundError. With Ruby added,
+  it exits 2 with "No module named pip". The package built at b909f95, before
+  #215, started on the same host with the same minimal PATH, because its
+  entrypoint called the Launcher directly. Staging validation does not hit
+  this, because it runs only the materialize step and not configure.
+
+observation:
+  context: >
+    Re-verification of
+    portable-city-world-staging-validation-does-not-inspect-the-staged-package
+    after #215, on the same native Windows 11 x64 host as that candidate,
+    business-pack c4fac99 (contains #215 = ecdbdf7). Packages were built with
+    tools/package_portable_workspace.py, both inside and outside the managed
+    Workspace (both exit 0). Each was extracted with Expand-Archive to
+    %USERPROFILE%\\hkpw, outside any git working tree. The batch files were run
+    with PATH set to C:\\Windows\\system32;C:\\Windows, where python, git, ruby
+    and cmake all resolve to "not found", and with empty stdin.
+  details:
+    - >-
+      Code path. prepare_city_world (tools/portable_workspace_runtime.py:157-164)
+      calls prepare_and_doctor with configure_command
+      ("tools/recipe/city_world_web_ui.py", "configure"). city_world_web_ui.py
+      configure calls configure_recipe (tools/recipe.py:1073). Before that,
+      city_world_web_ui.py main loads the Recipe through load_recipe, which runs
+      ["ruby", export_recipe_json.rb, <recipe>] (tools/recipe.py:82).
+      configure_recipe runs "<foundation python> -m pip install -r
+      <requirements>" whenever the Recipe declares requirements
+      (tools/recipe.py:1108). Nothing in this path checks for the portable case.
+    - >-
+      Minimal PATH. start-city-world.bat prints the Workspace activation lines
+      from workspace.py prepare, then a traceback that ends in load_recipe ->
+      subprocess.run -> "FileNotFoundError: [WinError 2]", then "ERROR:
+      portable City World Recipe configure failed with exit=1". It exits 2.
+      Port 28008 has no listener afterwards.
+    - >-
+      Minimal PATH plus the host Ruby (C:\\Ruby32-x64\\bin). Configure gets past
+      load_recipe and prints the Recipe plan, then runs
+      "<package>\\...\\work\\foundation\\install\\python\\python.exe -m pip install
+      -r ...", which fails with "No module named pip". The output ends with
+      "ERROR: Recipe Python dependency installation failed: exit=1" and
+      "ERROR: portable City World Recipe configure failed with exit=2".
+      start-city-world.bat exits 2.
+    - >-
+      Both results were the same for the ZIP built inside the Workspace and
+      the ZIP built outside it. In both, relocation had already rewritten the
+      Receipt's install.prefix to the extraction path before configure failed.
+    - >-
+      Control. On a fresh extraction of the same ZIP, with Ruby on PATH, a
+      probe script outside the package replaced only prepare_city_world. The
+      replacement calls prepare_and_doctor with configure_command set to the
+      materialize-only step that staging validation uses
+      (_materialize_web_ui_recipe, tools/package_portable_workspace.py:731).
+      The probe then called the real portable_workspace_runtime.main with
+      start-city-world. That is the same run_city_world path and Launcher
+      arguments, including --open-browser, that start-city-world.bat uses.
+      Nothing in the package was edited. The probe differs from the batch in
+      two ways: it was entered from PowerShell instead of the batch file, and
+      Ruby was on PATH. Relocate, prepare, materialize and
+      city_world_web_ui.py doctor passed, with "Foundation: SATISFIED",
+      "[SATISFIED] hakoniwa-pdu-endpoint", "[SATISFIED] Recipe runtime" and
+      runtime imports OK. The start that followed printed "[OK] City World
+      services are ready" and exited 0, and http://127.0.0.1:28008/ returned
+      200 with one listener. The packaged status-city-world.bat and
+      stop-city-world.bat, on the minimal PATH, reported ACTIVATED and then
+      TERMINATED. Both exited 0. Afterwards no python.exe under the package was
+      running and port 28008 had no listener.
+    - >-
+      The materialize-only step still goes through load_recipe, so the control
+      needed Ruby too. A Ruby-free extraction path was not tried.
+    - >-
+      Pre-#215 baseline. The b909f95 package on the same host, with the same
+      minimal PATH and with ruby "not found", started with exit 0 and HTTP 200.
+      Its entrypoint ran the Launcher directly through workspace.py run,
+      without configure. The OS build differed between the two runs (26200
+      then, 26300 now). Both failures above are a missing executable and a
+      missing module, not OS behaviour.
+    - >-
+      The package README says no extra installation of Python, Git, WSL or
+      Docker is needed (tools/package_portable_workspace.py:552), and
+      docs/windows-portable-city-world-workspace-ja.md:24 says the same. Ruby is
+      not mentioned.
+    - >-
+      tools/tests/test_portable_workspace_runtime.py replaces subprocess.run and
+      prepare_city_world with mocks, so the configure subprocess and its ruby
+      and pip children do not run under the tests.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/portable_workspace_runtime.py
+      revision: c4fac9980587001ba4c8f04fc795e40befd2b3e0
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/recipe.py
+      revision: c4fac9980587001ba4c8f04fc795e40befd2b3e0
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/package_portable_workspace.py
+      revision: c4fac9980587001ba4c8f04fc795e40befd2b3e0
+  runtime_evidence:
+    - description: >
+        Native Windows 11 Business x64, build 26300, Visual Studio 2022
+        Community, CPython 3.12.7 (embeddable, in the package), Ruby 3.2.11 on
+        the host (outside the minimal PATH unless stated), ja-JP locale,
+        LongPathsEnabled=1. Measured 2026-10-02. Sibling revisions unchanged
+        from the earlier candidate: hakoniwa-envsim 0b02d6c,
+        hakoniwa-pdu-javascript 1d98d4d, hakoniwa-pdu-python f3bb5d6,
+        hakoniwa-pdu-endpoint 12230c9.
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - >-
+      The fix is a maintainer call. From the code and the control, the
+      extraction step needs the Recipe runtime that materialize produces, and
+      does not need the dependency installation that configure adds. A
+      Ruby-free way to load the Recipe at extraction time would also be needed
+      for the README's promise to hold. That last point is an inference; no
+      Ruby-free path was tried.
+  notes:
+    - >-
+      Measured on one Windows host. Hosts that do have Ruby on PATH and a pip
+      in the packaged Python were not available to test. Whether pip would
+      need the network there was not measured; at c4fac99 the Recipe
+      requirements file asks only for pydantic, which the package already
+      contains.
+
+tracking:
+  implementation_status: open
+  issues:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      number: 224
+      relation: fix
+      status: open
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - city-world-web-ui
+  executable_guardrails: []
+
+promotion_rationale:
+  - >-
+    The defect sits in the portable City World extraction entrypoint. The
+    Recipe configure behaves as written for a source Workspace; the
+    entrypoint reuses it in a runtime that lacks two of its prerequisites.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes: []
