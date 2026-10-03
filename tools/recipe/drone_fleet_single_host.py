@@ -2499,6 +2499,8 @@ def viewer_url(
             f"http://127.0.0.1:{http_port}/src/client/index.html"
             "?threejsRoot=/thirdparty/hakoniwa-threejs-drone"
             "&viewerConfigName=viewer-config-fleets.json"
+            # Connect to the simulation on load (no connect button to press).
+            "&autoConnect=true"
         )
     else:
         base = (
