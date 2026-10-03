@@ -51,7 +51,7 @@ observation:
       unmodified packager), the command exits 0 and writes a ZIP. The third,
       staged doctor run reports SATISFIED for Foundation toolchain, Foundation
       Python, hakoniwa-pdu-endpoint and Recipe runtime at the source paths
-      (sanitized: "executable=<checkout>\\hakoniwa-business-pack\\work\\foundation\\install\\python\\Scripts\\python.exe").
+      (sanitized: "executable=<checkout>\hakoniwa-business-pack\work\foundation\install\python\Scripts\python.exe").
       Only the three Recipe dependency lines name the staging tree. The
       packager's own staged file-presence check and staged-Python import check
       also ran and passed.
@@ -60,7 +60,7 @@ observation:
       snapshots recorded the source work/recipes/city-world-web-ui/environment.json
       before and after: its mtime and SHA-256 changed, RECIPE_REPOSITORY and
       HAKONIWA_ENVSIM_ROOT moved from the source checkout to
-      <TEMP>\\hako-portable-<id>\\..., and that staging directory did not
+      <TEMP>\hako-portable-<id>\..., and that staging directory did not
       exist afterwards. The source doctor then exits 1 with
       "[MISSING] Recipe runtime" and "- environment.json is stale; rerun
       configure". In the first run the source start and stop still exited 0.
@@ -93,7 +93,7 @@ observation:
       rewrite has to use the resolved path.
     - >-
       Extracted package. The ZIP from the in-Workspace run was extracted with
-      Expand-Archive to a 25-character folder outside any git working tree.
+      Expand-Archive to a short folder outside any git working tree.
       With PATH set to C:\Windows\system32;C:\Windows, where python, git, ruby
       and cmake all resolve to "not found", start-city-world.bat,
       status-city-world.bat and stop-city-world.bat each exit 0. The three
@@ -171,11 +171,13 @@ validation:
     - >-
       Whether the ZIP should keep the staging install.prefix in its Receipt is
       a maintainer call. The 2026-10-02 run found the archived Receipt still
-      names <TEMP>\\hako-portable-<id>\\..., because the staged validation
+      names <TEMP>\hako-portable-<id>\..., because the staged validation
       relocates it to staging before the archive is written. The entrypoint
-      relocates it again before use, so the lifecycle is unaffected. A doctor
-      run on a fresh extraction before the first start reports
-      hakoniwa-pdu-endpoint INCOMPATIBLE on install.prefix.
+      relocates it again before use, so the leftover staging prefix does not
+      affect the lifecycle. At c4fac99 start fails for separate reasons (see
+      portable-city-world-extraction-configure-needs-ruby-and-pip, #224). A
+      doctor run with Ruby on PATH on a fresh extraction, before the first
+      start, reports hakoniwa-pdu-endpoint INCOMPATIBLE on install.prefix.
   notes:
     - >-
       Measured on one Windows host. --keep-staging was run; it passed the source
@@ -196,6 +198,11 @@ validation:
       no longer matters, since both modes now isolate staging. On where the
       fixes belong, #215 did both: a shared portable_environment() for every
       validator, and Receipt relocation during staging and again at extraction.
+    - >-
+      Revised on 2026-10-03 after a review: Windows paths in block scalars use
+      single backslashes, the staged-doctor comparison names all four items
+      it covered before, the extraction folder is no longer described by
+      length, and the note on the leftover staging prefix points to #224.
 
 tracking:
   implementation_status: resolved
@@ -242,9 +249,13 @@ resolution:
       ecdbdf7. The host and sibling revisions were the same as in the first
       report, with the OS at build 26300. The two reported layers no longer
       reproduce. Outside the Workspace the packager exits 0 where it exited 2.
-      Inside the Workspace it exits 0, and its staged doctor now reports
-      Foundation Python, hakoniwa-pdu-endpoint and Recipe runtime at the
-      staging paths, where before it reported them at the source paths.
+      Inside the Workspace it exits 0. Its staged doctor now prints the
+      Foundation toolchain config path, Foundation Python and Recipe runtime at
+      the staging paths, where before they named the source paths, and reports
+      hakoniwa-pdu-endpoint SATISFIED against the relocated staging prefix
+      (that line prints no path). The toolchain's vcpkg_root still names the
+      packaging host's vcpkg; see
+      portable-city-world-extraction-configure-needs-ruby-and-pip.
       Snapshots taken before and after packaging, in both modes, show the
       source environment.json, config/launcher.json and Foundation Receipt with
       the same SHA-256 (the first 16 hex digits were recorded); before the fix
@@ -255,8 +266,9 @@ resolution:
       directory is left in TEMP.
     - >-
       The ZIP still has no work/recipes/city-world-web-ui/ entries, but that
-      is now by design: #215 removes the staging-specific runtime and the
-      entrypoint regenerates it at extraction. On the extracted package, the
+      is now by design: #215 removes the staging-specific runtime
+      (tools/package_portable_workspace.py:1099-1102) and the entrypoint
+      regenerates it on start. On the extracted package, the
       packaged start-city-world.bat rewrote the Receipt's install.prefix to
       the extraction path before it failed (see the last note). With the
       entrypoint's configure step replaced by the staging materialize step
@@ -266,9 +278,9 @@ resolution:
     - >-
       resolution.verified is true for the two layers this candidate describes,
       based on the measurements above and not on the merge. The same run
-      found that the packaged start-city-world.bat no longer starts on a host
-      without Ruby, because the extraction-time step now runs the full Recipe
-      configure. That is a new finding introduced by #215 and is recorded as
-      its own candidate,
+      found that the packaged start-city-world.bat no longer starts. Start now
+      runs the Recipe configure and doctor, which need Ruby, pip and the
+      packaging host's vcpkg. That is a new finding introduced by #215 and is
+      recorded as its own candidate,
       portable-city-world-extraction-configure-needs-ruby-and-pip, and
       reported as #224.
