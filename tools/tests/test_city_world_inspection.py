@@ -271,6 +271,18 @@ class CityWorldInspectionTest(unittest.TestCase):
         self.assertEqual(result["catalog_snapshot"]["fetched_at"], "2026-08-23T00:00:00Z")
         protocol.validate_inspection(result)
 
+    def test_bridges_at_lod2_are_candidates_road_markings_need_lod3(self) -> None:
+        # Many cities publish bridges at LOD2 only; Envsim draws them from LOD2
+        # (their floor surfaces collide). Road markings exist only at LOD3.
+        bridge = inspection._capability("bridge", [{"max_lod": 2}])
+        self.assertEqual((bridge["generation_status"], bridge["reason"]), ("candidate", None))
+        markings = inspection._capability("road_markings", [{"max_lod": 2}])
+        self.assertEqual(markings["generation_status"], "scoped_out")
+        self.assertIn("LOD3", markings["reason"])
+        lod1 = inspection._capability("bridge", [{"max_lod": 1}])
+        self.assertEqual(lod1["generation_status"], "scoped_out")
+        self.assertIn("LOD2", lod1["reason"])
+
     def test_second_mesh_bridge_catalog_is_filtered_to_selected_third_meshes(self) -> None:
         files = [
             {"code": "52385618", "url": "https://assets.example/in.gml"},
