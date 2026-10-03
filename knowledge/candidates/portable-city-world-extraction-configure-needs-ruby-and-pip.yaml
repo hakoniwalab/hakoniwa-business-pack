@@ -1,0 +1,240 @@
+id: portable-city-world-extraction-configure-needs-ruby-and-pip
+title: The City World portable start entrypoint runs the Recipe configure and doctor on every start, which need Ruby, pip and the packaging host's vcpkg that the package does not ship
+
+status: candidate
+
+knowledge_type:
+  - known_pitfall
+
+summary: >
+  Since #215, start-city-world.bat calls tools/portable_workspace_runtime.py
+  start-city-world. On every start, that command relocates the Foundation
+  Receipt, runs workspace.py prepare, and then runs
+  tools/recipe/city_world_web_ui.py configure and doctor before starting the
+  Launcher. Three things in that sequence are not provided by the package.
+  Both city_world_web_ui.py commands load the Recipe through a Ruby exporter
+  before dispatching. Configure, which is the full configure_recipe, installs
+  the Recipe's Python requirements with pip, while the packager strips pip on
+  purpose. The doctor checks the Foundation vcpkg toolchain, whose
+  toolchain.json in the ZIP still names the packaging host's vcpkg by
+  absolute path. On a Windows host, start fails at each of these in turn.
+  Without Ruby on PATH, start exits 2 with FileNotFoundError. With Ruby
+  added, it exits 2 with "No module named pip". With configure replaced by
+  the materialize step and vcpkg_root pointed at a path that does not exist,
+  it exits 2 with the Foundation toolchain INCOMPATIBLE. The package built at
+  b909f95, before #215, started on the same host with the same minimal PATH,
+  because its entrypoint called the Launcher directly. Staging validation
+  avoids the pip failure because it runs only the materialize step. It
+  avoids the Ruby and vcpkg failures because it runs on the packaging host.
+
+observation:
+  context: >
+    Re-verification of
+    portable-city-world-staging-validation-does-not-inspect-the-staged-package
+    after #215, on the same native Windows 11 x64 host as that candidate, at
+    business-pack c4fac99 (contains #215 = ecdbdf7). Packages were built with
+    tools/package_portable_workspace.py, both inside and outside the managed
+    Workspace (both exit 0). Each was extracted with Expand-Archive to a short
+    folder outside any git working tree. All extractions ran on the packaging
+    host. The batch files were run with PATH set to
+    C:\Windows\system32;C:\Windows, where python, git, ruby and cmake all
+    resolve to "not found", and with empty stdin.
+  details:
+    - >-
+      Code path. run_city_world calls prepare_city_world for every "start"
+      command (tools/portable_workspace_runtime.py:186-187), with no
+      first-run guard. prepare_city_world (:157-164) calls prepare_and_doctor
+      with configure_command ("tools/recipe/city_world_web_ui.py",
+      "configure") and doctor_command (... "doctor"). city_world_web_ui.py
+      main calls recipe_data() before it dispatches the subcommand
+      (tools/recipe/city_world_web_ui.py:152-154). recipe_data() calls
+      load_recipe, which runs ["ruby", export_recipe_json.rb, <recipe>]
+      (tools/recipe.py:81-82), so both configure and doctor need Ruby.
+      configure_recipe (tools/recipe.py:1073) runs "<foundation python> -m
+      pip install -r <requirements>" whenever the Recipe declares requirements
+      (:1108). The doctor reads work/foundation/config/toolchain.json and
+      requires vcpkg.exe and scripts/buildsystems/vcpkg.cmake under its
+      vcpkg_root (tools/foundation_lib/runtime.py:157-182).
+    - >-
+      What the package carries. The packager drops pip and setuptools from the
+      packaged Python on purpose. Its comment states that "the portable
+      package uses the official embeddable interpreter and never installs
+      packages at runtime" (tools/package_portable_workspace.py:53-57).
+      Neither ZIP contains a pip entry. The ZIP's
+      work/foundation/config/toolchain.json keeps vcpkg_root as the packaging
+      checkout's absolute vcpkg path, and neither packaging nor relocation
+      rewrites it. Parts of this path do handle the portable layout:
+      foundation_python_executable picks the embeddable python.exe
+      (tools/workspace.py:59-66), and recipe_repository_root falls back to the
+      package location (tools/recipe.py:114-119). Nothing in it skips the Ruby
+      exporter, the pip install or the vcpkg check for a portable package.
+    - >-
+      Minimal PATH. start-city-world.bat prints the Workspace activation lines
+      from workspace.py prepare. It then prints a traceback that ends in
+      load_recipe -> subprocess.run -> "FileNotFoundError: [WinError 2]",
+      followed by "ERROR: portable City World Recipe configure failed with
+      exit=1". It exits 2. Port 28008 has no listener afterwards.
+    - >-
+      Minimal PATH plus the host Ruby's bin directory. Configure gets past
+      load_recipe and prints the Recipe plan. It then runs
+      "<package>\...\work\foundation\install\python\python.exe -m pip install
+      -r ...", which fails with "No module named pip". The output ends with
+      "ERROR: Recipe Python dependency installation failed: exit=1" and
+      "ERROR: portable City World Recipe configure failed with exit=2".
+      start-city-world.bat exits 2.
+    - >-
+      Both results were the same for the ZIP built inside the Workspace and
+      the ZIP built outside it. In both, relocation had already rewritten the
+      Receipt's install.prefix to the extraction path before configure failed.
+    - >-
+      Control (materialize instead of configure). This was a fresh extraction of the ZIP built inside
+      the Workspace, with Ruby on PATH. A probe script outside the package
+      replaced only prepare_city_world. The replacement calls
+      prepare_and_doctor with configure_command set to the materialize-only
+      step that staging validation uses (_materialize_web_ui_recipe,
+      tools/package_portable_workspace.py:731). The probe then called the real
+      portable_workspace_runtime.main with start-city-world. That is the same
+      run_city_world path and Launcher arguments, including --open-browser,
+      that start-city-world.bat uses. Nothing in the package was edited.
+      Compared with the batch run that had Ruby on PATH, the probe differs in
+      configure (materialize instead of configure) and in the entry point: it
+      was entered from PowerShell, with inherited stdin, instead of the batch
+      file with empty stdin. Relocate, prepare,
+      materialize and city_world_web_ui.py doctor all passed, with
+      "Foundation: SATISFIED", "[SATISFIED] hakoniwa-pdu-endpoint",
+      "[SATISFIED] Recipe runtime" and runtime imports OK. The start that
+      followed printed "[OK] City World services are ready" and exited 0, and
+      http://127.0.0.1:28008/ returned 200 with one listener. The packaged
+      status-city-world.bat and stop-city-world.bat, on the minimal PATH,
+      reported ACTIVATED and then TERMINATED. Both exited 0. Afterwards no
+      python.exe under the package was running and port 28008 had no
+      listener. The control was not run on the ZIP built outside the
+      Workspace.
+    - >-
+      vcpkg control. This repeated the control above with one change after
+      extraction: toolchain.json's vcpkg_root was rewritten to a path that
+      does not exist. The doctor reported "[INCOMPATIBLE] Foundation
+      toolchain: Foundation toolchain vcpkg_root is not usable; missing
+      required files: <path>\vcpkg.exe, <path>\scripts\buildsystems\vcpkg.cmake"
+      and "ERROR: portable City World Recipe doctor failed with exit=1". Start
+      exited 2 with no listener. In the control above, the shipped vcpkg_root
+      exists on this host, so the same check passed on host state. On a host that does
+      not have the packaging checkout's vcpkg path, the shipped package would
+      therefore stop at this check even with Ruby and pip resolved. That
+      conclusion is inferred from this control; no second host was used.
+    - >-
+      Doctor without Ruby. On a fresh extraction with the minimal
+      PATH and no Ruby, "workspace.py run -- city_world_web_ui.py doctor"
+      fails with FileNotFoundError through city_world_web_ui.py:154 main ->
+      :44 recipe_data -> tools/recipe.py:81 load_recipe, and exits 1.
+    - >-
+      Pre-#215 baseline. The b909f95 package on the same host, with the same
+      minimal PATH and with ruby "not found", started with exit 0 and HTTP 200.
+      Its entrypoint ran the Launcher directly through workspace.py run,
+      without configure or doctor. Two other things differed from the c4fac99
+      runs: the OS build (26200 then, 26300 now) and the default Web UI port
+      (8008 then, 28008 after #218). The failures above happen before the
+      Launcher binds a port. Between ecdbdf7 (#215, whose parent is b909f95)
+      and c4fac99, the portable runtime, the packager, tools/recipe.py,
+      tools/workspace.py and tools/foundation_lib are unchanged. The only
+      City World changes in that range are the port defaults (#218) and the
+      viewer server backlog used by web_smoke.py (#223).
+    - >-
+      The package README says no extra installation of Python, Git, WSL or
+      Docker is needed (tools/package_portable_workspace.py:552), and
+      docs/windows-portable-city-world-workspace-ja.md:24 says the same. Ruby
+      and vcpkg are not mentioned.
+    - >-
+      tools/tests/test_portable_workspace_runtime.py replaces subprocess.run and
+      prepare_city_world with mocks, so the configure and doctor subprocesses
+      and their ruby, pip and vcpkg dependencies do not run under the tests.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/portable_workspace_runtime.py
+      revision: c4fac9980587001ba4c8f04fc795e40befd2b3e0
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/recipe.py
+      revision: c4fac9980587001ba4c8f04fc795e40befd2b3e0
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/recipe/city_world_web_ui.py
+      revision: c4fac9980587001ba4c8f04fc795e40befd2b3e0
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/package_portable_workspace.py
+      revision: c4fac9980587001ba4c8f04fc795e40befd2b3e0
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/foundation_lib/runtime.py
+      revision: c4fac9980587001ba4c8f04fc795e40befd2b3e0
+  runtime_evidence:
+    - description: >
+        Native Windows 11 Business x64, build 26300, Visual Studio 2022
+        Community, CPython 3.12.7 (embeddable, in the package), Ruby 3.2.11 on
+        the host (outside the minimal PATH unless stated), ja-JP locale,
+        LongPathsEnabled=1. Measured 2026-10-02; the vcpkg control and the
+        doctor-without-Ruby run on 2026-10-03. Sibling revisions unchanged from the
+        earlier candidate: hakoniwa-envsim 0b02d6c, hakoniwa-pdu-javascript
+        1d98d4d, hakoniwa-pdu-python f3bb5d6, hakoniwa-pdu-endpoint 12230c9.
+
+confidence: high
+
+contradictions: []
+
+validation:
+  status: verified
+  required:
+    - >-
+      The fix is a maintainer call. From the code and the controls, start
+      needs the Recipe runtime that materialize produces. It does not need the
+      dependency installation that configure adds, which the packager's own
+      comment rules out. For a start that needs no extra installation, the
+      Recipe would also have to be loaded without Ruby. The pre-start doctor
+      would also have to stop requiring the packaging host's vcpkg, or the
+      package would have to carry or relocate what it checks. Both points are
+      inferences; no Ruby-free or vcpkg-free start was run.
+  notes:
+    - >-
+      Measured on one Windows host, which is also the packaging host. The
+      vcpkg finding comes from rewriting vcpkg_root in the extracted package,
+      not from a second host.
+    - >-
+      Revised on 2026-10-03 after a review. Added: the vcpkg dependency and its
+      control, the doctor's own Ruby dependency, the packager's no-pip
+      contract, and that the sequence runs on every start. Corrected: the
+      control is described against the batch run with Ruby (two differences),
+      Windows paths in block scalars use single backslashes, the portable-case
+      sentence was narrowed, and the baseline now also notes the port change.
+      Removed: the note that treated pip in the packaged Python as a host
+      condition.
+
+tracking:
+  implementation_status: open
+  issues:
+    - repository: hakoniwalab/hakoniwa-business-pack
+      number: 224
+      relation: fix
+      status: open
+
+promotion_targets:
+  catalog: []
+  runtime_primer: false
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - city-world-web-ui
+  executable_guardrails: []
+
+promotion_rationale:
+  - >-
+    The defect sits in the portable City World start entrypoint. The Recipe
+    configure and doctor behave as written for a source Workspace on the
+    packaging host. The entrypoint reuses them in a runtime that lacks at
+    least three of their prerequisites.
+
+resolution:
+  status: pending
+  fixed_by: []
+  verified: false
+  promoted_to: []
+  executable_guardrails: []
+  notes: []
