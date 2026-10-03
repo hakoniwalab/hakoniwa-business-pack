@@ -73,9 +73,12 @@ def _capability(name: str, files: list[dict[str, Any]]) -> dict[str, Any]:
     max_lod = max(int(item.get("max_lod", 0)) for item in files)
     generation_status = "candidate"
     reason = None
-    if name in {"road_markings", "bridge"} and max_lod < 3:
+    # Road markings exist only at LOD3; bridges are drawn from LOD3 where a
+    # bridge has it, else from LOD2 (hakoniwa-envsim bridge2glb/bridge2mjcf).
+    needed = {"road_markings": 3, "bridge": 2}.get(name, 1)
+    if max_lod < needed:
         generation_status = "scoped_out"
-        reason = "LOD3 geometry required by the current generator is not available"
+        reason = f"LOD{needed} geometry required by the current generator is not available"
     return {
         "dataset_status": "available",
         "generation_status": generation_status,
