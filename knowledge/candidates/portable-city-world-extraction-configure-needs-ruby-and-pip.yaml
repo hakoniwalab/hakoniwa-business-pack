@@ -65,7 +65,7 @@ observation:
       checkout's absolute vcpkg path, and neither packaging nor relocation
       rewrites it. Parts of this path do handle the portable layout:
       foundation_python_executable picks the embeddable python.exe
-      (tools/workspace.py:59-66), and recipe_repository_root falls back to the
+      (tools/foundation_lib/runtime.py:233-241), and recipe_repository_root falls back to the
       package location (tools/recipe.py:114-119). Nothing in it skips the Ruby
       exporter, the pip install or the vcpkg check for a portable package.
     - >-
