@@ -13,6 +13,7 @@ import tempfile
 import threading
 import unittest
 import urllib.request
+from unittest import mock
 
 from tools.recipe.viewer_http_server import ViewerHTTPServer
 
@@ -25,6 +26,12 @@ class _Quiet(SimpleHTTPRequestHandler):
 
 
 class ViewerHttpServerTest(unittest.TestCase):
+    def test_mime_types_are_initialized_before_serving(self) -> None:
+        with mock.patch("tools.recipe.viewer_http_server.mimetypes.init") as initialize:
+            server = ViewerHTTPServer(("127.0.0.1", 0), _Quiet)
+            self.addCleanup(server.server_close)
+        initialize.assert_called_once_with()
+
     def test_a_burst_of_module_requests_is_all_served(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             for number in range(MODULES):
