@@ -15,6 +15,7 @@ with a backlog of 128.
 from __future__ import annotations
 
 import argparse
+import mimetypes
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -25,6 +26,13 @@ class ViewerHTTPServer(ThreadingHTTPServer):
 
     request_queue_size = 128
     daemon_threads = True
+
+    def __init__(self, *args, **kwargs):
+        # SimpleHTTPRequestHandler guesses MIME types from worker threads.
+        # Initialize the database before any handler can race through its
+        # lazy Windows registry scan on the first request.
+        mimetypes.init()
+        super().__init__(*args, **kwargs)
 
 
 def main(argv: list[str] | None = None) -> int:
