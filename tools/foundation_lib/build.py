@@ -53,7 +53,10 @@ def _set_manifest_boolean(
 
 
 def _core_foundation_manifest(
-    source_manifest: Path, *, callback_assets_shared: bool = False
+    source_manifest: Path,
+    *,
+    callback_assets_shared: bool = False,
+    core_shared: bool = False,
 ) -> str:
     if not source_manifest.is_file():
         raise FoundationError(
@@ -64,6 +67,12 @@ def _core_foundation_manifest(
     lines = _set_manifest_boolean(
         lines, "features", "callback_assets_shared", callback_assets_shared
     )
+    # Windows opt-in (hakoniwalab/hakoniwa-core-pro#95): the Core library as one
+    # hako.dll. Written only when a Recipe requires it, so a Foundation that does
+    # not ask for it gets the same build input as before, and an older Core PRO
+    # that does not know the key is never handed it.
+    if core_shared:
+        lines = _set_manifest_boolean(lines, "features", "core_shared", True)
     lines = _set_manifest_boolean(lines, "validation", "tests", False)
     return "\n".join(lines) + "\n"
 
@@ -90,6 +99,7 @@ def write_component_manifest(
             callback_assets_shared=(
                 required_capabilities.get("callback_assets_shared") is True
             ),
+            core_shared=(required_capabilities.get("core_shared") is True),
         )
     elif component_id == "zenoh-c":
         content = f"""version: 1
