@@ -551,7 +551,7 @@ Launcherが存在しない、あるいはRecipeが意図的にmanual runbookを�
 
 ## Windowsランタイムの注意点
 
-ネイティブWindowsには、Linux/macOSで動くRecipeが動かなくなる違いが2つあります。どちらもビルドは通り、実行時に初めて失敗します。
+ネイティブWindowsには、Linux/macOSで動くRecipeが動かなくなる違いが3つあります。どちらもビルドは通り、実行時に初めて失敗します。
 
 ### Core対応のアセットEXEとEndpointのcallback DLL
 
@@ -572,13 +572,30 @@ FoundationはこれをCore PROの `features.callback_assets_shared` に渡しま
 
 これは、Endpointのasset contextのルール（アセットが所有するSHM callback Endpointは `Endpoint::open(config_path, asset_name)` で開く）とは別に、追加で必要です。
 
+### Pythonのサービスクライアントと共有のCore（core_shared）
+
+Windowsでは、Core PROはCoreライブラリ `hako` を既定でstaticライブラリとしてビルドし、`assets.dll`、`hakopy.pyd`、`shakoc.dll`、conductorのそれぞれに埋め込みます。このため、Coreの状態（hako_pro.cppの `pro_data_ptr` など）をモジュールごとに別々に持ちます。assetsランタイムは自分の側にCore PROのデータ（サービス、PDUチャネル）を読み込みますが、Pythonのサービスクライアント（hakopy）は自分の側の空の状態を読み、`Failed to get pro data` で失敗します。`callback_assets_shared` で共有されるのはcallbackの `assets` だけで、その下のCoreはstaticのままなので、これだけでは直りません。
+
+ルール：Windowsで動かすRecipeは、`callback_assets_shared` に加えて次を宣言します。
+
+```yaml
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      core_shared: true
+```
+
+FoundationはこれをCore PROの `features.core_shared` に渡します。Windowsでは `hako` が1つの `hako.dll` としてビルドされ（`HAKO_CORE_SHARED=ON`）、Linux/macOSでは無視されます。既存のWindows Foundationに後から追加した場合は、`hakoniwa-core-pro`、`hakoniwa-pdu-python`、`hakoniwa-pdu-endpoint`、`hakoniwa-pdu-bridge-core` を再ビルドし、RecipeのPlantもビルドし直して、実行ファイルの隣に `hako.dll` を置きます。Linux/macOSでも、このキーを知る前のCore PROで作ったFoundationはreceiptに `core_shared` がないため、`hakoniwa-core-pro` の再ビルドが一度必要です。
+
+症状：configureとstartは成功し、LauncherはRUNNINGで、viewerにも機体が出ますが、ドローンが離陸しません。scheduleのログに `Failed to get pro data` が出ます。Pythonからサービスを使わない車のデモは普通に動くため、ドローンだけの問題に見えます。Python側で回避せず、Coreを共有にしてください。
+
 ### 前回の実行で残ったmmapファイル
 
 Windowsのmmapバックエンドは、既存の `mmap-*.bin` をサイズ変更せず、古いサイズのまま再利用します（POSIXは、サイズが足りないファイルを作り直します）。PDU構成が小さかった前回の実行のファイルが残っていると、次の実行で `hako-cmd` が落ちたり（VCRUNTIME140.dllで0xc0000005）、アセットが `WAIT RUNNING` のまま止まったりします。
 
 ルール：シミュレーションが動いていない状態で、start前にCore configの `core_mmap_path`（Business Packでは `work/foundation/runtime/mmap`）にある `mmap-*.bin` を削除します。ロックファイルは残します。Windowsで削除できないファイルは、まだ動いているシミュレーション（別のWorkspaceのものも含む）がmmapしています。強制的に消さず、そちらを停止してください。
 
-出典：`knowledge/candidates/windows-callback-endpoint-dll-requires-shared-callback-assets.yaml`、`knowledge/candidates/windows-mmap-runtime-state-persists-across-runs.yaml`
+出典：`knowledge/candidates/windows-callback-endpoint-dll-requires-shared-callback-assets.yaml`、`knowledge/candidates/windows-static-core-duplicates-core-state-per-module.yaml`、`knowledge/candidates/windows-mmap-runtime-state-persists-across-runs.yaml`
 
 ## Recipe起動チェックリスト
 

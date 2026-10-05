@@ -1,0 +1,140 @@
+id: windows-static-core-duplicates-core-state-per-module
+title: On Windows, the static Core library gives hakopy and the assets runtime separate Core state; require Core PRO core_shared
+status: candidate
+
+knowledge_type:
+  - runtime_rule
+  - known_pitfall
+  - usage_pattern
+
+summary: >
+  On Windows, hakoniwa-core-pro builds the Core library `hako` as a static library
+  by default. It is linked into assets.dll, hakopy.pyd, shakoc.dll and the
+  conductor, so each module carries its own copy of Core state, including the
+  module-local `pro_data_ptr` of hako_pro.cpp. The assets runtime loads the Core
+  PRO data (services, PDU channels) into its copy; the Python service clients
+  (hakopy) read their own empty copy and fail with "Failed to get pro data". The
+  fix is a build choice: the Recipe declares `core_shared: true` on
+  `foundation_requirements.hakoniwa-core-pro.capabilities`, the Foundation passes it
+  to Core PRO `features.core_shared`, and Core PRO builds `hako` as one hako.dll on
+  Windows (HAKO_CORE_SHARED=ON). The option is ignored on Linux/macOS.
+
+observation:
+  context: >
+    Running the Urban Mobility drone demo (Drone schedule driven by Python service
+    clients, Three.js viewer through WebBridge) on native Windows 11 through the
+    Business Pack Foundation. The Car demos of the same Workspace ran normally.
+  details:
+    - >-
+      Symptom seen by the operator: configure and start succeed, the Launcher reports
+      RUNNING and the viewer shows the city and the Drone, but the Drone never takes
+      off. The schedule log shows "Failed to get pro data" from the Python service
+      client; the mission track altitude never rises.
+    - >-
+      `callback_assets_shared: true` was already enabled. It shares the callback
+      `assets` frontend only; the Core library underneath stayed static, so hakopy.pyd
+      still had its own Core copy.
+    - >-
+      Cars do not use Core PRO services from Python, so the duplicated state stays
+      invisible there. That is why the failure looks drone-specific.
+    - >-
+      With core_shared the build produces hako.dll plus the import library hako.lib.
+      hakopy.pyd, assets.dll and shakoc.dll import `hako_pro_get_data` from hako.dll,
+      and only hako.dll carries the Core implementation.
+    - >-
+      Changing the capability makes an existing Windows Foundation INCOMPATIBLE.
+      Rebuild hakoniwa-core-pro, hakoniwa-pdu-python, hakoniwa-pdu-endpoint and
+      hakoniwa-pdu-bridge-core (`foundation.py build --force` for each), then rebuild
+      the Recipe's native Plant so hako.dll is copied next to its executables.
+    - >-
+      On POSIX the CMake graph is unchanged and Core PRO reports the capability as
+      provided. A Foundation built before Core PRO knew the key has no
+      `core_shared` in its receipt, so a Recipe requiring it asks for one rebuild of
+      hakoniwa-core-pro there as well.
+
+sources:
+  repositories:
+    - repository: hakoniwalab/hakoniwa-core-pro
+      path: CMakeLists.txt
+      revision: 569f50b
+    - repository: hakoniwalab/hakoniwa-core-pro
+      path: tools/hako.py
+      revision: 569f50b
+    - repository: hakoniwalab/hakoniwa-business-pack
+      path: tools/foundation_lib/build.py
+      revision: a285aca
+    - repository: hakoniwalab/hakoniwa-urban-mobility
+      path: recipes/usecases/urban-drone-rc.yaml
+      revision: 3c21fd1
+  runtime_evidence:
+    - description: >-
+        2026-10-05, Urban Workspace on Windows 11 with the default (static) Core:
+        the drone demo never took off; the schedule log reported "Failed to get pro
+        data".
+    - description: >-
+        2026-10-05, same Workspace after a forced Foundation rebuild with
+        core_shared: true (Core PRO 569f50b): the drone demo ran set_ready, takeoff
+        and the first goto, altitude rose from 248.9 m to 254.0 m, no "Failed to get
+        pro data". The Car brake demo was unchanged (top speed 3.84 m/s, rtf 1.0).
+  expert_input:
+    - source: Hakoniwa maintainer
+      statement: >-
+        The problem comes from the static link of the Core. Fix it with the shared
+        Core as a Windows-only opt-in, enable it for the new case first, and roll it
+        out to other Recipes after it is stable.
+
+confidence: high
+
+contradictions:
+  - target: knowledge/candidates/windows-callback-endpoint-dll-requires-shared-callback-assets.yaml
+    existing_claim: >-
+      `callback_assets_shared: true` is the Windows fix for duplicated Core/Asset
+      state between modules.
+    new_evidence: >-
+      It shares the callback assets frontend only. Python service clients also need
+      the Core library itself shared (`core_shared: true`).
+
+validation:
+  status: verified
+  required:
+    - Re-verify the drone demo from the Windows portable package once the change is merged.
+  notes:
+    - The option is `experimental` in Core PRO's own wording and defaults to false.
+
+tracking:
+  implementation_status: in_progress
+  issues:
+    - repository: hakoniwalab/hakoniwa-core-pro
+      number: 94
+      relation: fix
+      status: open
+
+promotion_targets:
+  catalog:
+    - hakoniwa-core-pro
+  runtime_primer: true
+  base_ecosystem_guide: false
+  component_asset_guide: false
+  recipes:
+    - urban-drone-rc
+  executable_guardrails: []
+
+promotion_rationale:
+  - >-
+    A runtime rule every Windows Recipe with Python service clients must follow,
+    next to the existing callback_assets_shared rule in the Runtime Primer.
+
+resolution:
+  status: pending
+  fixed_by:
+    - repository: hakoniwalab/hakoniwa-core-pro
+      issue: 94
+      pull_request: 95
+      revision: 569f50b
+  verified: false
+  promoted_to:
+    - docs/hakoniwa-runtime-primer.md#windows-runtime-notes
+    - docs/hakoniwa-runtime-primer-ja.md#windows-runtime-notes
+  executable_guardrails: []
+  notes:
+    - Verified on the Windows development Workspace; the portable package is re-checked after merge.

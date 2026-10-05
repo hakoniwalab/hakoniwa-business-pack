@@ -673,7 +673,7 @@ producer, runtime, PDU config, and observable validation.
 
 ## Windows Runtime Notes
 
-Native Windows differs from Linux/macOS in two ways that break a Recipe which
+Native Windows differs from Linux/macOS in three ways that break a Recipe which
 works elsewhere. Both fail at runtime, not at build time.
 
 ### Core-aware asset EXE plus Endpoint callback DLL
@@ -712,6 +712,42 @@ This is separate from, and in addition to, the Endpoint asset-context rule
 (`Endpoint::open(config_path, asset_name)` for an asset-owned SHM callback
 Endpoint).
 
+### Python service clients and the shared Core (core_shared)
+
+On Windows, Core PRO builds the Core library `hako` as a static library by
+default and links it into `assets.dll`, `hakopy.pyd`, `shakoc.dll` and the
+conductor. Each module then carries its own Core state (for example the
+`pro_data_ptr` of hako_pro.cpp). The assets runtime loads the Core PRO data
+(services, PDU channels) into its copy; Python service clients (hakopy) read
+their own empty copy and fail with `Failed to get pro data`.
+`callback_assets_shared` shares only the callback `assets` frontend; the Core
+underneath stays static, so it does not fix this.
+
+Rule: a Recipe that runs on Windows declares, in addition to
+`callback_assets_shared`,
+
+```yaml
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      core_shared: true
+```
+
+The Foundation passes it to Core PRO `features.core_shared`, which builds
+`hako` as one `hako.dll` on Windows (`HAKO_CORE_SHARED=ON`) and is ignored on
+Linux/macOS. After adding it to an existing Windows Foundation, rebuild
+`hakoniwa-core-pro`, `hakoniwa-pdu-python`, `hakoniwa-pdu-endpoint`, and
+`hakoniwa-pdu-bridge-core`, then rebuild the Recipe's Plant so `hako.dll` sits
+next to its executables. On Linux/macOS a Foundation built by a Core PRO that
+did not know the key has no `core_shared` in its receipt and needs one rebuild
+of `hakoniwa-core-pro`.
+
+Symptom: configure and start succeed, the Launcher reports RUNNING and the
+viewer shows the vehicle, but the drone never takes off; the schedule log shows
+`Failed to get pro data`. Car demos that use no services from Python run
+normally, so it looks drone-specific. Do not work around it in Python; share
+the Core.
+
 ### Stale mmap segments
 
 The Windows mmap backend reuses an existing `mmap-*.bin` at its old size
@@ -726,6 +762,7 @@ a running simulation, possibly from another Workspace; stop it instead of
 forcing removal.
 
 Sources: `knowledge/candidates/windows-callback-endpoint-dll-requires-shared-callback-assets.yaml`,
+`knowledge/candidates/windows-static-core-duplicates-core-state-per-module.yaml`,
 `knowledge/candidates/windows-mmap-runtime-state-persists-across-runs.yaml`.
 
 ## Recipe Startup Checklist
