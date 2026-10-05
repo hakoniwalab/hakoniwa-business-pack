@@ -424,6 +424,14 @@ def _materialize_portable_python(
     )
 
 
+def _package_files(root: Path) -> set[str]:
+    return {
+        path.relative_to(root).as_posix()
+        for path in root.rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc"
+    }
+
+
 def _drop_packages_shadowing_bundled_sources(
     python_root: Path, package_root: Path, package_paths: tuple[str, ...]
 ) -> list[str]:
@@ -432,9 +440,11 @@ def _drop_packages_shadowing_bundled_sources(
     The embedded Python reads Lib\\site-packages before the bundled source
     paths, so a package installed by the Foundation (the hakoniwa_pdu wheel)
     would shadow the newer checkout copied next to it
-    (hakoniwa-business-pack#230). Remove the site-packages copy of every package
-    the bundled sources provide; its dist-info stays so installed requirements
-    still resolve.
+    (hakoniwa-business-pack#230). hakoniwa_pdu is a namespace package (no
+    __init__.py), so packages are matched by directory name. The site-packages
+    copy is removed only when the bundled source provides every one of its
+    files; otherwise it is kept and reported. Its dist-info stays so installed
+    requirements still resolve.
     """
     site_packages = _site_packages(python_root)
     dropped: list[str] = []
@@ -446,12 +456,24 @@ def _drop_packages_shadowing_bundled_sources(
             continue
         for package in sorted(source.iterdir()):
             installed = site_packages / package.name
-            if (package / "__init__.py").is_file() and installed.is_dir():
-                shutil.rmtree(installed)
-                dropped.append(package.name)
-                print(f"[OK] Bundled source replaces Foundation package: {package.name} ({entry})")
+            if (
+                not package.is_dir()
+                or package.name == "__pycache__"
+                or package.suffix in {".egg-info", ".dist-info"}
+                or not installed.is_dir()
+            ):
+                continue
+            missing = sorted(_package_files(installed) - _package_files(package))
+            if missing:
+                print(
+                    f"[WARN] Foundation package {package.name} kept: the bundled source "
+                    f"({entry}) lacks {len(missing)} of its files, e.g. {missing[0]}"
+                )
+                continue
+            shutil.rmtree(installed)
+            dropped.append(package.name)
+            print(f"[OK] Bundled source replaces Foundation package: {package.name} ({entry})")
     return dropped
-
 
 def _install_portable_requirements(
     source_python: Path,
