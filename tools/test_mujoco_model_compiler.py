@@ -6,6 +6,11 @@ import unittest
 from pathlib import Path
 import sys
 
+sys.path.append(str(Path(__file__).resolve().parent))
+from workspace_test_isolation import isolate_from_active_workspace  # noqa: E402
+
+isolate_from_active_workspace()
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import mujoco_model_compiler as compiler
 

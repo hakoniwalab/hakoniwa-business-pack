@@ -3,11 +3,17 @@ from __future__ import annotations
 
 import importlib.util
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
+
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+from workspace_test_isolation import isolate_from_active_workspace  # noqa: E402
+
+isolate_from_active_workspace()
 
 SCRIPT = Path(__file__).resolve().parents[1] / "recipe.py"
 SPEC = importlib.util.spec_from_file_location("business_pack_recipe_git_revision", SCRIPT)

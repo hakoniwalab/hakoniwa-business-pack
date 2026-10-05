@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import sys
 import tempfile
 import unittest
 import json
 from pathlib import Path
 from types import SimpleNamespace
+
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+from workspace_test_isolation import isolate_from_active_workspace  # noqa: E402
+
+isolate_from_active_workspace()
 
 from tools.recipe import drone_fleet_runtime as runtime
 
