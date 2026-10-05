@@ -97,11 +97,14 @@ python tools/recipe.py configure --recipe <recipe.yaml>
 ```
 
 `recipe.py` resolves Foundation component repositories and Recipe-local
-repositories through one source contract. `plan` reports `clone`, `reuse`, or a
-required local input together with available revision provenance. `configure`
-clones only missing, cloneable sibling repositories and never updates, resets, or
-replaces an existing checkout. It then delegates Receipt inspection and component
-build/install to the Foundation engine and installs Recipe Python requirements.
+repositories through one source contract. `plan` reports source actions such as
+`clone`, `reuse`, `checkout`, or a required local input together with available
+revision provenance. `configure` derives the same plan and applies it. Missing,
+cloneable sibling repositories may be cloned; when a Recipe pins a full commit SHA,
+a clean, non-overridden checkout may be synchronized to that revision. Dirty or
+operator-overridden checkouts are not changed automatically. `configure` then
+delegates Receipt inspection and component build/install to the Foundation engine
+and installs Recipe Python requirements.
 
 When an operator resolves experiment-specific Foundation capabilities before the
 Foundation exists, pass that generated requirement file through the same flow:
@@ -396,6 +399,52 @@ Recipeには、単なるコンポーネント一覧だけでなく、次のよ�
 - 不足している機能
 - 必要な追加開発
 - 最小デモの作り方
+
+### Recipe orchestration の現在の考え方
+
+> **2026年10月時点の設計整理です。**
+> これは現時点の Business Pack における考え方を説明するものであり、
+> 将来の実装や個別 Recipe / Component の操作語彙まで固定する恒久仕様ではありません。
+
+Business Pack の generic Recipe orchestration では、Recipe に記述された構成、
+依存関係、実行環境への要求を **Desired State** として扱います。
+`tools/recipe.py` は、その Desired State と現在状態の関係を、
+`doctor`、`plan`、`configure` の三つの操作に分けて扱います。
+
+- **`doctor`**: 現在状態を診断します。Foundation、Recipe-local dependency、
+  生成済み runtime などが Recipe の要求を満たしているかを確認する
+  read-only な操作で、必要なタイミングでいつでも実行できます。
+- **`plan`**: Recipe を構築するために必要な操作を、現在状態との差分から
+  副作用なしで導出・表示します。source の `clone` / `reuse` / `checkout`、
+  Foundation の build/install action、Recipe Python requirements、
+  runtime materialization などが計画対象です。
+- **`configure`**: `plan` と同じ計画生成処理を内部で実行し、
+  その時点で導出された計画を実際に適用します。明示的な `plan` コマンドの
+  事前実行は必須ではありません。また、以前表示した Plan を保存して再利用するのではなく、
+  `configure` 開始時に現在状態から Plan を再導出します。適用後は `doctor`
+  相当の診断を行い、Recipe の要求が満たされたかを再確認します。
+
+概念的には次の関係です。
+
+```text
+Recipe requirements + Current State
+  |
+  +-- doctor --> diagnosis
+  |
+  +-- plan ----> Derived Plan (read-only preview)
+
+configure
+  -> derive the same kind of Plan from the current state
+  -> apply the Plan
+  -> doctor
+```
+
+この節でいう `doctor` / `plan` / `configure` は、
+**`tools/recipe.py` が提供する generic Recipe orchestration の操作**を指します。
+Component repository の `tools/hako.py` や、`tools/recipe/*.py` にある
+Recipe 固有 operator が同じ名前のコマンドを持つ場合でも、それらは各レイヤが
+所有する局所的な lifecycle / operation です。現時点では、それらの語彙や内部実装を
+この三操作へ一律に統一することは目的としていません。
 
 ### Recipeの操作ガイドを生成する
 
