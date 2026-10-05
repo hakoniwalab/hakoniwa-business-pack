@@ -2,12 +2,18 @@ from __future__ import annotations
 
 import json
 import shutil
+import sys
 import tempfile
 import unittest
 import zipfile
 from contextlib import ExitStack
 from pathlib import Path
 from unittest import mock
+
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+from workspace_test_isolation import isolate_from_active_workspace  # noqa: E402
+
+isolate_from_active_workspace()
 
 from tools.remote_operation import result_transfer
 
