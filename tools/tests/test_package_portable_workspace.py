@@ -10,6 +10,31 @@ from tools import package_portable_workspace as portable
 
 
 class PortableWorkspacePackageTest(unittest.TestCase):
+    def test_bundled_source_replaces_the_foundation_wheel_of_the_same_package(self) -> None:
+        """hakoniwa-business-pack#230: site-packages is read before the bundled src."""
+        with tempfile.TemporaryDirectory() as temporary:
+            package_root = Path(temporary)
+            python_root = package_root / "python"
+            site_packages = python_root / "Lib" / "site-packages"
+            for name in ("hakoniwa_pdu", "numpy"):
+                (site_packages / name).mkdir(parents=True)
+                (site_packages / name / "__init__.py").write_text("", encoding="utf-8")
+            (site_packages / "hakoniwa_pdu-1.7.0.dist-info").mkdir()
+            source = package_root / "hakoniwa-pdu-python" / "src" / "hakoniwa_pdu"
+            source.mkdir(parents=True)
+            (source / "__init__.py").write_text("", encoding="utf-8")
+            (package_root / "hakoniwa-pdu-python" / "src" / "hakoniwa_pdu.egg-info").mkdir()
+
+            dropped = portable._drop_packages_shadowing_bundled_sources(
+                python_root, package_root,
+                ("hakoniwa-business-pack", "hakoniwa-pdu-python/src", "missing/src"),
+            )
+
+            self.assertEqual(dropped, ["hakoniwa_pdu"])
+            self.assertFalse((site_packages / "hakoniwa_pdu").exists())
+            self.assertTrue((site_packages / "hakoniwa_pdu-1.7.0.dist-info").is_dir())
+            self.assertTrue((site_packages / "numpy").is_dir())
+
     def test_windows_python_prefers_portable_root_executable(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -225,6 +225,13 @@ def _embedded_python_archive(
     )
 
 
+DEFAULT_PYTHON_PATHS = (
+    "hakoniwa-business-pack",
+    "hakoniwa-pdu-python/src",
+    "hakoniwa-envsim/tools",
+    "hakoniwa-envsim/src/city_pipeline",
+)
+
 def _relative_python_path(_python_root: Path, package_root_entry: str) -> str:
     # The portable interpreter is always located at
     # hakoniwa-business-pack/work/foundation/install/python.  Keep this
@@ -248,12 +255,7 @@ def _rewrite_embedded_python_pth(
     output: list[str] = []
     has_site_packages = False
     if package_paths is None:
-        package_paths = (
-            "hakoniwa-business-pack",
-            "hakoniwa-pdu-python/src",
-            "hakoniwa-envsim/tools",
-            "hakoniwa-envsim/src/city_pipeline",
-        )
+        package_paths = DEFAULT_PYTHON_PATHS
     relative_paths = tuple(
         _relative_python_path(python_root, value) for value in package_paths
     )
@@ -416,6 +418,39 @@ def _materialize_portable_python(
     _rewrite_embedded_python_pth(destination, package_paths)
     _copy_site_packages(source_python_root, destination)
     _copy_foundation_python_runtime_packages(source_python_root, destination)
+    # destination is <package>/hakoniwa-business-pack/work/foundation/install/python
+    _drop_packages_shadowing_bundled_sources(
+        destination, destination.parents[4], package_paths or DEFAULT_PYTHON_PATHS
+    )
+
+
+def _drop_packages_shadowing_bundled_sources(
+    python_root: Path, package_root: Path, package_paths: tuple[str, ...]
+) -> list[str]:
+    """Let the bundled source win over the Foundation wheel of the same package.
+
+    The embedded Python reads Lib\\site-packages before the bundled source
+    paths, so a package installed by the Foundation (the hakoniwa_pdu wheel)
+    would shadow the newer checkout copied next to it
+    (hakoniwa-business-pack#230). Remove the site-packages copy of every package
+    the bundled sources provide; its dist-info stays so installed requirements
+    still resolve.
+    """
+    site_packages = _site_packages(python_root)
+    dropped: list[str] = []
+    for entry in package_paths:
+        if entry.replace("\\", "/").strip("/") == "hakoniwa-business-pack":
+            continue
+        source = package_root / entry
+        if not source.is_dir():
+            continue
+        for package in sorted(source.iterdir()):
+            installed = site_packages / package.name
+            if (package / "__init__.py").is_file() and installed.is_dir():
+                shutil.rmtree(installed)
+                dropped.append(package.name)
+                print(f"[OK] Bundled source replaces Foundation package: {package.name} ({entry})")
+    return dropped
 
 
 def _install_portable_requirements(
