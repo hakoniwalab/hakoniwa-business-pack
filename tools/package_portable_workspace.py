@@ -225,6 +225,13 @@ def _embedded_python_archive(
     )
 
 
+DEFAULT_PYTHON_PATHS = (
+    "hakoniwa-business-pack",
+    "hakoniwa-pdu-python/src",
+    "hakoniwa-envsim/tools",
+    "hakoniwa-envsim/src/city_pipeline",
+)
+
 def _relative_python_path(_python_root: Path, package_root_entry: str) -> str:
     # The portable interpreter is always located at
     # hakoniwa-business-pack/work/foundation/install/python.  Keep this
@@ -248,12 +255,7 @@ def _rewrite_embedded_python_pth(
     output: list[str] = []
     has_site_packages = False
     if package_paths is None:
-        package_paths = (
-            "hakoniwa-business-pack",
-            "hakoniwa-pdu-python/src",
-            "hakoniwa-envsim/tools",
-            "hakoniwa-envsim/src/city_pipeline",
-        )
+        package_paths = DEFAULT_PYTHON_PATHS
     relative_paths = tuple(
         _relative_python_path(python_root, value) for value in package_paths
     )
@@ -416,7 +418,62 @@ def _materialize_portable_python(
     _rewrite_embedded_python_pth(destination, package_paths)
     _copy_site_packages(source_python_root, destination)
     _copy_foundation_python_runtime_packages(source_python_root, destination)
+    # destination is <package>/hakoniwa-business-pack/work/foundation/install/python
+    _drop_packages_shadowing_bundled_sources(
+        destination, destination.parents[4], package_paths or DEFAULT_PYTHON_PATHS
+    )
 
+
+def _package_files(root: Path) -> set[str]:
+    return {
+        path.relative_to(root).as_posix()
+        for path in root.rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc"
+    }
+
+
+def _drop_packages_shadowing_bundled_sources(
+    python_root: Path, package_root: Path, package_paths: tuple[str, ...]
+) -> list[str]:
+    """Let the bundled source win over the Foundation wheel of the same package.
+
+    The embedded Python reads Lib\\site-packages before the bundled source
+    paths, so a package installed by the Foundation (the hakoniwa_pdu wheel)
+    would shadow the newer checkout copied next to it
+    (hakoniwa-business-pack#230). hakoniwa_pdu is a namespace package (no
+    __init__.py), so packages are matched by directory name. The site-packages
+    copy is removed only when the bundled source provides every one of its
+    files; otherwise it is kept and reported. Its dist-info stays so installed
+    requirements still resolve.
+    """
+    site_packages = _site_packages(python_root)
+    dropped: list[str] = []
+    for entry in package_paths:
+        if entry.replace("\\", "/").strip("/") == "hakoniwa-business-pack":
+            continue
+        source = package_root / entry
+        if not source.is_dir():
+            continue
+        for package in sorted(source.iterdir()):
+            installed = site_packages / package.name
+            if (
+                not package.is_dir()
+                or package.name == "__pycache__"
+                or package.suffix in {".egg-info", ".dist-info"}
+                or not installed.is_dir()
+            ):
+                continue
+            missing = sorted(_package_files(installed) - _package_files(package))
+            if missing:
+                print(
+                    f"[WARN] Foundation package {package.name} kept: the bundled source "
+                    f"({entry}) lacks {len(missing)} of its files, e.g. {missing[0]}"
+                )
+                continue
+            shutil.rmtree(installed)
+            dropped.append(package.name)
+            print(f"[OK] Bundled source replaces Foundation package: {package.name} ({entry})")
+    return dropped
 
 def _install_portable_requirements(
     source_python: Path,
