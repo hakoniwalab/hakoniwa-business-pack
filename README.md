@@ -157,6 +157,20 @@ to select the Foundation-owned Python, binaries, libraries, and Core
 configuration without inheriting ambient Python discovery state. `exit` only
 leaves the Workspace shell; it does not replace a Recipe's `stop` operation.
 
+## 箱庭コアの更新（アップグレード）
+
+箱庭コア（hakoniwa-core-cpp / hakoniwa-core-pro / hakoniwa-pdu-python）を新しくするときの手順です。持ち主が死んだ鍵を検出するコア（hakoniwa-core-cpp#62、`hako-cmd` 1.1.0 以降）からは、古いコアが残した共有メモリのファイルがあると、起動を止めて知らせます。
+
+1. 動いている Recipe をすべて止める（各 Recipe の停止の手順。例：`urban_mobility.py stop`。Launcher のセッションが残っていないこと）
+2. Foundation を作り直す（`recipe.py configure`。コアの部品はまとめて入れ直されます）
+3. Workspace に入る（`python tools/workspace.py enter`、または `run`）
+
+3 の入り口で、共有メモリの置き場所（`work/foundation/runtime/mmap`）が今のコアのものかを確かめます。前のコアのファイルが残っていて、Launcher が動いていなければ、`work/foundation/runtime/mmap-upgrade-<日時>/` に移して（証拠として新しい 3 つまで残す）、今のコアの印を付けます。Launcher が動いているときは何も移さず、止めてから入り直すよう表示します。
+
+- 同じ置き場所で新旧のコアを混ぜて使うことはできません（古い Foundation や、別に入れた古いコアを同じ置き場所で動かさない）
+- 走行中にプロセスが落ちて鍵が残った場合（`hako-cmd check` が `ABORT`）は、これとは別に、すべて止めてから `hako-cmd recover` で片付けます。Launcher は証拠を残すため、自動では片付けません
+- 詳しくは [`docs/hakoniwa-workspace-environment-ja.md`](docs/hakoniwa-workspace-environment-ja.md) の「コアの更新と共有メモリの置き場所」
+
 ## 箱庭で、何をしたいですか？
 
 箱庭には、MuJoCo、Godot、PDU、Endpoint、Conductor、Foxglove など、
