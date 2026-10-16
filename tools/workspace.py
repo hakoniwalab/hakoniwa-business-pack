@@ -17,6 +17,7 @@ TOOLS_DIR = Path(__file__).resolve().parent
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 from workdir import resolve_work_dir
+from foundation_lib import runtime_upgrade
 from foundation_lib.python_bootstrap import (
     foundation_site_package_dirs,
     install_workspace_python_bootstrap,
@@ -511,8 +512,21 @@ def _apply_prompt_environment(shell: str, env: dict[str, str]) -> None:
         env["PS1"] = f"{role_prefix}(hako) $ "
 
 
+def reconcile_runtime(paths: WorkspacePaths) -> str:
+    """Finish a Core upgrade on the Foundation's runtime directory (foundation_lib/runtime_upgrade.py).
+    Never fails the entry: a problem is reported and the command goes on."""
+    hako_cmd = paths.foundation_bin / ("hako-cmd.exe" if os.name == "nt" else "hako-cmd")
+    try:
+        check = runtime_upgrade.inspect(paths.foundation_config, hako_cmd, paths.work_root)
+        return runtime_upgrade.reconcile(check, report=lambda text: print(text, file=sys.stderr))
+    except OSError as exc:
+        print(f"warning: could not check the Hakoniwa runtime directory: {exc}", file=sys.stderr)
+        return "error"
+
+
 def enter(paths: WorkspacePaths) -> int:
     prepare(paths)
+    reconcile_runtime(paths)
     env = build_environment(paths)
     if os.name == "nt":
         shell = (
@@ -566,6 +580,7 @@ def run_command(paths: WorkspacePaths, command: Sequence[str]) -> int:
     if not values:
         raise WorkspaceError("run requires a command after --")
     prepare(paths)
+    reconcile_runtime(paths)
     env = build_environment(paths)
     if os.name == "nt":
         # Windows looks in the parent's folder before PATH: a bare "python" would be the base

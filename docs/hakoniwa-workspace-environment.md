@@ -142,6 +142,16 @@ python tools/workspace.py enter
 python tools/workspace.py run -- <command>
 ```
 
+## Core upgrades and the runtime directory
+
+Hakoniwa Core keeps its shared memory and master lock in files under `work/foundation/runtime/mmap`. A Core with fail-stop master locks (hakoniwa-core-cpp#62, hako-cmd 1.1.0 or later) refuses files left by an older Core (a 4096-byte `flock.bin`) and stops every master start. Mixed Core versions on one runtime directory are unsupported.
+
+The directory belongs to the Foundation, and the Foundation installs every Core component together, so the Workspace entry (`enter` / `run`) completes an upgrade:
+
+- The directory carries a stamp of the Core that made it (`.hakoniwa-runtime.json`: the hako-cmd version and the shared memory layout). When the installed Core differs from the stamp, or there is no stamp and a legacy `flock.bin` is present, and no Launcher session of this Workspace is running, the old files are moved to `work/foundation/runtime/mmap-upgrade-<time>/` (kept as evidence, the newest three) and the directory is stamped again.
+- While a Launcher session runs nothing is moved; the entry tells you to stop it and enter again.
+- A lock left by an owner that died during a run (`hako-cmd check` reports ABORT) is a separate case: stop everything, then run `hako-cmd recover`.
+
 ## Ownership
 
 | Layer | Responsibility |

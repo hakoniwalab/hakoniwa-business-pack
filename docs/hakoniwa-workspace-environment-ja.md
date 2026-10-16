@@ -154,6 +154,16 @@ python tools/workspace.py enter
 python tools/workspace.py run -- <command>
 ```
 
+## コアの更新と共有メモリの置き場所
+
+箱庭コアは、共有メモリと master の鍵を `work/foundation/runtime/mmap` のファイルに置きます。持ち主が死んだ鍵を検出するコア（hakoniwa-core-cpp#62、hako-cmd 1.1.0 以降）は、古いコアが残したファイル（4096 バイトの `flock.bin`）があると、master の起動を止めます。同じ置き場所で新旧のコアを混ぜて使うことはできません。
+
+この置き場所は Foundation だけのもので、Foundation はコアの部品をまとめて入れ直すので、更新の仕上げは Workspace の入り口（`enter` / `run`）で行います。
+
+- 置き場所には、それを作ったコアの印（`.hakoniwa-runtime.json`：hako-cmd の版と共有メモリの形式の版）があります。入れ直したコアと印が違う（印がなく古い `flock.bin` がある）とき、この Workspace の Launcher が動いていなければ、古いファイルを `work/foundation/runtime/mmap-upgrade-<日時>/` に移し（証拠として新しい 3 つまで残す）、印を書き直します
+- Launcher が動いているときは何も移さず、止めてから入り直すよう表示します
+- 走行中に持ち主が死んだ鍵（`hako-cmd check` が ABORT）の片付けは、これとは別に、止めてから `hako-cmd recover` で行います
+
 ## 責務境界
 
 | レイヤ | 責務 |
