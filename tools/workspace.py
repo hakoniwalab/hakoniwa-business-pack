@@ -566,10 +566,17 @@ def run_command(paths: WorkspacePaths, command: Sequence[str]) -> int:
     if not values:
         raise WorkspaceError("run requires a command after --")
     prepare(paths)
+    env = build_environment(paths)
+    if os.name == "nt":
+        # Windows looks in the parent's folder before PATH: a bare "python" would be the base
+        # interpreter behind the venv launcher, not the Foundation Python.
+        resolved = shutil.which(values[0], path=env.get("PATH"))
+        if resolved:
+            values[0] = resolved
     return subprocess.run(
         values,
         cwd=paths.business_pack_root,
-        env=build_environment(paths),
+        env=env,
         check=False,
     ).returncode
 
