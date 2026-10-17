@@ -9,6 +9,11 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+from workspace_test_isolation import isolate_from_active_workspace  # noqa: E402
+
+isolate_from_active_workspace()
+
 
 SCRIPT = Path(__file__).with_name("mujoco_turtlebot3_wall_follower.py")
 SPEC = importlib.util.spec_from_file_location("mujoco_turtlebot3_wall_follower", SCRIPT)

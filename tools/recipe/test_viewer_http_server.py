@@ -9,11 +9,17 @@ import concurrent.futures
 from functools import partial
 from http.server import SimpleHTTPRequestHandler
 from pathlib import Path
+import sys
 import tempfile
 import threading
 import unittest
 import urllib.request
 from unittest import mock
+
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+from workspace_test_isolation import isolate_from_active_workspace  # noqa: E402
+
+isolate_from_active_workspace()
 
 from tools.recipe.viewer_http_server import ViewerHTTPServer
 

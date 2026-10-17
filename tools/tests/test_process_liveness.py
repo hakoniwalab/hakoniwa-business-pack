@@ -10,6 +10,11 @@ import time
 import unittest
 from pathlib import Path
 
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+from workspace_test_isolation import isolate_from_active_workspace  # noqa: E402
+
+isolate_from_active_workspace()
+
 
 RECIPE_TOOLS = Path(__file__).resolve().parents[1] / "recipe"
 sys.path.insert(0, str(RECIPE_TOOLS))
