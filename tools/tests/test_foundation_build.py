@@ -5,6 +5,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+from workspace_test_isolation import isolate_from_active_workspace  # noqa: E402
+
+isolate_from_active_workspace()
+
 
 TOOLS_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOLS_DIR))

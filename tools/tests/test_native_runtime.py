@@ -13,6 +13,11 @@ from pathlib import Path
 from typing import Sequence
 from unittest import mock
 
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+from workspace_test_isolation import isolate_from_active_workspace  # noqa: E402
+
+isolate_from_active_workspace()
+
 
 TOOLS = Path(__file__).resolve().parents[1]
 ROOT = TOOLS.parent

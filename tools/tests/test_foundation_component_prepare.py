@@ -7,6 +7,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+from workspace_test_isolation import isolate_from_active_workspace  # noqa: E402
+
+isolate_from_active_workspace()
+
 FOUNDATION_SCRIPT = Path(__file__).resolve().parents[1] / "foundation.py"
 SPEC = importlib.util.spec_from_file_location(
     "business_pack_foundation_component_prepare", FOUNDATION_SCRIPT
