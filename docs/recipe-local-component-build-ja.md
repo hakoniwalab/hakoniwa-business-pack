@@ -102,7 +102,7 @@ python recipes/recipe.py <doctor|plan|configure|build|install|launch> --recipe r
 
 ### 決着したもの（2026-10-27 森）
 
-- **Python だけの Recipe（PID チューニング）**：問題にしない。今の PID チューニングの Recipe は `foundation_contract: required`（core-pro の Python バインディング）として書いてあり、Foundation を 1 回作れば足りる。お客さんは SITL などのために Foundation をどのみち作るので、別の種類は足さない
+- **Core のない構成はない（森）**：箱庭の構成は必ず Foundation の Core の上に立つ。「Core は要らないが Python は要る」種類は足さない。PID チューニングは箱庭ドローンとセットで、同じ Foundation（Core を含む）の上で作る。PRO のチューニングのプログラムが今 Core を同梱（`foundation.mode: bundled`）でビルドしているのは方言として、Foundation の Core を使う形へ直す
 - **部品のリポジトリに置いた Recipe の検査**：後回し。今は納品を優先する
 - **`prepare` の扱い**：configure に含める（6 つの言葉は増やさない）
 - **Control Link と PX4 のアダプター**：今は PX4 のアダプターを Recipe の依存として宣言するだけにする（PRO は変えない）
