@@ -1,0 +1,187 @@
+id: athrill-v850e2m-baremetal-hello
+title: Athrill V850E2M Bare-metal Hello World
+recipe_version: 0.1
+goal:
+  user_request: Run a bare-metal V850E2M program on the Foundation athrill2 and see its serial output.
+  description: >
+    Build the Foundation athrill2 emulator, cross-compile the step1 sample of
+    baremetal-athrill-v850e2m in the published V850 builder container, and run
+    the ELF on athrill2 until it prints "Hello World!" through the
+    memory-mapped serial output. This is the target program for the later
+    Hakoniwa-synchronized Athrill runs.
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - The athrill-v850e2m-build Recipe already builds athrill2 through the Foundation on macOS, Linux and native Windows.
+    - The sample ships its memory and device configuration and needs no Hakoniwa runtime.
+validation:
+  status: verified
+  summary: On macOS arm64 on 2026-11-03, athrill2 built from athrill v1.2.1 ran the step1 ELF built in toppersjp/athrill-v850e2m-builder v1.0.0 and printed "Hello World!" before the 2000000-clock timeout.
+  steps:
+    - id: macos_hello_world
+      status: verified
+      evidence:
+        - repository: toppers/baremetal-athrill-v850e2m
+          path: workspace/step1/main.c
+          revision: d91909da9b70aab9f9c05eb4c31f3a07f5ebe251
+        - repository: toppers/athrill
+          path: src/main/main.c
+          revision: 7359346ede89c73ad1fa124a34c9cf2173eb2b8f
+    - id: linux_hello_world
+      status: not_tested
+      evidence: []
+constraints:
+  - docker-for-v850-cross-compiler
+  - no-hakoniwa-runtime
+target_environment:
+  required_for: build-and-run
+  status: specified
+  os: macOS | Linux
+  os_version: current-supported-host
+  architecture: x64 | arm64
+  execution_mode: native
+  runtimes:
+    - name: Python
+      required: true
+      version: "3"
+      path: host
+    - name: Docker
+      required: true
+      version: current
+      path: host
+  hakoniwa:
+    install_prefix: work/foundation/install
+    components_built:
+      - athrill-target-v850e2m
+execution_environment:
+  workspace:
+    mode: managed
+  required_for: build-and-run
+  status: specified
+  os: macOS | Linux
+  os_version: current-supported-host
+  architecture: x64 | arm64
+  execution_mode: native
+  gui:
+    required: false
+    status: disabled
+  shared_memory:
+    required: false
+    access: not-used
+  hakoniwa:
+    install_prefix: work/foundation/install
+    hako_cmd_access: not-required
+foundation_contract:
+  mode: required
+  reason: The Foundation builds and installs the athrill2 emulator that runs the sample.
+foundation_requirements:
+  athrill-target-v850e2m:
+    version:
+      min: 1.0.2
+    capabilities:
+      target_v850e2m: true
+      usage_smoke: true
+recipe_local_requirements_schema_version: 1
+recipe_local_requirements:
+  athrill:
+    root:
+      default_path: ../athrill
+      override_env: ATHRILL_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/toppers/athrill.git
+      revision: master
+    required_artifacts:
+      - path: cmake/AthrillCore.cmake
+        kind: file
+  baremetal-athrill-v850e2m:
+    root:
+      default_path: ../baremetal-athrill-v850e2m
+      override_env: BAREMETAL_ATHRILL_V850E2M_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/toppers/baremetal-athrill-v850e2m.git
+      revision: main
+    required_artifacts:
+      - path: workspace/step1/main.c
+        kind: file
+      - path: workspace/run/memory.txt
+        kind: file
+      - path: workspace/run/device_config.txt
+        kind: file
+components:
+  - id: athrill-target-v850e2m
+    roles:
+      - simulation_core
+  - id: baremetal-athrill-v850e2m
+    roles:
+      - simulation_core
+connections:
+  - from: baremetal-athrill-v850e2m
+    to: athrill-target-v850e2m
+    interface: file
+    data: [V850E2M ELF program, Athrill memory and device configuration]
+    contract:
+      status: verified
+      requires: [step1/test_main.elf built by the builder container]
+      validation_notes: [The ELF runs on the Foundation athrill2 and prints Hello World!]
+data_flow:
+  - step1 sources -> v850-elf-gcc in the builder container -> test_main.elf -> Foundation athrill2 -> serial output on the console
+time_model:
+  mode: instruction-emulation
+  notes:
+    - athrill2 runs free without Hakoniwa time synchronization; -t ends the run after the given number of clocks.
+artifact_sets: {}
+artifacts:
+  - id: athrill2
+    kind: executable
+    path: work/foundation/install/bin/athrill2
+    platforms: [macos, linux]
+  - id: step1_elf
+    kind: file
+    path: ../baremetal-athrill-v850e2m/workspace/step1/test_main.elf
+    platforms: [macos, linux]
+platform_notes:
+  macos:
+    - The builder image is linux/amd64 and runs under emulation on Apple silicon.
+  linux:
+    - Not yet verified.
+missing_pieces:
+  - Run the sample with Hakoniwa time synchronization once athrill2 can register as a Hakoniwa asset.
+demo:
+  steps:
+    - id: build_foundation
+      command: python tools/recipe.py configure --recipe recipes/examples/athrill-v850e2m-baremetal-hello.yaml
+      expected: athrill-target-v850e2m is SATISFIED and the athrill and baremetal-athrill-v850e2m checkouts sit next to this repository.
+    - id: pull_builder
+      command: docker pull --platform linux/amd64 toppersjp/athrill-v850e2m-builder:v1.0.0
+      expected: The V850 cross-compiler image is available locally.
+    - id: build_step1
+      command: docker run --rm --platform linux/amd64 -v "$PWD/../baremetal-athrill-v850e2m/workspace:/root/workspace" -v "$PWD/../athrill-target-v850e2m:/root/athrill-target-v850e2m" toppersjp/athrill-v850e2m-builder:v1.0.0 /bin/bash -c "cd /root/workspace/step1 && make"
+      expected: The make output ends with v850-elf-objdump and ../baremetal-athrill-v850e2m/workspace/step1/test_main.elf exists.
+    - id: run_step1
+      command: cd ../baremetal-athrill-v850e2m/workspace/run && ../../../hakoniwa-business-pack/work/foundation/install/bin/athrill2 -c1 -m memory.txt -d device_config.txt -t 2000000 ../step1/test_main.elf
+      expected: The console shows "Hello World!" and "PASSED", then "EXIT for timeout(2000000)." with exit status 1, which is how a -t run ends.
+  cleanup:
+    expected_behavior:
+      - athrill2 exits by itself at the -t clock limit; no process remains.
+    verification_checks:
+      - Confirm no athrill2 process remains after run_step1.
+    cautions:
+      - athrill2 writes log.txt into workspace/run; it is ignored by git.
+expected_result: >
+  The step1 ELF runs on the Foundation athrill2 and prints "Hello World!"
+  before the clock limit ends the run.
+source_catalogs:
+  - component_id: athrill-target-v850e2m
+    catalog_path: ../catalog/components/athrill-target-v850e2m.yaml
+  - component_id: baremetal-athrill-v850e2m
+    catalog_path: ../catalog/components/baremetal-athrill-v850e2m.yaml
+source_artifacts:
+  - repository: toppers/baremetal-athrill-v850e2m
+    path: workspace/step1
+    revision: d91909da9b70aab9f9c05eb4c31f3a07f5ebe251
+    description: Startup code, Hello World main, memory and device configuration.
