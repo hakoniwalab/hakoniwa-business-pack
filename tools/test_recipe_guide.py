@@ -173,6 +173,161 @@ class RecipeGuideTest(unittest.TestCase):
         self.assertIn("--open", help_text)
         self.assertNotIn("build", help_text)
 
+    def test_execution_context_preserves_interpreters_and_terminal_specific_steps(self) -> None:
+        host = {
+            "location": "host",
+            "terminal": "host-hako",
+            "cwd": "Business Pack root",
+            "environment": "Foundation Workspace (hako)",
+        }
+        container = {
+            **host,
+            "location": "container",
+            "terminal": "docker-ros-bridge",
+            "cwd": "/workspace/hakoniwa-robot-arm",
+            "environment": "ROS workspace",
+        }
+        data = {
+            "demo": {
+                "prerequisites": [
+                    {"command": "python3.12 doctor.py", "execution_context": host},
+                ],
+                "steps": [
+                    {"command": "python3.12 doctor.py", "execution_context": host},
+                    {"command": "python3.12 doctor.py", "execution_context": container},
+                    {"command": "python3 legacy.py"},
+                    {"command": "python3 legacy.py"},
+                    {"command": "/usr/bin/python3 ros.py", "execution_context": container},
+                ],
+            }
+        }
+        commands = guide._command_items(data, self.recipe_dir / "context-test.yaml")
+        self.assertEqual(
+            [item.command for item in commands],
+            [
+                "python3.12 doctor.py",
+                "python3.12 doctor.py",
+                "python3.12 doctor.py",
+                "python legacy.py",
+                "/usr/bin/python3 ros.py",
+            ],
+        )
+        self.assertEqual(commands[0].execution_context.terminal, "host-hako")
+        self.assertEqual(commands[2].execution_context.terminal, "docker-ros-bridge")
+        self.assertIsNone(commands[3].execution_context)
+        self.assertFalse(commands[0].execution_context.shell_transition)
+
+    def test_execution_context_does_not_hide_a_container_foundation_doctor(self) -> None:
+        data = {
+            "foundation_requirements": {},
+            "demo": {
+                "steps": [{
+                    "command": "python3.12 tools/foundation.py doctor",
+                    "execution_context": {
+                        "location": "container",
+                        "terminal": "container-hako",
+                        "cwd": "/workspace/hakoniwa-business-pack",
+                        "environment": "Container Foundation",
+                    },
+                }],
+            },
+        }
+        commands = guide._command_items(data, self.recipe_dir / "context-test.yaml")
+        self.assertEqual(len(commands), 4)
+        self.assertEqual(commands[-1].command, "python3.12 tools/foundation.py doctor")
+
+    def test_execution_context_rejects_malformed_metadata(self) -> None:
+        valid = {
+            "location": "host",
+            "terminal": "host-hako",
+            "cwd": "Business Pack root",
+            "environment": "Foundation",
+        }
+        invalid = [
+            None, {}, [], "host",
+            {**valid, "location": "remote"},
+            {**valid, "terminal": " "},
+            {**valid, "cwd": 42},
+            {key: value for key, value in valid.items() if key != "environment"},
+            {**valid, "shell_transition": "false"},
+            {**valid, "shell_transition": 1},
+            {**valid, "working_directory": "."},
+        ]
+        for section in ("prerequisites", "steps"):
+            for value in invalid:
+                with self.subTest(section=section, context=value):
+                    data = {"demo": {section: [{
+                        "command": "echo test", "execution_context": value,
+                    }]}}
+                    with self.assertRaisesRegex(
+                        guide.RecipeGuideError, rf"demo\.{section}\[0\]\.execution_context"
+                    ):
+                        guide._command_items(data, self.recipe_dir / "context-test.yaml")
+
+    def test_guide_renders_context_and_shell_boundary_without_executing_steps(self) -> None:
+        recipe_path = self.recipe_dir / "context-test.yaml"
+        data = {
+            "id": "context-test",
+            "demo": {
+                "steps": [
+                    {
+                        "command": "docker exec -it ros bash",
+                        "expected": "Wait for the Container prompt.",
+                        "execution_context": {
+                            "location": "host",
+                            "terminal": "host-attach",
+                            "cwd": "/host/robot-arm",
+                            "environment": "Normal Host shell <not Foundation>",
+                            "shell_transition": True,
+                        },
+                    },
+                    {
+                        "command": "/usr/bin/python3 ros.py",
+                        "expected": "ROS imports succeed.",
+                        "execution_context": {
+                            "location": "container",
+                            "terminal": "docker-ros-bridge",
+                            "cwd": "/workspace/robot-arm",
+                            "environment": "ROS workspace",
+                        },
+                    },
+                ],
+            },
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            with mock.patch.object(guide, "root", return_value=Path(temporary)):
+                with mock.patch.object(guide.subprocess, "run") as run:
+                    output = guide.write_guide(recipe_path, data)
+                    run.assert_not_called()
+                    content = output.read_text(encoding="utf-8")
+        for value in (
+            "host-attach", "docker-ros-bridge", "/host/robot-arm",
+            "/workspace/robot-arm", "ROS workspace", "ROS imports succeed.",
+            "Normal Host shell &lt;not Foundation&gt;",
+            "切替後のプロンプトを確認",
+            'data-copy="/usr/bin/python3 ros.py"',
+        ):
+            self.assertIn(value, content)
+        self.assertNotIn("Normal Host shell <not Foundation>", content)
+        self.assertLess(
+            content.index('data-copy="docker exec -it ros bash"'),
+            content.index('data-copy="/usr/bin/python3 ros.py"'),
+        )
+
+    def test_unannotated_commands_keep_legacy_portal_rendering(self) -> None:
+        commands = guide._command_items(
+            {"demo": {"steps": [{"command": "python3.12 legacy.py"}]}},
+            self.recipe_dir / "legacy.yaml",
+        )
+        from recipe_portal import _render_commands, _workspace_commands
+
+        rendered = _render_commands(_workspace_commands(commands))
+        self.assertIn('data-copy="python legacy.py"', rendered)
+        self.assertIn('data-copy="python tools/workspace.py enter"', rendered)
+        self.assertIn('data-copy="exit"', rendered)
+        self.assertNotIn('<dl class="command-context">', rendered)
+        self.assertNotIn('class="shell-transition"', rendered)
+
     def test_managed_plan_warns_about_workspace_and_continues(self) -> None:
         recipe_path = self.recipe_dir / "drone-fleet-single-host.yaml"
         plan = {

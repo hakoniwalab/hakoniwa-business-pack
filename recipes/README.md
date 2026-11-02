@@ -88,6 +88,48 @@ repositories.
 
 ## Generate The Human-Facing Recipe Guide
 
+### Per-step execution context
+
+Commands in `demo.prerequisites` and `demo.steps` may declare an optional
+`execution_context`. The guide shows these preconditions beside the individual
+Copy button:
+
+```yaml
+execution_context:
+  location: container
+  terminal: docker-ros-bridge
+  cwd: /workspace/hakoniwa-robot-arm
+  environment: ROS workspace activated; Foundation venv must not be active
+  shell_transition: false
+```
+
+`location`, `terminal`, `cwd` and `environment` are required non-empty strings
+when the mapping is present; `location` is `host` or `container`.
+`shell_transition` is an optional boolean, defaulting to `false`.
+Unknown fields and malformed values are rejected by the Recipe validator and
+guide generator.
+
+Describe where the command **starts**. For an interactive container attachment,
+use `location: host`, a separate normal Host terminal role, its Host checkout
+directory, and `shell_transition: true`. Put the subsequent Container command
+in a separate step, with its Container directory and ROS environment. The guide
+warns the user to confirm the new prompt before continuing. Use the same rule
+for entering or leaving a managed child shell.
+
+The generated Workspace enter/exit cards still apply to the Host `host-hako`
+terminal. Unannotated commands retain their existing Workspace assumptions;
+Container roles must use separate terminals, not that Host Foundation shell.
+The metadata does not change directories, activate environments, execute or
+validate the command, or prove that its success condition has been met.
+Continue to declare observable success conditions with `expected`.
+
+Explicitly contextual commands are displayed verbatim, including `python3.12`
+or `/usr/bin/python3`; they are not rewritten to Workspace `python`.
+Repeated contextual commands remain separate steps, even in the same terminal,
+because an intervening operation may have changed the shell or runtime state. Recipes
+without this optional metadata retain their previous rendering and command
+normalization.
+
 The common user entry point is a generated workspace guide. Pass any Recipe YAML
 to the generic guide command:
 

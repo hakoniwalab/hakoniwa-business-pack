@@ -31,6 +31,9 @@ jobs:
       - name: Validate recipes
         run: ruby recipes/tools/validate_recipes.rb
 
+      - name: Test Recipe execution contexts
+        run: ruby recipes/tools/test_validate_recipes.rb
+
       - name: Test shared native runtime schema
         run: ruby schemas/test_native_runtime_validation.rb
 

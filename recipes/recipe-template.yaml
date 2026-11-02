@@ -350,6 +350,13 @@ demo:
       component: component-id
       action: Concrete action.
       command: optional command
+      # Optional display-only preconditions. Omit the whole mapping for legacy behavior.
+      execution_context:
+        location: host # host | container; where this command starts
+        terminal: host-hako
+        cwd: hakoniwa-business-pack checkout root
+        environment: Foundation Workspace (hako)
+        shell_transition: false
       agency: agent_action | human_decision | human_action | required_permission
       requires_gates:
         - optional-agency-boundary-id
