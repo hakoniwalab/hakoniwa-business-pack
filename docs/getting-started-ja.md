@@ -227,39 +227,71 @@ macOS arm64 と Windows x64 で実行検証済みの **`mujoco-turtlebot3-wall-f
 
 ### 5.2 手順（OS 共通）
 
-リポジトリのルートで実行します。
+ここからは Host の同じターミナルを使います。カレントディレクトリが、
+`tools/` のある `hakoniwa-business-pack` のルートであることを確認してください。
+別の venv や ROS 2 環境を有効にしていないターミナルを使用します。
 
-~~~bash
-# 1. 隔離された作業シェルに入る（プロンプト先頭に (hako) が付く）
-python3.12 tools/workspace.py enter      # Windows: py -3.12 tools\workspace.py enter
+まず隔離された作業シェルへ入ります。macOS / Linux では次を実行します。
 
-# 2. 何が足りないか確認（ビルドはしない）
-python3.12 tools/recipe.py doctor --recipe recipes/examples/mujoco-turtlebot3-wall-follower.yaml
-
-# 3. これから何を clone / build するか確認
-python3.12 tools/recipe.py plan   --recipe recipes/examples/mujoco-turtlebot3-wall-follower.yaml
-
-# 4. Foundation を構築（clone -> build -> install -> Python 依存導入）  ※初回は 10 分前後
-python3.12 tools/recipe.py configure --recipe recipes/examples/mujoco-turtlebot3-wall-follower.yaml
-
-# 5. 使い方ガイド（HTML）を生成してブラウザで開く（configure 完了後は `python` で OK）
-python tools/recipe.py guide  --recipe recipes/examples/mujoco-turtlebot3-wall-follower.yaml --open
-~~~
-
-`configure` が完了すると、`(hako)` シェルの `python` は Foundation venv の Python 3.12 を指すようになります。以後の操作は `python` で構いません。
-
-手順 4 の最後に次のように出れば Foundation は完成です。
-
-```text
-Foundation: SATISFIED
-[SATISFIED] Foundation Python: 3.12.x ...
-[SATISFIED] hakoniwa-core-pro
-[SATISFIED] hakoniwa-pdu-python
-[SATISFIED] hakoniwa-pdu-endpoint
+```bash
+python3.12 tools/workspace.py enter
 ```
 
-続けて `python tools/workspace.py doctor` を実行し、
+Windows の PowerShell では、代わりに次を実行します。
+
+```powershell
+py -3.12 tools\workspace.py enter
+```
+
+プロンプト先頭に `(hako)` が付いたら、**同じターミナルの子シェル**で
+次へ進みます。開始ディレクトリも Business Pack のルートです。
+シェルが切り替わるため、上のコマンドと後続コマンドはまとめて貼り付けないでください。
+
+何が足りないか診断し、取得・ビルド計画を確認します。ここではビルドしません。
+macOS / Linux:
+
+```bash
+python3.12 tools/recipe.py doctor --recipe recipes/examples/mujoco-turtlebot3-wall-follower.yaml
+python3.12 tools/recipe.py plan   --recipe recipes/examples/mujoco-turtlebot3-wall-follower.yaml
+```
+
+Windows:
+
+```powershell
+py -3.12 tools/recipe.py doctor --recipe recipes/examples/mujoco-turtlebot3-wall-follower.yaml
+py -3.12 tools/recipe.py plan --recipe recipes/examples/mujoco-turtlebot3-wall-follower.yaml
+```
+
+計画を確認してから Foundation を構築します。初回は 10 分前後かかります。
+macOS / Linux:
+
+```bash
+python3.12 tools/recipe.py configure --recipe recipes/examples/mujoco-turtlebot3-wall-follower.yaml
+```
+
+Windows:
+
+```powershell
+py -3.12 tools/recipe.py configure --recipe recipes/examples/mujoco-turtlebot3-wall-follower.yaml
+```
+
+エラーなく完了し、Foundation と必要な各 component が `SATISFIED` と
+表示されたら次へ進みます。構築後の `(hako)` シェルでは `python` が
+Foundation venv の CPython 3.12 を選択するため、以後は `python` を使います。
+初期構築に必要な CPython 3.12 の指定を、別の Python バージョンに置き換える意図ではありません。
+
+Python の参照先を確認します。
+
+```bash
+python tools/workspace.py doctor
+```
+
 `[OK] Foundation Python and Hakoniwa modules are workspace-owned.` と出れば OK です。
+使い方ガイドを生成してブラウザで開きます。
+
+```bash
+python tools/recipe.py guide --recipe recipes/examples/mujoco-turtlebot3-wall-follower.yaml --open
+```
 
 `configure` は **既存の checkout を勝手に更新・削除しません**。
 2 回目以降は差分だけがビルドされます。
@@ -274,26 +306,54 @@ Recipe によって起動方法は 2 通りあります。
 `mujoco-turtlebot3-wall-follower` は後者です。Recipe YAML の `runbook` に書かれた順で実行します
 （`(hako)` シェルの中で）。
 
+同じ `(hako)` シェル、Business Pack のルートで実行します。
+まず MBody と controller 入力を配置し、Recipe 用 CMake を構成します。
+
 ```bash
-# 1. MBody と controller 入力を配置し、Recipe 用 CMake を構成
 python tools/recipe/mujoco_turtlebot3_wall_follower.py configure
+```
 
-# 2. TB3 シミュレータをビルド（初回のみ数分）
+エラーなく完了したら TB3 シミュレータをビルドします。初回は数分かかります。
+
+```bash
 python tools/recipe/mujoco_turtlebot3_wall_follower.py build
+```
 
-# 3. 準備確認（"status": "READY" なら OK）
+ビルドが成功したら準備を確認します。
+
+```bash
 python tools/recipe/mujoco_turtlebot3_wall_follower.py doctor
+```
 
-# 4. 起動（MuJoCo ビューアと LiDAR プロットが開き、20 秒後に自動終了）
+`"status": "READY"` なら起動できます。MuJoCo ビューアと LiDAR プロットが開き、
+20 秒後に自動終了します。
+
+```bash
 python tools/recipe/mujoco_turtlebot3_wall_follower.py start
+```
 
-# 5. 状態確認 / 途中で止めたいとき
+状態確認には次を使います。
+
+```bash
 python tools/recipe/mujoco_turtlebot3_wall_follower.py status
-python tools/recipe/mujoco_turtlebot3_wall_follower.py stop
+```
 
-# 6. 終わったら作業シェルを抜ける
+途中で停止するとき、または作業シェルを終了する前には次を実行します。
+
+```bash
+python tools/recipe/mujoco_turtlebot3_wall_follower.py stop
+```
+
+停止を確認したら作業シェルを抜けます。
+
+```bash
 exit
 ```
+
+`exit` は子シェルを終了するだけで、checkout や `work/` のビルド成果物は削除しません。
+再開時は Business Pack のルートで再び `enter` し、必要な診断を行ってください。
+終了したという理由だけで最初からビルドし直す必要はありませんが、
+依存関係やソースを変更した場合は対応する configure / build が必要です。
 
 `start` はバックグラウンドで Launcher を起動し、
 `work/recipes/mujoco-turtlebot3-wall-follower/runtime/launcher-session.json` の

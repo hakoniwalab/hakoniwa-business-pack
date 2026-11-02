@@ -32,6 +32,10 @@ python tools/workspace.py enter
 
 この表示がある間だけHakoniwa Workspace Environment内です。
 
+子シェルの開始ディレクトリは、`tools/` がある `hakoniwa-business-pack` の
+checkoutルートです。`HAKONIWA_WORK_DIR`で成果物の保存先を変更していても、
+開始ディレクトリは変わりません。`enter`と子シェル内の操作は別々に実行してください。
+
 作業を終了するときは、OSに関係なく次を実行します。
 
 ```bash
@@ -39,6 +43,12 @@ exit
 ```
 
 子シェルが終了し、親シェルへ戻ります。親シェルの環境変数は変更されていないため、個別の復元操作は不要です。
+
+`exit`はcheckoutやFoundation・Recipeのビルド成果物を削除しません。
+再開時は同じcheckoutとwork directoryを選んで再び`enter`します。
+実行中のRecipeは先にそのRecipeの停止手順で終了してください。
+ROS 2など別のPython環境が必要な操作は、その手順で指定された別ターミナルで行い、
+Foundation venvと混ぜないでください。
 
 標準運用は次の対です。
 
