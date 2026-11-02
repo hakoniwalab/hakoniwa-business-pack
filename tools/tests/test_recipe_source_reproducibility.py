@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -74,6 +75,62 @@ class RecipeSourceReproducibilityTest(unittest.TestCase):
         self.assertEqual(source["provenance"]["requested_revision"], "main")
         self.assertEqual(source["provenance"]["resolved_revision"], resolved)
         self.assertEqual(source["provenance"]["reproducibility"], "unpinned")
+
+    def _git_checkout(self, root: Path) -> Path:
+        target = root / "dependency"
+        target.mkdir()
+        (target / "README.md").write_text("ok\n", encoding="utf-8")
+        for command in (
+            ["git", "init", "-q", "-b", "main"],
+            ["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+             "add", "README.md"],
+            ["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+             "commit", "-q", "-m", "init"],
+        ):
+            subprocess.run(command, cwd=target, check=True)
+        return target
+
+    def _reuse(self, target: Path, revision: str) -> dict:
+        return guide._resolve_source_requirement(
+            source_id="dependency",
+            kind="recipe",
+            target=target,
+            source_type="git",
+            repository="https://example.invalid/dependency.git",
+            revision=revision,
+            required_artifacts=[{"path": "README.md", "kind": "file"}],
+            clone_boundary=target.parent,
+        )
+
+    def test_existing_checkout_on_requested_branch_has_no_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            target = self._git_checkout(Path(temporary))
+            source = self._reuse(target, "main")
+        self.assertEqual(source["action"], "reuse")
+        self.assertNotIn("warning", source)
+
+    def test_existing_checkout_on_other_branch_warns(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            target = self._git_checkout(Path(temporary))
+            subprocess.run(["git", "switch", "-q", "-c", "work"], cwd=target, check=True)
+            subprocess.run(
+                ["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+                 "commit", "-q", "--allow-empty", "-m", "work"],
+                cwd=target,
+                check=True,
+            )
+            source = self._reuse(target, "main")
+        self.assertEqual(source["action"], "reuse")
+        self.assertIn("branch work", source["warning"])
+        self.assertIn("not the requested main", source["warning"])
+
+    def test_detached_checkout_at_requested_tag_has_no_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            target = self._git_checkout(Path(temporary))
+            subprocess.run(["git", "tag", "v1.0.0"], cwd=target, check=True)
+            subprocess.run(["git", "checkout", "-q", "--detach", "v1.0.0"], cwd=target, check=True)
+            source = self._reuse(target, "v1.0.0")
+        self.assertNotIn("warning", source)
 
     def test_git_without_revision_is_unpinned(self) -> None:
         source = self._source(None)
