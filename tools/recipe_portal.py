@@ -9,10 +9,20 @@ from typing import Iterable
 
 
 @dataclass(frozen=True)
+class PortalExecutionContext:
+    location: str
+    terminal: str
+    cwd: str
+    environment: str
+    shell_transition: bool = False
+
+
+@dataclass(frozen=True)
 class PortalCommand:
     label: str
     command: str
     description: str
+    execution_context: PortalExecutionContext | None = None
 
 
 @dataclass(frozen=True)
@@ -37,17 +47,27 @@ def _escape(value: object) -> str:
 
 
 def _workspace_commands(commands: Iterable[PortalCommand]) -> tuple[PortalCommand, ...]:
+    items = tuple(commands)
+    contextual = any(item.execution_context is not None for item in items)
     return (
         PortalCommand(
             "Enter Hakoniwa Workspace",
             WORKSPACE_ENTER_COMMAND,
             "隔離された子シェルへ入ります。プロンプト先頭の(hako)を確認してください。",
+            PortalExecutionContext(
+                "host", "host-hako", "hakoniwa-business-pack checkout root",
+                "通常のHostシェル", shell_transition=True,
+            ) if contextual else None,
         ),
-        *tuple(commands),
+        *items,
         PortalCommand(
             "Exit Hakoniwa Workspace",
             WORKSPACE_EXIT_COMMAND,
             "Launcherを使用した場合は、先にRecipeのStopを実行してから子シェルを終了します。",
+            PortalExecutionContext(
+                "host", "host-hako", "hakoniwa-business-pack checkout root",
+                "Foundation Workspace (hako)", shell_transition=True,
+            ) if contextual else None,
         ),
     )
 
@@ -66,6 +86,7 @@ def _render_commands(commands: Iterable[PortalCommand]) -> str:
                   <p>{_escape(item.description)}</p>
                 </div>
               </div>
+              {_render_command_context(item.execution_context)}
               <div class="command-row">
                 <code>{command}</code>
                 <button type="button" data-copy={json.dumps(item.command)}>Copy</button>
@@ -74,6 +95,24 @@ def _render_commands(commands: Iterable[PortalCommand]) -> str:
             """
         )
     return "\n".join(cards)
+
+
+def _render_command_context(context: PortalExecutionContext | None) -> str:
+    if context is None:
+        return ""
+    details = (
+        PortalEnvironment("実行場所", context.location),
+        PortalEnvironment("端末", context.terminal),
+        PortalEnvironment("作業ディレクトリ", context.cwd),
+        PortalEnvironment("必要な環境", context.environment),
+    )
+    notice = (
+        '<p class="shell-transition" role="note">'
+        "このコマンドはシェルを切り替えます。切替後のプロンプトを確認してから、"
+        "次のコマンドを別に実行してください。</p>"
+        if context.shell_transition else ""
+    )
+    return f'<dl class="command-context">{_render_environment(details)}</dl>{notice}'
 
 
 def _render_links(links: Iterable[PortalLink]) -> str:
@@ -210,6 +249,8 @@ def write_recipe_portal(
       align-items: flex-start;
     }}
     .command-heading h3, .command-heading p {{ margin: 0; }}
+    .command-context {{ margin-top: 14px; }}
+    .shell-transition {{ font-weight: 700; }}
     .step {{
       display: grid;
       place-items: center;

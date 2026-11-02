@@ -1,6 +1,34 @@
 schema_version: 0.1
 description: Machine-readable contracts used by generic Business Pack Recipe tooling.
 
+demo_execution_context:
+  applies_to: [demo.prerequisites, demo.steps]
+  field: execution_context
+  required: false
+  type: non_empty_mapping
+  required_fields: [location, terminal, cwd, environment]
+  location:
+    allowed: [host, container]
+    semantics: Where the command starts executing, not where its child processes eventually run.
+  terminal:
+    type: non_empty_string
+    semantics: Stable operator-facing terminal role; different roles require separate terminals.
+  cwd:
+    type: non_empty_string
+    semantics: Human-readable directory precondition; never implicitly applied or expanded.
+  environment:
+    type: non_empty_string
+    semantics: Environment required before running this command, not the environment it creates.
+  shell_transition:
+    type: boolean
+    default: false
+    semantics: Run separately and confirm the destination prompt before issuing another command.
+  unknown_fields: rejected
+  semantics:
+    - Display metadata only; does not execute commands, activate environments, change cwd or verify readiness.
+    - Explicitly contextual commands retain their interpreter spelling and order, including repeated commands.
+    - Unannotated commands retain legacy Workspace interpreter normalization and command deduplication.
+
 native_runtime_requirements:
   shared_schema: ../schemas/native-runtime.yaml
   semantics:

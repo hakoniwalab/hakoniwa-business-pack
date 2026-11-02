@@ -577,12 +577,22 @@ demo:
   steps:
     - id: configure
       command: python tools/recipe/ros2_service_add_two_ints.py configure
+      execution_context:
+        location: host
+        terminal: host-hako
+        cwd: hakoniwa-business-pack checkout root
+        environment: Foundation Workspace (hako)
       status: verified
       expected:
         - Recipe workspace and generated configs exist.
         - Candidate bind address and approval requirement are printed and recorded.
     - id: build
       command: python tools/recipe/ros2_service_add_two_ints.py build
+      execution_context:
+        location: host
+        terminal: host-hako
+        cwd: hakoniwa-business-pack checkout root
+        environment: Foundation Workspace (hako); Docker daemon available
       status: verified
       expected:
         - Host Foundation requirements are reused or installed locally.
@@ -600,6 +610,11 @@ demo:
         - Host listener is ready before the ROS container starts.
     - id: smoke
       command: python tools/recipe/ros2_service_add_two_ints.py smoke --a 20 --b 22
+      execution_context:
+        location: host
+        terminal: host-hako
+        cwd: hakoniwa-business-pack checkout root
+        environment: Foundation Workspace (hako); Recipe host and container sessions running
       status: verified
       expected: [ROS Service returns sum=42 within the timeout.]
     - id: status

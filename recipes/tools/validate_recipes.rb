@@ -124,6 +124,37 @@ def validate_readiness(value, label:)
   errors
 end
 
+def validate_execution_contexts(demo, label:)
+  errors = []
+  %w[prerequisites steps].each do |section|
+    Array(demo[section]).each_with_index do |step, index|
+      next unless step.is_a?(Hash) && step.key?("execution_context")
+
+      path = "#{label}: demo.#{section}[#{index}].execution_context"
+      context = step["execution_context"]
+      unless context.is_a?(Hash) && !context.empty?
+        errors << "#{path} must be a non-empty mapping"
+        next
+      end
+      fields = %w[location terminal cwd environment]
+      unknown = context.keys - fields - %w[shell_transition]
+      errors << "#{path} has unknown fields: #{unknown.join(', ')}" unless unknown.empty?
+      fields.each do |field|
+        unless context[field].is_a?(String) && !context[field].strip.empty?
+          errors << "#{path}.#{field} must be a non-empty string"
+        end
+      end
+      unless %w[host container].include?(context["location"])
+        errors << "#{path}.location must be host or container"
+      end
+      if context.key?("shell_transition") && context["shell_transition"] != true && context["shell_transition"] != false
+        errors << "#{path}.shell_transition must be boolean"
+      end
+    end
+  end
+  errors
+end
+
 ROOT = File.expand_path("../..", __dir__)
 CATALOG_DIR = File.join(ROOT, "catalog")
 RECIPE_DIRS = [File.join(ROOT, "recipes", "examples")]
@@ -241,6 +272,7 @@ recipe_paths.each do |path|
   end
 
   demo = data["demo"] || {}
+  errors.concat(validate_execution_contexts(demo, label: label))
   errors.concat(validate_readiness(demo["readiness"], label: label))
   cleanup = demo["cleanup"]
   if launcher_managed_recipe?(data) && cleanup.nil?

@@ -20,6 +20,7 @@ if str(TOOLS_DIR) not in sys.path:
 from recipe_portal import (
     PortalCommand,
     PortalEnvironment,
+    PortalExecutionContext,
     PortalLink,
     write_recipe_portal,
 )
@@ -1353,9 +1354,45 @@ def _workspace_command(command: str) -> str:
     return command
 
 
+def _execution_context(item: dict, path: str) -> PortalExecutionContext | None:
+    if "execution_context" not in item:
+        return None
+    value = item["execution_context"]
+    required = {"location", "terminal", "cwd", "environment"}
+    if not isinstance(value, dict) or not value:
+        raise RecipeGuideError(f"{path}.execution_context must be a non-empty mapping")
+    unknown = set(value) - required - {"shell_transition"}
+    if unknown:
+        raise RecipeGuideError(
+            f"{path}.execution_context has unknown fields: {', '.join(sorted(unknown))}"
+        )
+    fields = {
+        key: _required_string(value.get(key), f"{path}.execution_context.{key}")
+        for key in sorted(required)
+    }
+    if fields["location"] not in {"host", "container"}:
+        raise RecipeGuideError(
+            f"{path}.execution_context.location must be host or container"
+        )
+    transition = value.get("shell_transition", False)
+    if not isinstance(transition, bool):
+        raise RecipeGuideError(f"{path}.execution_context.shell_transition must be boolean")
+    return PortalExecutionContext(
+        location=fields["location"],
+        terminal=fields["terminal"],
+        cwd=fields["cwd"],
+        environment=fields["environment"],
+        shell_transition=transition,
+    )
+
+
 def _command_items(data: dict, recipe_path: Path) -> tuple[PortalCommand, ...]:
     demo = _mapping(data.get("demo"))
-    raw_items = _list(demo.get("prerequisites")) + _list(demo.get("steps"))
+    raw_items = [
+        (f"demo.{section}[{index}]", item)
+        for section in ("prerequisites", "steps")
+        for index, item in enumerate(_list(demo.get(section)))
+    ]
     commands: list[PortalCommand] = []
     seen: set[str] = set()
     if (
@@ -1371,19 +1408,24 @@ def _command_items(data: dict, recipe_path: Path) -> tuple[PortalCommand, ...]:
             command = f"python tools/recipe.py {action} --recipe {rendered_recipe}"
             commands.append(PortalCommand(label, command, description))
             seen.add(command)
-    for index, item in enumerate(raw_items, start=1):
+    for index, (path, item) in enumerate(raw_items, start=1):
         if not isinstance(item, dict):
             continue
-        command = _workspace_command(_text(item.get("command")))
-        if not command or command in seen:
+        context = _execution_context(item, path)
+        command = _text(item.get("command"))
+        if context is None:
+            command = _workspace_command(command)
+        if not command or (context is None and command in seen):
             continue
         if (
             "tools/foundation.py doctor" in command
+            and context is None
             and commands
             and demo.get("foundation_workflow") != "declared"
         ):
             continue
-        seen.add(command)
+        if context is None:
+            seen.add(command)
         label = _text(item.get("id"), _text(item.get("action"))).replace("_", " ")
         if not label:
             for operation in (
@@ -1417,7 +1459,7 @@ def _command_items(data: dict, recipe_path: Path) -> tuple[PortalCommand, ...]:
                     ),
                 ),
             )
-        commands.append(PortalCommand(label.title(), command, description))
+        commands.append(PortalCommand(label.title(), command, description, context))
     return tuple(commands)
 
 
