@@ -1,0 +1,141 @@
+id: nova5-public-reference
+title: Public Nova5 simulation and ROS 2 integration reference
+recipe_version: 0.1
+goal:
+  user_request: Find a public Nova5 simulation path with explicit Host and ROS 2 execution procedures.
+  description: >-
+    Discover the public Robot Arm composition without duplicating its build scripts,
+    Foundation requirements or environment-specific runbooks in Business Pack.
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - The public repository owns the robot-specific executable composition and procedures.
+validation:
+  status: partially_verified
+  summary: >-
+    Source references were reviewed at 301c22cd3b9b8d0111a039c309ee53a6428665a2.
+    Its README and Nova5 Recipe record runtime verification, including macOS
+    host+Docker Jazzy and Ubuntu 24.04 native host-ros2. The contributing user
+    also reported successful macOS host+Docker and separate Ubuntu PC
+    host-standalone/host-ros2 operation. Those reports are not a fresh
+    Business Pack E2E run and do not establish unreported OS/distro combinations.
+  steps:
+    - id: public_source_review
+      status: verified
+      evidence:
+        - repository: teras-project/hakoniwa-robot-arm
+          path: README.md
+          revision: 301c22cd3b9b8d0111a039c309ee53a6428665a2
+    - id: business_pack_reference_e2e
+      status: not_tested
+      notes:
+        - This metadata-only Recipe does not implement a Business Pack runtime.
+constraints:
+  - simulation-only
+  - external-runbook-owner
+  - separate-foundation-and-ros-python
+  - third-party-model-license-review
+target_environment:
+  status: specified
+  os: macOS or Ubuntu
+  execution_mode: Select host+Docker, host-standalone or host-ros2 in the external procedures.
+execution_environment:
+  status: unspecified
+  notes:
+    - Confirm the user's actual OS, ROS distribution and desired execution mode before selecting commands.
+    - The Mac host+Docker path and Ubuntu native paths run on different computers; do not infer Ubuntu Host execution on macOS.
+foundation_contract:
+  mode: not_required
+  reason: >-
+    This metadata-only reference executes no Core, SHM, hako-cmd or hakopy.
+    Actual Nova5 execution does require Foundation; the external Recipe owns
+    the complete executable requirements. This declaration is not a Core-free
+    Nova5 runtime claim.
+components:
+  - id: hakoniwa-robot-arm
+    roles: [physics_runtime, integration_boundary]
+    purpose: Own Nova5 manifests, model preparation, executable composition and user procedures.
+  - id: hakoniwa-robot-runtime
+    roles: [simulation_core]
+    purpose: Execute the shared actuator pipeline and Hakoniwa lifecycle.
+  - id: hakoniwa-pdu-ros
+    roles: [bridge]
+    purpose: Convert ROS 2 trajectory commands and state feedback across TCP/PDU.
+connections:
+  - from: hakoniwa-robot-arm
+    to: hakoniwa-robot-runtime
+    interface: Manifest and CMake composition
+    data: [Nova5 manifest, actuator and controller configuration]
+    contract:
+      status: partially_verified
+      requires: [External model preparation and Foundation build]
+      validation_notes: [Source-reviewed composition; runtime evidence is owned by the external Nova5 Recipe.]
+  - from: hakoniwa-robot-arm
+    to: hakoniwa-pdu-ros
+    interface: TCP/PDU bridge
+    data: [JointTrajectory, JointState]
+    contract:
+      status: partially_verified
+      requires: [Running simulator and Host TCP Bridge, Separate ROS workspace]
+      validation_notes: [Use the selected environment's external setup/build/operation procedure.]
+data_flow:
+  summary: ROS control -> ROS Bridge -> TCP Bridge -> SHM -> Nova5 runtime; joint state returns through the reverse path.
+time_model:
+  mode: shared-simulation-time
+  notes:
+    - Runtime follows the Hakoniwa lifecycle; ROS transport crosses a TCP boundary.
+artifact_sets:
+  physics_artifacts:
+    status: partially_verified
+    artifacts: [External Nova5 Model Forge output]
+  pdu_artifacts:
+    status: partially_verified
+    artifacts: [External JointTrajectory and JointState definitions and bindings]
+  runtime_artifacts:
+    status: partially_verified
+    artifacts: [External Runtime binary and Launcher configuration]
+artifacts:
+  - name: Authoritative Nova5 Recipe
+    owner: teras-project/hakoniwa-robot-arm
+    path: https://github.com/teras-project/hakoniwa-robot-arm/blob/301c22cd3b9b8d0111a039c309ee53a6428665a2/recipes/nova5/nova5-joint-trajectory-control.yaml
+    purpose: Source of the full executable Foundation requirements and robot-specific configuration.
+missing_pieces:
+  - No Business Pack-owned launch or smoke command is introduced by this reference Recipe.
+  - Reproduction must follow the external environment-specific procedures; generic configure alone does not build the Nova5 simulator or ROS workspace.
+demo:
+  # Do not advertise a partial generic doctor/plan/configure sequence as an executable Nova5 runbook.
+  foundation_workflow: declared
+  objective: Follow the external quick start, select an environment, and verify trajectory-driven motion and six-joint state feedback.
+  steps:
+    - id: select_environment
+      action: Open the public quick start and select the procedure matching the actual machine.
+      notes: https://github.com/teras-project/hakoniwa-robot-arm/blob/301c22cd3b9b8d0111a039c309ee53a6428665a2/README.md#クイックスタート
+    - id: follow_setup_build_operation
+      action: Complete setup, build and operation in order, preserving the documented terminal roles.
+      notes: https://github.com/teras-project/hakoniwa-robot-arm/blob/301c22cd3b9b8d0111a039c309ee53a6428665a2/docs/procedures/README.md
+    - id: verify_and_stop
+      action: Observe JointState changes after trajectory input, then follow the selected procedure's shutdown steps.
+  observability:
+    success_signals:
+      - Runtime status is RUNNING and six-joint state values change after the trajectory command.
+      - In ROS modes the expected JointState topic is received.
+    failure_signals:
+      - A successful build without sourcing the sample overlay leaves the sample ROS package undiscoverable.
+      - Foundation or ROS doctor failures must be resolved before operation.
+expected_result: A selected external Nova5 path is reproduced with explicit environment and verification evidence, not inferred from Catalog feasibility.
+source_catalogs:
+  - component_id: hakoniwa-robot-arm
+    catalog_path: ../catalog/components/hakoniwa-robot-arm.yaml
+  - component_id: hakoniwa-robot-runtime
+    catalog_path: ../catalog/components/hakoniwa-robot-runtime.yaml
+  - component_id: hakoniwa-pdu-ros
+    catalog_path: ../catalog/components/hakoniwa-pdu-ros.yaml
+source_artifacts:
+  - repository: teras-project/hakoniwa-robot-arm
+    path: recipes/nova5/nova5-joint-trajectory-control.yaml
+    revision: 301c22cd3b9b8d0111a039c309ee53a6428665a2
+  - repository: teras-project/hakoniwa-robot-arm
+    path: docs/procedures/host-docker/operation.md
+    revision: 301c22cd3b9b8d0111a039c309ee53a6428665a2
+tags: [nova5, robot-arm, public-reference, ros2, mujoco]
