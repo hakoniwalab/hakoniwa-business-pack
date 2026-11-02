@@ -1,0 +1,108 @@
+id: hakoniwa-robot-arm
+name: Hakoniwa Robot Arm (public integration)
+repository:
+  owner: teras-project
+  name: hakoniwa-robot-arm
+  url: https://github.com/teras-project/hakoniwa-robot-arm
+  visibility: public
+distribution:
+  channel: oss
+  notes:
+    - Repository-owned code, configuration, tools and documentation use Apache-2.0.
+    - Third-party robot models and dependencies retain their own licenses; consult docs/license before redistribution.
+    - This is a separate repository from hakoniwalab/hakoniwa-robot-arm-pack; its private/commercial metadata must not be overwritten.
+verification:
+  verified_at: 2026-11-02
+  source_revision: 301c22cd3b9b8d0111a039c309ee53a6428665a2
+  source_ref: main
+summary: >-
+  Public robot-specific composition of Hakoniwa Foundation, Robot Runtime,
+  MuJoCo models and ROS 2 bridges, with Nova5 setup, build and operation procedures.
+category:
+  primary: physics-environment
+  secondary: [robot-arm, simulator, integration, ros2]
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - Source and documentation reviewed at the pinned revision; no new runtime verification was performed for this Catalog addition.
+    - The source README records Nova5 macOS host+Docker Jazzy and Ubuntu 24.04 native host-ros2 verification.
+    - FR5 and SO-101 sources are published, but the public README still marks their verification as in progress.
+capabilities:
+  - name: Nova5 simulation composition
+    description: Owns robot-specific manifests, model conversion, CMake targets and Launcher operations over the shared Robot Runtime.
+    evidence:
+      - repository: teras-project/hakoniwa-robot-arm
+        path: recipes/nova5/nova5-joint-trajectory-control.yaml
+        revision: 301c22cd3b9b8d0111a039c309ee53a6428665a2
+  - name: ROS 2 trajectory and state integration
+    description: Connects JointTrajectory control and JointState feedback through a TCP bridge, with separate Host and ROS environments.
+    evidence:
+      - repository: teras-project/hakoniwa-robot-arm
+        path: docs/procedures/host-docker/operation.md
+        revision: 301c22cd3b9b8d0111a039c309ee53a6428665a2
+limitations:
+  - Runtime verification remains specific to robot, OS, ROS distribution and execution mode; do not transfer the private pack's verification claims to this public repository.
+  - Business Pack provides discovery metadata, not a second implementation of the robot-specific runner.
+  - Foundation CPython 3.12 and the ROS system-Python workspace are separate environments.
+  - Simulation results do not establish physical fidelity, safety or permission to actuate hardware.
+interfaces:
+  inputs:
+    - name: JointTrajectory
+      kind: pdu
+      description: trajectory_msgs/JointTrajectory-compatible commands, originating at /joint_trajectory on the ROS side.
+  outputs:
+    - name: JointState
+      kind: pdu
+      description: sensor_msgs/JointState-compatible output, exposed at /pdu/joint_states on the ROS side.
+  protocols:
+    - name: TCP bridge
+      role: server
+      notes: Host TCP Bridge connects the simulator's SHM PDU domain to the ROS Bridge; the default TCP port is 54001.
+dependencies:
+  required:
+    - name: hakoniwa-business-pack
+      type: repository
+      notes: Owns Foundation and Workspace tooling.
+    - name: hakoniwa-robot-runtime
+      type: repository
+      notes: Owns the shared actuator runtime and configuration semantics.
+    - name: hakoniwa-mujoco-robots
+      type: repository
+      notes: Provides MuJoCo integration and PDU adapters.
+  optional:
+    - name: hakoniwa-pdu-ros
+      type: repository
+      notes: Required for the ROS 2 integration path, not host-standalone.
+connects_to:
+  - component_id: hakoniwa-robot-runtime
+    direction: uses
+    interface: Manifest-driven runtime and consumer-owned CMake targets
+  - component_id: hakoniwa-mujoco-robots
+    direction: uses
+    interface: MuJoCo physics and PDU adapters
+  - component_id: hakoniwa-core-pro
+    direction: uses
+    interface: Foundation SHM and asset lifecycle
+  - component_id: hakoniwa-pdu-ros
+    direction: uses
+    interface: ROS 2 JointTrajectory and JointState via TCP/PDU
+recipe_roles:
+  - role: physics_runtime
+    description: Robot-specific executable composition over the shared runtime.
+  - role: integration_boundary
+    description: Owns the robot-specific Host and ROS integration configuration.
+typical_usecases:
+  - Validate trajectory commands and joint feedback in simulation before hardware integration.
+demo_candidates:
+  - name: Public Nova5 reference path
+    description: Follow the externally owned environment-specific procedures rather than copying their implementation into Business Pack.
+    recipe: recipes/examples/nova5-public-reference.yaml
+source_refs:
+  - repository: teras-project/hakoniwa-robot-arm
+    path: README.md
+    revision: 301c22cd3b9b8d0111a039c309ee53a6428665a2
+  - repository: teras-project/hakoniwa-robot-arm
+    path: docs/license/README.md
+    revision: 301c22cd3b9b8d0111a039c309ee53a6428665a2
+tags: [hakoniwa, robot-arm, nova5, mujoco, ros2, joint-trajectory, joint-state]

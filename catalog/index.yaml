@@ -801,6 +801,35 @@ components:
   - collision
   - simulation
   catalog_path: components/hakoniwa-robot-arm-pack.yaml
+- id: hakoniwa-robot-arm
+  name: Hakoniwa Robot Arm (public integration)
+  category: physics-environment
+  secondary_categories:
+  - robot-arm
+  - simulator
+  - integration
+  - ros2
+  maturity: active
+  distribution: oss
+  summary: Public robot-specific composition of Hakoniwa Foundation, Robot Runtime,
+    MuJoCo models and ROS 2 bridges, with Nova5 setup, build and operation procedures.
+  recipe_roles:
+  - physics_runtime
+  - integration_boundary
+  connects_to:
+  - hakoniwa-robot-runtime
+  - hakoniwa-mujoco-robots
+  - hakoniwa-core-pro
+  - hakoniwa-pdu-ros
+  tags:
+  - hakoniwa
+  - robot-arm
+  - nova5
+  - mujoco
+  - ros2
+  - joint-trajectory
+  - joint-state
+  catalog_path: components/hakoniwa-robot-arm.yaml
 - id: hakoniwa-robot-runtime
   name: Hakoniwa Robot Runtime
   category: simulation-core

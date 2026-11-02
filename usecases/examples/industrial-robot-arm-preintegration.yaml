@@ -1,6 +1,6 @@
 id: industrial-robot-arm-preintegration
 title: 産業用ロボットアーム導入前の指令・状態統合検証
-usecase_version: 0.2
+usecase_version: 0.3
 
 audience:
   primary:
@@ -35,9 +35,13 @@ status:
     - FR5 ROS 2 Docker E2E is not currently recorded as verified and should not be inferred from configuration availability.
     - JointTrajectory command handling and JointState output are supported by the common arm runtime and bridge architecture.
 
-realized_by: []
+realized_by:
+  - recipe_id: nova5-public-reference
+    notes: Metadata-only entry pointing to the public Robot Arm procedures; not a Business Pack-owned executable Demo.
 
 supported_by:
+  - component_id: hakoniwa-robot-arm
+    role: Provide a separate public Nova5 composition and environment-specific procedures without requiring access to the private pack.
   - component_id: hakoniwa-robot-arm-pack
     role: Provide robot-specific models and manifests, the common arm runtime, per-model Recipes, and the verified integration paths.
   - component_id: hakoniwa-mujoco-robots
@@ -67,15 +71,15 @@ communication_notes:
     - Simulation results prove physical performance or safety.
 
 limitations:
-  - Access approval is required for the private robot-arm integration assets.
+  - Access approval is required for the private hakoniwa-robot-arm-pack assets, not for cloning the separate public teras-project/hakoniwa-robot-arm repository.
   - Verification coverage differs by robot, ROS 2 distribution, execution mode, and host platform.
   - Model fidelity, actuator behavior, collision parameters, payloads, and acceptance criteria require human review.
-  - Current host verification is recorded on Docker Desktop for macOS arm64; other host environments require separate verification.
+  - The private pack's host coverage remains as recorded in its Catalog. The public Nova5 reference separately cites macOS host+Docker and Ubuntu 24.04 native host-ros2 evidence; coverage must not be transferred between repositories.
   - Simulation output must not be connected to physical hardware without an explicit approval and safety gate.
-  - The absence of a public executable Business Pack Recipe limits independent reproduction from this repository alone.
+  - The public reference Recipe links externally owned setup/build/operation procedures; Business Pack does not provide a complete executable Nova5 runner.
 
 next_steps:
-  - Add or update public metadata-only Recipes for verified reference paths without exposing private implementation assets.
+  - Keep the public reference and private pack metadata distinct as their implementations and verification coverage evolve.
   - Complete ROS 2 E2E verification for FR5 and remaining model/distribution combinations where needed.
   - Verify additional host environments separately from the current macOS arm64 Docker path.
   - Define repeatable model-fidelity and actuator-validation criteria for additional robot arms.
