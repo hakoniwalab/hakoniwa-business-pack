@@ -1,0 +1,162 @@
+id: baremetal-athrill-v850e2m
+name: Bare-metal Athrill V850E2M Samples
+repository:
+  owner: toppers
+  name: baremetal-athrill-v850e2m
+  url: https://github.com/toppers/baremetal-athrill-v850e2m
+  visibility: public
+distribution:
+  channel: unknown
+  notes:
+    - The repository has no license file at the cataloged revision; its athrill-target-v850e2m submodule is distributed under the TOPPERS License.
+verification:
+  verified_at: 2026-11-03
+  source_revision: 264ad59d44e56420ec0cf384418c653bc68aaaa2
+  source_ref: main
+summary: Bare-metal V850E2M sample programs, startup code, linker script, and memory configuration that run a target ELF on the Athrill emulator.
+category:
+  primary: tool
+  secondary:
+    - simulator
+    - integration
+
+status:
+  maturity: experimental
+  catalog_confidence: medium
+  notes:
+    - On macOS arm64, the step1 ELF built with the toppersjp/athrill-v850e2m-builder v1.0.0 container ran on the Foundation athrill2 and printed "Hello World!" through the serial output address.
+    - The run used the sample's own memory and device configuration without Hakoniwa time synchronization.
+
+capabilities:
+  - name: Bare-metal startup and Hello World sample
+    description: Provides vector, startup, and main sources that bring a V850E2M program to main and print through the memory-mapped serial output.
+    evidence:
+      - repository: toppers/baremetal-athrill-v850e2m
+        path: workspace/step1/main.c
+        revision: 264ad59d44e56420ec0cf384418c653bc68aaaa2
+  - name: Cross-compilation container
+    description: Builds sample ELFs with v850-elf-gcc inside the published builder image.
+    evidence:
+      - repository: toppers/baremetal-athrill-v850e2m
+        path: docker/build.bash
+        revision: 264ad59d44e56420ec0cf384418c653bc68aaaa2
+  - name: Athrill run configuration
+    description: Supplies the ROM/RAM memory map and device configuration consumed by athrill2.
+    evidence:
+      - repository: toppers/baremetal-athrill-v850e2m
+        path: workspace/run/memory.txt
+        revision: 264ad59d44e56420ec0cf384418c653bc68aaaa2
+
+limitations:
+  - The sample build requires Docker and the linux/amd64 builder image, emulated on arm64 hosts.
+  - docker/build.bash starts the container with -it and needs an interactive terminal.
+  - The sample loops forever after its test suite, so a non-interactive run ends by the athrill2 -t clock timeout.
+  - The repository's own build-athrill.bash builds an older athrill2 from its submodule; the Foundation athrill2 can run the same ELF.
+
+interfaces:
+  inputs:
+    - name: V850 assembly and C sources
+      kind: file
+      description: Sample program sources under workspace/<app>.
+  outputs:
+    - name: V850E2M ELF program
+      kind: file
+      description: workspace/<app>/test_main.elf loaded by athrill2.
+    - name: Serial output
+      kind: log
+      description: Characters written to the serial output address appear on the athrill2 console.
+  protocols: []
+  configuration:
+    - path: workspace/run/memory.txt
+      description: Athrill ROM and RAM regions.
+    - path: workspace/run/device_config.txt
+      description: Athrill device and debugger parameters.
+
+dependencies:
+  required:
+    - name: athrill-target-v850e2m
+      type: runtime
+      notes: Supplies athrill2 to run the ELF and the CPU configuration headers used by the build.
+    - name: toppersjp/athrill-v850e2m-builder
+      type: tool
+      notes: Docker image with the v850-elf-gcc cross toolchain.
+  optional: []
+
+platforms:
+  supported:
+    - macOS
+    - Linux
+    - Windows
+  notes:
+    - Verified on macOS arm64 on 2026-11-03; the README lists Ubuntu 22.04 and WSL2.
+
+connects_to:
+  - component_id: athrill-target-v850e2m
+    direction: uses
+    interface: ELF program and Athrill memory/device configuration
+    notes: Runs the sample ELF on athrill2.
+  - component_id: athrill-device
+    direction: related
+    interface: Athrill EXDEV
+    notes: Candidate target program for the first Hakoniwa-synchronized Athrill run.
+
+recipe_roles:
+  - role: simulation_core
+    description: Provides the target program that the Athrill emulator executes.
+
+typical_usecases:
+  - Learn V850 registers, memory, and pointers by running bare-metal programs without hardware.
+  - Provide a minimal target ELF for Athrill and Hakoniwa integration tests.
+
+anti_usecases:
+  - Running an RTOS or production ECU software.
+
+demo_candidates:
+  - name: Bare-metal Hello World
+    description: Build step1 in the builder container and run it on the Foundation athrill2.
+    required_components:
+      - athrill-target-v850e2m
+      - baremetal-athrill-v850e2m
+    source_examples:
+      - repository: toppers/baremetal-athrill-v850e2m
+        path: workspace/step1
+        revision: 264ad59d44e56420ec0cf384418c653bc68aaaa2
+
+operations:
+  build:
+    commands:
+      - git submodule update --init athrill-target-v850e2m
+      - bash docker/pull-image.bash
+      - bash docker/build.bash step1
+    notes:
+      - Run from the repository root in an interactive terminal.
+  run:
+    commands:
+      - cd workspace/run && athrill2 -c1 -m memory.txt -d device_config.txt -t 2000000 ../step1/test_main.elf
+    notes:
+      - Use the Foundation athrill2 from work/foundation/install/bin; "Hello World!" appears before the timeout.
+
+known_gaps:
+  - No Business Pack Recipe runs the sample yet.
+  - Hakoniwa time synchronization through athrill-device has not been exercised with this ELF.
+
+source_refs:
+  - repository: toppers/baremetal-athrill-v850e2m
+    path: README.md
+    revision: 264ad59d44e56420ec0cf384418c653bc68aaaa2
+    description: Build and run procedure.
+  - repository: toppers/baremetal-athrill-v850e2m
+    path: workspace/step1/main.c
+    revision: 264ad59d44e56420ec0cf384418c653bc68aaaa2
+    description: Hello World entry point.
+  - repository: toppers/baremetal-athrill-v850e2m
+    path: workspace/run/memory.txt
+    revision: 264ad59d44e56420ec0cf384418c653bc68aaaa2
+    description: Memory map used for the verified run.
+
+tags:
+  - athrill
+  - v850e2m
+  - bare-metal
+  - sample
+  - ecu
