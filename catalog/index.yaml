@@ -49,6 +49,28 @@ components:
   - emulator
   - msvc
   catalog_path: components/athrill-target-v850e2m.yaml
+- id: baremetal-athrill-v850e2m
+  name: Bare-metal Athrill V850E2M Samples
+  category: tool
+  secondary_categories:
+  - simulator
+  - integration
+  maturity: experimental
+  distribution: unknown
+  summary: Bare-metal V850E2M sample programs, startup code, linker script, and memory
+    configuration that run a target ELF on the Athrill emulator.
+  recipe_roles:
+  - simulation_core
+  connects_to:
+  - athrill-target-v850e2m
+  - athrill-device
+  tags:
+  - athrill
+  - v850e2m
+  - bare-metal
+  - sample
+  - ecu
+  catalog_path: components/baremetal-athrill-v850e2m.yaml
 - id: hakoniwa-conductor-light
   name: Hakoniwa Conductor Light
   category: simulation-core
