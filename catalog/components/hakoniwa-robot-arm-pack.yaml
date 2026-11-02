@@ -1,5 +1,5 @@
 id: hakoniwa-robot-arm-pack
-name: Hakoniwa Robot Arm Pack
+name: Hakoniwa Robot Arm Pack (construction machine)
 repository:
   owner: hakoniwalab
   name: hakoniwa-robot-arm-pack
@@ -8,19 +8,20 @@ repository:
 distribution:
   channel: commercial
   notes:
-    - Commercial robot and construction-machine integration pack maintained by Hakoniwa Lab.
-    - The implementation repository is private; access and licensing require approval from Hakoniwa Lab.
-    - Public Hakoniwa runtime components are used underneath the private robot-specific assets.
+    - Hakoniwa Lab's private pack, now listed for its construction machine (MathScavator9000) only.
+    - The robot arms (FR5, Nova5, SO-101) are served by the public teras-project/hakoniwa-robot-arm (Catalog hakoniwa-robot-arm); this pack is no longer offered for them.
+    - The excavator is planned to be contributed to the public repository; this entry is removed once it is there.
+    - Until then the implementation repository is private; access requires approval from Hakoniwa Lab.
 verification:
   verified_at: 2026-08-28
   source_revision: c722a4549f6414fecdc3bb5acd21989ca5463ccf
   source_ref: main
-summary: Manifest- and Recipe-driven Hakoniwa/MuJoCo integration pack for articulated robots and construction machines. FR5, Nova5, and SO-101 share a common arm runtime, while MathScavator9000 combines a dedicated articulated-arm and mobile-base runtime with manual and automatic control paths.
+summary: MathScavator9000 excavator for Hakoniwa/MuJoCo, a dedicated articulated-arm and mobile-base runtime with manual and automatic control paths and digging-worksite assets. Robot arms are served by the public hakoniwa-robot-arm.
 category:
   primary: physics-environment
   secondary:
-    - robot-arm
     - simulator
+    - environment-model
     - integration
     - commercial
 
@@ -28,53 +29,22 @@ status:
   maturity: active
   catalog_confidence: high
   notes:
-    - FAIRINO FR5, DOBOT Nova5, and SO-101 follower have verified MuJoCo Viewer and headless runtime paths.
-    - Nova5 has verified ROS 2 Humble and Jazzy E2E paths; SO-101 has a verified Jazzy E2E path.
+    - Robot-arm entries were retired from this pack on 2026-11-02 in favour of the public hakoniwa-robot-arm; their verification records below the pinned revision are history, not an offer.
     - MathScavator9000 has a verified headless runtime for six-wheel differential motion followed by four-joint JointTrajectory execution.
     - Excavator digging, soil, terrain, PS5 manual control, and bucket collision-proxy work are present, but verification depth differs by feature and should be read from the repository verification notes and Recipe documentation.
 
 capabilities:
-  - name: Multi-model articulated robot simulation
-    description: Runs FR5, Nova5, and SO-101 robot-arm models as Hakoniwa assets in MuJoCo using a common C++ arm runtime with model-specific manifests and configuration.
-    evidence:
-      - repository: hakoniwalab/hakoniwa-robot-arm-pack
-        path: README.md
-        revision: c722a4549f6414fecdc3bb5acd21989ca5463ccf
-      - repository: hakoniwalab/hakoniwa-robot-arm-pack
-        path: docs/verification.md
-        revision: c722a4549f6414fecdc3bb5acd21989ca5463ccf
   - name: Manifest-driven robot integration
     description: Resolves robot models, PDU definitions, Endpoint configuration, actuator configuration, state-output configuration, and demo trajectories from per-robot assets and Recipes.
     evidence:
       - repository: hakoniwalab/hakoniwa-robot-arm-pack
         path: README.md
         revision: c722a4549f6414fecdc3bb5acd21989ca5463ccf
-  - name: JointTrajectory command control
-    description: Accepts JointTrajectory-compatible PDU commands and interpolates joint targets in the robot runtime.
-    evidence:
-      - repository: hakoniwalab/hakoniwa-robot-arm-pack
-        path: recipes/fr5/fr5-joint-trajectory-control.yaml
-        revision: c722a4549f6414fecdc3bb5acd21989ca5463ccf
-      - repository: hakoniwalab/hakoniwa-robot-arm-pack
-        path: recipes/nova5/nova5-joint-trajectory-control.yaml
-        revision: c722a4549f6414fecdc3bb5acd21989ca5463ccf
-      - repository: hakoniwalab/hakoniwa-robot-arm-pack
-        path: recipes/so101/so101-joint-trajectory-control.yaml
-        revision: c722a4549f6414fecdc3bb5acd21989ca5463ccf
   - name: JointState publishing
     description: Publishes simulated joint state as JointState-compatible Hakoniwa PDU data for monitoring and integration.
     evidence:
       - repository: hakoniwalab/hakoniwa-robot-arm-pack
         path: docs/architecture.md
-        revision: c722a4549f6414fecdc3bb5acd21989ca5463ccf
-  - name: ROS 2 TCP bridge integration
-    description: Connects Hakoniwa SHM/PDU simulation to ROS 2 through a TCP bridge, with JointTrajectory input and JointState output. Verified combinations are tracked separately from merely buildable combinations.
-    evidence:
-      - repository: hakoniwalab/hakoniwa-robot-arm-pack
-        path: docs/architecture.md
-        revision: c722a4549f6414fecdc3bb5acd21989ca5463ccf
-      - repository: hakoniwalab/hakoniwa-robot-arm-pack
-        path: docs/verification.md
         revision: c722a4549f6414fecdc3bb5acd21989ca5463ccf
   - name: Docker-contained simulation and ROS 2 environment
     description: Provides a Compose-based environment in which Hakoniwa, MuJoCo, SHM, TCP Bridge, and ROS 2 can run in containers, while verification status remains robot and ROS-distribution specific.
@@ -109,18 +79,10 @@ capabilities:
       - repository: hakoniwalab/hakoniwa-robot-arm-pack
         path: recipes/excavator/bucket-collision.yaml
         revision: c722a4549f6414fecdc3bb5acd21989ca5463ccf
-  - name: Custom robot model onboarding
-    description: Provides a repeatable path for adding another articulated robot through model acquisition or conversion, robot-specific configuration, and runtime Recipes.
-    evidence:
-      - repository: hakoniwalab/hakoniwa-robot-arm-pack
-        path: docs/model-installation.md
-        revision: c722a4549f6414fecdc3bb5acd21989ca5463ccf
-
 limitations:
   - The implementation repository and robot-specific assets are private and require commercial access approval.
   - Model fidelity, actuator characteristics, collision parameters, payloads, soil behavior, and physical validity must be reviewed for each target experiment.
-  - Verified runtime coverage differs by robot, ROS 2 distribution, execution mode, and host platform; consult docs/verification.md instead of inferring support from available configuration files.
-  - FR5 ROS 2 Docker E2E is not currently recorded as verified; Nova5 is verified on Humble and Jazzy, while SO-101 is verified on Jazzy.
+  - Verified runtime coverage differs by feature, execution mode, and host platform; consult docs/verification.md instead of inferring support from available configuration files.
   - The excavator moving model is not recorded as verified in the interactive MuJoCo Viewer even though its headless mobile runtime is verified.
   - Bucket collision proxies are approximations intended for configurable contact experiments and do not imply CAD-accurate bucket geometry or validated digging physics.
   - Simulation verification does not authorize connection to or actuation of physical robot hardware.
@@ -175,7 +137,7 @@ dependencies:
       notes: Hakoniwa runtime integration and lifecycle control.
     - name: MuJoCo
       type: runtime
-      notes: Physics runtime for articulated robots and construction-machine experiments.
+      notes: Physics runtime for construction-machine experiments.
   optional:
     - name: hakoniwa-pdu-ros
       type: repository
@@ -243,24 +205,21 @@ data_contracts:
 
 recipe_roles:
   - role: physics_runtime
-    description: Simulates articulated robot and construction-machine motion in MuJoCo.
+    description: Simulates construction-machine motion in MuJoCo.
   - role: simulation_core
-    description: Runs robot and machine models as synchronized Hakoniwa assets.
+    description: Runs the machine model as a synchronized Hakoniwa asset.
   - role: integration_boundary
     description: Connects command generators and state consumers through explicit PDU and bridge contracts.
   - role: environment_model
     description: Provides excavator terrain, soil, and contact-proxy assets for digging experiments.
   - role: commercial_pack
-    description: Provides private robot-specific models, configuration, Recipes, and integration assets on top of public Hakoniwa components.
+    description: Provides the private excavator model, configuration, Recipes, and runtime on top of public Hakoniwa components, until it moves to the public repository.
 
 typical_usecases:
-  - Validate industrial robot-arm joint trajectories before physical-system integration.
-  - Introduce FR5, Nova5, SO-101, or another onboarded articulated robot into a Hakoniwa simulation.
-  - Connect ROS 2 trajectory generation and state monitoring to a MuJoCo robot through the Hakoniwa TCP/PDU bridge path.
   - Simulate a mobile excavator with articulated arm control, differential motion, and JointState feedback.
   - Operate the excavator manually with a game controller or automatically with scripted commands.
   - Experiment with construction-site terrain, soil particles, and configurable bucket collision proxies.
-  - Combine articulated robots and construction machines with other Hakoniwa assets in heterogeneous simulations.
+  - Combine the construction machine with other Hakoniwa assets in heterogeneous simulations.
 
 anti_usecases:
   - Safety certification or proof of physical robot or construction-machine performance based only on simulation results.
@@ -269,40 +228,6 @@ anti_usecases:
   - Assuming every robot, ROS 2 distribution, OS, or execution mode is verified merely because configuration exists.
 
 demo_candidates:
-  - name: FAIRINO FR5 JointTrajectory control
-    description: Run the FR5 MuJoCo asset, send a multi-waypoint trajectory, move all six joints, and publish JointState.
-    required_components:
-      - hakoniwa-robot-arm-pack
-      - hakoniwa-mujoco-robots
-      - hakoniwa-pdu-endpoint
-      - hakoniwa-core-pro
-      - hakoniwa-pdu-python
-    source_examples:
-      - repository: hakoniwalab/hakoniwa-robot-arm-pack
-        path: recipes/fr5/README.md
-        revision: c722a4549f6414fecdc3bb5acd21989ca5463ccf
-  - name: Nova5 ROS 2 E2E control
-    description: Run the Nova5 simulation with the TCP bridge, send JointTrajectory from ROS 2, and receive JointState back in ROS 2. Humble and Jazzy are recorded as verified.
-    required_components:
-      - hakoniwa-robot-arm-pack
-      - hakoniwa-pdu-ros
-      - hakoniwa-pdu-endpoint
-      - hakoniwa-core-pro
-    source_examples:
-      - repository: hakoniwalab/hakoniwa-robot-arm-pack
-        path: docs/verification.md
-        revision: c722a4549f6414fecdc3bb5acd21989ca5463ccf
-  - name: SO-101 ROS 2 Jazzy E2E control
-    description: Run the SO-101 simulation and verify JointTrajectory-to-MuJoCo and JointState-to-ROS 2 flow using the Jazzy profile.
-    required_components:
-      - hakoniwa-robot-arm-pack
-      - hakoniwa-pdu-ros
-      - hakoniwa-pdu-endpoint
-      - hakoniwa-core-pro
-    source_examples:
-      - repository: hakoniwalab/hakoniwa-robot-arm-pack
-        path: docs/verification.md
-        revision: c722a4549f6414fecdc3bb5acd21989ca5463ccf
   - name: MathScavator9000 mobile and digging worksite
     description: Drive the six-wheel differential base, control the four articulated joints, switch between automatic and manual control paths, and run terrain/soil/bucket-contact experiments.
     required_components:
@@ -331,7 +256,7 @@ operations:
 
 known_gaps:
   - Re-run and record verification after significant excavator bucket-collision or digging-runtime changes.
-  - Complete ROS 2 E2E verification for FR5 and the remaining SO-101 distribution combinations.
+  - Contribute the excavator to the public teras-project/hakoniwa-robot-arm, then remove this Catalog entry and point construction-machine-simulation there.
   - Verify Ubuntu Linux AMD64, Ubuntu native, and Windows execution paths separately from the current macOS arm64 Docker host results.
   - Define experiment-specific acceptance criteria for model fidelity, actuator tuning, collision behavior, payloads, and soil/contact approximations.
 
@@ -359,8 +284,6 @@ source_refs:
 
 tags:
   - hakoniwa
-  - robot-arm
-  - industrial-robot
   - construction-machine
   - excavator
   - mujoco

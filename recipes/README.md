@@ -88,6 +88,15 @@ repositories.
 
 ## Generate The Human-Facing Recipe Guide
 
+### Public Robot Arm reference
+
+[`nova5-public-reference`](examples/nova5-public-reference.yaml) links to the
+public `teras-project/hakoniwa-robot-arm` quick start and environment-specific
+procedures. It is discovery metadata, not a Business Pack-owned launchable Demo.
+Use the external Nova5 Recipe for the full Foundation requirements and follow its
+setup, build, operation and shutdown sequence. Generic `configure` of the
+reference alone does not build the simulator or ROS workspace.
+
 ### Per-step execution context
 
 Commands in `demo.prerequisites` and `demo.steps` may declare an optional
@@ -129,6 +138,8 @@ Repeated contextual commands remain separate steps, even in the same terminal,
 because an intervening operation may have changed the shell or runtime state. Recipes
 without this optional metadata retain their previous rendering and command
 normalization.
+
+### Generating a guide
 
 The common user entry point is a generated workspace guide. Pass any Recipe YAML
 to the generic guide command:

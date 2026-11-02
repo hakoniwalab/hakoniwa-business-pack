@@ -8,7 +8,7 @@ audience:
     - robot-system-integrator
     - robot-development-team
   notes:
-    - The current reference model is MathScavator9000 Excavator in hakoniwa-robot-arm-pack.
+    - The current reference model is MathScavator9000 Excavator in hakoniwa-robot-arm-pack (private), planned to move to the public teras-project/hakoniwa-robot-arm.
 
 situation: >
   A team wants to evaluate a construction machine before using physical equipment,
@@ -75,7 +75,7 @@ next_steps:
   - Re-run and record verification after bucket-collision and digging-runtime changes.
   - Add repeatable acceptance criteria for bucket proxy geometry and digging scenarios.
   - Separate visual plausibility, contact behavior, and physical-fidelity claims in future validation records.
-  - Add public metadata-only Recipe coverage when an externally reproducible composition is defined.
+  - Contribute the excavator to the public teras-project/hakoniwa-robot-arm, then point this Usecase at that repository instead of the private pack.
 
 tags:
   - construction-machine
