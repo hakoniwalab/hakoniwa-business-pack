@@ -8,10 +8,10 @@ repository:
 distribution:
   channel: unknown
   notes:
-    - The repository has no license file at the cataloged revision; its athrill-target-v850e2m submodule is distributed under the TOPPERS License.
+    - The repository has no license file at the cataloged revision; the athrill and athrill-target-v850e2m checkouts it builds from are distributed under the TOPPERS License.
 verification:
   verified_at: 2026-11-03
-  source_revision: 264ad59d44e56420ec0cf384418c653bc68aaaa2
+  source_revision: d91909da9b70aab9f9c05eb4c31f3a07f5ebe251
   source_ref: main
 summary: Bare-metal V850E2M sample programs, startup code, linker script, and memory configuration that run a target ELF on the Athrill emulator.
 category:
@@ -26,6 +26,8 @@ status:
   notes:
     - On macOS arm64, the step1 ELF built with the toppersjp/athrill-v850e2m-builder v1.0.0 container ran on the Foundation athrill2 and printed "Hello World!" through the serial output address.
     - The run used the sample's own memory and device configuration without Hakoniwa time synchronization.
+    - Since d91909d the repository has no submodule; it builds athrill2 from the sibling athrill and athrill-target-v850e2m checkouts, the Business Pack layout.
+    - Recipe athrill-v850e2m-baremetal-hello runs the sample on the Foundation athrill2 (athrill v1.2.1), verified on macOS arm64 on 2026-11-03.
 
 capabilities:
   - name: Bare-metal startup and Hello World sample
@@ -33,25 +35,25 @@ capabilities:
     evidence:
       - repository: toppers/baremetal-athrill-v850e2m
         path: workspace/step1/main.c
-        revision: 264ad59d44e56420ec0cf384418c653bc68aaaa2
+        revision: d91909da9b70aab9f9c05eb4c31f3a07f5ebe251
   - name: Cross-compilation container
     description: Builds sample ELFs with v850-elf-gcc inside the published builder image.
     evidence:
       - repository: toppers/baremetal-athrill-v850e2m
         path: docker/build.bash
-        revision: 264ad59d44e56420ec0cf384418c653bc68aaaa2
+        revision: d91909da9b70aab9f9c05eb4c31f3a07f5ebe251
   - name: Athrill run configuration
     description: Supplies the ROM/RAM memory map and device configuration consumed by athrill2.
     evidence:
       - repository: toppers/baremetal-athrill-v850e2m
         path: workspace/run/memory.txt
-        revision: 264ad59d44e56420ec0cf384418c653bc68aaaa2
+        revision: d91909da9b70aab9f9c05eb4c31f3a07f5ebe251
 
 limitations:
   - The sample build requires Docker and the linux/amd64 builder image, emulated on arm64 hosts.
   - docker/build.bash starts the container with -it and needs an interactive terminal.
   - The sample loops forever after its test suite, so a non-interactive run ends by the athrill2 -t clock timeout.
-  - The repository's own build-athrill.bash builds an older athrill2 from its submodule; the Foundation athrill2 can run the same ELF.
+  - The Docker build mounts ../athrill-target-v850e2m for the CPU configuration headers, so that checkout must sit next to the repository.
 
 interfaces:
   inputs:
@@ -113,45 +115,46 @@ anti_usecases:
 
 demo_candidates:
   - name: Bare-metal Hello World
-    description: Build step1 in the builder container and run it on the Foundation athrill2.
+    description: Build step1 in the builder container and run it on the Foundation athrill2 (Recipe athrill-v850e2m-baremetal-hello).
     required_components:
       - athrill-target-v850e2m
       - baremetal-athrill-v850e2m
     source_examples:
       - repository: toppers/baremetal-athrill-v850e2m
         path: workspace/step1
-        revision: 264ad59d44e56420ec0cf384418c653bc68aaaa2
+        revision: d91909da9b70aab9f9c05eb4c31f3a07f5ebe251
 
 operations:
   build:
     commands:
-      - git submodule update --init athrill-target-v850e2m
+      - bash build-athrill.bash
       - bash docker/pull-image.bash
       - bash docker/build.bash step1
     notes:
-      - Run from the repository root in an interactive terminal.
+      - Run from the repository root; docker/build.bash needs an interactive terminal.
+      - build-athrill.bash clones ../athrill and ../athrill-target-v850e2m when missing and builds ./cmake-build/athrill2. In a Business Pack workspace the Foundation athrill2 can be used instead.
   run:
     commands:
-      - cd workspace/run && athrill2 -c1 -m memory.txt -d device_config.txt -t 2000000 ../step1/test_main.elf
+      - cd workspace/run && ../../cmake-build/athrill2 -c1 -m memory.txt -d device_config.txt -t 2000000 ../step1/test_main.elf
     notes:
-      - Use the Foundation athrill2 from work/foundation/install/bin; "Hello World!" appears before the timeout.
+      - 'The "Hello World!" line appears before the -t timeout ends the run with exit status 1.'
 
 known_gaps:
-  - No Business Pack Recipe runs the sample yet.
+  - The Recipe is not yet verified on Linux.
   - Hakoniwa time synchronization through athrill-device has not been exercised with this ELF.
 
 source_refs:
   - repository: toppers/baremetal-athrill-v850e2m
     path: README.md
-    revision: 264ad59d44e56420ec0cf384418c653bc68aaaa2
+    revision: d91909da9b70aab9f9c05eb4c31f3a07f5ebe251
     description: Build and run procedure.
   - repository: toppers/baremetal-athrill-v850e2m
     path: workspace/step1/main.c
-    revision: 264ad59d44e56420ec0cf384418c653bc68aaaa2
+    revision: d91909da9b70aab9f9c05eb4c31f3a07f5ebe251
     description: Hello World entry point.
   - repository: toppers/baremetal-athrill-v850e2m
     path: workspace/run/memory.txt
-    revision: 264ad59d44e56420ec0cf384418c653bc68aaaa2
+    revision: d91909da9b70aab9f9c05eb4c31f3a07f5ebe251
     description: Memory map used for the verified run.
 
 tags:
