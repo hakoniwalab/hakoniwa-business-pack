@@ -32,6 +32,10 @@ Example:
 
 The `(hako)` marker means the current shell is inside the Hakoniwa Workspace Environment.
 
+The child shell starts at the `hakoniwa-business-pack` checkout root containing
+`tools/`, even when `HAKONIWA_WORK_DIR` selects a different artifact directory.
+Run `enter` separately from commands intended for the child shell.
+
 Leave it with the same command on every OS:
 
 ```bash
@@ -39,6 +43,12 @@ exit
 ```
 
 The child shell terminates and control returns to the unchanged parent shell. No environment-restoration command is required.
+
+`exit` does not delete checkouts or Foundation/Recipe build artifacts. Re-enter
+with the same checkout and work directory to resume; leaving the shell alone
+does not require a rebuild. Stop running Recipes using their own stop procedure
+before exiting. Operations requiring a separate Python environment, such as
+ROS 2, belong in the terminal specified by their procedure, not the Foundation venv.
 
 The standard lifecycle is:
 
