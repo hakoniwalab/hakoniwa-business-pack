@@ -502,6 +502,7 @@ def inspect_local_requirements(
             recipe_path, requirement, environ
         )
         missing: list[str] = []
+        warning: str | None = None
         if not dependency_root.is_dir():
             missing.append("dependency root")
         else:
@@ -536,6 +537,8 @@ def inspect_local_requirements(
                     missing.append(
                         f"revision:{resolved_revision} != {revision}"
                     )
+            elif source["type"] == "git" and isinstance(revision, str):
+                warning = _checkout_ref_mismatch(dependency_root, revision)
         results.append(
             {
                 "dependency": dependency_id,
@@ -544,6 +547,7 @@ def inspect_local_requirements(
                 "overridden": overridden,
                 "override_env": requirement["root"]["override_env"],
                 "missing": missing,
+                "warning": warning,
             }
         )
     return results
@@ -557,6 +561,8 @@ def print_local_inspection(results: list[dict]) -> None:
         )
         for missing in result["missing"]:
             print(f"  - missing {missing}")
+        if result.get("warning"):
+            print(f"  - WARNING: {result['warning']}")
         if result["status"] != "SATISFIED":
             print(f"  - override with {result['override_env']}")
 
@@ -642,6 +648,37 @@ def _checkout_revision(target: Path) -> str | None:
     )
     revision = completed.stdout.strip()
     return revision if completed.returncode == 0 and revision else None
+
+
+def _checkout_ref_mismatch(target: Path, revision: str) -> str | None:
+    """Describe an existing checkout that is not on the branch or tag a Recipe names.
+
+    Only full commit SHAs are enforced; for a branch or tag name the existing
+    checkout is reused, so report when it sits somewhere else instead of
+    silently accepting it. Returns None when the checkout matches or when git
+    cannot tell.
+    """
+    head = _checkout_revision(target)
+    if head is None:
+        return None
+    branch = subprocess.run(
+        ["git", "-C", str(target), "symbolic-ref", "--quiet", "--short", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.strip()
+    if branch == revision:
+        return None
+    named = subprocess.run(
+        ["git", "-C", str(target), "rev-parse", "--verify", "--quiet", f"{revision}^{{commit}}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.strip()
+    if named and named.lower() == head.lower():
+        return None
+    location = f"branch {branch}" if branch else "a detached HEAD"
+    return f"checkout is on {location} ({head[:12]}), not the requested {revision}"
 
 
 def _git_worktree_is_dirty(target: Path) -> bool:
@@ -851,6 +888,15 @@ def _resolve_source_requirement(
             ),
         },
     }
+    if (
+        action == "reuse"
+        and source_type == "git"
+        and revision is not None
+        and not GIT_FULL_SHA1_PATTERN.fullmatch(revision)
+    ):
+        warning = _checkout_ref_mismatch(target, revision)
+        if warning is not None:
+            result["warning"] = warning
     if action == "reuse":
         missing = _missing_source_artifacts(result)
         if missing:
@@ -1039,6 +1085,8 @@ def print_recipe_plan(plan: dict) -> None:
                 f"  - reuse {label}: {source['target']} "
                 f"(requested={requested}, resolved={resolved})"
             )
+            if source.get("warning"):
+                print(f"    WARNING: {source['warning']}")
         else:
             print(
                 f"  - {source['action']} for {label}: {source['target']} "
