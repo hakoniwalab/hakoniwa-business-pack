@@ -1,5 +1,5 @@
 id: hakoniwa-robot-arm
-name: Hakoniwa Robot Arm (public integration)
+name: Hakoniwa Robot Arm
 repository:
   owner: teras-project
   name: hakoniwa-robot-arm
@@ -10,7 +10,7 @@ distribution:
   notes:
     - Repository-owned code, configuration, tools and documentation use Apache-2.0.
     - Third-party robot models and dependencies retain their own licenses; consult docs/license before redistribution.
-    - This is a separate repository from hakoniwalab/hakoniwa-robot-arm-pack; its private/commercial metadata must not be overwritten.
+    - The robot arms (Nova5, FR5, SO-101) are offered here; Hakoniwa Lab's private hakoniwa-robot-arm-pack no longer offers them.
 verification:
   verified_at: 2026-11-02
   source_revision: 301c22cd3b9b8d0111a039c309ee53a6428665a2
@@ -42,7 +42,7 @@ capabilities:
         path: docs/procedures/host-docker/operation.md
         revision: 301c22cd3b9b8d0111a039c309ee53a6428665a2
 limitations:
-  - Runtime verification remains specific to robot, OS, ROS distribution and execution mode; do not transfer the private pack's verification claims to this public repository.
+  - Runtime verification remains specific to robot, OS, ROS distribution and execution mode; read it from this repository's README and Recipes.
   - Business Pack provides discovery metadata, not a second implementation of the robot-specific runner.
   - Foundation CPython 3.12 and the ROS system-Python workspace are separate environments.
   - Simulation results do not establish physical fidelity, safety or permission to actuate hardware.

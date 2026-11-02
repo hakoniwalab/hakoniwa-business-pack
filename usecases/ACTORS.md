@@ -200,7 +200,7 @@ Usecase uses them.
   - separate technical feasibility from physical-system approval;
   - make commercial/private access and model-fidelity decisions explicit.
 - Evidence clusters:
-  - the `hakoniwa-robot-arm-pack` reference integration
+  - the public `hakoniwa-robot-arm` reference integration (Nova5; FR5 and SO-101 in progress)
   - Shadow Hand model/control and Foxglove visualization Recipes as narrower public
     evidence for command/state composition
 - Existing Usecase coverage: `industrial-robot-arm-preintegration`

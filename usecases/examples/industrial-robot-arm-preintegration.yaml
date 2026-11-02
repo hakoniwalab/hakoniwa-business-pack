@@ -1,6 +1,6 @@
 id: industrial-robot-arm-preintegration
 title: 産業用ロボットアーム導入前の指令・状態統合検証
-usecase_version: 0.3
+usecase_version: 0.4
 
 audience:
   primary:
@@ -8,7 +8,7 @@ audience:
     - robot-system-integrator
     - robot-control-developer
   notes:
-    - Current verified reference models include FAIRINO FR5, DOBOT Nova5, and SO-101 follower with different verification coverage per ROS 2 distribution.
+    - The public reference (teras-project/hakoniwa-robot-arm) verifies DOBOT Nova5; FAIRINO FR5 and SO-101 follower are published with verification in progress.
 
 situation: >
   A team is considering or integrating an articulated robot arm and wants to examine
@@ -30,9 +30,8 @@ status:
   validation: partially_verified
   confidence: high
   rationale:
-    - FR5, Nova5, and SO-101 are recorded as verified for MuJoCo Viewer and headless runtime execution.
-    - Nova5 is recorded as ROS 2 E2E verified on Humble and Jazzy; SO-101 is recorded as verified on Jazzy.
-    - FR5 ROS 2 Docker E2E is not currently recorded as verified and should not be inferred from configuration availability.
+    - The public repository records Nova5 as verified on macOS host+Docker with ROS 2 Jazzy and on Ubuntu 24.04 native host-ros2.
+    - FR5 and SO-101 are published there with verification still in progress; it should not be inferred from configuration availability.
     - JointTrajectory command handling and JointState output are supported by the common arm runtime and bridge architecture.
 
 realized_by:
@@ -41,9 +40,7 @@ realized_by:
 
 supported_by:
   - component_id: hakoniwa-robot-arm
-    role: Provide a separate public Nova5 composition and environment-specific procedures without requiring access to the private pack.
-  - component_id: hakoniwa-robot-arm-pack
-    role: Provide robot-specific models and manifests, the common arm runtime, per-model Recipes, and the verified integration paths.
+    role: Provide the public robot-specific models and manifests (Nova5, FR5, SO-101), the common arm runtime, per-model Recipes and environment-specific procedures.
   - component_id: hakoniwa-mujoco-robots
     role: Provide the public MuJoCo and Hakoniwa robot simulation runtime.
   - component_id: hakoniwa-mbody-registry
@@ -59,29 +56,27 @@ supported_by:
 
 communication_notes:
   safe_statements:
-    - FR5, Nova5, and SO-101 have verified MuJoCo simulation paths.
-    - Nova5 has verified ROS 2 Humble and Jazzy E2E paths; SO-101 has a verified Jazzy E2E path.
+    - Nova5 has verified simulation and ROS 2 paths on macOS host+Docker (Jazzy) and Ubuntu 24.04 native.
+    - FR5 and SO-101 models and configuration are published; their verification is in progress.
     - The integration path accepts JointTrajectory-compatible commands and publishes JointState-compatible data.
     - Additional robot models can be onboarded but require robot-specific model and validation work.
   avoid_statements:
     - Every industrial robot arm is supported without robot-specific work.
     - Every provided ROS 2 profile is E2E verified for every robot.
     - MoveIt integration is verified unless a separate end-to-end verification is added.
-    - Windows or native Ubuntu execution is verified based only on the presence of configuration or source code.
+    - Windows execution, or any robot other than Nova5, is verified based only on the presence of configuration or source code.
     - Simulation results prove physical performance or safety.
 
 limitations:
-  - Access approval is required for the private hakoniwa-robot-arm-pack assets, not for cloning the separate public teras-project/hakoniwa-robot-arm repository.
   - Verification coverage differs by robot, ROS 2 distribution, execution mode, and host platform.
   - Model fidelity, actuator behavior, collision parameters, payloads, and acceptance criteria require human review.
-  - The private pack's host coverage remains as recorded in its Catalog. The public Nova5 reference separately cites macOS host+Docker and Ubuntu 24.04 native host-ros2 evidence; coverage must not be transferred between repositories.
+  - The public Nova5 reference cites macOS host+Docker and Ubuntu 24.04 native host-ros2 evidence; other robots and host combinations require their own verification.
   - Simulation output must not be connected to physical hardware without an explicit approval and safety gate.
   - The public reference Recipe links externally owned setup/build/operation procedures; Business Pack does not provide a complete executable Nova5 runner.
 
 next_steps:
-  - Keep the public reference and private pack metadata distinct as their implementations and verification coverage evolve.
-  - Complete ROS 2 E2E verification for FR5 and remaining model/distribution combinations where needed.
-  - Verify additional host environments separately from the current macOS arm64 Docker path.
+  - Complete FR5 and SO-101 verification in the public repository and record it there.
+  - Verify additional host environments (Windows) separately from the recorded macOS and Ubuntu paths.
   - Define repeatable model-fidelity and actuator-validation criteria for additional robot arms.
 
 tags:

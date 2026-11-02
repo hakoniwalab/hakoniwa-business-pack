@@ -758,19 +758,18 @@ components:
   - control-plane
   catalog_path: components/hakoniwa-pdu-rpc.yaml
 - id: hakoniwa-robot-arm-pack
-  name: Hakoniwa Robot Arm Pack
+  name: Hakoniwa Robot Arm Pack (construction machine)
   category: physics-environment
   secondary_categories:
-  - robot-arm
   - simulator
+  - environment-model
   - integration
   - commercial
   maturity: active
   distribution: commercial
-  summary: Manifest- and Recipe-driven Hakoniwa/MuJoCo integration pack for articulated
-    robots and construction machines. FR5, Nova5, and SO-101 share a common arm runtime,
-    while MathScavator9000 combines a dedicated articulated-arm and mobile-base runtime
-    with manual and automatic control paths.
+  summary: MathScavator9000 excavator for Hakoniwa/MuJoCo, a dedicated articulated-arm
+    and mobile-base runtime with manual and automatic control paths and digging-worksite
+    assets. Robot arms are served by the public hakoniwa-robot-arm.
   recipe_roles:
   - physics_runtime
   - simulation_core
@@ -786,8 +785,6 @@ components:
   - hakoniwa-pdu-ros
   tags:
   - hakoniwa
-  - robot-arm
-  - industrial-robot
   - construction-machine
   - excavator
   - mujoco
@@ -802,7 +799,7 @@ components:
   - simulation
   catalog_path: components/hakoniwa-robot-arm-pack.yaml
 - id: hakoniwa-robot-arm
-  name: Hakoniwa Robot Arm (public integration)
+  name: Hakoniwa Robot Arm
   category: physics-environment
   secondary_categories:
   - robot-arm
