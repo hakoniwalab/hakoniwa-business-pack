@@ -12,6 +12,11 @@ import unittest
 from pathlib import Path, PureWindowsPath
 from unittest import mock
 
+sys.path.append(str(Path(__file__).resolve().parent))
+from workspace_test_isolation import isolate_from_active_workspace  # noqa: E402
+
+isolate_from_active_workspace()
+
 FOUNDATION_SCRIPT = Path(__file__).with_name("foundation.py")
 SPEC = importlib.util.spec_from_file_location("business_pack_foundation", FOUNDATION_SCRIPT)
 assert SPEC is not None and SPEC.loader is not None

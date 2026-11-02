@@ -3,11 +3,17 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
+
+sys.path.append(str(Path(__file__).resolve().parent))
+from workspace_test_isolation import isolate_from_active_workspace  # noqa: E402
+
+isolate_from_active_workspace()
 
 SCRIPT = Path(__file__).with_name("recipe.py")
 SPEC = importlib.util.spec_from_file_location("business_pack_recipe_guide", SCRIPT)
@@ -87,6 +93,7 @@ class RecipeGuideTest(unittest.TestCase):
             "test_workspace_guard.py",
             "workspace.py",
             "workspace_guard.py",
+            "workspace_test_isolation.py",
             "workdir.py",
         }
         tools_dir = self.business_pack_root / "tools"
