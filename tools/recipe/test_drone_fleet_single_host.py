@@ -1064,6 +1064,50 @@ profiles:
             self.assertEqual(mode, "verified-cache")
             urlopen.assert_not_called()
 
+    def test_download_retries_a_gateway_timeout(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary).resolve() / "archive.zip"
+            response = mock.MagicMock()
+            response.__enter__.return_value.read.side_effect = [b"payload", b""]
+            timeout = recipe.urllib.error.HTTPError(
+                "https://example.invalid/archive.zip", 504, "Gateway Timeout", None, None
+            )
+            with mock.patch.object(
+                recipe.urllib.request, "urlopen", side_effect=[timeout, response]
+            ) as urlopen, mock.patch.object(recipe.time, "sleep") as sleep:
+                recipe._download("https://example.invalid/archive.zip", destination)
+            self.assertEqual(urlopen.call_count, 2)
+            sleep.assert_called_once_with(recipe.DOWNLOAD_RETRY_DELAYS_SEC[0])
+            self.assertEqual(destination.read_bytes(), b"payload")
+
+    def test_download_does_not_retry_a_missing_asset(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary).resolve() / "archive.zip"
+            missing = recipe.urllib.error.HTTPError(
+                "https://example.invalid/archive.zip", 404, "Not Found", None, None
+            )
+            with mock.patch.object(
+                recipe.urllib.request, "urlopen", side_effect=missing
+            ) as urlopen, mock.patch.object(recipe.time, "sleep") as sleep:
+                with self.assertRaises(recipe.urllib.error.HTTPError):
+                    recipe._download("https://example.invalid/archive.zip", destination)
+            self.assertEqual(urlopen.call_count, 1)
+            sleep.assert_not_called()
+            self.assertFalse(destination.exists())
+
+    def test_download_gives_up_after_the_retries(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary).resolve() / "archive.zip"
+            unavailable = recipe.urllib.error.HTTPError(
+                "https://example.invalid/archive.zip", 503, "Service Unavailable", None, None
+            )
+            with mock.patch.object(
+                recipe.urllib.request, "urlopen", side_effect=unavailable
+            ) as urlopen, mock.patch.object(recipe.time, "sleep"):
+                with self.assertRaises(recipe.urllib.error.HTTPError):
+                    recipe._download("https://example.invalid/archive.zip", destination)
+            self.assertEqual(urlopen.call_count, len(recipe.DOWNLOAD_RETRY_DELAYS_SEC) + 1)
+
     def test_windows_mujoco_asset_is_supported(self) -> None:
         self.assertEqual(
             recipe._mujoco_asset("3.13.0", "Windows", "AMD64"),

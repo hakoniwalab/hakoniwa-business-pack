@@ -213,18 +213,36 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+# GitHub release downloads fail now and then with a gateway error (502, 503,
+# 504) or a dropped connection; these are retried, other errors are not.
+DOWNLOAD_RETRY_DELAYS_SEC = (5.0, 15.0, 30.0)
+_TRANSIENT_HTTP_CODES = {429, 500, 502, 503, 504}
+
+
+def _transient_download_error(exc: BaseException) -> bool:
+    if isinstance(exc, urllib.error.HTTPError):
+        return exc.code in _TRANSIENT_HTTP_CODES
+    return isinstance(exc, (urllib.error.URLError, ConnectionError, TimeoutError))
+
+
 def _download(url: str, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + ".tmp")
-    try:
-        with urllib.request.urlopen(url) as response:
-            with temporary.open("wb") as output:
-                while chunk := response.read(1024 * 1024):
-                    output.write(chunk)
-        temporary.replace(destination)
-    except Exception:
-        temporary.unlink(missing_ok=True)
-        raise
+    for attempt in range(len(DOWNLOAD_RETRY_DELAYS_SEC) + 1):
+        try:
+            with urllib.request.urlopen(url) as response:
+                with temporary.open("wb") as output:
+                    while chunk := response.read(1024 * 1024):
+                        output.write(chunk)
+            temporary.replace(destination)
+            return
+        except Exception as exc:
+            temporary.unlink(missing_ok=True)
+            if attempt == len(DOWNLOAD_RETRY_DELAYS_SEC) or not _transient_download_error(exc):
+                raise
+            delay = DOWNLOAD_RETRY_DELAYS_SEC[attempt]
+            print(f"Download failed ({exc}); retrying in {delay:.0f} s: {url}")
+            time.sleep(delay)
 
 
 def _verified_download(url: str, destination: Path, expected_sha256: str) -> str:
