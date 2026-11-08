@@ -1,0 +1,245 @@
+id: athrill-studio
+name: Athrill Studio
+repository:
+  owner: hakoniwalab
+  name: athrill-studio
+  url: https://github.com/hakoniwalab/athrill-studio
+  visibility: public
+distribution:
+  channel: oss
+  notes:
+    - Distributed under the MIT License declared by the repository.
+verification:
+  verified_at: 2026-11-08
+  source_revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+  source_ref: feat/console-and-devicetree
+summary: Early browser front end for Athrill that launches supported firmware, streams the emulator console, and visualizes Devicetree topology and constructed models.
+category:
+  primary: visualization
+  secondary:
+    - browser
+    - monitoring
+    - control-plane
+    - integration
+
+status:
+  maturity: experimental
+  catalog_confidence: medium
+  notes:
+    - The first milestone is implemented on branch feat/console-and-devicetree and represented by pull request 1.
+    - Broader device activity, console input, and Hakoniwa integration described as direction are not cataloged as current capabilities.
+
+capabilities:
+  - name: Browser firmware launcher
+    description: Uses an aiohttp backend to list boards, start and stop one Athrill firmware run, and report run state while leaving athrill3 unchanged.
+    evidence:
+      - repository: hakoniwalab/athrill-studio
+        path: studio/server.py
+        revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+  - name: REST and WebSocket observation API
+    description: Exposes REST endpoints for boards, Devicetree, run, and stop operations plus WebSocket console, athrill, model, and state messages.
+    evidence:
+      - repository: hakoniwalab/athrill-studio
+        path: studio/server.py
+        revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+  - name: Browser firmware console
+    description: Renders live firmware console output through xterm.js, including in-place redraws from the Zephyr philosophers sample.
+    evidence:
+      - repository: hakoniwalab/athrill-studio
+        path: README.md
+        revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+  - name: Devicetree graph
+    description: Reads DTBs without an external parsing dependency and visualizes enabled compatible nodes and their bus, interrupt, DMA, clock, reset, GPIO, and pin-control references with Cytoscape.js.
+    evidence:
+      - repository: hakoniwalab/athrill-studio
+        path: studio/dtb.py
+        revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+      - repository: hakoniwalab/athrill-studio
+        path: README.md
+        revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+  - name: Nucleo Zephyr launch matrix
+    description: Runs Zephyr hello_world, synchronization, and philosophers on NUCLEO-F767ZI and NUCLEO-H743ZI; lists Pixhawk 4 and Pixhawk 6C for Devicetree viewing only.
+    evidence:
+      - repository: hakoniwalab/athrill-studio
+        path: boards.yaml
+        revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+  - name: Release acquisition and end-to-end smoke
+    description: Fetches and verifies Athrill STM32 v0.3.0 host and Zephyr release archives plus the pinned athrill-device DTBs, then checks Devicetree, console, model, and exit behavior through the browser APIs.
+    evidence:
+      - repository: hakoniwalab/athrill-studio
+        path: tools/fetch.sh
+        revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+      - repository: hakoniwalab/athrill-studio
+        path: tests/smoke.py
+        revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+
+limitations:
+  - Early development; only the first console-and-Devicetree milestone is treated as implemented.
+  - The server is local and allows one firmware run at a time.
+  - The browser console displays firmware output but does not send console input.
+  - Only the two Nucleo boards launch firmware; Pixhawk 4 and Pixhawk 6C are Devicetree-view-only.
+  - Studio does not synchronize the free-running Athrill virtual time with Hakoniwa in this path.
+
+interfaces:
+  inputs:
+    - name: Board and firmware catalog
+      kind: config
+      description: boards.yaml maps board DTBs, Athrill executables, firmware ELFs, memory, and virtual-time limits.
+    - name: Athrill console and model output
+      kind: log
+      description: stdout and stderr from the unchanged athrill3 process.
+    - name: Board Devicetree blob
+      kind: file
+      description: DTB parsed by studio/dtb.py for the browser graph.
+  outputs:
+    - name: Board REST API
+      kind: api
+      description: GET /api/boards and GET /api/boards/{id}/devicetree.
+    - name: Run control REST API
+      kind: api
+      description: POST /api/run and POST /api/stop for one Athrill process.
+    - name: Observation WebSocket
+      kind: protocol
+      description: /ws JSON messages of type console, athrill, model, and state.
+    - name: Browser application
+      kind: api
+      description: Local xterm.js console and Cytoscape.js Devicetree graph at the Studio HTTP endpoint.
+  protocols:
+    - name: HTTP REST
+      role: server
+      notes: aiohttp serves the local board, Devicetree, and run-control API.
+    - name: WebSocket JSON
+      role: server
+      notes: Streams console, emulator, constructed-model, and state messages.
+  configuration:
+    - path: boards.yaml
+      description: Defines available boards, firmware, memory maps, and virtual-second limits.
+
+dependencies:
+  required:
+    - name: Python aiohttp
+      type: package
+      notes: Provides the HTTP and WebSocket backend.
+    - name: PyYAML
+      type: package
+      notes: Loads boards.yaml.
+    - name: Athrill STM32 v0.3.0 release
+      type: runtime
+      notes: Supplies athrill3 and the Zephyr sample ELFs fetched by tools/fetch.sh.
+    - name: athrill-device
+      type: repository
+      notes: Supplies the pinned board DTBs visualized and used for firmware execution.
+  optional:
+    - name: Browser automation
+      type: tool
+      notes: May replace the human browser check when it verifies console and graph behavior explicitly.
+
+platforms:
+  supported:
+    - macOS arm64
+    - Linux x86_64
+  notes:
+    - The fetch script supports both platforms; the first milestone was verified on macOS arm64 on 2026-11-08 and Linux remains not tested.
+
+connects_to:
+  - component_id: athrill-target-stm32
+    direction: uses
+    interface: athrill3 command / console and DEVICE_MODEL output
+    notes: Studio launches the unchanged emulator from the v0.3.0 release and only reads its output.
+  - component_id: hakoniwalab-athrill-device
+    direction: uses
+    interface: board DTB files
+    notes: Studio parses and displays the same board description that Athrill uses to construct models.
+
+recipe_roles:
+  - role: visualizer
+    description: Presents the live firmware console and Devicetree graph in a browser.
+  - role: monitor
+    description: Separates firmware console, Athrill log, constructed models, and process state.
+  - role: control_plane
+    description: Selects a supported board and firmware and starts or stops one local Athrill run.
+  - role: integration_boundary
+    description: Connects browser observation and run control to the unchanged Athrill process and DTB artifacts.
+
+typical_usecases:
+  - Run a supported Zephyr sample on an emulated Nucleo board from a local browser.
+  - Observe firmware console output and the board's Devicetree structure without physical hardware.
+  - Compare Devicetree nodes with the models Athrill actually constructed for the last run.
+
+anti_usecases:
+  - Remote, authenticated, multi-user, or production firmware execution.
+  - Interactive console input, high-rate device activity visualization, or Hakoniwa-synchronized execution.
+  - Launching PX4 or ArduPilot firmware from the current Studio milestone.
+
+demo_candidates:
+  - name: NUCLEO-F767ZI Zephyr browser observation
+    description: Fetch release artifacts, pass the Studio smoke test, then run Zephyr philosophers and inspect its console and Devicetree graph in a local browser.
+    required_components:
+      - athrill-studio
+      - athrill-target-stm32
+      - hakoniwalab-athrill-device
+    source_examples:
+      - repository: hakoniwalab/athrill-studio
+        path: README.md
+        revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+
+operations:
+  configure:
+    commands:
+      - tools/fetch.sh
+      - python3 -m pip install aiohttp pyyaml
+    notes:
+      - Downloads are checked against the Athrill STM32 release SHA256SUMS.
+  test:
+    commands:
+      - python3 tests/smoke.py
+    notes:
+      - Exercises Devicetree, run, WebSocket console, model messages, and process exit.
+  run:
+    commands:
+      - python3 -m studio.server
+    notes:
+      - Open http://127.0.0.1:8765/ in a browser and select a supported Nucleo firmware.
+
+known_gaps:
+  - Browser console input is not implemented.
+  - Linux x86_64 has not been runtime-validated for the Studio milestone.
+  - PX4 and ArduPilot are not launchable from Studio even though their Pixhawk Devicetrees can be viewed.
+  - No Hakoniwa time synchronization is present in the current Studio execution path.
+
+source_refs:
+  - repository: hakoniwalab/athrill-studio
+    path: README.md
+    revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+    description: Architecture, implemented first milestone, supported boards and firmware, and early-development boundary.
+  - repository: hakoniwalab/athrill-studio
+    path: studio/server.py
+    revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+    description: aiohttp REST/WebSocket API, one-run process ownership, and Athrill output classification.
+  - repository: hakoniwalab/athrill-studio
+    path: studio/dtb.py
+    revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+    description: Dependency-free DTB parsing and graph reference extraction.
+  - repository: hakoniwalab/athrill-studio
+    path: boards.yaml
+    revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+    description: Nucleo firmware matrix, Pixhawk view-only entries, and per-firmware virtual-time limits.
+  - repository: hakoniwalab/athrill-studio
+    path: tools/fetch.sh
+    revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+    description: Verified release and board-DTB acquisition for macOS arm64 and Linux x86_64.
+  - repository: hakoniwalab/athrill-studio
+    path: tests/smoke.py
+    revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+    description: End-to-end API, console, model, and exit smoke test.
+
+tags:
+  - athrill
+  - browser
+  - firmware
+  - devicetree
+  - console
+  - xtermjs
+  - cytoscapejs
+  - zephyr
+  - nucleo

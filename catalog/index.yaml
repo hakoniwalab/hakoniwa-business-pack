@@ -29,6 +29,69 @@ components:
   - core-pro
   - msvc
   catalog_path: components/athrill-device.yaml
+- id: athrill-studio
+  name: Athrill Studio
+  category: visualization
+  secondary_categories:
+  - browser
+  - monitoring
+  - control-plane
+  - integration
+  maturity: experimental
+  distribution: oss
+  summary: Early browser front end for Athrill that launches supported firmware, streams
+    the emulator console, and visualizes Devicetree topology and constructed models.
+  recipe_roles:
+  - visualizer
+  - monitor
+  - control_plane
+  - integration_boundary
+  connects_to:
+  - athrill-target-stm32
+  - hakoniwalab-athrill-device
+  tags:
+  - athrill
+  - browser
+  - firmware
+  - devicetree
+  - console
+  - xtermjs
+  - cytoscapejs
+  - zephyr
+  - nucleo
+  catalog_path: components/athrill-studio.yaml
+- id: athrill-target-stm32
+  name: Athrill STM32 Target
+  category: simulation-core
+  secondary_categories:
+  - simulator
+  - integration
+  - time-sync
+  maturity: active
+  distribution: oss
+  summary: Armv7-M Cortex-M7 target of Athrill that runs unmodified STM32F7/H7 firmware
+    on Devicetree-defined boards, with debugger and Hakoniwa integration paths.
+  recipe_roles:
+  - simulation_core
+  - integration_boundary
+  - time_sync
+  connects_to:
+  - hakoniwalab-athrill-device
+  - athrill-studio
+  - hakoniwa-drone-core
+  tags:
+  - athrill
+  - stm32
+  - armv7-m
+  - cortex-m7
+  - firmware
+  - px4
+  - ardupilot
+  - zephyr
+  - devicetree
+  - gdb
+  - lldb
+  catalog_path: components/athrill-target-stm32.yaml
 - id: athrill-target-v850e2m
   name: Athrill V850E2M Target
   category: simulation-core
@@ -1034,6 +1097,22 @@ components:
   - pdu
   - monitoring
   catalog_path: components/hakoniwa-zenoh-topology-viewer.yaml
+- id: hakoniwalab-athrill-device
+  name: Athrill Devicetree Device Framework
+  category: simulation-core
+  secondary_categories:
+  - integration
+  maturity: active
+  distribution: oss
+  summary: Devicetree-defined Athrill boards and device models (Pixhawk 4, Pixhawk
+    6C, NUCLEO-F767ZI, NUCLEO-H743ZI, Erbium) and the Hakoniwa sensor device, used
+    by the Athrill STM32 and RISC-V targets.
+  recipe_roles:
+  - data_model
+  connects_to:
+  - athrill-target-stm32
+  tags: []
+  catalog_path: components/hakoniwalab-athrill-device.yaml
 - id: tobas
   name: Tobas
   category: tool

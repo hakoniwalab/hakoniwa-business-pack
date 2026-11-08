@@ -1,0 +1,351 @@
+id: athrill-studio-zephyr-console
+title: Athrill Studio Zephyr Console and Devicetree
+recipe_version: 0.1
+
+goal:
+  user_request: Open a browser, run Zephyr on an emulated NUCLEO-F767ZI, and see both its console and the board's Devicetree graph.
+  description: >
+    Fetch the Athrill STM32 v0.3.0 release through Athrill Studio, verify the
+    local API and firmware path, then run Zephyr philosophers on the emulated
+    NUCLEO-F767ZI. Observe its live console and inspect the board's Devicetree
+    graph together with the models Athrill actually constructed.
+
+feasibility:
+  status: feasible
+  confidence: medium
+  rationale:
+    - Athrill STM32 v0.3.0 publishes a macOS arm64 emulator and Zephyr sample ELFs for the two supported Nucleo boards.
+    - athrill-device supplies the NUCLEO-F767ZI Devicetree used by both the firmware target and the emulator board.
+    - Athrill Studio launches athrill3 unchanged, streams its output, and displays the same DTB as a browser graph.
+    - The complete path is verified only on local macOS arm64; Linux x86_64 remains not tested.
+
+validation:
+  status: verified
+  verified_at: 2026-11-08
+  summary: >
+    On macOS arm64, tools/fetch.sh acquired and verified the Athrill STM32
+    v0.3.0 emulator and Zephyr samples, tests/smoke.py passed the API,
+    Devicetree, console, model, and exit checks, and a local browser check
+    confirmed the Zephyr philosophers console and NUCLEO-F767ZI Devicetree
+    graph. Linux x86_64 was not tested.
+  steps:
+    - id: macos_release_fetch
+      status: verified
+      evidence:
+        - repository: hakoniwalab/athrill-studio
+          path: tools/fetch.sh
+          revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+    - id: macos_smoke
+      status: verified
+      evidence:
+        - repository: hakoniwalab/athrill-studio
+          path: tests/smoke.py
+          revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+    - id: macos_browser_check
+      status: verified
+      evidence:
+        - repository: hakoniwalab/athrill-studio
+          path: README.md
+          revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+      notes:
+        - The browser showed the live philosophers console and the Devicetree graph with modelled nodes.
+        - Clicking serial@40004800 showed stm32-uart, its interrupt reference to NVIC, and its clock and reset references to RCC.
+    - id: linux_x86_64
+      status: not_tested
+      evidence: []
+
+constraints:
+  - local-browser-only
+  - macos-arm64-verified
+  - linux-x86_64-not-tested
+  - one-firmware-run-at-a-time
+  - output-only-browser-console
+  - nucleo-f767zi-and-nucleo-h743zi-firmware-only
+  - no-hakoniwa-runtime
+  - no-hakoniwa-time-synchronization
+  - no-docker
+  - no-shared-memory
+
+target_environment:
+  required_for: local-browser-demo
+  status: specified
+  os: macOS | Linux
+  os_version: macOS 14+ | current Linux x86_64
+  architecture: arm64 | x86_64
+  execution_mode: native
+  runtimes:
+    - name: Python
+      required: true
+      version: "3"
+      path: host
+    - name: aiohttp
+      required: true
+      version: current-compatible
+      path: host-python
+    - name: PyYAML
+      required: true
+      version: current-compatible
+      path: host-python
+    - name: Browser
+      required: true
+      version: current
+      path: host
+    - name: curl
+      required: true
+      version: current
+      path: host
+    - name: git
+      required: true
+      version: current
+      path: host
+    - name: tar
+      required: true
+      version: current
+      path: host
+  notes:
+    - macOS arm64 is verified; Linux x86_64 is supported by the fetch script but not tested by this Recipe.
+
+execution_environment:
+  required_for: local-browser-demo
+  status: specified
+  os: macOS | Linux
+  os_version: macOS 14+ | current Linux x86_64
+  architecture: arm64 | x86_64
+  execution_mode: native
+  gui:
+    required: true
+    status: local-browser
+  shared_memory:
+    required: false
+    access: not-used
+  hakoniwa:
+    install_prefix: not-used
+    hako_cmd_access: not-required
+  long_running_processes:
+    - name: Athrill Studio aiohttp server
+      owner: operator-terminal
+      endpoint: http://127.0.0.1:8765/
+      cleanup: Ctrl+C in the server terminal
+
+foundation_contract:
+  mode: not_required
+  reason: This Recipe runs the released Athrill emulator through Studio and does not execute Hakoniwa Core, shared memory, hako-cmd, or hakopy.
+
+recipe_local_requirements_schema_version: 1
+recipe_local_requirements:
+  athrill-studio:
+    root:
+      default_path: ../athrill-studio
+      override_env: ATHRILL_STUDIO_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/athrill-studio.git
+      revision: main
+    required_artifacts:
+      - path: tools/fetch.sh
+        kind: executable
+      - path: studio/server.py
+        kind: file
+      - path: boards.yaml
+        kind: file
+
+agency_boundary:
+  agent_actions:
+    - id: prepare_and_smoke
+      description: Fetch the declared release artifacts, install the two Python packages, and run the software-only smoke test when execution is requested.
+      autonomous: true
+      preconditions:
+        - user_requested_execution
+    - id: start_local_server
+      description: Start and stop the local Studio server and its simulation-only Athrill child process when execution is requested.
+      autonomous: true
+      preconditions:
+        - user_requested_execution
+  human_decisions: []
+  human_actions:
+    - id: inspect_browser_result
+      description: Open the local page, select Zephyr philosophers, press Run, and visually confirm the console redraw and Devicetree details; explicit browser automation may perform the same checks instead.
+      confirmation_required: true
+      required_before:
+        - visual_validation_claim
+  required_permissions: []
+
+components:
+  - id: athrill-studio
+    roles: [visualizer, monitor, control_plane, integration_boundary]
+    purpose: Serve the local UI, start and stop one Athrill run, stream console and model output, and render the Devicetree graph.
+  - id: athrill-target-stm32
+    roles: [simulation_core]
+    purpose: Execute the unmodified NUCLEO-F767ZI Zephyr ELF and own firmware virtual time.
+  - id: hakoniwalab-athrill-device
+    roles: [data_model]
+    purpose: Supply the NUCLEO-F767ZI Devicetree and device-model graph used by both Athrill and Studio.
+
+connections:
+  - from: athrill-studio
+    to: athrill-target-stm32
+    interface: command and process output
+    data: [athrill3 launch arguments, firmware console, Athrill log, constructed model messages, run state]
+    contract:
+      status: verified
+      requires: [athrill3 v0.3.0 host release, matching Zephyr sample ELF]
+      validation_notes:
+        - Studio launches athrill3 unchanged and classifies only the output it reads.
+        - tests/smoke.py requires console text, at least one model, and an exited state.
+  - from: athrill-target-stm32
+    to: hakoniwalab-athrill-device
+    interface: file
+    data: [NUCLEO-F767ZI Devicetree blob]
+    contract:
+      status: verified
+      requires: [athrill-device revision ff23daf380cab7b483dbf5f84f52a49d837898ea]
+      validation_notes:
+        - The emulator constructs the Nucleo board and device models from the selected DTB.
+  - from: athrill-studio
+    to: hakoniwalab-athrill-device
+    interface: file and REST JSON
+    data: [NUCLEO-F767ZI Devicetree blob, graph nodes, graph references]
+    contract:
+      status: verified
+      requires: [the same board DTB selected for Athrill execution]
+      validation_notes:
+        - Studio parses the DTB without external dependencies and exposes its graph through the Devicetree REST endpoint.
+
+data_flow:
+  - tools/fetch.sh -> verified athrill3 v0.3.0 host archive, Zephyr sample ELFs, and pinned athrill-device board DTBs
+  - Browser Run selection -> Studio POST /api/run -> athrill3 with NUCLEO-F767ZI DTB and Zephyr philosophers ELF
+  - Zephyr USART3 output -> athrill3 stdout -> Studio WebSocket console messages -> xterm.js console
+  - Athrill DEVICE_MODEL lines -> Studio WebSocket model messages -> blue modelled nodes in the Devicetree graph
+  - NUCLEO-F767ZI DTB -> dependency-free Studio parser -> REST graph nodes and references -> Cytoscape.js graph
+
+time_model:
+  mode: athrill-virtual-time-free-running
+  owner: athrill-target-stm32
+  notes:
+    - Athrill owns virtual time; Studio and the browser only observe the run.
+    - There is no Hakoniwa synchronization in this path.
+    - boards.yaml converts each firmware's virtual-second limit to Athrill clocks, and the run exits at that limit.
+
+artifact_sets:
+  runtime_artifacts:
+    status: verified
+    artifacts:
+      - ../athrill-studio/work/athrill3-stm32/athrill3
+      - ../athrill-studio/work/zephyr-stm32/philosophers-nucleo_f767zi.elf
+      - ../athrill-studio/work/athrill-device/boards/nucleo-f767zi/nucleo-f767zi.dtb
+    notes:
+      - tools/fetch.sh checks release downloads against SHA256SUMS and pins athrill-device.
+  visualization_artifacts:
+    status: verified
+    artifacts:
+      - ../athrill-studio/web
+    notes:
+      - The local browser check covered the philosophers console and Devicetree model graph on macOS arm64.
+
+artifacts:
+  - id: athrill3_stm32
+    kind: executable
+    path: ../athrill-studio/work/athrill3-stm32/athrill3
+    platforms: [macos-arm64, linux-x86_64]
+  - id: zephyr_philosophers_f767zi
+    kind: firmware-elf
+    path: ../athrill-studio/work/zephyr-stm32/philosophers-nucleo_f767zi.elf
+    platforms: [macos-arm64, linux-x86_64]
+  - id: nucleo_f767zi_dtb
+    kind: devicetree-blob
+    path: ../athrill-studio/work/athrill-device/boards/nucleo-f767zi/nucleo-f767zi.dtb
+    platforms: [macos-arm64, linux-x86_64]
+
+missing_pieces:
+  - Validate the complete Studio workflow on Linux x86_64.
+  - Add browser console input before treating the xterm.js view as interactive.
+  - Add and verify PX4 or ArduPilot launch entries before running those firmware families from Studio.
+  - Add a separate synchronized Recipe if Studio observation is combined with Hakoniwa time ownership.
+
+demo:
+  steps:
+    - id: fetch_release_artifacts
+      command: cd ../athrill-studio && tools/fetch.sh
+      expected: >
+        The checksum output includes "athrill3-v0.3.0-macos-arm64.tar.gz: OK"
+        and "zephyr-samples-v0.3.0.tar.gz: OK", followed by "ready: ...".
+    - id: install_python_packages
+      command: python3 -m pip install aiohttp pyyaml
+      expected: aiohttp and PyYAML are importable by the Python interpreter used to start Studio and its smoke test.
+    - id: run_smoke
+      command: cd ../athrill-studio && python3 tests/smoke.py
+      expected: >
+        The output includes "devicetree: STMicroelectronics STM32F767ZI-NUCLEO
+        board: 58 nodes, 45 references", "models: 54", and "PASS".
+    - id: run_browser_demo
+      command: cd ../athrill-studio && python3 -m studio.server
+      expected: >
+        The server reports http://127.0.0.1:8765/. Open it, choose "Zephyr
+        philosophers", and press Run. The console redraws six philosophers and
+        the Devicetree tab shows a graph with blue modelled nodes. Clicking
+        serial@40004800 shows model stm32-uart, interrupt -> NVIC, and clock and
+        reset -> RCC.
+  observability:
+    success_signals:
+      - The smoke test reports the expected Devicetree node and reference counts, 54 models, and PASS.
+      - The browser console redraws all six philosophers during the bounded run.
+      - The Devicetree graph marks constructed models blue and shows the expected serial@40004800 details.
+    failure_signals:
+      - tools/fetch.sh fails a release checksum or cannot prepare one of the required artifacts.
+      - tests/smoke.py reports any FAIL line or SOME CHECKS FAILED.
+      - The browser shows no console updates, no blue modelled nodes, or different serial@40004800 model references.
+    human_gate:
+      - A person or explicit browser automation must inspect the page before claiming visual validation.
+  verification_checks:
+    - Confirm the browser remains an observer and Athrill owns the bounded virtual-time run.
+    - Confirm the run reaches the exited state at its boards.yaml virtual-second limit.
+  cleanup:
+    expected_behavior:
+      - Ctrl+C stops the Studio server and its shutdown handler stops any active athrill3 child process.
+      - The firmware run normally exits by itself at the virtual-time limit declared in boards.yaml.
+    verification_checks:
+      - Confirm the Studio server no longer responds on 127.0.0.1:8765.
+      - Confirm no athrill3 child from this Studio run remains.
+    cautions:
+      - Stop only the server terminal and its known child process; do not broadly kill Python or Athrill processes.
+
+expected_result: >
+  A local browser starts Zephyr philosophers on the emulated NUCLEO-F767ZI,
+  shows its live console redraw, and displays the board's Devicetree graph with
+  the nodes Athrill actually modelled, while Athrill remains the owner of
+  firmware execution and virtual time.
+
+source_catalogs:
+  - component_id: athrill-studio
+    catalog_path: ../catalog/components/athrill-studio.yaml
+  - component_id: athrill-target-stm32
+    catalog_path: ../catalog/components/athrill-target-stm32.yaml
+  - component_id: hakoniwalab-athrill-device
+    catalog_path: ../catalog/components/hakoniwalab-athrill-device.yaml
+
+source_artifacts:
+  - repository: hakoniwalab/athrill-studio
+    path: README.md
+    revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+    description: Implemented first milestone and local browser workflow.
+  - repository: hakoniwalab/athrill-studio
+    path: studio/server.py
+    revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+    description: REST/WebSocket contract, Athrill process ownership, console classification, and cleanup.
+  - repository: hakoniwalab/athrill-studio
+    path: boards.yaml
+    revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+    description: Nucleo firmware choices and virtual-second limits.
+  - repository: hakoniwalab/athrill-studio
+    path: tests/smoke.py
+    revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+    description: Automated Devicetree, console, model, and exit check.
+  - repository: hakoniwalab/athrill-target-stm32
+    path: examples/zephyr/README.md
+    revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+    description: Unmodified Zephyr execution on the two Nucleo boards.
+  - repository: hakoniwalab/athrill-device
+    path: boards/nucleo-f767zi/README.md
+    revision: ff23daf380cab7b483dbf5f84f52a49d837898ea
+    description: NUCLEO-F767ZI Devicetree provenance and firmware coverage.
