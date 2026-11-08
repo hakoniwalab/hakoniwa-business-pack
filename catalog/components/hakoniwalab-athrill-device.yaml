@@ -1,0 +1,120 @@
+id: hakoniwalab-athrill-device
+name: Athrill Devicetree Device Framework
+repository:
+  owner: hakoniwalab
+  name: athrill-device
+  url: https://github.com/hakoniwalab/athrill-device
+  visibility: public
+distribution:
+  channel: oss
+  notes:
+    - MIT; the libfdt subset is BSD-2-Clause.
+    - Not the same repository as toppers/athrill-device (the athrill-device component, Athrill EXDEV libraries).
+verification:
+  verified_at: 2026-11-08
+  source_revision: ff23daf380cab7b483dbf5f84f52a49d837898ea
+  source_ref: main
+summary: Devicetree-defined Athrill boards and device models (Pixhawk 4, Pixhawk 6C, NUCLEO-F767ZI, NUCLEO-H743ZI, Erbium) and the Hakoniwa sensor device, used by the Athrill STM32 and RISC-V targets.
+category:
+  primary: simulation-core
+  secondary:
+    - integration
+
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - Cataloged from the repository README, board READMEs and CMake configuration at the source revision, and from the athrill-target-stm32 v0.3.0 release runs that use it.
+
+capabilities:
+  - name: Devicetree device graph and checked-in boards
+    description: Parses a board DTB and builds its device models for an Athrill target; checked-in boards are Pixhawk 4, Pixhawk 6C, NUCLEO-F767ZI, NUCLEO-H743ZI and Erbium. An enabled node without a model stops the build.
+    evidence:
+      - repository: hakoniwalab/athrill-device
+        path: README.md
+        revision: ff23daf380cab7b483dbf5f84f52a49d837898ea
+  - name: Zephyr Nucleo board descriptions
+    description: The Nucleo boards include Zephyr's own nucleo_f767zi and nucleo_h743zi board files unchanged; Zephyr's hello_world, synchronization and philosophers samples run on both.
+    evidence:
+      - repository: hakoniwalab/athrill-device
+        path: boards/nucleo-f767zi/README.md
+        revision: ff23daf380cab7b483dbf5f84f52a49d837898ea
+      - repository: hakoniwalab/athrill-device
+        path: boards/nucleo-h743zi/README.md
+        revision: ff23daf380cab7b483dbf5f84f52a49d837898ea
+  - name: Release-oriented static libyaml option
+    description: ATHRILL_DEVICE_STATIC_YAML links libyaml statically, and the bindings are found next to the executable, so a released athrill3 runs away from its source tree.
+    evidence:
+      - repository: hakoniwalab/athrill-device
+        path: CMakeLists.txt
+        revision: ff23daf380cab7b483dbf5f84f52a49d837898ea
+
+limitations:
+  - The models are functional register-level models of what the checked firmware uses, not complete peripherals.
+  - A board's unmodelled peripherals are switched off or stubbed in its Devicetree layer (for example DAC1 and the Ethernet MAC on the Nucleo boards).
+
+interfaces:
+  inputs:
+    - name: Board Devicetree blob
+      kind: file
+      description: Defines the enabled board nodes, compatible models, resources and references used to build an Athrill board.
+  outputs:
+    - name: Checked-in board Devicetrees
+      kind: file
+      description: DTBs for Pixhawk 4, Pixhawk 6C, NUCLEO-F767ZI, NUCLEO-H743ZI and Erbium.
+
+dependencies:
+  required:
+    - name: Athrill core
+      type: repository
+      notes: The targets that build the models (athrill-target-stm32, athrill-target-riscv) supply the CPU and core.
+  optional:
+    - name: Hakoniwa Drone
+      type: runtime
+      notes: Only for the Hakoniwa sensor device (link or in process).
+
+platforms:
+  supported:
+    - macOS arm64
+    - Linux x86_64
+
+connects_to:
+  - component_id: athrill-target-stm32
+    direction: used_by
+    interface: board DTB files and device models
+    notes: The STM32 target builds its boards only from these Devicetrees.
+
+recipe_roles:
+  - role: data_model
+    description: Supplies the board description and the device models built from it.
+
+typical_usecases:
+  - Describe an emulated MCU board as a Devicetree and run unmodified firmware on it.
+
+anti_usecases:
+  - Cycle-accurate or electrically accurate peripheral emulation.
+
+demo_candidates:
+  - name: Zephyr on an emulated Nucleo board
+    description: Run Zephyr's hello_world built for nucleo_f767zi on the NUCLEO-F767ZI DTB with the Athrill STM32 target.
+    required_components:
+      - athrill-target-stm32
+      - hakoniwalab-athrill-device
+    source_examples:
+      - repository: hakoniwalab/athrill-device
+        path: boards/nucleo-f767zi/README.md
+        revision: ff23daf380cab7b483dbf5f84f52a49d837898ea
+
+source_refs:
+  - repository: hakoniwalab/athrill-device
+    path: README.md
+    revision: ff23daf380cab7b483dbf5f84f52a49d837898ea
+    description: Framework scope, the checked-in boards and the build.
+  - repository: hakoniwalab/athrill-device
+    path: boards/nucleo-f767zi/README.md
+    revision: ff23daf380cab7b483dbf5f84f52a49d837898ea
+    description: The Nucleo board layer over Zephyr's board file, what is not modelled, and how the DTB is built.
+  - repository: hakoniwalab/athrill-device
+    path: src/bindings.c
+    revision: ff23daf380cab7b483dbf5f84f52a49d837898ea
+    description: Where a released athrill3 finds the bindings.

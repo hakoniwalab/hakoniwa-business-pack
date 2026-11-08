@@ -1,0 +1,86 @@
+id: firmware-execution-browser-observation
+title: 実機なしのマイコンファーム実行とブラウザ観察
+usecase_version: 0.1
+
+audience:
+  primary:
+    - embedded-firmware-developer
+    - development-team
+  notes:
+    - The audience includes firmware educators who need an observable software-only reference path.
+    - The verified reference is local macOS execution, not a remote or multi-user service.
+
+situation: >
+  An embedded-firmware developer or educator wants to run real, unmodified MCU
+  firmware such as Zephyr, PX4, or ArduPilot without the physical board, observe
+  its console, and understand the emulated board's hardware composition in a
+  browser.
+
+problem: >
+  Observing firmware execution normally requires a real board, serial console,
+  and debugger. The board composition is usually expressed as Devicetree text,
+  which makes the enabled peripherals, references, and actually constructed
+  emulator models difficult to inspect together.
+
+desired_outcome: >
+  Start firmware on an emulated board from a browser, watch its console live,
+  and inspect the board's Devicetree as a graph that distinguishes the hardware
+  models the emulator actually built.
+
+status:
+  feasibility: feasible
+  validation: verified
+  confidence: medium
+  rationale:
+    - Athrill STM32 runs unmodified Zephyr, PX4, and ArduPilot firmware on Devicetree-defined boards.
+    - Athrill Studio provides a verified local path for starting Zephyr on two emulated Nucleo boards and observing its console and Devicetree graph.
+    - Validation covers one local macOS arm64 reference and does not establish Linux, remote, concurrent, or interactive-console behavior.
+
+realized_by:
+  - recipe_id: athrill-studio-zephyr-console
+    relationship: reference_implementation
+    validation_scope: >
+      On macOS arm64, Athrill Studio runs Zephyr philosophers on an emulated
+      NUCLEO-F767ZI, streams the console to a local browser, and shows the
+      Devicetree graph with the models Athrill built.
+
+supported_by:
+  - component_id: athrill-target-stm32
+    role: Run unmodified Armv7-M firmware and build the emulated board from an athrill-device Devicetree.
+  - component_id: hakoniwalab-athrill-device
+    role: Supply the NUCLEO-F767ZI and NUCLEO-H743ZI Devicetree board descriptions and device models.
+  - component_id: athrill-studio
+    role: Launch Athrill from a local browser and present its live console and Devicetree model graph.
+
+communication_notes:
+  safe_statements:
+    - A verified local macOS reference runs unmodified Zephyr firmware without a physical Nucleo board and shows its console and Devicetree graph in a browser.
+    - Athrill owns virtual time and firmware execution; the browser observes the emulator through Studio.
+    - This is a sibling of browser-based-simulation-visualization with different time ownership: native Hakoniwa processes own time there, while Athrill owns virtual time here.
+  avoid_statements:
+    - Studio currently provides remote, multi-user, or production-ready firmware execution.
+    - The browser executes the firmware or owns authoritative virtual time.
+    - PX4 or ArduPilot can currently be launched from Studio merely because their boards can be viewed.
+    - The browser console currently accepts firmware input.
+
+limitations:
+  - Browser access and validation are local only.
+  - Studio permits one firmware run at a time.
+  - The browser console displays output but does not accept input yet.
+  - Only NUCLEO-F767ZI and NUCLEO-H743ZI run firmware in Studio today; Pixhawk 4 and Pixhawk 6C are Devicetree-view-only.
+  - This execution path has no Hakoniwa time synchronization; Athrill virtual time runs freely.
+
+next_steps:
+  - Validate the same Studio workflow on Linux x86_64.
+  - Add and validate browser-to-firmware console input before describing the console as interactive.
+  - Keep this Usecase distinct from browser-based-simulation-visualization when selecting a Recipe: Athrill owns virtual time here, while native Hakoniwa processes own simulation time there.
+  - Add Studio firmware launch paths for PX4 or ArduPilot only after their end-to-end browser workflows are implemented and verified.
+
+tags:
+  - firmware
+  - browser
+  - athrill
+  - zephyr
+  - devicetree
+  - console
+  - mcu-emulation

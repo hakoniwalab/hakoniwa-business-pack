@@ -21,6 +21,7 @@ controlled_fields:
       - demonstration-owner
       - development-team
       - distributed-simulation-developer
+      - embedded-firmware-developer
       - manufacturing-engineering-team
       - ros2-application-developer
       - robot-control-developer

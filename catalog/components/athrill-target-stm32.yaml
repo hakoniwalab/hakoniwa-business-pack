@@ -1,0 +1,222 @@
+id: athrill-target-stm32
+name: Athrill STM32 Target
+repository:
+  owner: hakoniwalab
+  name: athrill-target-stm32
+  url: https://github.com/hakoniwalab/athrill-target-stm32
+  visibility: public
+distribution:
+  channel: oss
+  notes:
+    - The repository is MIT except for Arm-generated decoders distributed under BSD-3-Clause.
+    - The Athrill core dependency is distributed under the TOPPERS License.
+    - Release v0.3.0 does not redistribute ArduPilot firmware because ArduPilot is GPL-3.0.
+verification:
+  verified_at: 2026-11-08
+  source_revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+  source_ref: v0.3.0
+summary: Armv7-M Cortex-M7 target of Athrill that runs unmodified STM32F7/H7 firmware on Devicetree-defined boards, with debugger and Hakoniwa integration paths.
+category:
+  primary: simulation-core
+  secondary:
+    - simulator
+    - integration
+    - time-sync
+
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - Cataloged from the v0.3.0 README, Zephyr, Hakoniwa, and debugging documentation.
+    - Firmware execution is functional register-level emulation, not cycle-accurate or electrical validation.
+
+capabilities:
+  - name: Armv7-M Cortex-M7 firmware execution
+    description: Runs unmodified firmware ELFs built for supported STM32F7 and STM32H7 boards, including their RTOS, interrupts, DMA, and drivers.
+    evidence:
+      - repository: hakoniwalab/athrill-target-stm32
+        path: README.md
+        revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+  - name: Devicetree-defined virtual boards
+    description: Builds supported boards only from athrill-device Devicetree blobs and stops at startup when an enabled node requires an unavailable model.
+    evidence:
+      - repository: hakoniwalab/athrill-target-stm32
+        path: README.md
+        revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+  - name: PX4, ArduPilot, and Zephyr firmware coverage
+    description: Runs PX4 v1.17.0 on Pixhawk 4 FMUv5 and Pixhawk 6C FMUv6C, ArduCopter V4.7.2 on Pixhawk 4 and Pixhawk 6C, and Zephyr samples on NUCLEO-F767ZI and NUCLEO-H743ZI.
+    evidence:
+      - repository: hakoniwalab/athrill-target-stm32
+        path: README.md
+        revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+      - repository: hakoniwalab/athrill-target-stm32
+        path: examples/zephyr/README.md
+        revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+  - name: GDB and LLDB remote debugging
+    description: Starts a GDB remote server with athrill3 -g<port> for breakpoints, stepping, backtraces, registers, and memory through GDB, LLDB, or compatible IDE tooling.
+    evidence:
+      - repository: hakoniwalab/athrill-target-stm32
+        path: docs/debugging.md
+        revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+  - name: Hakoniwa-linked and in-process aircraft simulation
+    description: Runs firmware against Hakoniwa Drone either through a Hakoniwa link between assets or with the aircraft model in the Athrill process, using athrill-device integration.
+    evidence:
+      - repository: hakoniwalab/athrill-target-stm32
+        path: docs/hakoniwa.md
+        revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+  - name: v0.3.0 host and firmware release artifacts
+    description: Publishes athrill3 for macOS arm64 on macOS 14 or newer and Linux x86_64, PX4 ELFs, and six Zephyr sample ELFs.
+    evidence:
+      - repository: hakoniwalab/athrill-target-stm32
+        path: README.md
+        revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+
+limitations:
+  - Functional register-level models are not cycle-accurate or electrically accurate substitutes for STM32 hardware.
+  - Firmware that requires a peripheral absent from the selected board's model does not run unchanged.
+  - Debugging a Hakoniwa-connected run is not supported by the documented GDB/LLDB path.
+  - ArduPilot firmware is supported when supplied separately but is not redistributed in release v0.3.0.
+
+interfaces:
+  inputs:
+    - name: STM32 firmware ELF
+      kind: file
+      description: Unmodified PX4, ArduPilot, Zephyr, or other supported board firmware loaded by athrill3.
+    - name: Board Devicetree blob
+      kind: file
+      description: athrill-device DTB that defines the board and selects its device models.
+    - name: Athrill device configuration
+      kind: config
+      description: CPU frequency, memory, board DTB, execution limit, and optional integration settings.
+  outputs:
+    - name: athrill3 executable
+      kind: command
+      description: Host-native Armv7-M firmware emulator.
+    - name: Firmware console and emulator model log
+      kind: log
+      description: Firmware serial output plus Athrill startup, model, and end-state lines.
+    - name: GDB remote server
+      kind: protocol
+      description: Local GDB Remote Serial Protocol endpoint enabled with -g<port>.
+  protocols:
+    - name: GDB Remote Serial Protocol
+      role: server
+      notes: Listens on 127.0.0.1 at the selected port.
+  configuration:
+    - path: device_config.txt
+      description: Per-run Athrill target, board, clock, device, and time-limit configuration.
+
+dependencies:
+  required:
+    - name: Athrill core
+      type: repository
+      notes: Supplies common CPU execution, loader, debugger, and host runtime infrastructure under the TOPPERS License.
+    - name: Athrill Arm Common
+      type: repository
+      notes: Supplies generated Arm decoders and shared Arm execution support.
+    - name: athrill-device
+      type: repository
+      notes: Supplies Devicetree boards, device models, and optional Hakoniwa aircraft links.
+  optional:
+    - name: Hakoniwa Drone
+      type: runtime
+      notes: Required only for Hakoniwa-linked or in-process aircraft simulation.
+    - name: GDB or LLDB
+      type: tool
+      notes: Required only for remote source-level debugging.
+
+platforms:
+  supported:
+    - macOS arm64
+    - Linux x86_64
+  notes:
+    - Release v0.3.0 provides athrill3 for macOS arm64 on macOS 14 or newer and Linux x86_64.
+
+connects_to:
+  - component_id: hakoniwalab-athrill-device
+    direction: uses
+    interface: board DTB / device model framework / optional Hakoniwa sensor device
+    notes: The target builds its board from athrill-device and uses its integration devices when selected.
+  - component_id: athrill-studio
+    direction: used_by
+    interface: athrill3 process / console and device-model output
+    notes: Studio launches the unchanged release executable and observes its output.
+  - component_id: hakoniwa-drone-core
+    direction: related
+    interface: Hakoniwa link or in-process aircraft through athrill-device
+    notes: The documented PIL paths connect emulated flight firmware to Hakoniwa Drone physics.
+
+recipe_roles:
+  - role: simulation_core
+    description: Owns MCU instruction execution, device progression, firmware console output, and Athrill virtual time.
+  - role: integration_boundary
+    description: Connects unmodified flight firmware to optional Hakoniwa aircraft simulation through athrill-device.
+  - role: time_sync
+    description: Owns Athrill virtual time and can advance in lockstep with the documented Hakoniwa aircraft paths.
+
+typical_usecases:
+  - Run and debug unmodified STM32F7 or STM32H7 firmware without the physical board.
+  - Execute Zephyr samples on emulated Nucleo boards and inspect their serial output.
+  - Run PX4 or ArduPilot firmware against QGroundControl or Hakoniwa Drone physics.
+
+anti_usecases:
+  - Cycle-accurate, electrical, safety, or board-certification validation.
+  - Firmware that depends on peripherals not modeled by the selected Devicetree board.
+
+demo_candidates:
+  - name: Zephyr Nucleo console
+    description: Run a released Zephyr sample ELF on the NUCLEO-F767ZI or NUCLEO-H743ZI DTB and observe its console until the virtual-time limit.
+    required_components:
+      - athrill-target-stm32
+      - hakoniwalab-athrill-device
+    source_examples:
+      - repository: hakoniwalab/athrill-target-stm32
+        path: examples/zephyr/README.md
+        revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+
+operations:
+  run:
+    commands:
+      - athrill3 -c1 -m memory.txt -d device_config.txt -t <clocks> <firmware.elf>
+    notes:
+      - The selected athrill-device DTB and modeled peripherals must match the firmware board target.
+  debug:
+    commands:
+      - athrill3 -c1 -g<port> -m memory.txt -d device_config.txt -t -1 <firmware.elf>
+    notes:
+      - Attach an Arm GDB or LLDB client to the local port before firmware execution proceeds.
+
+known_gaps:
+  - The documented GDB/LLDB path does not support a simultaneously Hakoniwa-connected run.
+  - Board and peripheral coverage remains limited to the models represented by the selected athrill-device DTB.
+
+source_refs:
+  - repository: hakoniwalab/athrill-target-stm32
+    path: README.md
+    revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+    description: Target scope, supported firmware and boards, v0.3.0 artifacts, licensing, and limitations.
+  - repository: hakoniwalab/athrill-target-stm32
+    path: examples/zephyr/README.md
+    revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+    description: Nucleo board and Zephyr sample execution contract.
+  - repository: hakoniwalab/athrill-target-stm32
+    path: docs/hakoniwa.md
+    revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+    description: Hakoniwa-linked and in-process aircraft paths.
+  - repository: hakoniwalab/athrill-target-stm32
+    path: docs/debugging.md
+    revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+    description: GDB and LLDB remote-server behavior and limitations.
+
+tags:
+  - athrill
+  - stm32
+  - armv7-m
+  - cortex-m7
+  - firmware
+  - px4
+  - ardupilot
+  - zephyr
+  - devicetree
+  - gdb
+  - lldb
