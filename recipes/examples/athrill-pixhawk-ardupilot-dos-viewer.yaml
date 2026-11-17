@@ -34,6 +34,7 @@ constraints:
   - macos-arm64-current-reference
   - pixhawk4-fmuv5
   - arducopter-4.7.2-firmware-supplied-separately
+  - private-drone-v5.1.1-8-motor-status-build
   - local-browser
   - functional-emulation-not-hardware-proof
 target_environment:
@@ -287,6 +288,7 @@ artifacts:
     platforms: [macos-arm64]
 missing_pieces:
   - Record one complete configure, prepare, start, browser-connect, scenario, and stop run through the new operator.
+  - Keep Recipe 0.1 on the tested private Drone v5.1.1-8 motor-status build; adopt the next official Drone Core release that provides IAirCraft::get_rotor_status in a later Recipe version.
   - Add Linux shared-library selection before claiming a portable Linux Recipe.
 demo:
   prerequisites:

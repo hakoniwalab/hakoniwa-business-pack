@@ -88,7 +88,7 @@ communication_notes:
 limitations:
   - Current managed Recipes target local macOS arm64 and a specific Pixhawk 4 composition.
   - Peripheral models are functional and firmware-driven but not cycle-accurate or electrically accurate.
-  - The in-process Drone dependency currently uses a compatible private/experimental build; license and access remain explicit prerequisites.
+  - Recipe 0.1 uses the tested private Drone v5.1.1-8 motor-status build; migration to the next official Drone Core release that provides the required rotor-status API is deferred to a later Recipe version.
   - ArduPilot firmware is supplied separately and is not redistributed by Athrill or the Business Pack.
   - Browser observation, emulator evidence, and firmware telemetry do not replace real-board confirmation for hardware-impact claims.
 

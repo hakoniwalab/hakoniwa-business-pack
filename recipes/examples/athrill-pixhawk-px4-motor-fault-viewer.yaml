@@ -44,6 +44,7 @@ constraints:
   - pixhawk4-fmuv5
   - px4-v1.17.0
   - dshot600-and-kiss-telemetry
+  - private-drone-v5.1.1-8-motor-status-build
   - local-browser
   - functional-emulation-not-hardware-proof
 target_environment:
@@ -290,6 +291,7 @@ artifacts:
     platforms: [macos-arm64]
 missing_pieces:
   - Record browser Connect and visual x500 observation during the already-verified managed scenario.
+  - Keep Recipe 0.1 on the tested private Drone v5.1.1-8 motor-status build; adopt the next official Drone Core release that provides IAirCraft::get_rotor_status in a later Recipe version.
   - Add Linux shared-library selection before claiming a portable Linux Recipe.
 demo:
   prerequisites: []
