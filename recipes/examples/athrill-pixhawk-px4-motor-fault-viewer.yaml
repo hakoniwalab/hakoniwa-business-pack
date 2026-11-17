@@ -25,7 +25,7 @@ validation:
       evidence:
         - repository: hakoniwalab/athrill-target-stm32
           path: examples/px4-hakoniwa-dshot/fly-motor-fault.py
-          revision: 86aeae0e227eefbab6dff7bbdca63ee8d9fab1a6
+          revision: a2d5c5433a9fc8c21fe03b2f9ffe839aebd23cdc
     - id: managed_recipe_e2e
       status: verified
       evidence:
@@ -130,7 +130,7 @@ recipe_local_requirements:
     source:
       type: git
       url: https://github.com/hakoniwalab/athrill-target-stm32.git
-      revision: 86aeae0e227eefbab6dff7bbdca63ee8d9fab1a6
+      revision: a2d5c5433a9fc8c21fe03b2f9ffe839aebd23cdc
     required_artifacts:
       - path: build-hakoniwa/athrill3
         kind: executable
@@ -357,5 +357,5 @@ source_catalogs:
 source_artifacts:
   - repository: hakoniwalab/athrill-target-stm32
     path: examples/px4-hakoniwa-dshot
-    revision: 86aeae0e227eefbab6dff7bbdca63ee8d9fab1a6
+    revision: a2d5c5433a9fc8c21fe03b2f9ffe839aebd23cdc
     description: Managed-state run script, PX4 fault scenario, and Pixhawk 4 DShot configuration.
