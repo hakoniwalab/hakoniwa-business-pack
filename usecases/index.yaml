@@ -15,6 +15,11 @@ usecases:
     title: 実機なしのマイコンファーム実行とブラウザ観察
     feasibility: feasible
     validation: verified
+  - id: virtual-flight-controller-fault-validation
+    path: examples/virtual-flight-controller-fault-validation.yaml
+    title: 実機なしのフライトコントローラ故障・回復挙動検証
+    feasibility: feasible
+    validation: partially_verified
   - id: industrial-robot-arm-preintegration
     path: examples/industrial-robot-arm-preintegration.yaml
     title: 産業用ロボットアーム導入前の指令・状態統合検証

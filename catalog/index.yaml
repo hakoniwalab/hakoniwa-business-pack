@@ -76,6 +76,7 @@ components:
   - integration_boundary
   - time_sync
   connects_to:
+  - athrill
   - hakoniwalab-athrill-device
   - athrill-studio
   - hakoniwa-drone-core
@@ -112,6 +113,36 @@ components:
   - emulator
   - msvc
   catalog_path: components/athrill-target-v850e2m.yaml
+- id: athrill
+  name: Athrill CPU Emulator Core
+  category: simulation-core
+  secondary_categories:
+  - simulator
+  - integration
+  - time-sync
+  - binary-contract
+  maturity: active
+  distribution: oss
+  summary: CPU-independent Athrill v3 emulator core for deterministic virtual-clock
+    execution, embedded debugging, target composition, external devices, and optional
+    Hakoniwa lockstep integration.
+  recipe_roles:
+  - simulation_core
+  - integration_boundary
+  - time_sync
+  connects_to:
+  - athrill-target-stm32
+  - athrill-target-v850e2m
+  - athrill-device
+  tags:
+  - athrill
+  - cpu-emulator
+  - virtual-time
+  - embedded
+  - debugger
+  - exdev
+  - hakoniwa
+  catalog_path: components/athrill.yaml
 - id: baremetal-athrill-v850e2m
   name: Bare-metal Athrill V850E2M Samples
   category: tool
@@ -1111,6 +1142,7 @@ components:
   - data_model
   connects_to:
   - athrill-target-stm32
+  - athrill
   tags: []
   catalog_path: components/hakoniwalab-athrill-device.yaml
 - id: tobas

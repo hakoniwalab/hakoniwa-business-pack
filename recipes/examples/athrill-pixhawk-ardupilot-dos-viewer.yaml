@@ -1,0 +1,357 @@
+id: athrill-pixhawk-ardupilot-dos-viewer
+title: Athrill Pixhawk 4 ArduPilot Watchdog DoS Viewer
+recipe_version: 0.1
+goal:
+  user_request: Run the ArduPilot Pixhawk 4 watchdog DoS validation as a managed Business Pack demo and observe the vehicle in a browser.
+  description: >
+    Prepare an isolated ArduCopter F-RAM and SD-card state, run the unmodified
+    Pixhawk 4 firmware on Athrill with Hakoniwa Drone in process, execute the
+    SERIAL_CONTROL stress scenario, and require corroborating firmware reboot
+    and IWDG reset evidence while Three.js shows the resulting vehicle behavior.
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - Athrill STM32 main contains the hardened DoS oracle and complete watchdog system-reset path.
+    - hakoniwalab/athrill-device emits deterministic IWDG reset evidence when the opt-in reset gate is enabled.
+    - The source scenario has reproduced the reset and the browser path has been exercised locally.
+    - The Recipe separates preparation, runtime state, Launcher ownership, scenario execution, and cleanup.
+validation:
+  status: partially_verified
+  summary: The underlying ArduPilot scenario and viewer composition were exercised locally; the new Business Pack operator and managed-state path still require one recorded end-to-end run.
+  steps:
+    - id: source_dos_oracle
+      status: verified
+      evidence:
+        - repository: hakoniwalab/athrill-target-stm32
+          path: test/ardupilot/test_dos_oracle.py
+          revision: a2d5c5433a9fc8c21fe03b2f9ffe839aebd23cdc
+    - id: managed_recipe_e2e
+      status: not_tested
+      evidence: []
+constraints:
+  - authorized-security-testing-only
+  - macos-arm64-current-reference
+  - pixhawk4-fmuv5
+  - arducopter-4.7.2-firmware-supplied-separately
+  - private-drone-v5.1.1-8-motor-status-build
+  - local-browser
+  - functional-emulation-not-hardware-proof
+target_environment:
+  required_for: executable-demo
+  status: specified
+  os: macOS
+  os_version: 14 or newer
+  architecture: arm64
+  execution_mode: native
+  runtimes:
+    - name: Python
+      required: true
+      version: "3.12"
+      path: work/foundation/install/python
+    - name: Browser
+      required: true
+      version: current
+      path: host
+    - name: ArduCopter Pixhawk4 ELF
+      required: true
+      version: "4.7.2"
+      path: selected by ARDUPILOT_FIRMWARE_ROOT
+  hakoniwa:
+    install_prefix: work/foundation/install
+    components_built: [hakoniwa-core-pro, hakoniwa-pdu-python, hakoniwa-pdu-bridge-core]
+execution_environment:
+  required_for: executable-demo
+  status: specified
+  workspace:
+    mode: managed
+  os: macOS
+  architecture: arm64
+  execution_mode: native
+  gui:
+    required: true
+    status: local-browser
+  shared_memory:
+    required: true
+    access: requires-unsandboxed-command
+  python:
+    environment: foundation-venv
+    path: work/foundation/install/python
+    version: "3.12"
+    hakopy_available: required
+  hakoniwa:
+    install_prefix: work/foundation/install
+    hako_cmd_access: requires-unsandboxed-command
+  notes:
+    - Ports 5760, 8000 and 8765 must be available.
+    - Firmware state is owned by work/recipes/athrill-pixhawk-ardupilot-dos-viewer/state.
+foundation_contract:
+  mode: required
+  reason: Foundation owns Hakoniwa Core, Python Launcher, PDU bridge, runtime configuration, shared memory, and component receipts.
+runtime_dependencies:
+  python:
+    interpreter: work/foundation/install/python
+    requirements: recipes/requirements/athrill-pixhawk.txt
+    packages:
+      - name: pymavlink
+        version: ">=2.4.49,<3"
+        purpose: Drive and observe the ArduPilot MAVLink scenario.
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      shared_memory: true
+      hako_cmd: true
+      python_binding: true
+  hakoniwa-pdu-python:
+    capabilities:
+      hako_launcher: true
+      shm_backend: true
+  hakoniwa-pdu-bridge-core:
+    capabilities:
+      hakoniwa_app: true
+      web_bridge: true
+recipe_local_requirements_schema_version: 1
+recipe_local_requirements:
+  athrill-target-stm32:
+    root:
+      default_path: ../athrill-target-stm32
+      override_env: ATHRILL_TARGET_STM32_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/athrill-target-stm32.git
+      revision: a2d5c5433a9fc8c21fe03b2f9ffe839aebd23cdc
+    required_artifacts:
+      - path: build-hakoniwa/athrill3
+        kind: executable
+      - path: examples/ardupilot-hakoniwa/run.sh
+        kind: executable
+      - path: examples/ardupilot-hakoniwa/fly_and_attack.py
+        kind: file
+  hakoniwalab-athrill-device:
+    root:
+      default_path: ../hakoniwalab-athrill-device-dshot
+      override_env: ATHRILL_DEVICE_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/athrill-device.git
+      revision: b9736e7a1c654bfb5d7e25f938b4b4299d64204f
+    required_artifacts:
+      - path: boards/pixhawk4/pixhawk4-hakoniwa.dtb
+        kind: file
+      - path: build-stm32-inproc/libhako_sensor_device_inproc_motor.dylib
+        kind: file
+  hakoniwa-drone-core:
+    root:
+      default_path: ../hakoniwa-drone-pro-motor-status
+      override_env: HAKONIWA_DRONE_ROOT
+      relative_to: recipe_repository
+    source:
+      type: local
+    required_artifacts:
+      - path: config
+        kind: directory
+  hakoniwa-pdu-bridge-core:
+    root:
+      default_path: ../hakoniwa-pdu-bridge-core
+      override_env: HAKONIWA_PDU_BRIDGE_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/hakoniwa-pdu-bridge-core.git
+      revision: e07190258c1790b37c3b3974fef1930340d8fce0
+    required_artifacts:
+      - path: config/web_bridge_disturb
+        kind: directory
+  hakoniwa-threejs-drone:
+    root:
+      default_path: ../hakoniwa-threejs-drone
+      override_env: HAKONIWA_THREEJS_DRONE_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/hakoniwa-threejs-drone.git
+      revision: 562b7197c4a3f43d59fd2d56d529fed8062412ba
+    required_artifacts:
+      - path: tools/hako.py
+        kind: file
+      - path: config/viewer-config-disturb-x500.json
+        kind: file
+  ardupilot-firmware:
+    root:
+      default_path: ../athrill-ardupilot-firmware
+      override_env: ARDUPILOT_FIRMWARE_ROOT
+      relative_to: recipe_repository
+    source:
+      type: local
+    required_artifacts:
+      - path: arducopter.elf
+        kind: file
+recipe_runtime_schema_version: 1
+recipe_runtime:
+  environment:
+    HAKO_FOUNDATION_INSTALL: ${FOUNDATION_INSTALL}
+    HAKO_FOUNDATION_PYTHON: ${FOUNDATION_PYTHON}
+    HAKO_RECIPE_REPOSITORY: ${RECIPE_REPOSITORY}
+    HAKO_RECIPE_WORKSPACE: ${RECIPE_WORKSPACE}
+    ATHRILL_TARGET_ROOT: ${DEPENDENCY:athrill-target-stm32}
+    ATHRILL_DEVICE_ROOT: ${DEPENDENCY:hakoniwalab-athrill-device}
+    HAKO_DRONE_ROOT: ${DEPENDENCY:hakoniwa-drone-core}
+    HAKO_BRIDGE_ROOT: ${DEPENDENCY:hakoniwa-pdu-bridge-core}
+    HAKO_THREEJS_ROOT: ${DEPENDENCY:hakoniwa-threejs-drone}
+    ARDUPILOT_ELF: ${DEPENDENCY:ardupilot-firmware}/arducopter.elf
+  launcher:
+    template: recipes/launcher/athrill-pixhawk-ardupilot-dos-viewer.json
+    output: config/launcher.json
+    mode: immediate
+agency_boundary:
+  agent_actions:
+    - id: prepare_firmware_state
+      description: Create Recipe-owned F-RAM and SD-card state with the deterministic bench sensor source.
+      autonomous: true
+      preconditions: [user_requested_execution]
+    - id: start_and_stop_managed_runtime
+      description: Start or terminate only the Recipe-owned background Launcher session.
+      autonomous: true
+      preconditions: [user_requested_execution]
+    - id: run_authorized_dos_scenario
+      description: Send the documented SERIAL_CONTROL stress traffic to the selected local firmware and record the verdict.
+      autonomous: false
+      preconditions: [explicit_authorization_for_selected_firmware]
+  human_decisions:
+    - id: security_test_authorization
+      description: Confirm ownership or authorization for testing the selected firmware and scenario.
+      confirmation_required: true
+  human_actions:
+    - id: connect_browser
+      description: Open the local viewer and press Connect to observe the scenario visually.
+      confirmation_required: true
+      required_before: [visual_observation]
+  required_permissions: [local-process-execution, shared-memory-runtime, local-network-ports]
+components:
+  - id: athrill
+    roles: [simulation_core, time_sync]
+  - id: athrill-target-stm32
+    roles: [simulation_core, integration_boundary]
+  - id: hakoniwalab-athrill-device
+    roles: [data_model, integration_boundary]
+  - id: hakoniwa-drone-core
+    roles: [physics_runtime]
+  - id: hakoniwa-core-pro
+    roles: [simulation_core, time_sync]
+  - id: hakoniwa-pdu-python
+    roles: [control_plane]
+  - id: hakoniwa-pdu-bridge-core
+    roles: [bridge]
+  - id: hakoniwa-threejs-drone
+    roles: [visualizer]
+connections:
+  - from: athrill-target-stm32
+    to: hakoniwalab-athrill-device
+    interface: Devicetree device callback ABI
+    contract:
+      status: verified
+      requires: [ABI 1.23 system-reset callback, Pixhawk 4 Hakoniwa DTB]
+      validation_notes: [Target and device reset conformance are pinned to the recorded revisions.]
+  - from: athrill-target-stm32
+    to: hakoniwa-drone-core
+    interface: in-process Hakoniwa sensor and motor integration
+    contract:
+      status: partially_verified
+      requires: [compatible private in-process Drone build, matching x500 airframe]
+      validation_notes: [The source composition ran locally; the Recipe-managed rerun is pending.]
+  - from: hakoniwa-pdu-bridge-core
+    to: hakoniwa-threejs-drone
+    interface: WebSocket visual-state stream
+    contract:
+      status: partially_verified
+      requires: [disturb visual-state PDU and matching viewer config]
+      validation_notes: [Browser viewer was observed locally; managed Recipe evidence is pending.]
+data_flow:
+  - ArduCopter drivers -> emulated Pixhawk devices -> in-process x500 physics -> visual-state PDU -> WebBridge -> Three.js
+  - Authorized MAVLink stress -> ArduPilot main-loop stall -> IWDG underflow -> Athrill system reset -> firmware reboot and vehicle response
+time_model:
+  mode: athrill-owned-hakoniwa-lockstep
+  notes:
+    - Athrill is the single Hakoniwa asset and conductor in this in-process composition.
+    - Firmware, emulated devices, aircraft physics, and visual publication advance from Athrill virtual time.
+artifact_sets: {}
+artifacts:
+  - id: launcher_session
+    kind: runtime-state
+    path: work/recipes/athrill-pixhawk-ardupilot-dos-viewer/runtime/launcher-session.json
+    platforms: [macos-arm64]
+  - id: firmware_state
+    kind: directory
+    path: work/recipes/athrill-pixhawk-ardupilot-dos-viewer/state
+    platforms: [macos-arm64]
+missing_pieces:
+  - Record one complete configure, prepare, start, browser-connect, scenario, and stop run through the new operator.
+  - Keep Recipe 0.1 on the tested private Drone v5.1.1-8 motor-status build; adopt the next official Drone Core release that provides IAirCraft::get_rotor_status in a later Recipe version.
+  - Add Linux shared-library selection before claiming a portable Linux Recipe.
+demo:
+  prerequisites:
+    - id: select_ardupilot_firmware
+      command: export ARDUPILOT_FIRMWARE_ROOT=/path/to/directory-containing-arducopter.elf
+      expected: The selected directory contains the authorized Pixhawk4 arducopter.elf; firmware is not redistributed by this Recipe.
+  steps:
+    - id: configure
+      command: python tools/recipe/athrill_pixhawk.py configure ardupilot
+      expected: Foundation and every pinned local artifact are satisfied and the Recipe launcher is materialized.
+    - id: prepare
+      command: python tools/recipe/athrill_pixhawk.py prepare ardupilot
+      expected: Recipe-owned fram.bin and sd.img are ready without joining Hakoniwa.
+    - id: start
+      command: python tools/recipe/athrill_pixhawk.py start ardupilot
+      expected: The background Launcher reaches RUNNING and prints the local viewer URL and session path.
+    - id: run_scenario
+      command: python tools/recipe/athrill_pixhawk.py scenario ardupilot
+      expected: After browser Connect and explicit test authorization, the oracle reports reproduced, no effect, or inconclusive with corroborating evidence.
+    - id: stop
+      command: python tools/recipe/athrill_pixhawk.py stop ardupilot
+      expected: Launcher normal termination stops only its managed Athrill, bridge, and viewer processes.
+  observability:
+    success_signals:
+      - Launcher control status is RUNNING before the scenario and TERMINATED after stop.
+      - The viewer connects and displays the x500.
+      - A reproduced verdict includes a new IWDG_RESET record and the selected ArduPilot target reboot.
+    failure_signals:
+      - Stable hover or target identity cannot be established before the test.
+      - The MAVLink transport becomes stale without corroborating watchdog evidence.
+      - The Launcher reports runtime-integrity ABORT or a managed asset exit.
+  cleanup:
+    owner: hakoniwa-launcher
+    provider: hakoniwa-pdu-python
+    mode: background-session
+    target: work/recipes/athrill-pixhawk-ardupilot-dos-viewer/runtime/launcher-session.json
+    normal:
+      interactive: python tools/recipe/athrill_pixhawk.py stop ardupilot
+      signal: Launcher control terminate request
+    expected_behavior:
+      - Launcher terminates only the assets recorded in its owned session.
+      - Recipe-owned F-RAM, SD-card, logs, and evidence remain for inspection.
+    verification_checks:
+      - python tools/recipe/athrill_pixhawk.py status ardupilot reports TERMINATED.
+      - No Recipe-managed process remains on ports 5760, 8000 or 8765.
+    cautions:
+      - Do not delete /var/lib/hakoniwa/mmap files or lock files with a broad glob.
+      - Run work/foundation/install/bin/hako-cmd check or explicit recover through tools/workspace.py run, and only after all managed processes are confirmed stopped.
+expected_result: >
+  The authorized ArduPilot scenario produces a three-way evidence-based verdict,
+  the browser shows the vehicle response, and the owned Launcher session stops
+  without broad process or shared-memory deletion.
+source_catalogs:
+  - component_id: athrill
+  - component_id: athrill-target-stm32
+  - component_id: hakoniwalab-athrill-device
+  - component_id: hakoniwa-drone-core
+  - component_id: hakoniwa-core-pro
+  - component_id: hakoniwa-pdu-python
+  - component_id: hakoniwa-pdu-bridge-core
+  - component_id: hakoniwa-threejs-drone
+source_artifacts:
+  - repository: hakoniwalab/athrill-target-stm32
+    path: examples/ardupilot-hakoniwa
+    revision: a2d5c5433a9fc8c21fe03b2f9ffe839aebd23cdc
+    description: Managed-state run script, hardened DoS oracle, and Pixhawk 4 ArduPilot configuration.
