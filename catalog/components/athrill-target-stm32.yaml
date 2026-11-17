@@ -12,9 +12,9 @@ distribution:
     - The Athrill core dependency is distributed under the TOPPERS License.
     - Release v0.3.0 does not redistribute ArduPilot firmware because ArduPilot is GPL-3.0.
 verification:
-  verified_at: 2026-11-08
-  source_revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
-  source_ref: v0.3.0
+  verified_at: 2026-11-18
+  source_revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
+  source_ref: main
 summary: Armv7-M Cortex-M7 target of Athrill that runs unmodified STM32F7/H7 firmware on Devicetree-defined boards, with debugger and Hakoniwa integration paths.
 category:
   primary: simulation-core
@@ -27,7 +27,7 @@ status:
   maturity: active
   catalog_confidence: high
   notes:
-    - Cataloged from the v0.3.0 README, Zephyr, Hakoniwa, and debugging documentation.
+    - Cataloged from the current README, Zephyr, Hakoniwa, DShot, debugging, watchdog-reset, and ArduPilot DoS validation artifacts.
     - Firmware execution is functional register-level emulation, not cycle-accurate or electrical validation.
 
 capabilities:
@@ -36,46 +36,71 @@ capabilities:
     evidence:
       - repository: hakoniwalab/athrill-target-stm32
         path: README.md
-        revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+        revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
   - name: Devicetree-defined virtual boards
     description: Builds supported boards only from athrill-device Devicetree blobs and stops at startup when an enabled node requires an unavailable model.
     evidence:
       - repository: hakoniwalab/athrill-target-stm32
         path: README.md
-        revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+        revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
   - name: PX4, ArduPilot, and Zephyr firmware coverage
     description: Runs PX4 v1.17.0 on Pixhawk 4 FMUv5 and Pixhawk 6C FMUv6C, ArduCopter V4.7.2 on Pixhawk 4 and Pixhawk 6C, and Zephyr samples on NUCLEO-F767ZI and NUCLEO-H743ZI.
     evidence:
       - repository: hakoniwalab/athrill-target-stm32
         path: README.md
-        revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+        revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
       - repository: hakoniwalab/athrill-target-stm32
         path: examples/zephyr/README.md
-        revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+        revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
   - name: GDB and LLDB remote debugging
     description: Starts a GDB remote server with athrill3 -g<port> for breakpoints, stepping, backtraces, registers, and memory through GDB, LLDB, or compatible IDE tooling.
     evidence:
       - repository: hakoniwalab/athrill-target-stm32
         path: docs/debugging.md
-        revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+        revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
   - name: Hakoniwa-linked and in-process aircraft simulation
     description: Runs firmware against Hakoniwa Drone either through a Hakoniwa link between assets or with the aircraft model in the Athrill process, using athrill-device integration.
     evidence:
       - repository: hakoniwalab/athrill-target-stm32
         path: docs/hakoniwa.md
-        revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+        revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
   - name: v0.3.0 host and firmware release artifacts
-    description: Publishes athrill3 for macOS arm64 on macOS 14 or newer and Linux x86_64, PX4 ELFs, and six Zephyr sample ELFs.
+    description: Release v0.3.0 publishes athrill3 for macOS arm64 on macOS 14 or newer and Linux x86_64, PX4 ELFs, and six Zephyr sample ELFs; newer reset and DoS-validation capabilities require a source build from main.
     evidence:
       - repository: hakoniwalab/athrill-target-stm32
         path: README.md
-        revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+        revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
+  - name: DShot ESC telemetry and motor-fault validation
+    description: Runs stock PX4 or ArduCopter DShot drivers through timer DMA, emulated ESCs, KISS telemetry, and injectable motor-stop behavior; PX4 can report the resulting motor failure.
+    evidence:
+      - repository: hakoniwalab/athrill-target-stm32
+        path: docs/dshot.md
+        revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
+  - name: Watchdog system-reset conformance
+    description: An explicitly enabled IWDG bite requests an architectural system reset that clears CPU, interrupt, target-device, and Devicetree-device state while preserving persistent F-RAM and SD-card media.
+    evidence:
+      - repository: hakoniwalab/athrill-target-stm32
+        path: test/wdt-reset/run-iwdg.sh
+        revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
+      - repository: hakoniwalab/athrill-target-stm32
+        path: src/device/device.c
+        revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
+  - name: Corroborated ArduPilot watchdog DoS oracle
+    description: Classifies success only when a stable armed hover is followed by both target-scoped reboot evidence and a new Athrill IWDG underflow/reset diagnostic; transport loss or a fall alone is inconclusive.
+    evidence:
+      - repository: hakoniwalab/athrill-target-stm32
+        path: examples/ardupilot-hakoniwa/fly_and_attack.py
+        revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
+      - repository: hakoniwalab/athrill-target-stm32
+        path: examples/ardupilot-hakoniwa/dos_oracle.py
+        revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
 
 limitations:
   - Functional register-level models are not cycle-accurate or electrically accurate substitutes for STM32 hardware.
   - Firmware that requires a peripheral absent from the selected board's model does not run unchanged.
   - Debugging a Hakoniwa-connected run is not supported by the documented GDB/LLDB path.
   - ArduPilot firmware is supported when supplied separately but is not redistributed in release v0.3.0.
+  - A reproduced emulator-visible reset or fault does not by itself establish exploitability, physical-hardware timing, flight safety, or production risk.
 
 interfaces:
   inputs:
@@ -114,7 +139,7 @@ dependencies:
     - name: Athrill Arm Common
       type: repository
       notes: Supplies generated Arm decoders and shared Arm execution support.
-    - name: athrill-device
+    - name: Hakoniwalab Athrill Devicetree device framework
       type: repository
       notes: Supplies Devicetree boards, device models, and optional Hakoniwa aircraft links.
   optional:
@@ -133,6 +158,10 @@ platforms:
     - Release v0.3.0 provides athrill3 for macOS arm64 on macOS 14 or newer and Linux x86_64.
 
 connects_to:
+  - component_id: athrill
+    direction: uses
+    interface: CPU-independent emulator core / loader / bus / debugger / Hakoniwa adapter
+    notes: The STM32 target composes Athrill core sources with Armv7-M execution and target-specific device state.
   - component_id: hakoniwalab-athrill-device
     direction: uses
     interface: board DTB / device model framework / optional Hakoniwa sensor device
@@ -158,10 +187,12 @@ typical_usecases:
   - Run and debug unmodified STM32F7 or STM32H7 firmware without the physical board.
   - Execute Zephyr samples on emulated Nucleo boards and inspect their serial output.
   - Run PX4 or ArduPilot firmware against QGroundControl or Hakoniwa Drone physics.
+  - Reproduce a controlled firmware fault or watchdog-reset scenario and collect emulator, firmware, and vehicle evidence together.
 
 anti_usecases:
   - Cycle-accurate, electrical, safety, or board-certification validation.
   - Firmware that depends on peripherals not modeled by the selected Devicetree board.
+  - Treating a simulation-only security or fault result as proof of real-hardware exploitability or safety impact.
 
 demo_candidates:
   - name: Zephyr Nucleo console
@@ -172,7 +203,23 @@ demo_candidates:
     source_examples:
       - repository: hakoniwalab/athrill-target-stm32
         path: examples/zephyr/README.md
-        revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+        revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
+  - name: Pixhawk firmware fault observation
+    description: Run ArduPilot watchdog DoS or PX4 DShot motor-fault scenarios on an emulated Pixhawk 4 and observe the firmware-owned response and vehicle state through Hakoniwa.
+    required_components:
+      - athrill
+      - athrill-target-stm32
+      - hakoniwalab-athrill-device
+      - hakoniwa-drone-core
+      - hakoniwa-pdu-bridge-core
+      - hakoniwa-threejs-drone
+    source_examples:
+      - repository: hakoniwalab/athrill-target-stm32
+        path: examples/ardupilot-hakoniwa
+        revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
+      - repository: hakoniwalab/athrill-target-stm32
+        path: examples/px4-hakoniwa-dshot
+        revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
 
 operations:
   run:
@@ -193,19 +240,19 @@ known_gaps:
 source_refs:
   - repository: hakoniwalab/athrill-target-stm32
     path: README.md
-    revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+    revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
     description: Target scope, supported firmware and boards, v0.3.0 artifacts, licensing, and limitations.
   - repository: hakoniwalab/athrill-target-stm32
     path: examples/zephyr/README.md
-    revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+    revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
     description: Nucleo board and Zephyr sample execution contract.
   - repository: hakoniwalab/athrill-target-stm32
     path: docs/hakoniwa.md
-    revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+    revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
     description: Hakoniwa-linked and in-process aircraft paths.
   - repository: hakoniwalab/athrill-target-stm32
     path: docs/debugging.md
-    revision: b6dd12fd795724a9af5911182ff9a9fb9b49dd86
+    revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
     description: GDB and LLDB remote-server behavior and limitations.
 
 tags:

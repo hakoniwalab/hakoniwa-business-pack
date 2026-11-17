@@ -1,0 +1,189 @@
+id: athrill
+name: Athrill CPU Emulator Core
+repository:
+  owner: toppers
+  name: athrill
+  url: https://github.com/toppers/athrill
+  visibility: public
+distribution:
+  channel: oss
+  notes:
+    - Distributed under the TOPPERS License Agreement.
+    - This repository is the CPU-independent core; runnable executables are built by target repositories.
+verification:
+  verified_at: 2026-11-18
+  source_revision: a63d4cd9b6bcbfea7ad411e590b5b3107b1ce41c
+  source_ref: master
+summary: CPU-independent Athrill v3 emulator core for deterministic virtual-clock execution, embedded debugging, target composition, external devices, and optional Hakoniwa lockstep integration.
+category:
+  primary: simulation-core
+  secondary:
+    - simulator
+    - integration
+    - time-sync
+    - binary-contract
+
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - Cataloged from the master README, reusable CMake contract, configuration reference, and EXDEV ABI at the verified revision.
+    - The core is not a standalone firmware target; CPU and board behavior come from a target repository and its device models.
+
+capabilities:
+  - name: CPU-independent emulator core
+    description: Supplies the common loader, bus, MPU, debugger, host runtime, command-line handling, and execution infrastructure composed by Athrill v3 target repositories.
+    evidence:
+      - repository: toppers/athrill
+        path: README.md
+        revision: a63d4cd9b6bcbfea7ad411e590b5b3107b1ce41c
+      - repository: toppers/athrill
+        path: cmake/AthrillCore.cmake
+        revision: a63d4cd9b6bcbfea7ad411e590b5b3107b1ce41c
+  - name: Deterministic virtual-clock execution
+    description: Advances one virtual clock per instruction, skips idle intervals, and repeats a run from the same inputs without depending on host wall-clock scheduling.
+    evidence:
+      - repository: toppers/athrill
+        path: README.md
+        revision: a63d4cd9b6bcbfea7ad411e590b5b3107b1ce41c
+  - name: Reusable target composition contract
+    description: Exposes cmake/AthrillCore.cmake so target repositories can select address width, host platform support, Hakoniwa integration, GDB RSP support, and their CPU/device sources.
+    evidence:
+      - repository: toppers/athrill
+        path: cmake/AthrillCore.cmake
+        revision: a63d4cd9b6bcbfea7ad411e590b5b3107b1ce41c
+  - name: Hakoniwa lockstep asset support
+    description: Optionally links Hakoniwa Core and PDU Endpoint so a target can participate as a Hakoniwa asset and advance under coordinated simulation time.
+    evidence:
+      - repository: toppers/athrill
+        path: cmake/AthrillCore.cmake
+        revision: a63d4cd9b6bcbfea7ad411e590b5b3107b1ce41c
+  - name: External device ABI
+    description: Defines the EXDEV descriptor and callbacks used by loadable device libraries for memory, interrupts, clock supply, transport helpers, and cleanup.
+    evidence:
+      - repository: toppers/athrill
+        path: src/inc/athrill_exdev.h
+        revision: a63d4cd9b6bcbfea7ad411e590b5b3107b1ce41c
+
+limitations:
+  - The core cannot run firmware without a compatible target repository that provides an instruction set, target CPU hooks, and device composition.
+  - Timing is instruction/virtual-clock based, not cycle-accurate, electrical, or hardware-certification evidence.
+  - Hakoniwa support is optional at build time and requires a compatible Hakoniwa Core and PDU Endpoint installation.
+
+interfaces:
+  inputs:
+    - name: Target repository sources
+      kind: file
+      description: CPU decoder/executor, target hooks, board/device composition, and target CMake graph.
+    - name: Firmware image and memory configuration
+      kind: file
+      description: Target-specific ELF image plus Athrill memory and device configuration supplied to the composed executable.
+  outputs:
+    - name: Reusable CMake target composition
+      kind: config
+      description: Common source sets, options, and helper functions consumed by target repositories.
+    - name: Athrill runtime infrastructure
+      kind: file
+      description: Loader, bus, debugger, host runtime, virtual clock, Hakoniwa adapter, and EXDEV support linked into a target executable.
+  protocols:
+    - name: Athrill EXDEV ABI
+      role: host
+      notes: Loadable external-device contract declared by athrill_exdev.h.
+    - name: Hakoniwa PDU and lifecycle
+      role: participant
+      notes: Present only when ATHRILL_ENABLE_HAKONIWA is enabled by the target build.
+  configuration:
+    - path: cmake/AthrillCore.cmake
+      description: Build-time feature and source-composition contract.
+    - path: docs/configuration.md
+      description: Common command-line, memory-map, and core-device configuration reference.
+
+dependencies:
+  required:
+    - name: Athrill target repository
+      type: repository
+      notes: Supplies a concrete instruction set and board/device target.
+    - name: CMake and native C/C++ toolchain
+      type: tool
+      notes: CMake 3.16 or newer plus C11 and C++17 compilers.
+  optional:
+    - name: Hakoniwa Core and PDU Endpoint
+      type: runtime
+      notes: Required only when a target enables Hakoniwa lockstep asset support.
+
+platforms:
+  supported:
+    - macOS arm64
+    - Linux x86_64
+    - Linux arm64
+    - Windows 11 x64
+
+connects_to:
+  - component_id: athrill-target-stm32
+    direction: used_by
+    interface: CMake source composition / loader / bus / debugger / Hakoniwa adapter
+    notes: The STM32 target combines the common core with Armv7-M execution and Devicetree-defined devices.
+  - component_id: athrill-target-v850e2m
+    direction: used_by
+    interface: CMake source composition / loader / bus / debugger
+    notes: The V850E2M target builds its host executable from the common core.
+  - component_id: athrill-device
+    direction: related
+    interface: Athrill EXDEV ABI
+    notes: toppers/athrill-device builds portable Hakoniwa EXDEV libraries against the core ABI.
+
+recipe_roles:
+  - role: simulation_core
+    description: Supplies the target-independent execution, loading, debugging, and virtual-time substrate.
+  - role: integration_boundary
+    description: Exposes the EXDEV and optional Hakoniwa participant boundaries used by composed targets.
+  - role: time_sync
+    description: Owns deterministic virtual-clock progression and the optional Hakoniwa lockstep adapter.
+
+typical_usecases:
+  - Build a concrete Athrill target for an embedded instruction set and run unmodified firmware without the physical MCU board.
+  - Repeat firmware behavior from identical inputs under deterministic virtual time.
+  - Connect a composed target to Hakoniwa or load an EXDEV integration library.
+
+anti_usecases:
+  - Treating the core repository alone as a runnable board emulator.
+  - Cycle-accurate, electrical, safety, or certification validation.
+
+demo_candidates:
+  - name: Compose the STM32 target
+    description: Build athrill3 from the core, Arm common support, the STM32 target, and hakoniwalab/athrill-device, then run a supported firmware ELF.
+    required_components:
+      - athrill
+      - athrill-target-stm32
+      - hakoniwalab-athrill-device
+    source_examples:
+      - repository: toppers/athrill
+        path: README.md
+        revision: a63d4cd9b6bcbfea7ad411e590b5b3107b1ce41c
+
+known_gaps:
+  - A standalone Foundation Component Receipt is not applicable because the core is consumed as source by target builds.
+  - Target-specific instruction and device coverage must be evaluated in each target Catalog entry.
+
+source_refs:
+  - repository: toppers/athrill
+    path: README.md
+    revision: a63d4cd9b6bcbfea7ad411e590b5b3107b1ce41c
+    description: Core/target split, supported instruction sets, deterministic virtual clock, host requirements, and license.
+  - repository: toppers/athrill
+    path: cmake/AthrillCore.cmake
+    revision: a63d4cd9b6bcbfea7ad411e590b5b3107b1ce41c
+    description: Reusable build graph, platform sources, address width, Hakoniwa, and debugger feature gates.
+  - repository: toppers/athrill
+    path: src/inc/athrill_exdev.h
+    revision: a63d4cd9b6bcbfea7ad411e590b5b3107b1ce41c
+    description: External-device ABI and host operation contract.
+
+tags:
+  - athrill
+  - cpu-emulator
+  - virtual-time
+  - embedded
+  - debugger
+  - exdev
+  - hakoniwa

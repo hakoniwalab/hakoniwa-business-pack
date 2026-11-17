@@ -1,0 +1,359 @@
+id: athrill-pixhawk-px4-motor-fault-viewer
+title: Athrill Pixhawk 4 PX4 DShot Motor-Fault Viewer
+recipe_version: 0.1
+goal:
+  user_request: Add a managed PX4 variant of the Athrill STM32 Pixhawk browser demo.
+  description: >
+    Prepare isolated PX4 Pixhawk 4 firmware state, run the unmodified PX4 v1.17
+    firmware against DShot600 ESC and KISS telemetry models with Hakoniwa Drone
+    in process, stop one motor at a deterministic virtual time, and observe both
+    PX4's motor-failure report and the x500 response in Three.js.
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - Athrill STM32 and hakoniwalab/athrill-device already contain the Pixhawk 4 DShot, telemetry, motor-stop, and PX4 scenario paths.
+    - The existing local workspace has the required PX4 ELF, Athrill build, in-process device plugin, Drone runtime, bridge config, and viewer assets.
+    - The Recipe separates preparation, runtime state, Launcher ownership, scenario execution, and cleanup.
+validation:
+  status: partially_verified
+  verified_at: 2026-11-18
+  summary: The Foundation-managed preparation, Launcher lifecycle, and PX4 motor-fault scenario passed end to end; interactive browser rendering remains to be recorded.
+  steps:
+    - id: source_motor_fault_path
+      status: verified
+      evidence:
+        - repository: hakoniwalab/athrill-target-stm32
+          path: examples/px4-hakoniwa-dshot/fly-motor-fault.py
+          revision: 86aeae0e227eefbab6dff7bbdca63ee8d9fab1a6
+    - id: managed_recipe_e2e
+      status: verified
+      evidence:
+        - source: local-foundation-e2e
+          date: 2026-11-18
+      notes:
+        - Foundation doctor reported every required component and dependency SATISFIED.
+        - PX4 v1.17.0 was prepared into Recipe-owned F-RAM and SD-card state and launched through the background Launcher.
+        - The scenario detected the scheduled motor failure at 40.05 seconds and vehicle touchdown at 41.06 seconds, then returned PASS.
+        - Launcher termination completed with state TERMINATED.
+    - id: browser_render_observation
+      status: not_tested
+      evidence: []
+constraints:
+  - macos-arm64-current-reference
+  - pixhawk4-fmuv5
+  - px4-v1.17.0
+  - dshot600-and-kiss-telemetry
+  - local-browser
+  - functional-emulation-not-hardware-proof
+target_environment:
+  required_for: executable-demo
+  status: specified
+  os: macOS
+  os_version: 14 or newer
+  architecture: arm64
+  execution_mode: native
+  runtimes:
+    - name: Python
+      required: true
+      version: "3.12"
+      path: work/foundation/install/python
+    - name: Browser
+      required: true
+      version: current
+      path: host
+    - name: PX4 Pixhawk4 ELF
+      required: true
+      version: "1.17.0"
+      path: selected by PX4_FIRMWARE_ROOT
+  hakoniwa:
+    install_prefix: work/foundation/install
+    components_built: [hakoniwa-core-pro, hakoniwa-pdu-python, hakoniwa-pdu-bridge-core]
+execution_environment:
+  required_for: executable-demo
+  status: specified
+  workspace:
+    mode: managed
+  os: macOS
+  architecture: arm64
+  execution_mode: native
+  gui:
+    required: true
+    status: local-browser
+  shared_memory:
+    required: true
+    access: requires-unsandboxed-command
+  python:
+    environment: foundation-venv
+    path: work/foundation/install/python
+    version: "3.12"
+    hakopy_available: required
+  hakoniwa:
+    install_prefix: work/foundation/install
+    hako_cmd_access: requires-unsandboxed-command
+  notes:
+    - Ports 5760, 8000 and 8765 must be available.
+    - Firmware state is owned by work/recipes/athrill-pixhawk-px4-motor-fault-viewer/state.
+foundation_contract:
+  mode: required
+  reason: Foundation owns Hakoniwa Core, Python Launcher, PDU bridge, runtime configuration, shared memory, and component receipts.
+runtime_dependencies:
+  python:
+    interpreter: work/foundation/install/python
+    requirements: recipes/requirements/athrill-pixhawk.txt
+    packages:
+      - name: pymavlink
+        version: ">=2.4.49,<3"
+        purpose: Arm PX4, command takeoff, and observe firmware telemetry and failure reports.
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      shared_memory: true
+      hako_cmd: true
+      python_binding: true
+  hakoniwa-pdu-python:
+    capabilities:
+      hako_launcher: true
+      shm_backend: true
+  hakoniwa-pdu-bridge-core:
+    capabilities:
+      hakoniwa_app: true
+      web_bridge: true
+recipe_local_requirements_schema_version: 1
+recipe_local_requirements:
+  athrill-target-stm32:
+    root:
+      default_path: ../athrill-target-stm32
+      override_env: ATHRILL_TARGET_STM32_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/athrill-target-stm32.git
+      revision: 86aeae0e227eefbab6dff7bbdca63ee8d9fab1a6
+    required_artifacts:
+      - path: build-hakoniwa/athrill3
+        kind: executable
+      - path: examples/px4-hakoniwa-dshot/run.sh
+        kind: executable
+      - path: examples/px4-hakoniwa-dshot/fly-motor-fault.py
+        kind: file
+  hakoniwalab-athrill-device:
+    root:
+      default_path: ../hakoniwalab-athrill-device-dshot
+      override_env: ATHRILL_DEVICE_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/athrill-device.git
+      revision: b9736e7a1c654bfb5d7e25f938b4b4299d64204f
+    required_artifacts:
+      - path: boards/pixhawk4/pixhawk4-hakoniwa-dshot.dtb
+        kind: file
+      - path: build-stm32-inproc/libhako_sensor_device_inproc_motor.dylib
+        kind: file
+  hakoniwa-drone-core:
+    root:
+      default_path: ../hakoniwa-drone-pro-motor-status
+      override_env: HAKONIWA_DRONE_ROOT
+      relative_to: recipe_repository
+    source:
+      type: local
+    required_artifacts:
+      - path: config/drone/x500-athrill-px4/drone_config_0.json
+        kind: file
+  hakoniwa-pdu-bridge-core:
+    root:
+      default_path: ../hakoniwa-pdu-bridge-core
+      override_env: HAKONIWA_PDU_BRIDGE_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/hakoniwa-pdu-bridge-core.git
+      revision: e07190258c1790b37c3b3974fef1930340d8fce0
+    required_artifacts:
+      - path: config/web_bridge_disturb
+        kind: directory
+  hakoniwa-threejs-drone:
+    root:
+      default_path: ../hakoniwa-threejs-drone
+      override_env: HAKONIWA_THREEJS_DRONE_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/hakoniwa-threejs-drone.git
+      revision: 562b7197c4a3f43d59fd2d56d529fed8062412ba
+    required_artifacts:
+      - path: tools/hako.py
+        kind: file
+      - path: config/viewer-config-disturb-x500.json
+        kind: file
+  px4-firmware:
+    root:
+      default_path: work/inputs/px4-v1.17.0
+      override_env: PX4_FIRMWARE_ROOT
+      relative_to: recipe_repository
+    source:
+      type: local
+    required_artifacts:
+      - path: px4_fmu-v5_default.elf
+        kind: file
+recipe_runtime_schema_version: 1
+recipe_runtime:
+  environment:
+    HAKO_FOUNDATION_INSTALL: ${FOUNDATION_INSTALL}
+    HAKO_FOUNDATION_PYTHON: ${FOUNDATION_PYTHON}
+    HAKO_RECIPE_REPOSITORY: ${RECIPE_REPOSITORY}
+    HAKO_RECIPE_WORKSPACE: ${RECIPE_WORKSPACE}
+    ATHRILL_TARGET_ROOT: ${DEPENDENCY:athrill-target-stm32}
+    ATHRILL_DEVICE_ROOT: ${DEPENDENCY:hakoniwalab-athrill-device}
+    HAKO_DRONE_ROOT: ${DEPENDENCY:hakoniwa-drone-core}
+    HAKO_BRIDGE_ROOT: ${DEPENDENCY:hakoniwa-pdu-bridge-core}
+    HAKO_THREEJS_ROOT: ${DEPENDENCY:hakoniwa-threejs-drone}
+    PX4_ELF: ${DEPENDENCY:px4-firmware}/px4_fmu-v5_default.elf
+  launcher:
+    template: recipes/launcher/athrill-pixhawk-px4-motor-fault-viewer.json
+    output: config/launcher.json
+    mode: immediate
+agency_boundary:
+  agent_actions:
+    - id: prepare_firmware_state
+      description: Create Recipe-owned PX4 F-RAM and SD-card state with the deterministic bench sensor source.
+      autonomous: true
+      preconditions: [user_requested_execution]
+    - id: start_stop_and_run_scenario
+      description: Operate the Recipe-owned Launcher session and execute the declared software-only motor-fault scenario.
+      autonomous: true
+      preconditions: [user_requested_execution, local-simulation-only]
+  human_decisions: []
+  human_actions:
+    - id: connect_browser
+      description: Open the local viewer and press Connect to observe the scenario visually.
+      confirmation_required: true
+      required_before: [visual_observation]
+  required_permissions: [local-process-execution, shared-memory-runtime, local-network-ports]
+components:
+  - id: athrill
+    roles: [simulation_core, time_sync]
+  - id: athrill-target-stm32
+    roles: [simulation_core, integration_boundary]
+  - id: hakoniwalab-athrill-device
+    roles: [data_model, integration_boundary]
+  - id: hakoniwa-drone-core
+    roles: [physics_runtime]
+  - id: hakoniwa-core-pro
+    roles: [simulation_core, time_sync]
+  - id: hakoniwa-pdu-python
+    roles: [control_plane]
+  - id: hakoniwa-pdu-bridge-core
+    roles: [bridge]
+  - id: hakoniwa-threejs-drone
+    roles: [visualizer]
+connections:
+  - from: athrill-target-stm32
+    to: hakoniwalab-athrill-device
+    interface: Devicetree DShot ESC and telemetry models
+    contract:
+      status: verified
+      requires: [Pixhawk 4 DShot DTB, timer DMA, KISS telemetry, motor-stop injection]
+      validation_notes: [Component tests cover the DShot and fault-model paths.]
+  - from: athrill-target-stm32
+    to: hakoniwa-drone-core
+    interface: in-process Hakoniwa sensor and motor integration
+    contract:
+      status: verified
+      requires: [compatible private in-process Drone build, x500-athrill-px4 airframe]
+      validation_notes: [The Recipe-managed PX4 fault scenario completed successfully in Foundation Workspace on 2026-11-18.]
+  - from: hakoniwa-pdu-bridge-core
+    to: hakoniwa-threejs-drone
+    interface: WebSocket visual-state stream
+    contract:
+      status: partially_verified
+      requires: [disturb visual-state PDU and matching viewer config]
+      validation_notes: [Browser viewer was observed locally; managed Recipe evidence is pending.]
+data_flow:
+  - PX4 DShot driver -> emulated STM32 timer DMA -> DShot ESC and KISS telemetry -> in-process x500 physics -> visual-state PDU -> WebBridge -> Three.js
+  - Scheduled motor stop -> zero-current telemetry under commanded throttle -> PX4 motor-failure report -> vehicle descent
+time_model:
+  mode: athrill-owned-hakoniwa-lockstep
+  notes:
+    - Athrill is the single Hakoniwa asset and conductor in this in-process composition.
+    - The motor stop is scheduled at a deterministic Athrill vehicle time, not host wall time.
+artifact_sets: {}
+artifacts:
+  - id: launcher_session
+    kind: runtime-state
+    path: work/recipes/athrill-pixhawk-px4-motor-fault-viewer/runtime/launcher-session.json
+    platforms: [macos-arm64]
+  - id: firmware_state
+    kind: directory
+    path: work/recipes/athrill-pixhawk-px4-motor-fault-viewer/state
+    platforms: [macos-arm64]
+missing_pieces:
+  - Record browser Connect and visual x500 observation during the already-verified managed scenario.
+  - Add Linux shared-library selection before claiming a portable Linux Recipe.
+demo:
+  prerequisites: []
+  steps:
+    - id: fetch_pinned_px4
+      command: python tools/recipe/athrill_pixhawk.py fetch px4
+      expected: Download the official v0.3.0 PX4 v1.17.0 FMUv5 ELF into the managed input directory and verify SHA-256 f8a78a13f3a545305cce45eeef677e4d436325ee6a6065b1753c387283f3d05e.
+    - id: configure
+      command: python tools/recipe/athrill_pixhawk.py configure px4
+      expected: Foundation and every pinned local artifact are satisfied and the Recipe launcher is materialized.
+    - id: prepare
+      command: python tools/recipe/athrill_pixhawk.py prepare px4
+      expected: Recipe-owned fram.bin and sd.img are ready without joining Hakoniwa.
+    - id: start
+      command: python tools/recipe/athrill_pixhawk.py start px4
+      expected: The background Launcher reaches RUNNING and prints the local viewer URL and session path.
+    - id: run_scenario
+      command: python tools/recipe/athrill_pixhawk.py scenario px4
+      expected: After browser Connect, PX4 reports Motor failure detected and the scenario verifies takeoff and return to ground.
+    - id: stop
+      command: python tools/recipe/athrill_pixhawk.py stop px4
+      expected: Launcher normal termination stops only its managed Athrill, bridge, and viewer processes.
+  observability:
+    success_signals:
+      - Launcher control status is RUNNING before the scenario and TERMINATED after stop.
+      - The viewer connects and displays the x500.
+      - PX4 reports Motor failure detected after the scheduled stop.
+      - The scenario records takeoff above 2 m and a return below 0.3 m.
+    failure_signals:
+      - PX4 cannot establish home position or arm.
+      - No motor-failure report appears, or the vehicle does not return to ground.
+      - The Launcher reports runtime-integrity ABORT or a managed asset exit.
+  cleanup:
+    owner: hakoniwa-launcher
+    provider: hakoniwa-pdu-python
+    mode: background-session
+    target: work/recipes/athrill-pixhawk-px4-motor-fault-viewer/runtime/launcher-session.json
+    normal:
+      interactive: python tools/recipe/athrill_pixhawk.py stop px4
+      signal: Launcher control terminate request
+    expected_behavior:
+      - Launcher terminates only the assets recorded in its owned session.
+      - Recipe-owned F-RAM, SD-card, logs, and evidence remain for inspection.
+    verification_checks:
+      - python tools/recipe/athrill_pixhawk.py status px4 reports TERMINATED.
+      - No Recipe-managed process remains on ports 5760, 8000 or 8765.
+    cautions:
+      - Do not delete /var/lib/hakoniwa/mmap files or lock files with a broad glob.
+      - Run work/foundation/install/bin/hako-cmd check or explicit recover through tools/workspace.py run, and only after all managed processes are confirmed stopped.
+expected_result: >
+  PX4 detects the deterministic DShot motor failure through its own driver and
+  telemetry path, the viewer shows the vehicle response, and the owned Launcher
+  session stops without broad process or shared-memory deletion.
+source_catalogs:
+  - component_id: athrill
+  - component_id: athrill-target-stm32
+  - component_id: hakoniwalab-athrill-device
+  - component_id: hakoniwa-drone-core
+  - component_id: hakoniwa-core-pro
+  - component_id: hakoniwa-pdu-python
+  - component_id: hakoniwa-pdu-bridge-core
+  - component_id: hakoniwa-threejs-drone
+source_artifacts:
+  - repository: hakoniwalab/athrill-target-stm32
+    path: examples/px4-hakoniwa-dshot
+    revision: 86aeae0e227eefbab6dff7bbdca63ee8d9fab1a6
+    description: Managed-state run script, PX4 fault scenario, and Pixhawk 4 DShot configuration.

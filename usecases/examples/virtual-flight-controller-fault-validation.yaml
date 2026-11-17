@@ -1,0 +1,113 @@
+id: virtual-flight-controller-fault-validation
+title: 実機なしのフライトコントローラ故障・回復挙動検証
+usecase_version: 0.1
+
+audience:
+  primary:
+    - embedded-firmware-developer
+    - control-software-developer
+    - development-team
+  notes:
+    - The representative references run local unmodified Pixhawk firmware, not SITL application binaries.
+    - Security scenarios require explicit authorization for the selected firmware and test target.
+
+situation: >
+  A flight-controller developer wants to exercise a fault, denial-of-service
+  condition, watchdog response, or actuator failure before using a physical
+  Pixhawk. The firmware's own drivers, RTOS, interrupt path, telemetry and reset
+  behavior must remain in the loop, and the resulting vehicle behavior should be
+  observable together with emulator evidence.
+
+problem: >
+  SITL can validate high-level control behavior but does not execute the exact
+  STM32 firmware image or its board drivers. A real-board test adds hardware and
+  operational risk, while a firmware reboot, MAVLink disconnect, or falling
+  vehicle alone is insufficient evidence for the root cause of a fault.
+
+desired_outcome: >
+  Run an authorized unmodified PX4 or ArduPilot Pixhawk firmware ELF on a
+  Devicetree-defined virtual board, inject one declared software-only condition,
+  collect independent firmware and emulator evidence, observe the simulated
+  vehicle in a browser, and retain an explicit inconclusive outcome when the
+  required evidence is missing.
+
+status:
+  feasibility: feasible
+  validation: partially_verified
+  confidence: high
+  rationale:
+    - Athrill STM32 runs the supported Pixhawk 4 firmware images and firmware-owned peripheral drivers.
+    - The ArduPilot path corroborates a target-scoped reboot with a new IWDG underflow/reset record.
+    - The PX4 path uses its DShot driver and KISS telemetry to report a scheduled motor failure.
+    - The PX4 path passed through Foundation-managed prepare, launch, fault detection and cleanup; the managed ArduPilot and interactive browser observations remain to be recorded.
+
+realized_by:
+  - recipe_id: athrill-pixhawk-ardupilot-dos-viewer
+    relationship: security_fault_variant
+    validation_scope: >
+      On an emulated Pixhawk 4, an authorized ArduPilot SERIAL_CONTROL stress
+      scenario requires stable hover, target-scoped reboot evidence, and a new
+      Athrill IWDG reset diagnostic before reporting reproduction.
+  - recipe_id: athrill-pixhawk-px4-motor-fault-viewer
+    relationship: actuator_fault_variant
+    validation_scope: >
+      On an emulated Pixhawk 4, stock PX4 DShot output and ESC telemetry carry a
+      deterministic motor stop to PX4's own motor-failure detector while the
+      vehicle response is rendered in a local browser.
+
+supported_by:
+  - component_id: athrill
+    role: Provide deterministic virtual-clock execution and the Hakoniwa participant substrate composed by the STM32 target.
+  - component_id: athrill-target-stm32
+    role: Execute the unmodified Armv7-M firmware, own target reset, and expose the scenario evidence paths.
+  - component_id: hakoniwalab-athrill-device
+    role: Provide the Pixhawk Devicetree, peripheral models, DShot ESC telemetry, motor fault and IWDG reset evidence.
+  - component_id: hakoniwa-drone-core
+    role: Simulate the x500 physics and turn firmware motor output into observable vehicle behavior.
+  - component_id: hakoniwa-core-pro
+    role: Provide managed lifecycle, shared-memory PDU and coordinated simulation time.
+  - component_id: hakoniwa-pdu-python
+    role: Own the multi-process Launcher session and normal termination path.
+  - component_id: hakoniwa-pdu-bridge-core
+    role: Bridge visual state from native PDU to the browser WebSocket boundary.
+  - component_id: hakoniwa-threejs-drone
+    role: Render the local x500 response independently from the firmware and physics runtime.
+
+communication_notes:
+  safe_statements:
+    - The reference paths execute supported unmodified Pixhawk firmware images and their board drivers in a functional emulator.
+    - A reproduced ArduPilot verdict requires independent watchdog and firmware-reboot evidence; a fall or disconnect alone is inconclusive.
+    - The PX4 reference validates the software path from DShot command through emulated ESC telemetry to PX4's motor-failure report and simulated vehicle response.
+    - The browser is an observer; Athrill and Hakoniwa own firmware execution, physics and simulation time.
+  avoid_statements:
+    - Simulation proves that the same exploit timing or physical outcome occurs on real hardware.
+    - A passing scenario establishes flight safety, security certification, or production readiness.
+    - Any firmware, peripheral, board revision, or attack is supported without a matching model and explicit evidence contract.
+    - Security testing is authorized merely because the Recipe is available.
+
+limitations:
+  - Current managed Recipes target local macOS arm64 and a specific Pixhawk 4 composition.
+  - Peripheral models are functional and firmware-driven but not cycle-accurate or electrically accurate.
+  - The in-process Drone dependency currently uses a compatible private/experimental build; license and access remain explicit prerequisites.
+  - ArduPilot firmware is supplied separately and is not redistributed by Athrill or the Business Pack.
+  - Browser observation, emulator evidence, and firmware telemetry do not replace real-board confirmation for hardware-impact claims.
+
+next_steps:
+  - Execute and record the managed ArduPilot Recipe from configure through normal Launcher termination using an authorized firmware image.
+  - Record browser Connect and visual x500 observation during a managed PX4 or ArduPilot scenario.
+  - Promote validation only after repeatable logs include runtime readiness, firmware identity, injected condition, firmware response, emulator evidence, browser observation and cleanup state.
+  - Add a Linux shared-library variant and public Drone in-process compatibility before claiming broader portability.
+  - Add new security or fault scenarios only with scenario-specific authorization, oracle, negative control and inconclusive criteria.
+
+tags:
+  - athrill
+  - pixhawk
+  - stm32
+  - px4
+  - ardupilot
+  - watchdog
+  - dshot
+  - fault-injection
+  - security-validation
+  - firmware
+  - browser
