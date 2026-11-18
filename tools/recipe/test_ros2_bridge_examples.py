@@ -9,6 +9,11 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+from workspace_test_isolation import isolate_from_active_workspace  # noqa: E402
+
+isolate_from_active_workspace()
+
 
 MODULE_PATH = Path(__file__).with_name("ros2_bridge_examples.py")
 sys.path.insert(0, str(MODULE_PATH.parent))

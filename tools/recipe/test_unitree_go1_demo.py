@@ -12,6 +12,11 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+from workspace_test_isolation import isolate_from_active_workspace  # noqa: E402
+
+isolate_from_active_workspace()
+
 from tools.recipe.path_test_support import contains_path
 
 

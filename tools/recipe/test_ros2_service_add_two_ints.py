@@ -10,6 +10,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+from workspace_test_isolation import isolate_from_active_workspace  # noqa: E402
+
+isolate_from_active_workspace()
+
 import process_liveness
 
 MODULE_PATH = Path(__file__).with_name("ros2_service_add_two_ints.py")
