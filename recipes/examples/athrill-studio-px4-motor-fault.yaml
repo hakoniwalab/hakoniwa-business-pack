@@ -15,24 +15,29 @@ feasibility:
   status: feasible
   confidence: high
   rationale:
-    - athrill-target-stm32 v0.4.0 ships athrill3 with the DShot ESCs, the JIT and tick skip for macOS arm64.
+    - athrill-target-stm32 v0.4.0 ships athrill3 with the DShot ESCs, the JIT and tick skip for macOS arm64 and Linux x86_64.
     - athrill-device ab3c22e builds the in-process sensor device from the public Hakoniwa Drone v5.2.0 alone.
     - Athrill Studio runs the motor-failure profile and checks it through its API (tests/motor_stop_smoke.py).
 validation:
-  status: partially_verified
+  status: verified
   verified_at: 2026-11-20
-  summary: The Recipe steps on macOS arm64 in a fresh Business Pack clone; Linux x86_64 waits for an in-process sensor device on Linux.
+  summary: The Recipe steps from an empty directory on macOS arm64 and on Linux x86_64 (WSL2, Ubuntu 24.04).
   steps:
     - id: macos_recipe_e2e
       status: verified
       evidence:
         - source: local-foundation-e2e
           date: 2026-11-20
-    - id: linux_x86_64
-      status: not_tested
-      evidence: []
+    - id: linux_x86_64_wsl2
+      status: verified
+      evidence:
+        - source: local-foundation-e2e
+          date: 2026-11-20
+      notes:
+        - Ubuntu 24.04 on WSL2 from an empty directory, no sudo: configure 445 s, scenario PASS (flight hold 2.48-2.50 m; motor 3 stopped 40.104 s, on the ground 40.824 s).
+        - Studio on 0.0.0.0 opened from the Windows browser at http://localhost:8765/.
 constraints:
-  - macos-arm64-current-reference
+  - macos-arm64-or-linux-x86_64
   - pixhawk4-fmuv5
   - px4-v1.17.0-official-elf
   - dshot600-and-kiss-telemetry
@@ -43,9 +48,9 @@ constraints:
 target_environment:
   required_for: executable-demo
   status: specified
-  os: macOS
-  os_version: 14 or newer
-  architecture: arm64
+  os: macOS | Linux
+  os_version: macOS 14 or newer | Ubuntu 24.04 (WSL2)
+  architecture: arm64 | x86_64
   execution_mode: native
   runtimes:
     - name: Python
@@ -68,8 +73,8 @@ execution_environment:
   status: specified
   workspace:
     mode: managed
-  os: macOS
-  architecture: arm64
+  os: macOS | Linux
+  architecture: arm64 | x86_64
   execution_mode: native
   gui:
     required: true
@@ -88,6 +93,8 @@ execution_environment:
   notes:
     - Ports 5760 (PX4 MAVLink) and 8765 (Studio) must be free.
     - Everything the Recipe makes is under work/recipes/athrill-studio-px4-motor-fault and the Studio checkout's work/.
+    - On Linux, lnx.zip leaves out the Hakoniwa core libraries; the Recipe puts the Foundation's lib on LD_LIBRARY_PATH for athrill3 runs.
+    - On Linux (WSL2) start makes Studio listen on 0.0.0.0, so a Windows browser opens http://localhost:8765/; other machines on the network can reach it too. On macOS it listens on 127.0.0.1.
 foundation_contract:
   mode: required
   reason: The in-process sensor device links Hakoniwa Core (shakoc) and takes the PDU types (core) and nlohmann/json (pdu-endpoint) from the Foundation install; the Launcher (pdu-python) manages the Studio server.
@@ -125,7 +132,7 @@ recipe_local_requirements:
     source:
       type: git
       url: https://github.com/hakoniwalab/athrill-studio.git
-      revision: 6ec0dd68980e4999d0bdcc8b6ab6d5a27e94a772
+      revision: 9cddec21e7692dcf97e421a50dfcda681b80e1da
     required_artifacts:
       - path: tools/fetch.sh
         kind: file
@@ -157,7 +164,7 @@ recipe_local_requirements:
     source:
       type: git
       url: https://github.com/hakoniwalab/athrill-device.git
-      revision: ab3c22e02748fed104972edc93afd5bd4aef51cb
+      revision: 487da73c83ceaa351d991fc52ecb1bc3eb96dd11
     required_artifacts:
       - path: board/common/CMakeLists.txt
         kind: file
@@ -202,6 +209,7 @@ recipe_runtime:
     ATHRILL_ROOT: ${DEPENDENCY:athrill}
     HAKO_DRONE_CHECKOUT: ${DEPENDENCY:hakoniwa-drone-core}
     HAKO_DRONE_RELEASE: v5.2.0
+    ATHRILL_STUDIO_HOST: 127.0.0.1
   launcher:
     template: recipes/launcher/athrill-studio-px4-motor-fault.json
     output: config/launcher.json
@@ -253,7 +261,7 @@ connections:
     interface: in-process aircraft (direct calls, rotor status)
     contract:
       status: verified
-      requires: [public Hakoniwa Drone v5.2.0 headers and mac.zip]
+      requires: [public Hakoniwa Drone v5.2.0 headers and mac.zip or lnx.zip]
       validation_notes: ["athrill-device PR 145 built against the public release alone."]
   - from: athrill-studio
     to: athrill-target-stm32
@@ -276,17 +284,16 @@ artifacts:
   - id: device_build
     kind: directory
     path: work/recipes/athrill-studio-px4-motor-fault/build-device
-    platforms: [macos-arm64]
+    platforms: [macos-arm64, linux-x86_64]
   - id: firmware_state
     kind: directory
     path: work/recipes/athrill-studio-px4-motor-fault/seed-dshot
-    platforms: [macos-arm64]
+    platforms: [macos-arm64, linux-x86_64]
   - id: launcher_session
     kind: runtime-state
     path: work/recipes/athrill-studio-px4-motor-fault/runtime/launcher-session.json
-    platforms: [macos-arm64]
+    platforms: [macos-arm64, linux-x86_64]
 missing_pieces:
-  - Linux x86_64 (WSL2) needs athrill-device's in-process build on Linux (lnx.zip) and a Linux run of this Recipe.
   - Fault injection from the browser at run time (the Hakoniwa asset mode) is a later Recipe.
 demo:
   prerequisites: []
@@ -296,10 +303,10 @@ demo:
       expected: Foundation is SATISFIED and the five repositories are at their pinned commits; the Launcher and environment files are written.
     - id: fetch
       command: python tools/recipe/athrill_studio_px4.py fetch
-      expected: Studio's tools/fetch.sh reports athrill3-v0.4.0-macos-arm64.tar.gz, px4_fmu-v5_default.elf and zephyr-samples-v0.3.0.tar.gz OK; mac.zip v5.2.0 matches its SHA-256.
+      expected: Studio's tools/fetch.sh reports the athrill3 v0.4.0 tarball of the host, px4_fmu-v5_default.elf and zephyr-samples-v0.3.0.tar.gz OK; mac.zip (macOS) or lnx.zip (Linux) v5.2.0 matches its SHA-256.
     - id: build
       command: python tools/recipe/athrill_studio_px4.py build
-      expected: libhako_sensor_device_inproc_motor.dylib in work/recipes/athrill-studio-px4-motor-fault/build-device.
+      expected: libhako_sensor_device_inproc_motor.dylib (.so on Linux) in work/recipes/athrill-studio-px4-motor-fault/build-device.
     - id: prepare
       command: python tools/recipe/athrill_studio_px4.py prepare
       expected: PX4's first boot writes fram.bin and sd.img, and Studio's setup-drone-motor.sh prints "drone (motor status) ready".
@@ -352,7 +359,7 @@ source_catalogs:
 source_artifacts:
   - repository: hakoniwalab/athrill-studio
     path: tests/motor_stop_smoke.py
-    revision: 6ec0dd68980e4999d0bdcc8b6ab6d5a27e94a772
+    revision: 9cddec21e7692dcf97e421a50dfcda681b80e1da
     description: The motor-failure demo through Studio's API.
   - repository: hakoniwalab/athrill-target-stm32
     path: examples/px4-hakoniwa-dshot

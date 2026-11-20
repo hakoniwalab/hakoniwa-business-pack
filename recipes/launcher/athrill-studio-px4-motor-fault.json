@@ -1,7 +1,16 @@
 {
   "version": "0.1",
-  "runtime": { "cleanup_mmap_on_start": false },
+  "runtime": {
+    "cleanup_mmap_on_start": false
+  },
   "defaults": {
+    "env": {
+      "prepend": {
+        "lib_path": [
+          "${HAKO_FOUNDATION_INSTALL}/lib"
+        ]
+      }
+    },
     "stdout": "${HAKO_RECIPE_WORKSPACE}/logs/${asset}.out",
     "stderr": "${HAKO_RECIPE_WORKSPACE}/logs/${asset}.err",
     "delay_sec": 1
@@ -11,7 +20,14 @@
       "name": "studio",
       "activation_timing": "before_start",
       "command": "${HAKO_FOUNDATION_PYTHON}",
-      "args": ["-m", "studio.server", "--port", "8765"],
+      "args": [
+        "-m",
+        "studio.server",
+        "--host",
+        "${ATHRILL_STUDIO_HOST}",
+        "--port",
+        "8765"
+      ],
       "cwd": "${ATHRILL_STUDIO_ROOT}",
       "delay_sec": 2
     }
