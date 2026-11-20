@@ -232,11 +232,18 @@ def launcher(command: str) -> int:
     if command == "start":
         (WORK / "logs").mkdir(parents=True, exist_ok=True)
         session.parent.mkdir(parents=True, exist_ok=True)
+        # On Linux (WSL2 among them) Studio listens on every interface, so that a Windows browser
+        # reaches it at http://localhost:8765/ through WSL2's NAT; other machines on the network
+        # can reach it too. On macOS it stays on 127.0.0.1.
+        studio_host = "0.0.0.0" if platform.system() == "Linux" else "127.0.0.1"
         rc = run([v["HAKO_FOUNDATION_PYTHON"], "-m", "hakoniwa_pdu.apps.launcher.hako_launcher",
                   WORK / "config/launcher.json", "--mode", "activate-only", "--background", session],
-                 env={**os.environ, **v})
+                 env={**os.environ, **v, "ATHRILL_STUDIO_HOST": studio_host})
         if rc == 0:
             print(f"Studio : {STUDIO_URL}")
+            if studio_host == "0.0.0.0":
+                print("         listening on every interface (WSL2: open it from the Windows browser);"
+                      " other machines on this network can reach it too")
             print("Board Holybro Pixhawk 4, firmware 'PX4 v1.17.0 x500, motor 3 stops at 40 s', Real time on, Run.")
         return rc
     if not session.is_file():

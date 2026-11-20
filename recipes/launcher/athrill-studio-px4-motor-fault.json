@@ -23,6 +23,8 @@
       "args": [
         "-m",
         "studio.server",
+        "--host",
+        "${ATHRILL_STUDIO_HOST}",
         "--port",
         "8765"
       ],

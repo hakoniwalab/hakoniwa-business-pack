@@ -89,6 +89,7 @@ execution_environment:
     - Ports 5760 (PX4 MAVLink) and 8765 (Studio) must be free.
     - Everything the Recipe makes is under work/recipes/athrill-studio-px4-motor-fault and the Studio checkout's work/.
     - On Linux, lnx.zip leaves out the Hakoniwa core libraries; the Recipe puts the Foundation's lib on LD_LIBRARY_PATH for athrill3 runs.
+    - On Linux (WSL2) start makes Studio listen on 0.0.0.0, so a Windows browser opens http://localhost:8765/; other machines on the network can reach it too. On macOS it listens on 127.0.0.1.
 foundation_contract:
   mode: required
   reason: The in-process sensor device links Hakoniwa Core (shakoc) and takes the PDU types (core) and nlohmann/json (pdu-endpoint) from the Foundation install; the Launcher (pdu-python) manages the Studio server.
