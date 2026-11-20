@@ -30,16 +30,6 @@ PROFILES = {
         "extra": ROOT / "recipes/config/athrill-pixhawk/ardupilot-dos.txt",
         "scenario": "examples/ardupilot-hakoniwa/fly_and_attack.py",
     },
-    "px4": {
-        "recipe_id": "athrill-pixhawk-px4-motor-fault-viewer",
-        "recipe": ROOT / "recipes/examples/athrill-pixhawk-px4-motor-fault-viewer.yaml",
-        "run": "examples/px4-hakoniwa-dshot/run.sh",
-        "firmware": "PX4_ELF",
-        "firmware_sha256": "f8a78a13f3a545305cce45eeef677e4d436325ee6a6065b1753c387283f3d05e",
-        "firmware_url": "https://github.com/hakoniwalab/athrill-target-stm32/releases/download/v0.3.0/px4_fmu-v5_default.elf",
-        "extra": ROOT / "recipes/config/athrill-pixhawk/px4-motor-fault.txt",
-        "scenario": "examples/px4-hakoniwa-dshot/fly-motor-fault.py",
-    },
 }
 
 

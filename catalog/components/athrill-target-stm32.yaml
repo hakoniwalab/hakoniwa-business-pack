@@ -10,7 +10,7 @@ distribution:
   notes:
     - The repository is MIT except for Arm-generated decoders distributed under BSD-3-Clause.
     - The Athrill core dependency is distributed under the TOPPERS License.
-    - Release v0.3.0 does not redistribute ArduPilot firmware because ArduPilot is GPL-3.0.
+    - The releases do not redistribute ArduPilot firmware because ArduPilot is GPL-3.0.
 verification:
   verified_at: 2026-11-18
   source_revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
@@ -64,12 +64,15 @@ capabilities:
       - repository: hakoniwalab/athrill-target-stm32
         path: docs/hakoniwa.md
         revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
-  - name: v0.3.0 host and firmware release artifacts
-    description: Release v0.3.0 publishes athrill3 for macOS arm64 on macOS 14 or newer and Linux x86_64, PX4 ELFs, and six Zephyr sample ELFs; newer reset and DoS-validation capabilities require a source build from main.
+  - name: v0.4.0 host and firmware release artifacts
+    description: Release v0.4.0 publishes athrill3 for macOS arm64 on macOS 14 or newer and Linux x86_64 with the block JIT, tick skip and the DShot ESCs built in, and the PX4 ELF; the six Zephyr sample ELFs stay in v0.3.0. versions.txt names the release and the commits it builds from, and the docs read it.
     evidence:
       - repository: hakoniwalab/athrill-target-stm32
-        path: README.md
-        revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
+        path: versions.txt
+        revision: 2fbc46468cdceb7d0c4d3b2fd40e9ff53a4d201b
+      - repository: hakoniwalab/athrill-target-stm32
+        path: tools/release/build-release.sh
+        revision: 2fbc46468cdceb7d0c4d3b2fd40e9ff53a4d201b
   - name: DShot ESC telemetry and motor-fault validation
     description: Runs stock PX4 or ArduCopter DShot drivers through timer DMA, emulated ESCs, KISS telemetry, and injectable motor-stop behavior; PX4 can report the resulting motor failure.
     evidence:
@@ -99,7 +102,7 @@ limitations:
   - Functional register-level models are not cycle-accurate or electrically accurate substitutes for STM32 hardware.
   - Firmware that requires a peripheral absent from the selected board's model does not run unchanged.
   - Debugging a Hakoniwa-connected run is not supported by the documented GDB/LLDB path.
-  - ArduPilot firmware is supported when supplied separately but is not redistributed in release v0.3.0.
+  - ArduPilot firmware is supported when supplied separately but is not redistributed in the releases.
   - A reproduced emulator-visible reset or fault does not by itself establish exploitability, physical-hardware timing, flight safety, or production risk.
 
 interfaces:
@@ -155,7 +158,7 @@ platforms:
     - macOS arm64
     - Linux x86_64
   notes:
-    - Release v0.3.0 provides athrill3 for macOS arm64 on macOS 14 or newer and Linux x86_64.
+    - Release v0.4.0 provides athrill3 for macOS arm64 on macOS 14 or newer and Linux x86_64.
 
 connects_to:
   - component_id: athrill
@@ -205,7 +208,7 @@ demo_candidates:
         path: examples/zephyr/README.md
         revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
   - name: Pixhawk firmware fault observation
-    description: Run ArduPilot watchdog DoS or PX4 DShot motor-fault scenarios on an emulated Pixhawk 4 and observe the firmware-owned response and vehicle state through Hakoniwa.
+    description: Run ArduPilot watchdog DoS (Hakoniwa link) or PX4 DShot motor-fault (Athrill Studio, aircraft in process) scenarios on an emulated Pixhawk 4 and observe the firmware-owned response and vehicle state.
     required_components:
       - athrill
       - athrill-target-stm32
@@ -241,7 +244,7 @@ source_refs:
   - repository: hakoniwalab/athrill-target-stm32
     path: README.md
     revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe
-    description: Target scope, supported firmware and boards, v0.3.0 artifacts, licensing, and limitations.
+    description: Target scope, supported firmware and boards, release artifacts, licensing, and limitations.
   - repository: hakoniwalab/athrill-target-stm32
     path: examples/zephyr/README.md
     revision: ce21b95a18b9fb1b9373bab07c8568c7b9723ffe

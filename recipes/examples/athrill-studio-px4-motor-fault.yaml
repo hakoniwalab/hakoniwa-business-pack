@@ -1,0 +1,357 @@
+id: athrill-studio-px4-motor-fault
+title: Athrill Studio PX4 Flight and DShot Motor-Fault Demo
+recipe_version: 0.1
+goal:
+  user_request: Watch the official PX4 firmware on an emulated Pixhawk 4 fly the x500, and detect a stopped motor, in the browser, from public releases only.
+  description: >
+    Build the Athrill in-process sensor device with the motor status against the
+    Foundation and the public Hakoniwa Drone release, prepare PX4's first boot
+    with the DShot parameters, and run two Athrill Studio profiles: the
+    unmodified PX4 v1.17.0 ELF flies the Hakoniwa Drone x500 in one Athrill
+    process on DShot600 ESCs (take off, hold 2.5 m, land); and the emulated ESC
+    stops motor 3 at 40 s of virtual time, PX4 reports "Motor failure detected"
+    from the ESC telemetry and the x500 comes down.
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - athrill-target-stm32 v0.4.0 ships athrill3 with the DShot ESCs, the JIT and tick skip for macOS arm64.
+    - athrill-device ab3c22e builds the in-process sensor device from the public Hakoniwa Drone v5.2.0 alone.
+    - Athrill Studio runs the motor-failure profile and checks it through its API (tests/motor_stop_smoke.py).
+validation:
+  status: partially_verified
+  verified_at: 2026-11-20
+  summary: The Recipe steps on macOS arm64 in a fresh Business Pack clone; Linux x86_64 waits for an in-process sensor device on Linux.
+  steps:
+    - id: macos_recipe_e2e
+      status: verified
+      evidence:
+        - source: local-foundation-e2e
+          date: 2026-11-20
+    - id: linux_x86_64
+      status: not_tested
+      evidence: []
+constraints:
+  - macos-arm64-current-reference
+  - pixhawk4-fmuv5
+  - px4-v1.17.0-official-elf
+  - dshot600-and-kiss-telemetry
+  - public-hakoniwa-drone-v5.2.0
+  - in-process-aircraft-no-hakoniwa-runtime
+  - local-browser
+  - functional-emulation-not-hardware-proof
+target_environment:
+  required_for: executable-demo
+  status: specified
+  os: macOS
+  os_version: 14 or newer
+  architecture: arm64
+  execution_mode: native
+  runtimes:
+    - name: Python
+      required: true
+      version: "3.12"
+      path: work/foundation/install/python
+    - name: Browser
+      required: true
+      version: current
+      path: host
+    - name: CMake, a C/C++ compiler, git, curl, unzip, tar
+      required: true
+      version: current
+      path: host
+  hakoniwa:
+    install_prefix: work/foundation/install
+    components_built: [hakoniwa-core-pro, hakoniwa-pdu-endpoint, hakoniwa-pdu-python]
+execution_environment:
+  required_for: executable-demo
+  status: specified
+  workspace:
+    mode: managed
+  os: macOS
+  architecture: arm64
+  execution_mode: native
+  gui:
+    required: true
+    status: local-browser
+  shared_memory:
+    required: false
+    access: not-used
+  python:
+    environment: foundation-venv
+    path: work/foundation/install/python
+    version: "3.12"
+    hakopy_available: not-required
+  hakoniwa:
+    install_prefix: work/foundation/install
+    hako_cmd_access: not-required
+  notes:
+    - Ports 5760 (PX4 MAVLink) and 8765 (Studio) must be free.
+    - Everything the Recipe makes is under work/recipes/athrill-studio-px4-motor-fault and the Studio checkout's work/.
+foundation_contract:
+  mode: required
+  reason: The in-process sensor device links Hakoniwa Core (shakoc) and takes the PDU types (core) and nlohmann/json (pdu-endpoint) from the Foundation install; the Launcher (pdu-python) manages the Studio server.
+runtime_dependencies:
+  python:
+    interpreter: work/foundation/install/python
+    requirements: recipes/requirements/athrill-studio.txt
+    packages:
+      - name: aiohttp
+        version: ">=3.9,<4"
+        purpose: Studio's HTTP and WebSocket server and its smoke tests.
+      - name: pyyaml
+        version: ">=6,<7"
+        purpose: Studio's boards.yaml.
+      - name: pymavlink
+        version: ">=2.4.49,<3"
+        purpose: Studio's MAVLink link to PX4 (take-off, status texts).
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      shared_memory: true
+  hakoniwa-pdu-python:
+    capabilities:
+      hako_launcher: true
+  hakoniwa-pdu-endpoint:
+    capabilities:
+      hakoniwa_core: true
+recipe_local_requirements_schema_version: 1
+recipe_local_requirements:
+  athrill-studio:
+    root:
+      default_path: ../athrill-studio
+      override_env: ATHRILL_STUDIO_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/athrill-studio.git
+      revision: 6ec0dd68980e4999d0bdcc8b6ab6d5a27e94a772
+    required_artifacts:
+      - path: tools/fetch.sh
+        kind: file
+      - path: tools/setup-drone-motor.sh
+        kind: file
+      - path: tests/motor_stop_smoke.py
+        kind: file
+      - path: tests/flight_smoke.py
+        kind: file
+  athrill-target-stm32:
+    root:
+      default_path: ../athrill-target-stm32
+      override_env: ATHRILL_TARGET_STM32_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/athrill-target-stm32.git
+      revision: 2fbc46468cdceb7d0c4d3b2fd40e9ff53a4d201b
+    required_artifacts:
+      - path: examples/px4-hakoniwa-dshot/run.sh
+        kind: executable
+      - path: versions.txt
+        kind: file
+  hakoniwalab-athrill-device:
+    root:
+      default_path: ../athrill-device
+      override_env: ATHRILL_DEVICE_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/athrill-device.git
+      revision: ab3c22e02748fed104972edc93afd5bd4aef51cb
+    required_artifacts:
+      - path: board/common/CMakeLists.txt
+        kind: file
+      - path: boards/pixhawk4/pixhawk4-hakoniwa-dshot.dtb
+        kind: file
+  athrill:
+    root:
+      default_path: ../athrill
+      override_env: ATHRILL_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/toppers/athrill.git
+      revision: a63d4cd9b6bcbfea7ad411e590b5b3107b1ce41c
+    required_artifacts:
+      - path: src/inc/athrill_exdev.h
+        kind: file
+  hakoniwa-drone-core:
+    root:
+      default_path: ../hakoniwa-drone-core
+      override_env: HAKONIWA_DRONE_CORE_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/toppers/hakoniwa-drone-core.git
+      revision: a126f15472a060cfd88f59d8d51f8d063057b0e5
+    required_artifacts:
+      - path: include/aircraft/interfaces/rotor_count.hpp
+        kind: file
+      - path: config/drone/x500-athrill-px4/drone_config_0.json
+        kind: file
+recipe_runtime_schema_version: 1
+recipe_runtime:
+  environment:
+    HAKO_FOUNDATION_INSTALL: ${FOUNDATION_INSTALL}
+    HAKO_FOUNDATION_PYTHON: ${FOUNDATION_PYTHON}
+    HAKO_RECIPE_REPOSITORY: ${RECIPE_REPOSITORY}
+    HAKO_RECIPE_WORKSPACE: ${RECIPE_WORKSPACE}
+    ATHRILL_STUDIO_ROOT: ${DEPENDENCY:athrill-studio}
+    ATHRILL_TARGET_ROOT: ${DEPENDENCY:athrill-target-stm32}
+    ATHRILL_DEVICE_ROOT: ${DEPENDENCY:hakoniwalab-athrill-device}
+    ATHRILL_ROOT: ${DEPENDENCY:athrill}
+    HAKO_DRONE_CHECKOUT: ${DEPENDENCY:hakoniwa-drone-core}
+    HAKO_DRONE_RELEASE: v5.2.0
+  launcher:
+    template: recipes/launcher/athrill-studio-px4-motor-fault.json
+    output: config/launcher.json
+    mode: activate-only
+agency_boundary:
+  agent_actions:
+    - id: build_and_prepare
+      description: Fetch the pinned release files, build the in-process sensor device and prepare PX4's first-boot state in the Recipe workspace.
+      autonomous: true
+      preconditions: [user_requested_execution]
+    - id: run_scenario
+      description: Run the software-only flight and motor-failure demo through Studio's API and report PASS or FAIL.
+      autonomous: true
+      preconditions: [user_requested_execution, local-simulation-only]
+  human_decisions: []
+  human_actions:
+    - id: watch_in_browser
+      description: Open Studio, choose the Pixhawk 4 and the motor-failure firmware, turn Real time on and press Run.
+      confirmation_required: true
+      required_before: [visual_observation]
+  required_permissions: [local-process-execution, local-network-ports]
+components:
+  - id: athrill-studio
+    roles: [visualizer, monitor, control_plane]
+  - id: athrill-target-stm32
+    roles: [simulation_core]
+  - id: hakoniwalab-athrill-device
+    roles: [data_model, integration_boundary]
+  - id: athrill
+    roles: [simulation_core]
+  - id: hakoniwa-drone-core
+    roles: [physics_runtime]
+  - id: hakoniwa-core-pro
+    roles: [simulation_core]
+  - id: hakoniwa-pdu-python
+    roles: [control_plane]
+  - id: hakoniwa-pdu-endpoint
+    roles: [integration_boundary]
+connections:
+  - from: athrill-target-stm32
+    to: hakoniwalab-athrill-device
+    interface: Devicetree DShot ESC, KISS telemetry and the in-process sensor device
+    contract:
+      status: verified
+      requires: [pixhawk4-hakoniwa-dshot.dtb, DEVICE_CONFIG_ESC_MOTOR_STOP]
+      validation_notes: [athrill-target-stm32 v0.4.0 and athrill-device ab3c22e CI and release checks.]
+  - from: hakoniwalab-athrill-device
+    to: hakoniwa-drone-core
+    interface: in-process aircraft (direct calls, rotor status)
+    contract:
+      status: verified
+      requires: [public Hakoniwa Drone v5.2.0 headers and mac.zip]
+      validation_notes: ["athrill-device PR 145 built against the public release alone."]
+  - from: athrill-studio
+    to: athrill-target-stm32
+    interface: athrill3 process, MAVLink TCP 5760, flight trace
+    contract:
+      status: verified
+      requires: [Studio's px4-x500-motor-stop profile]
+      validation_notes: [tests/motor_stop_smoke.py]
+data_flow:
+  - x500 physics (in process) -> emulated sensor chips -> PX4's own drivers -> PX4 control -> DShot600 timer DMA -> emulated ESC -> x500 motors
+  - Scheduled stop of motor 3 at 40 s -> the ESC sends 0 and answers zero-current, zero-eRPM telemetry -> PX4 "Motor failure detected" -> descent
+  - Athrill flight trace and PX4 MAVLink -> Studio -> browser (x500 view, PX4 console)
+time_model:
+  mode: athrill-owned-virtual-time
+  notes:
+    - Athrill steps the firmware and the in-process x500 in lockstep on its virtual clock; no Hakoniwa conductor.
+    - The motor stop is at a fixed virtual time; with Real time on, virtual time follows the wall clock.
+artifact_sets: {}
+artifacts:
+  - id: device_build
+    kind: directory
+    path: work/recipes/athrill-studio-px4-motor-fault/build-device
+    platforms: [macos-arm64]
+  - id: firmware_state
+    kind: directory
+    path: work/recipes/athrill-studio-px4-motor-fault/seed-dshot
+    platforms: [macos-arm64]
+  - id: launcher_session
+    kind: runtime-state
+    path: work/recipes/athrill-studio-px4-motor-fault/runtime/launcher-session.json
+    platforms: [macos-arm64]
+missing_pieces:
+  - Linux x86_64 (WSL2) needs athrill-device's in-process build on Linux (lnx.zip) and a Linux run of this Recipe.
+  - Fault injection from the browser at run time (the Hakoniwa asset mode) is a later Recipe.
+demo:
+  prerequisites: []
+  steps:
+    - id: configure
+      command: python tools/recipe/athrill_studio_px4.py configure
+      expected: Foundation is SATISFIED and the five repositories are at their pinned commits; the Launcher and environment files are written.
+    - id: fetch
+      command: python tools/recipe/athrill_studio_px4.py fetch
+      expected: Studio's tools/fetch.sh reports athrill3-v0.4.0-macos-arm64.tar.gz, px4_fmu-v5_default.elf and zephyr-samples-v0.3.0.tar.gz OK; mac.zip v5.2.0 matches its SHA-256.
+    - id: build
+      command: python tools/recipe/athrill_studio_px4.py build
+      expected: libhako_sensor_device_inproc_motor.dylib in work/recipes/athrill-studio-px4-motor-fault/build-device.
+    - id: prepare
+      command: python tools/recipe/athrill_studio_px4.py prepare
+      expected: PX4's first boot writes fram.bin and sd.img, and Studio's setup-drone-motor.sh prints "drone (motor status) ready".
+    - id: scenario
+      command: python tools/recipe/athrill_studio_px4.py scenario
+      expected: Studio's flight smoke test (DShot ESCs) holds 2.5 m, lands and prints PASS; then its motor-stop smoke test prints "Motor failure detected", "on the ground" and PASS.
+    - id: start
+      command: python tools/recipe/athrill_studio_px4.py start
+      expected: The Launcher runs Studio in the background and prints http://127.0.0.1:8765/. Choose Holybro Pixhawk 4; "PX4 v1.17.0 flying the x500 (in process, DShot ESCs)" flies with Take off 2.5 m and Land, and "PX4 v1.17.0 x500, motor 3 stops at 40 s" takes off by itself and loses motor 3; Real time on, Run, then the Flight tab.
+    - id: stop
+      command: python tools/recipe/athrill_studio_px4.py stop
+      expected: The Launcher terminates the Studio server and its athrill3 child.
+  observability:
+    success_signals:
+      - The flight smoke test holds 2.5 +- 0.3 m and lands disarmed.
+      - The motor-stop smoke test reports PASS with motor 3 stopped near 40.1 s, PX4's report about then and the ground under a second later.
+      - The Flight tab shows the x500 climb, motor 3's rotor at 0 and the x500 coming down beside PX4's console.
+    failure_signals:
+      - A checksum mismatch in fetch, a missing library after build, or PX4's first boot not finishing in prepare.
+      - The smoke test reports SOME CHECKS FAILED.
+  cleanup:
+    owner: hakoniwa-launcher
+    provider: hakoniwa-pdu-python
+    mode: background-session
+    target: work/recipes/athrill-studio-px4-motor-fault/runtime/launcher-session.json
+    normal:
+      interactive: python tools/recipe/athrill_studio_px4.py stop
+      signal: Launcher control terminate request
+    expected_behavior:
+      - The Launcher terminates only the Studio server it started; Studio's shutdown stops its athrill3 child.
+    verification_checks:
+      - python tools/recipe/athrill_studio_px4.py status reports TERMINATED.
+      - Nothing listens on 8765 or 5760.
+expected_result: >
+  From public releases only, Athrill Studio shows the unmodified PX4 firmware on
+  the emulated Pixhawk 4 flying the Hakoniwa Drone x500, detecting the stopped
+  motor through its own DShot driver and ESC telemetry, and the x500 coming down.
+source_catalogs:
+  - component_id: athrill-studio
+  - component_id: athrill-target-stm32
+  - component_id: hakoniwalab-athrill-device
+  - component_id: athrill
+  - component_id: hakoniwa-drone-core
+  - component_id: hakoniwa-core-pro
+  - component_id: hakoniwa-pdu-python
+  - component_id: hakoniwa-pdu-endpoint
+source_artifacts:
+  - repository: hakoniwalab/athrill-studio
+    path: tests/motor_stop_smoke.py
+    revision: 6ec0dd68980e4999d0bdcc8b6ab6d5a27e94a772
+    description: The motor-failure demo through Studio's API.
+  - repository: hakoniwalab/athrill-target-stm32
+    path: examples/px4-hakoniwa-dshot
+    revision: 2fbc46468cdceb7d0c4d3b2fd40e9ff53a4d201b
+    description: PX4's first boot with the DShot parameters.
