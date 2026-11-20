@@ -19,7 +19,7 @@ feasibility:
     - athrill-device ab3c22e builds the in-process sensor device from the public Hakoniwa Drone v5.2.0 alone.
     - Athrill Studio runs the motor-failure profile and checks it through its API (tests/motor_stop_smoke.py).
 validation:
-  status: partially_verified
+  status: verified
   verified_at: 2026-11-20
   summary: The Recipe steps from an empty directory on macOS arm64 and on Linux x86_64 (WSL2, Ubuntu 24.04).
   steps:
@@ -29,8 +29,13 @@ validation:
         - source: local-foundation-e2e
           date: 2026-11-20
     - id: linux_x86_64_wsl2
-      status: not_tested
-      evidence: []
+      status: verified
+      evidence:
+        - source: local-foundation-e2e
+          date: 2026-11-20
+      notes:
+        - Ubuntu 24.04 on WSL2 from an empty directory, no sudo: configure 445 s, scenario PASS (flight hold 2.48-2.50 m; motor 3 stopped 40.104 s, on the ground 40.824 s).
+        - Studio on 0.0.0.0 opened from the Windows browser at http://localhost:8765/.
 constraints:
   - macos-arm64-or-linux-x86_64
   - pixhawk4-fmuv5
