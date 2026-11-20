@@ -5,7 +5,7 @@
     python tools/recipe/athrill_studio_px4.py fetch       # Studio's release files, Hakoniwa Drone's mac.zip or lnx.zip
     python tools/recipe/athrill_studio_px4.py build       # the in-process sensor device with the motor status
     python tools/recipe/athrill_studio_px4.py prepare     # PX4's first boot with the DShot parameters, Studio's links
-    python tools/recipe/athrill_studio_px4.py scenario    # the flight, then the motor failure, through Studio's API
+    python tools/recipe/athrill_studio_px4.py scenario    # the flight, the motor failure, a route with a planned fault
     python tools/recipe/athrill_studio_px4.py start       # Studio in the background: open the printed URL
     python tools/recipe/athrill_studio_px4.py status | stop | url
 
@@ -223,7 +223,9 @@ def scenario(extra: list[str]) -> int:
     env = runtime_env(v)
     must(run([python, "tests/flight_smoke.py", "--firmware", "px4-x500-dshot"], env=env, cwd=studio),
          "flight (take off, hold, land)")
-    return run([python, "tests/motor_stop_smoke.py", *extra], env=env, cwd=studio)
+    must(run([python, "tests/motor_stop_smoke.py", *extra], env=env, cwd=studio), "motor stop at 40 s")
+    # a route with a fault planned at a point (the browser's map and fault plan, through the API)
+    return run([python, "tests/route_fault_smoke.py", *extra], env=env, cwd=studio)
 
 
 def launcher(command: str) -> int:
@@ -245,7 +247,8 @@ def launcher(command: str) -> int:
             if studio_host == "0.0.0.0":
                 print("         listening on every interface (WSL2: open it from the Windows browser);"
                       " other machines on this network can reach it too")
-            print("Board Holybro Pixhawk 4, firmware 'PX4 v1.17.0 x500, motor 3 stops at 40 s', Real time on, Run.")
+            print("Board Holybro Pixhawk 4, firmware 'PX4 v1.17.0 x500, fly a route and stop a motor from the browser',"
+                  " Real time on, Run, then the Flight tab: Take off, set the route on the map, Fly route.")
         return rc
     if not session.is_file():
         raise RecipeError(f"Launcher session is missing: {session}")
