@@ -2,7 +2,7 @@ id: athrill-studio-px4-motor-fault
 title: Athrill Studio PX4 Flight and DShot Motor-Fault Demo
 recipe_version: 0.1
 goal:
-  user_request: Watch the official PX4 firmware on an emulated Pixhawk 4 fly the x500, and detect a stopped motor, in the browser, from public releases only.
+  user_request: Watch the official PX4 firmware on an emulated Pixhawk 4 fly the x500 along a route, stop a motor where you planned it or when you like, and see PX4 detect it, in the browser, from public releases only.
   description: >
     Build the Athrill in-process sensor device with the motor status against the
     Foundation and the public Hakoniwa Drone release, prepare PX4's first boot
@@ -132,7 +132,7 @@ recipe_local_requirements:
     source:
       type: git
       url: https://github.com/hakoniwalab/athrill-studio.git
-      revision: 9cddec21e7692dcf97e421a50dfcda681b80e1da
+      revision: f6b765e5ea3346c401ec77ec9dc3c42d7a21faa9
     required_artifacts:
       - path: tools/fetch.sh
         kind: file
@@ -141,6 +141,8 @@ recipe_local_requirements:
       - path: tests/motor_stop_smoke.py
         kind: file
       - path: tests/flight_smoke.py
+        kind: file
+      - path: tests/route_fault_smoke.py
         kind: file
   athrill-target-stm32:
     root:
@@ -164,11 +166,15 @@ recipe_local_requirements:
     source:
       type: git
       url: https://github.com/hakoniwalab/athrill-device.git
-      revision: 487da73c83ceaa351d991fc52ecb1bc3eb96dd11
+      revision: 6dbe7627f23e995d221702caf33602f34b149e30
     required_artifacts:
       - path: board/common/CMakeLists.txt
         kind: file
       - path: boards/pixhawk4/pixhawk4-hakoniwa-dshot.dtb
+        kind: file
+      - path: boards/pixhawk4/pixhawk4-hakoniwa-dshot-asset.dtb
+        kind: file
+      - path: board/common/src/hako_sensor_rotor_fault.c
         kind: file
   athrill:
     root:
@@ -312,10 +318,10 @@ demo:
       expected: PX4's first boot writes fram.bin and sd.img, and Studio's setup-drone-motor.sh prints "drone (motor status) ready".
     - id: scenario
       command: python tools/recipe/athrill_studio_px4.py scenario
-      expected: Studio's flight smoke test (DShot ESCs) holds 2.5 m, lands and prints PASS; then its motor-stop smoke test prints "Motor failure detected", "on the ground" and PASS.
+      expected: Studio's flight smoke test (DShot ESCs) holds 2.5 m, lands and prints PASS; its motor-stop smoke test prints "Motor failure detected", "on the ground" and PASS; its route smoke test flies a 6 m square, stops motor 3 at point 2 as planned, and prints PASS.
     - id: start
       command: python tools/recipe/athrill_studio_px4.py start
-      expected: The Launcher runs Studio in the background and prints http://127.0.0.1:8765/. Choose Holybro Pixhawk 4; "PX4 v1.17.0 flying the x500 (in process, DShot ESCs)" flies with Take off 2.5 m and Land, and "PX4 v1.17.0 x500, motor 3 stops at 40 s" takes off by itself and loses motor 3; Real time on, Run, then the Flight tab.
+      expected: The Launcher runs Studio in the background and prints http://127.0.0.1:8765/. Choose Holybro Pixhawk 4, Real time on, Run, then the Flight tab. "PX4 v1.17.0 x500, fly a route and stop a motor from the browser": Take off 2.5 m, click the map to set the route, optionally plan "stop motor 3 at point 2", Fly route; the Stop buttons stop a motor at any moment. "PX4 v1.17.0 flying the x500 (in process, DShot ESCs)" flies with Take off and Land; "PX4 v1.17.0 x500, motor 3 stops at 40 s" takes off by itself and loses motor 3.
     - id: stop
       command: python tools/recipe/athrill_studio_px4.py stop
       expected: The Launcher terminates the Studio server and its athrill3 child.
@@ -323,6 +329,7 @@ demo:
     success_signals:
       - The flight smoke test holds 2.5 +- 0.3 m and lands disarmed.
       - The motor-stop smoke test reports PASS with motor 3 stopped near 40.1 s, PX4's report about then and the ground under a second later.
+      - The route smoke test reports point 2 reached, motor 3 stopped, PX4's report and the descent, then PASS.
       - The Flight tab shows the x500 climb, motor 3's rotor at 0 and the x500 coming down beside PX4's console.
     failure_signals:
       - A checksum mismatch in fetch, a missing library after build, or PX4's first boot not finishing in prepare.
