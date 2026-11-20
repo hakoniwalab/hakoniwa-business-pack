@@ -63,12 +63,21 @@ capabilities:
       - repository: hakoniwalab/athrill-studio
         path: boards.yaml
         revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+  - name: PX4 flight and DShot motor failure (in process)
+    description: Runs PX4 v1.17.0 on the emulated Pixhawk 4 flying the public Hakoniwa Drone x500 in the Athrill process on DShot600 ESCs (take off, hold, land), and the motor-failure profile where the emulated ESC stops motor 3 at 40 s and PX4 reports it; tests/flight_smoke.py and tests/motor_stop_smoke.py check both through the API.
+    evidence:
+      - repository: hakoniwalab/athrill-studio
+        path: tests/motor_stop_smoke.py
+        revision: 6ec0dd68980e4999d0bdcc8b6ab6d5a27e94a772
+      - repository: hakoniwalab/athrill-studio
+        path: tests/flight_smoke.py
+        revision: 6ec0dd68980e4999d0bdcc8b6ab6d5a27e94a772
   - name: Release acquisition and end-to-end smoke
-    description: Fetches and verifies Athrill STM32 v0.3.0 host and Zephyr release archives plus the pinned athrill-device DTBs, then checks Devicetree, console, model, and exit behavior through the browser APIs.
+    description: Fetches and verifies the Athrill STM32 release of versions.txt (athrill3, PX4 ELF), the Zephyr sample release, and the pinned athrill-device DTBs, then checks Devicetree, console, model, and exit behavior through the browser APIs.
     evidence:
       - repository: hakoniwalab/athrill-studio
         path: tools/fetch.sh
-        revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
+        revision: 6ec0dd68980e4999d0bdcc8b6ab6d5a27e94a772
       - repository: hakoniwalab/athrill-studio
         path: tests/smoke.py
         revision: 433dd1363bf6f49b417cd2a49f4ed6b240f60c23
@@ -123,9 +132,9 @@ dependencies:
     - name: PyYAML
       type: package
       notes: Loads boards.yaml.
-    - name: Athrill STM32 v0.3.0 release
+    - name: Athrill STM32 release (versions.txt)
       type: runtime
-      notes: Supplies athrill3 and the Zephyr sample ELFs fetched by tools/fetch.sh.
+      notes: Supplies athrill3 and the PX4 ELF (v0.4.0) and the Zephyr sample ELFs (v0.3.0) fetched by tools/fetch.sh.
     - name: athrill-device
       type: repository
       notes: Supplies the pinned board DTBs visualized and used for firmware execution.
@@ -145,7 +154,7 @@ connects_to:
   - component_id: athrill-target-stm32
     direction: uses
     interface: athrill3 command / console and DEVICE_MODEL output
-    notes: Studio launches the unchanged emulator from the v0.3.0 release and only reads its output.
+    notes: Studio launches the unchanged emulator from the release of versions.txt and only reads its output.
   - component_id: hakoniwalab-athrill-device
     direction: uses
     interface: board DTB files

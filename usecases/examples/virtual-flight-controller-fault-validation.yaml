@@ -39,7 +39,7 @@ status:
     - Athrill STM32 runs the supported Pixhawk 4 firmware images and firmware-owned peripheral drivers.
     - The ArduPilot path corroborates a target-scoped reboot with a new IWDG underflow/reset record.
     - The PX4 path uses its DShot driver and KISS telemetry to report a scheduled motor failure.
-    - The PX4 path passed through Foundation-managed prepare, launch, fault detection and cleanup; the managed ArduPilot and interactive browser observations remain to be recorded.
+    - The PX4 path runs in Athrill Studio from public releases (Recipe athrill-studio-px4-motor-fault); the managed ArduPilot observation remains to be recorded.
 
 realized_by:
   - recipe_id: athrill-pixhawk-ardupilot-dos-viewer
@@ -48,12 +48,12 @@ realized_by:
       On an emulated Pixhawk 4, an authorized ArduPilot SERIAL_CONTROL stress
       scenario requires stable hover, target-scoped reboot evidence, and a new
       Athrill IWDG reset diagnostic before reporting reproduction.
-  - recipe_id: athrill-pixhawk-px4-motor-fault-viewer
+  - recipe_id: athrill-studio-px4-motor-fault
     relationship: actuator_fault_variant
     validation_scope: >
       On an emulated Pixhawk 4, stock PX4 DShot output and ESC telemetry carry a
-      deterministic motor stop to PX4's own motor-failure detector while the
-      vehicle response is rendered in a local browser.
+      motor stop at a fixed virtual time to PX4's own motor-failure detector, with
+      the public Hakoniwa Drone in process, observed in Athrill Studio.
 
 supported_by:
   - component_id: athrill
