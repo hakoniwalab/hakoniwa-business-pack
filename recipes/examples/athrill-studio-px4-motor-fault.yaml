@@ -321,7 +321,8 @@ demo:
       expected: Studio's flight smoke test (DShot ESCs) holds 2.5 m, lands and prints PASS; its motor-stop smoke test prints "Motor failure detected", "on the ground" and PASS; its route smoke test flies a 6 m square, stops motor 3 at point 2 as planned, and prints PASS.
     - id: start
       command: python tools/recipe/athrill_studio_px4.py start
-      expected: The Launcher runs Studio in the background and prints http://127.0.0.1:8765/. Choose Holybro Pixhawk 4, Real time on, Run, then the Flight tab. "PX4 v1.17.0 x500, fly a route and stop a motor from the browser": Take off 2.5 m, click the map to set the route, optionally plan "stop motor 3 at point 2", Fly route; the Stop buttons stop a motor at any moment. "PX4 v1.17.0 flying the x500 (in process, DShot ESCs)" flies with Take off and Land; "PX4 v1.17.0 x500, motor 3 stops at 40 s" takes off by itself and loses motor 3.
+      expected: >-
+        The Launcher runs Studio in the background and prints http://127.0.0.1:8765/. Choose Holybro Pixhawk 4, Real time on, Run, then the Flight tab. "PX4 v1.17.0 x500, fly a route and stop a motor from the browser": Take off 2.5 m, click the map to set the route, optionally plan "stop motor 3 at point 2", Fly route; the Stop buttons stop a motor at any moment. "PX4 v1.17.0 flying the x500 (in process, DShot ESCs)" flies with Take off and Land; "PX4 v1.17.0 x500, motor 3 stops at 40 s" takes off by itself and loses motor 3.
     - id: stop
       command: python tools/recipe/athrill_studio_px4.py stop
       expected: The Launcher terminates the Studio server and its athrill3 child.
