@@ -2,7 +2,7 @@
 """Operate the Athrill Studio PX4 motor-fault Recipe (recipes/examples/athrill-studio-px4-motor-fault.yaml).
 
     python tools/recipe/athrill_studio_px4.py configure   # Foundation and the pinned repositories
-    python tools/recipe/athrill_studio_px4.py fetch       # Studio's release files, Hakoniwa Drone's mac.zip
+    python tools/recipe/athrill_studio_px4.py fetch       # Studio's release files, Hakoniwa Drone's mac.zip or lnx.zip
     python tools/recipe/athrill_studio_px4.py build       # the in-process sensor device with the motor status
     python tools/recipe/athrill_studio_px4.py prepare     # PX4's first boot with the DShot parameters, Studio's links
     python tools/recipe/athrill_studio_px4.py scenario    # the flight, then the motor failure, through Studio's API
@@ -10,7 +10,7 @@
     python tools/recipe/athrill_studio_px4.py status | stop | url
 
 Everything it makes stays under work/recipes/athrill-studio-px4-motor-fault/ and in the
-Studio checkout's work/ directory. It needs no sudo and installs nothing outside the
+Studio checkout's work/ directory. macOS arm64 (mac.zip) or Linux x86_64 (lnx.zip). It needs no sudo and installs nothing outside the
 Workspace.
 """
 
@@ -75,11 +75,24 @@ def var_path(name: str) -> Path:
     return Path(variables()[name])
 
 
-def host() -> str:
+def host() -> dict[str, str]:
+    """The Hakoniwa Drone release zip and the shared-library suffix of this host."""
     key = (platform.system(), platform.machine())
     if key == ("Darwin", "arm64"):
-        return "mac"
-    raise RecipeError("this Recipe is verified on macOS arm64 only (the in-process sensor device is macOS-only for now)")
+        return {"zip": "mac", "ext": "dylib"}
+    if key == ("Linux", "x86_64"):
+        return {"zip": "lnx", "ext": "so"}
+    raise RecipeError(f"no Hakoniwa Drone and athrill3 release for {key[0]} {key[1]} (macOS arm64 or Linux x86_64)")
+
+
+def runtime_env(v: dict[str, str]) -> dict[str, str]:
+    """The environment for athrill3 runs: on Linux, lnx.zip's libraries take the Hakoniwa core
+    libraries (libassets, libconductor, libshakoc) from the Foundation."""
+    env = os.environ.copy()
+    if platform.system() == "Linux":
+        lib = str(Path(v["HAKO_FOUNDATION_INSTALL"]) / "lib")
+        env["LD_LIBRARY_PATH"] = lib + (os.pathsep + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
+    return env
 
 
 def sha256(path: Path) -> str:
@@ -105,29 +118,29 @@ def drone_dir() -> Path:
 
 
 def fetch() -> int:
-    host()
+    zip_name = host()["zip"] + ".zip"
     studio = var_path("ATHRILL_STUDIO_ROOT")
     must(run(["sh", studio / "tools/fetch.sh"], cwd=studio), "Studio tools/fetch.sh")
     drone = var_path("HAKO_DRONE_CHECKOUT")
     release = variables()["HAKO_DRONE_RELEASE"]
     base = f"https://github.com/toppers/hakoniwa-drone-core/releases/download/{release}"
     inputs = WORK / "inputs" / f"hakoniwa-drone-core-{release}"
-    zip_path = inputs / "mac.zip"
-    sum_path = inputs / "mac.zip.sha256"
+    zip_path = inputs / zip_name
+    sum_path = inputs / f"{zip_name}.sha256"
     if not zip_path.is_file():
-        download(f"{base}/mac.zip.sha256", sum_path)
-        download(f"{base}/mac.zip", zip_path)
+        download(f"{base}/{zip_name}.sha256", sum_path)
+        download(f"{base}/{zip_name}", zip_path)
     expected = sum_path.read_text(encoding="utf-8").split()[0]
     actual = sha256(zip_path)
     if actual != expected:
         zip_path.unlink()
-        raise RecipeError(f"mac.zip SHA-256 mismatch: {actual} != {expected}")
-    print(f"[OK] mac.zip {release}: {actual}")
+        raise RecipeError(f"{zip_name} SHA-256 mismatch: {actual} != {expected}")
+    print(f"[OK] {zip_name} {release}: {actual}")
     target = drone_dir()
     if target.exists():
         shutil.rmtree(target)
     target.mkdir(parents=True)
-    must(run(["unzip", "-q", zip_path, "-d", target]), "unzip mac.zip")
+    must(run(["unzip", "-q", zip_path, "-d", target]), f"unzip {zip_name}")
     for name in ("include", "thirdparty"):
         (target / name).symlink_to(drone / name)
     # a copy: the in-process aircraft writes its log next to the airframe
@@ -137,7 +150,7 @@ def fetch() -> int:
 
 
 def build() -> int:
-    host()
+    ext = host()["ext"]
     v = variables()
     drone = Path(v["HAKO_DRONE_CHECKOUT"])
     must(run(["git", "-C", drone, "submodule", "update", "--init", "thirdparty/glm"]), "glm submodule")
@@ -159,7 +172,7 @@ def build() -> int:
         f"-DHAKO_DRONE_ROOT={drone_dir()}", f"-DHAKO_PDU_REGISTRY_DIR={registry}",
     ]), "cmake configure")
     must(run(["cmake", "--build", build_dir, "--parallel"]), "cmake build")
-    library = build_dir / "libhako_sensor_device_inproc_motor.dylib"
+    library = build_dir / f"libhako_sensor_device_inproc_motor.{ext}"
     if not library.is_file():
         raise RecipeError(f"missing {library}")
     print(f"[OK] {library}")
@@ -167,21 +180,21 @@ def build() -> int:
 
 
 def prepare() -> int:
-    host()
+    ext = host()["ext"]
     v = variables()
     studio = Path(v["ATHRILL_STUDIO_ROOT"])
     target = Path(v["ATHRILL_TARGET_ROOT"])
     device = Path(v["ATHRILL_DEVICE_ROOT"])
     athrill3 = studio / "work/athrill3-stm32/athrill3"
     elf = studio / "work/download/px4_fmu-v5_default.elf"
-    library = WORK / "build-device/libhako_sensor_device_inproc_motor.dylib"
+    library = WORK / f"build-device/libhako_sensor_device_inproc_motor.{ext}"
     for need in (athrill3, elf, library):
         if not need.exists():
             raise RecipeError(f"missing {need}; run fetch and build first")
     seed = WORK / "seed-dshot"
     if not ((seed / "fram.bin").is_file() and (seed / "sd.img").is_file()):
         seed.mkdir(parents=True, exist_ok=True)
-        env = os.environ.copy()
+        env = runtime_env(v)
         env.update({"ATHRILL_DEVICE_DIR": str(device), "ATHRILL_WORK_DIR": str(seed),
                     "ATHRILL_PREPARE_ONLY": "1", "PYTHON": v["HAKO_FOUNDATION_PYTHON"]})
         for name in ("HAKO_DRONE_ROOT", "HAKO_AIRCRAFT_CONFIG_PATH", "ATHRILL_OPTIONS"):
@@ -207,8 +220,10 @@ def scenario(extra: list[str]) -> int:
     studio = Path(v["ATHRILL_STUDIO_ROOT"])
     python = v["HAKO_FOUNDATION_PYTHON"]
     # the normal flight on the DShot ESCs, then the motor failure
-    must(run([python, "tests/flight_smoke.py", "--firmware", "px4-x500-dshot"], cwd=studio), "flight (take off, hold, land)")
-    return run([python, "tests/motor_stop_smoke.py", *extra], cwd=studio)
+    env = runtime_env(v)
+    must(run([python, "tests/flight_smoke.py", "--firmware", "px4-x500-dshot"], env=env, cwd=studio),
+         "flight (take off, hold, land)")
+    return run([python, "tests/motor_stop_smoke.py", *extra], env=env, cwd=studio)
 
 
 def launcher(command: str) -> int:
