@@ -234,13 +234,14 @@ def launcher(command: str) -> int:
         session.parent.mkdir(parents=True, exist_ok=True)
         # On Linux (WSL2 among them) Studio listens on every interface, so that a Windows browser
         # reaches it at http://localhost:8765/ through WSL2's NAT; other machines on the network
-        # can reach it too. On macOS it stays on 127.0.0.1.
+        # can reach it too. On macOS it stays on 127.0.0.1 (the Recipe environment's default,
+        # which configure checks the Launcher against).
         studio_host = "0.0.0.0" if platform.system() == "Linux" else "127.0.0.1"
         rc = run([v["HAKO_FOUNDATION_PYTHON"], "-m", "hakoniwa_pdu.apps.launcher.hako_launcher",
                   WORK / "config/launcher.json", "--mode", "activate-only", "--background", session],
                  env={**os.environ, **v, "ATHRILL_STUDIO_HOST": studio_host})
         if rc == 0:
-            print(f"Studio : {STUDIO_URL}")
+            print(f"Studio : {STUDIO_URL if studio_host == '127.0.0.1' else f'http://localhost:{STUDIO_PORT}/'}")
             if studio_host == "0.0.0.0":
                 print("         listening on every interface (WSL2: open it from the Windows browser);"
                       " other machines on this network can reach it too")

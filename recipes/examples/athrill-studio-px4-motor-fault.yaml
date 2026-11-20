@@ -204,6 +204,7 @@ recipe_runtime:
     ATHRILL_ROOT: ${DEPENDENCY:athrill}
     HAKO_DRONE_CHECKOUT: ${DEPENDENCY:hakoniwa-drone-core}
     HAKO_DRONE_RELEASE: v5.2.0
+    ATHRILL_STUDIO_HOST: 127.0.0.1
   launcher:
     template: recipes/launcher/athrill-studio-px4-motor-fault.json
     output: config/launcher.json
