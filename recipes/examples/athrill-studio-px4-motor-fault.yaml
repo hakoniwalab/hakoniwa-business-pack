@@ -333,6 +333,9 @@ demo:
     verification_checks:
       - python tools/recipe/athrill_studio_px4.py status reports TERMINATED.
       - Nothing listens on 8765 or 5760.
+    cautions:
+      - Stop only the Launcher session of this Recipe; do not kill Python or athrill3 processes broadly.
+      - The scenario starts its own Studio server on a free port but PX4's MAVLink uses TCP 5760; run it while no other PX4 run is active.
 expected_result: >
   From public releases only, Athrill Studio shows the unmodified PX4 firmware on
   the emulated Pixhawk 4 flying the Hakoniwa Drone x500, detecting the stopped
