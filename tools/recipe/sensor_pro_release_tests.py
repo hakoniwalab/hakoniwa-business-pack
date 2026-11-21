@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 from pathlib import Path
 import platform
@@ -189,6 +190,23 @@ def check() -> int:
     for c in checks:
         print(f"[{'OK' if c.ok else 'NG'}] {c.label}: {c.detail}")
         failed += 0 if c.ok else 1
+    # A core library of the right name can still be too old: every Hakoniwa core function the plugin
+    # imports (MANIFEST.json runtime_dependencies) must be exported by the Foundation's libassets.
+    manifest = json.loads((RUNTIME / "archive/MANIFEST.json").read_text(encoding="utf-8"))
+    needed = manifest["runtime_dependencies"]["lib/hakoniwa_mujoco_sensors_plugin.so"]["hakoniwa_core_functions"]
+    library = next(iter(sorted((FOUNDATION / "lib").glob("libassets.*"))), None)
+    if library is None:
+        print(f"[NG] Hakoniwa core functions: no libassets in {FOUNDATION / 'lib'}")
+        failed += 1
+    else:
+        flags = ["-gU"] if platform.system() == "Darwin" else ["-D", "--defined-only"]
+        exported = {s.lstrip("_") for s in subprocess.run(["nm", *flags, str(library)], capture_output=True,
+                                                          text=True, check=True).stdout.split()}
+        missing = [f for f in needed if f not in exported]
+        print(f"[{'NG' if missing else 'OK'}] Hakoniwa core functions: "
+              + (f"missing in {library}: {', '.join(missing)}" if missing
+                 else f"all {len(needed)} the plugin imports are in {library.name}"))
+        failed += 1 if missing else 0
     if failed:
         raise RecipeError(f"{failed} native runtime check(s) failed: install the missing host libraries (GLFW) "
                           "or run configure for the Foundation core")
