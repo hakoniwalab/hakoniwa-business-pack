@@ -1,0 +1,190 @@
+id: hakoniwa-sensor-pro
+name: Hakoniwa Sensor PRO
+repository:
+  owner: hakoniwalab
+  name: hakoniwa-sensor-pro
+  url: https://github.com/hakoniwalab/hakoniwa-sensor-pro
+  visibility: public
+distribution:
+  channel: dual-license
+  notes:
+    - Binaries only (release archives per platform) with the tests that check them against the public specification; the sources are not public.
+    - Free for personal use, academic research and education, non-commercial research and development and non-profit activities; commercial use needs a commercial license.
+verification:
+  verified_at: 2026-11-21
+  source_revision: df0e67d13a7b32c592a3c094f4b09a8c6698d7f9
+  source_ref: v0.2.0
+summary: Hakoniwa Lab's sensor implementation for simulation, as binaries behind the public hakoniwa-sensor-adapter interface, with release tests traced to the specification.
+category:
+  primary: physics-environment
+  secondary:
+    - physics-runtime
+    - binary-contract
+    - robot-arm
+
+status:
+  maturity: active
+  catalog_confidence: high
+  notes:
+    - Cataloged from the v0.2.0 README, release notes, MANIFEST.json and the release tests (275 of 275 on macOS arm64 and Linux x86_64, the latter also under WSL2).
+
+capabilities:
+  - name: Sensor models with datasheet error effects
+    description: Joint (encoder, joint torque), 6-axis force-torque, IMU, magnetometer, barometer, GNSS, 2D/3D LiDAR, rangefinder, depth and RGB cameras; each error effect a datasheet describes is set and switched off on its own.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-sensor-pro
+        path: README.md
+        revision: df0e67d13a7b32c592a3c094f4b09a8c6698d7f9
+  - name: Force-torque vibration of a moving arm
+    description: A host model in front of any force-torque implementation (gear orders, structural modes in sensor or world axes, broadband, run-to-run variation, load direction), checked against a public KUKA recording.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-sensor-adapter
+        path: docs/spec/force-torque-vibration.md
+        revision: a68186d7aa3d208e20d95bbc766dd09a8754ae90
+      - repository: hakoniwalab/hakoniwa-robot-runtime
+        path: evaluation/force-torque/kuka-lbr-med14/gazebo-comparison.md
+        revision: 4c63cca9
+  - name: Release tests traced to the specification
+    description: tools/run-tests.py checks a downloaded archive against its MANIFEST.json and runs the tests that name the requirements they check; all 42 vibration requirements and the force-torque, joint and ray-sensor requirements are tested.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-sensor-pro
+        path: docs/running-tests.md
+        revision: df0e67d13a7b32c592a3c094f4b09a8c6698d7f9
+
+limitations:
+  - Binaries for macOS arm64 and Linux x86_64 only; native Windows is not supported (Linux under WSL2 is).
+  - A functional model of each sensor; it does not claim agreement with a particular product.
+  - The external sensor plugin links the Hakoniwa core library (libassets) and needs it to load, even when PDU output and services are not used.
+
+interfaces:
+  inputs:
+    - name: Sensor configuration
+      kind: config
+      description: JSON per sensor (datasheet values), read through the hakoniwa-sensor-adapter interface.
+    - name: Truth from the host
+      kind: api
+      description: The host (for example hakoniwa-robot-runtime or Drone PRO) passes the physics truth every step.
+  outputs:
+    - name: Measured values
+      kind: api
+      description: The sensor's samples through the common interface; the external plugin can also write them as PDUs.
+  protocols:
+    - name: hakoniwa-sensor-adapter implementation entry
+      role: local
+      notes: Hosts select the implementation by name (hakoniwa) and link the static libraries.
+  configuration:
+    - path: MANIFEST.json
+      description: In each release archive; source revisions, toolchain, SHA-256 of every file and runtime_dependencies of the plugin (shared libraries and the Hakoniwa core functions it imports).
+
+dependencies:
+  required:
+    - name: hakoniwa-sensor-adapter
+      type: repository
+      notes: The public interface and specification; the release tests build against it at the revision in config/sources.json.
+    - name: MuJoCo
+      type: runtime
+      notes: The MuJoCo version in MUJOCO_VERSION.txt (3.16.0) for the MuJoCo parts and the plugin.
+  optional:
+    - name: hakoniwa-core-pro
+      type: runtime
+      notes: libassets, needed to load the external sensor plugin. A core that has every function in MANIFEST.json runtime_dependencies (for example hako_asset_simulation_state); PDU and services call it only when the host passes pdu_config_path or service_config_dir.
+    - name: GLFW and OpenGL
+      type: library
+      notes: GLFW 3.3 or later and OpenGL for the image renderer (RGB and rendered depth cameras) and the plugin.
+
+platforms:
+  supported:
+    - macOS
+    - Linux
+  notes:
+    - macOS arm64 and Ubuntu 24.04 x86_64; the Linux archive is tested under WSL2 on Windows 11 (image renderer on WSLg).
+
+native_runtime:
+  schema_version: 1
+  profiles:
+    public-v0.2.0:
+      distribution_release: v0.2.0
+      managed_runtimes:
+        mujoco:
+          required: true
+          version_file: MUJOCO_VERSION.txt
+          platforms:
+            linux:
+              library: mujoco/lib/libmujoco.so.{version}
+            macos:
+              library: mujoco/lib/libmujoco.{version}.dylib
+      platforms:
+        linux:
+          dependency_inspector: elf
+          binary_roles:
+            external_sensor_plugin: archive/lib/hakoniwa_mujoco_sensors_plugin.so
+          required_libraries: ["libassets.so.1", "libmujoco.so.3.16.0", "libglfw.so.3"]
+        macos:
+          dependency_inspector: macho
+          binary_roles:
+            external_sensor_plugin: archive/lib/hakoniwa_mujoco_sensors_plugin.so
+          required_libraries: ["libassets.1.dylib", "libmujoco.3.16.0.dylib", "libglfw.3.dylib"]
+
+# The profile's paths are relative to the runtime root the recipe sensor-pro-release-tests makes: archive/ (the
+# extracted release archive, unchanged), mujoco/ (the MuJoCo release) and MUJOCO_VERSION.txt (from the repository).
+
+connects_to:
+  - component_id: hakoniwa-robot-runtime
+    direction: used_by
+    interface: sensor implementation (hakoniwa) through hakoniwa-sensor-adapter
+    notes: The robot runtime's sensor stage selects it by name; its KUKA evaluation uses it.
+  - component_id: hakoniwa-drone-core
+    direction: used_by
+    interface: external sensor plugin (C boundary)
+    notes: Drone PRO loads the plugin for LiDAR, cameras and rangefinders.
+  - component_id: hakoniwa-core-pro
+    direction: uses
+    interface: libassets (PDU output and services of the plugin)
+    notes: Only when the host passes the PDU or service configuration.
+
+recipe_roles:
+  - role: physics_runtime
+    description: The sensor models that turn the physics truth into measured values.
+  - role: integration_boundary
+    description: The external sensor plugin between a host and Hakoniwa PDUs.
+
+typical_usecases:
+  - Robot arms and drones whose control must cope with realistic sensor errors.
+  - Comparing sensor implementations on the same physics (Hakoniwa, Gazebo, Project AirSim) through one interface.
+
+anti_usecases:
+  - Certifying a particular sensor product or replacing tests on hardware.
+
+demo_candidates:
+  - name: Release tests from an empty folder
+    description: Download a release archive, check it, and run its 275 tests against the Foundation core and MuJoCo (recipe sensor-pro-release-tests).
+    required_components:
+      - hakoniwa-sensor-pro
+      - hakoniwa-sensor-adapter
+      - hakoniwa-core-pro
+    source_examples:
+      - ../hakoniwa-sensor-pro/docs/running-tests.md
+
+operations:
+  test:
+    commands:
+      - python tools/recipe/sensor_pro_release_tests.py configure
+      - python tools/recipe/sensor_pro_release_tests.py fetch
+      - python tools/recipe/sensor_pro_release_tests.py check
+      - python tools/recipe/sensor_pro_release_tests.py test
+    notes:
+      - The Business Pack recipe sensor-pro-release-tests runs the procedure of docs/running-tests.md from an empty folder.
+
+source_refs:
+  - repository: hakoniwalab/hakoniwa-sensor-pro
+    path: README.md
+    revision: df0e67d13a7b32c592a3c094f4b09a8c6698d7f9
+    description: Supported sensors, archives, supported environments, plugin dependencies, license and test status.
+  - repository: hakoniwalab/hakoniwa-sensor-pro
+    path: docs/running-tests.md
+    revision: df0e67d13a7b32c592a3c094f4b09a8c6698d7f9
+    description: Release tests against a downloaded archive on macOS and on Linux or WSL2.
+  - repository: hakoniwalab/hakoniwa-sensor-pro
+    path: config/sources.json
+    revision: df0e67d13a7b32c592a3c094f4b09a8c6698d7f9
+    description: The revisions of the interface and test design the release tests build against.
