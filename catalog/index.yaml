@@ -1016,6 +1016,27 @@ components:
   - mit
   - oss
   catalog_path: components/hakoniwa-scratch.yaml
+- id: hakoniwa-sensor-pro
+  name: Hakoniwa Sensor PRO
+  category: physics-environment
+  secondary_categories:
+  - physics-runtime
+  - binary-contract
+  - robot-arm
+  maturity: active
+  distribution: dual-license
+  summary: Hakoniwa Lab's sensor implementation for simulation, as binaries behind
+    the public hakoniwa-sensor-adapter interface, with release tests traced to the
+    specification.
+  recipe_roles:
+  - physics_runtime
+  - integration_boundary
+  connects_to:
+  - hakoniwa-robot-runtime
+  - hakoniwa-drone-core
+  - hakoniwa-core-pro
+  tags: []
+  catalog_path: components/hakoniwa-sensor-pro.yaml
 - id: hakoniwa-threejs-drone
   name: Hakoniwa Three.js Drone
   category: visualization

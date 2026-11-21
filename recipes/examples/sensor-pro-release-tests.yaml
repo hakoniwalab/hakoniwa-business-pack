@@ -1,0 +1,241 @@
+id: sensor-pro-release-tests
+title: Hakoniwa Sensor PRO Release Tests
+recipe_version: 0.1
+goal:
+  user_request: Check the published Hakoniwa Sensor PRO binaries on my own machine from an empty folder, the way its release was checked.
+  description: >
+    Download the Sensor PRO v0.2.0 archive of this host and MuJoCo 3.16.0, check
+    both against pinned SHA-256 values, check that the external sensor plugin
+    finds every library it needs (the Foundation's Hakoniwa core, MuJoCo, GLFW),
+    then build and run the release tests of the hakoniwa-sensor-pro repository
+    against the archive: 275 tests traced to the public specification.
+feasibility:
+  status: feasible
+  confidence: high
+  rationale:
+    - The v0.2.0 release tests pass 275 of 275 on macOS arm64 and on Ubuntu 24.04 x86_64 under WSL2.
+    - tools/run-tests.py checks every archive file against MANIFEST.json before it builds the tests.
+    - The plugin's load-time libraries are recorded in MANIFEST.json runtime_dependencies and declared in the catalog.
+validation:
+  status: verified
+  verified_at: 2026-11-21
+  summary: The Recipe steps from an empty directory on macOS arm64 and on Linux x86_64 (WSL2, Ubuntu 24.04).
+  steps:
+    - id: macos_recipe_e2e
+      status: verified
+      evidence:
+        - source: local-foundation-e2e
+          date: 2026-11-21
+      notes:
+        - macOS arm64 from an empty directory: configure 124 s, fetch 24 s, check 1 s, test 18 s; 275 of 275 passed.
+        - With the Foundation core left out of the search path, check reports libassets missing; against an older core it names hako_asset_simulation_state as missing.
+    - id: linux_x86_64_wsl2
+      status: verified
+      evidence:
+        - source: local-foundation-e2e
+          date: 2026-11-21
+      notes:
+        - Ubuntu 24.04 on WSL2 from an empty directory, no sudo: configure 144 s, fetch 8 s, check 0 s, test 31 s; 275 of 275 passed, image-renderer tests on WSLg.
+constraints:
+  - macos-arm64-or-linux-x86_64
+  - public-release-archives-only
+  - no-sudo-inside-the-recipe
+target_environment:
+  required_for: verification
+  status: specified
+  os: macOS | Linux
+  os_version: macOS 14 or newer | Ubuntu 24.04 (WSL2)
+  architecture: arm64 | x86_64
+  execution_mode: native
+  runtimes:
+    - name: Python
+      required: true
+      version: "3.12"
+      path: work/foundation/install/python
+    - name: CMake, a C++17 compiler, git, curl, unzip, GoogleTest, GLFW 3.3 or later
+      required: true
+      version: current
+      path: host
+  hakoniwa:
+    install_prefix: work/foundation/install
+    components_built: [hakoniwa-core-pro]
+execution_environment:
+  required_for: verification
+  status: specified
+  workspace:
+    mode: managed
+  os: macOS | Linux
+  architecture: arm64 | x86_64
+  execution_mode: native
+  gui:
+    required: false
+    status: image-renderer-tests-use-a-display-when-present
+  shared_memory:
+    required: false
+    access: not-used
+  python:
+    environment: foundation-venv
+    path: work/foundation/install/python
+    version: "3.12"
+    hakopy_available: not-required
+  hakoniwa:
+    install_prefix: work/foundation/install
+    hako_cmd_access: not-required
+  notes:
+    - Host tools are installed by the user before the Recipe (macOS brew install cmake googletest glfw; Ubuntu apt build-essential cmake ninja-build libgtest-dev libglfw3-dev libgl-dev nlohmann-json3-dev); the Recipe installs nothing outside the Workspace.
+    - The plugin tests need only the Hakoniwa core library file (libassets) of the Foundation; no Hakoniwa process runs.
+    - Under WSL2 the image-renderer tests use WSLg's display.
+foundation_contract:
+  mode: required
+  reason: The external sensor plugin links the Hakoniwa core library (libassets); its tests take it from the Foundation install, which has every core function the plugin imports.
+foundation_requirements:
+  hakoniwa-core-pro:
+    capabilities:
+      shared_memory: true
+recipe_local_requirements_schema_version: 1
+recipe_local_requirements:
+  hakoniwa-sensor-pro:
+    root:
+      default_path: ../hakoniwa-sensor-pro
+      override_env: HAKONIWA_SENSOR_PRO_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/hakoniwa-sensor-pro.git
+      revision: df0e67d13a7b32c592a3c094f4b09a8c6698d7f9
+    required_artifacts:
+      - path: tools/run-tests.py
+        kind: file
+      - path: config/sources.json
+        kind: file
+      - path: MUJOCO_VERSION.txt
+        kind: file
+  hakoniwa-sensor-adapter:
+    root:
+      default_path: ../hakoniwa-sensor-adapter
+      override_env: HAKONIWA_SENSOR_ADAPTER_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/hakoniwalab/hakoniwa-sensor-adapter.git
+      revision: a68186d7aa3d208e20d95bbc766dd09a8754ae90
+    required_artifacts:
+      - path: include/hakoniwa/sensor_adapter/force_torque_vibration.hpp
+        kind: file
+      - path: docs/spec/force-torque-vibration.md
+        kind: file
+  hakoniwa-drone-core:
+    root:
+      default_path: ../hakoniwa-drone-core
+      override_env: HAKONIWA_DRONE_CORE_ROOT
+      relative_to: recipe_repository
+    source:
+      type: git
+      url: https://github.com/toppers/hakoniwa-drone-core.git
+      revision: a126f15472a060cfd88f59d8d51f8d063057b0e5
+    required_artifacts:
+      - path: docs/architecture/aircraft/sensor
+        kind: directory
+native_runtime_requirements:
+  schema_version: 1
+  components:
+    hakoniwa-sensor-pro:
+      profile: public-v0.2.0
+      required_roles: ["external_sensor_plugin"]
+      optional_roles: []
+agency_boundary:
+  agent_actions:
+    - id: fetch_and_test
+      description: Download and check the archive and MuJoCo, check the plugin's libraries, build and run the release tests in the Recipe workspace.
+      autonomous: true
+      preconditions: [user_requested_execution]
+  human_decisions: []
+  human_actions:
+    - id: install_host_tools
+      description: Install CMake, a compiler, GoogleTest and GLFW with the host's package manager (needs sudo on Ubuntu).
+      confirmation_required: true
+      required_before: [fetch_and_test]
+  required_permissions: [local-process-execution, network-download]
+components:
+  - id: hakoniwa-sensor-pro
+    roles: [physics_runtime, integration_boundary]
+  - id: hakoniwa-core-pro
+    roles: [simulation_core]
+connections:
+  - from: hakoniwa-sensor-pro
+    to: hakoniwa-core-pro
+    interface: libassets (the external sensor plugin)
+    contract:
+      status: verified
+      requires: [a core with every function in MANIFEST.json runtime_dependencies]
+      validation_notes: [The v0.2.0 plugin tests on macOS and WSL2 with the Business Pack Foundation core.]
+data_flow:
+  - Release archive -> SHA-256 and MANIFEST.json checks -> tests built against the archive and the pinned interface -> results and traceability under the sensor-pro checkout's build/
+time_model:
+  mode: none
+  notes:
+    - The tests step the sensors on simulated time inside each test; no Hakoniwa time synchronisation.
+artifact_sets: {}
+artifacts:
+  - id: release_archive
+    kind: directory
+    path: work/recipes/sensor-pro-release-tests/runtime/archive
+    platforms: [macos-arm64, linux-x86_64]
+  - id: mujoco
+    kind: directory
+    path: work/recipes/sensor-pro-release-tests/runtime/mujoco
+    platforms: [macos-arm64, linux-x86_64]
+  - id: test_report
+    kind: directory
+    path: ../hakoniwa-sensor-pro/build/tests-<platform>/report
+    platforms: [macos-arm64, linux-x86_64]
+missing_pieces: []
+demo:
+  prerequisites:
+    - The host tools of execution_environment.notes are installed.
+  steps:
+    - id: configure
+      command: python tools/recipe/sensor_pro_release_tests.py configure
+      expected: Foundation is SATISFIED and hakoniwa-sensor-pro, hakoniwa-sensor-adapter and hakoniwa-drone-core are at their pinned commits.
+    - id: fetch
+      command: python tools/recipe/sensor_pro_release_tests.py fetch
+      expected: The v0.2.0 archive of this host and MuJoCo 3.16.0 match their SHA-256 and are extracted under work/recipes/sensor-pro-release-tests/runtime.
+    - id: check
+      command: python tools/recipe/sensor_pro_release_tests.py check
+      expected: The native runtime check of the external sensor plugin passes (every shared library resolved with the Foundation core, MuJoCo and GLFW).
+    - id: test
+      command: python tools/recipe/sensor_pro_release_tests.py test
+      expected: The archive matches its MANIFEST.json and the release tests end with "275 of 275 passed".
+  observability:
+    success_signals:
+      - fetch prints OK for both SHA-256 checks.
+      - check prints [OK] for the plugin's shared libraries.
+      - test ends with "275 of 275 passed" and exit status 0.
+    failure_signals:
+      - A SHA-256 mismatch, a missing library in check, or failed tests listed at the end of test.
+  cleanup:
+    owner: recipe
+    provider: none
+    mode: foreground
+    target: work/recipes/sensor-pro-release-tests
+    normal:
+      interactive: none needed; every command ends by itself
+      signal: none
+    expected_behavior:
+      - Nothing keeps running after a command ends.
+    verification_checks:
+      - No process of the Recipe remains.
+    cautions:
+      - The tests write under the hakoniwa-sensor-pro checkout's build/ directory; delete it to start over.
+expected_result: >
+  On a machine that has never built Sensor PRO, the published v0.2.0 archive
+  passes the same 275 release tests it passed when it was released, with the
+  plugin's libraries resolved from the Business Pack Workspace.
+source_catalogs:
+  - component_id: hakoniwa-sensor-pro
+  - component_id: hakoniwa-core-pro
+source_artifacts:
+  - repository: hakoniwalab/hakoniwa-sensor-pro
+    path: docs/running-tests.md
+    revision: df0e67d13a7b32c592a3c094f4b09a8c6698d7f9
+    description: The release-test procedure this Recipe automates.
