@@ -17,13 +17,25 @@ feasibility:
     - tools/run-tests.py checks every archive file against MANIFEST.json before it builds the tests.
     - The plugin's load-time libraries are recorded in MANIFEST.json runtime_dependencies and declared in the catalog.
 validation:
-  status: specified
+  status: verified
+  verified_at: 2026-11-21
   summary: The Recipe steps from an empty directory on macOS arm64 and on Linux x86_64 (WSL2, Ubuntu 24.04).
   steps:
     - id: macos_recipe_e2e
-      status: specified
+      status: verified
+      evidence:
+        - source: local-foundation-e2e
+          date: 2026-11-21
+      notes:
+        - macOS arm64 from an empty directory: configure 124 s, fetch 24 s, check 1 s, test 18 s; 275 of 275 passed.
+        - With the Foundation core left out of the search path, check reports libassets missing; against an older core it names hako_asset_simulation_state as missing.
     - id: linux_x86_64_wsl2
-      status: specified
+      status: verified
+      evidence:
+        - source: local-foundation-e2e
+          date: 2026-11-21
+      notes:
+        - Ubuntu 24.04 on WSL2 from an empty directory, no sudo: configure 144 s, fetch 8 s, check 0 s, test 31 s; 275 of 275 passed, image-renderer tests on WSLg.
 constraints:
   - macos-arm64-or-linux-x86_64
   - public-release-archives-only
