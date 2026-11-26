@@ -163,6 +163,17 @@ def execute_build_plan(plan: dict, paths: WorkspacePaths) -> dict:
                         f"{paths.install_prefix} --vcpkg-root <vcpkg-root>"
                     )
                 raise FoundationError(message)
+            if action["component"] == "hakoniwa-pdu-endpoint" and command[-1] == "configure":
+                # The owner build reuses this cache. Set PIC explicitly so a
+                # static Endpoint can also be linked into a shared consumer.
+                configure_pic = [
+                    "cmake", "-S", str(source),
+                    "-B", str(paths.foundation_build / action["component"]),
+                    "-DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON",
+                ]
+                print(f"> {subprocess.list2cmdline(configure_pic)}", flush=True)
+                if subprocess.run(configure_pic, cwd=source, check=False).returncode:
+                    raise FoundationError("hakoniwa-pdu-endpoint PIC configuration failed")
             if action["component"] == "hakoniwa-core-pro":
                 normalize_core_config_for_windows(
                     paths.foundation_config / "cpp_core_config.json",
