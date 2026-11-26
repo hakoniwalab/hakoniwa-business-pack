@@ -185,6 +185,16 @@ capabilities:
         path: tools/hako.py
         revision: 7ed378bacf76aca9ba65625d3c21c65bc83f7051
 
+  - name: Shared-memory client endpoint on hakoniwa-core-pro services
+    description: Protocol `shm` lets a PDU-RPC client call a hakoniwa-core-pro service directly, without hakoniwa-pdu-endpoint, from C++, the C API, and Python CFFI. Hakoniwa time runs on its own polling-asset thread; a cancel refused by core-pro is retried every step. Built with HAKO_PDU_RPC_ENABLE_SHM (default OFF).
+    evidence:
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: docs/design/shm/README.md
+        revision: 3c07c4d6dc3d5b2e782193b21f31c4868d1ddec5
+      - repository: hakoniwalab/hakoniwa-pdu-rpc
+        path: src/shm_rpc_client_endpoint.cpp
+        revision: 3c07c4d6dc3d5b2e782193b21f31c4868d1ddec5
+
 limitations:
   - Not a general-purpose RPC framework like gRPC.
   - Not a dynamic service mesh with discovery, authentication, tracing, and streaming semantics.
@@ -465,6 +475,8 @@ known_gaps:
   - Action deliberately has no built-in Future/callback scheduler; application or adapter layers own execution scheduling.
   - ROS 2 Action mapping remains a hakoniwa-pdu-ros responsibility.
   - Broad cross-language client support and general peer-failure or high-availability policy remain out of scope.
+  - The shared-memory endpoint works where ROS 2 and Hakoniwa share one OS (docker-only). The docker-host route (ROS 2 in Docker, Hakoniwa on a macOS host) needs the rpc-bridge, which is designed but not built; the shm server endpoint is not built either.
+  - hakoniwa-core-pro serves one client at a time per service (hakoniwalab/hakoniwa-core-pro#115).
 
 source_refs:
   - repository: hakoniwalab/hakoniwa-pdu-rpc

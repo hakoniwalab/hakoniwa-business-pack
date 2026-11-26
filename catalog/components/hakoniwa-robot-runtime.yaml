@@ -136,6 +136,44 @@ capabilities:
         path: src/runtime/types.hpp
         revision: 0a9bba3d529c7acc0e62c98569a4443eb736beed
 
+  - name: Asynchronous RPC services on hakoniwa-core-pro
+    description: >-
+      Serves RPC through hakoniwa-core-pro services declared in the asset manifest
+      (`services`). A service implements request, per-substep step, post-physics
+      response, and cancel hooks; built-in car (AckermannStep, tire friction in the
+      request) and person (PersonStep) services replace the former lockstep RPC input.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-robot-runtime
+        path: docs/design-async-rpc.md
+        revision: 12cef65cb5dc637f0fe140c7e3ab3b7ec378b9af
+      - repository: hakoniwalab/hakoniwa-robot-runtime
+        path: src/runtime/service/async_service.hpp
+        revision: 12cef65cb5dc637f0fe140c7e3ab3b7ec378b9af
+      - repository: hakoniwalab/hakoniwa-robot-runtime
+        path: docs/configuration.md
+        revision: 12cef65cb5dc637f0fe140c7e3ab3b7ec378b9af
+
+  - name: Common lockstep step gate
+    description: >-
+      The runner waits for every registered lockstep input (PDU readers and lockstep
+      services) before each physics step, with timeouts and pause handling; a lockstep
+      service request drives the step and its reply marks completion. Runs are
+      byte-identical on one machine; goldens tolerate platform rounding with warnings.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-robot-runtime
+        path: src/runner/lockstep_gate.cpp
+        revision: 12cef65cb5dc637f0fe140c7e3ab3b7ec378b9af
+
+  - name: Published source list for consumers
+    description: >-
+      cmake/HakoniwaRobotRuntimeSources.cmake lists Runtime sources, include
+      directories, and feature defines by group, so Robot Packs read one list instead
+      of keeping their own; a coverage check fails when a source is in no group.
+    evidence:
+      - repository: hakoniwalab/hakoniwa-robot-runtime
+        path: cmake/HakoniwaRobotRuntimeSources.cmake
+        revision: 12cef65cb5dc637f0fe140c7e3ab3b7ec378b9af
+
 limitations:
   - Does not own robot-specific MuJoCo models, actuator/controller configuration, Recipes, demos, or Launcher composition.
   - Does not provide a ROS 2 API or physical gamepad frontend directly; those remain bridge/frontend responsibilities outside this Runtime.
@@ -269,7 +307,8 @@ operations:
       - Runtime is normally instantiated through a consuming Robot Pack ManifestFactory/Runner composition.
 
 known_gaps:
-  - Repository-local top-level CMake/build/test ownership has not yet been introduced.
+  - Repository-local top-level CMake/build/test ownership has not yet been introduced; consumers build from the published source list.
+  - User-defined async RPC services (for example a vendor ServoJ) cannot yet be loaded as external plugins (.so); today they must be compiled into the Runtime. Service plugin loading is in progress (2026-11-26).
   - Standalone Runner is a design extension point, not a current implementation.
   - IRunner presentation access remains partially MuJoCo-specific.
   - Additional robot classes require explicit behavioral validation in their Robot Packs.
